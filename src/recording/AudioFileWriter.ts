@@ -1,0 +1,80 @@
+import { FileSystemSyncAccessHandle } from 'filesystem/FileSystemSyncAccessHandle'
+import { RingBuffer } from 'ringbuf.js'
+import { Summary } from '../project/Summary'
+import { Transcriber } from '../transcription/Transcriber'
+
+export class AudioFileWriter {
+  private readonly ringBuffer: RingBuffer
+  private readonly writeBuffer: Float32Array
+  private readonly transcriber = new Transcriber(48_000)
+
+  private position = 0
+  private stopped: boolean = false
+  private pausePromise: Promise<any> | null = null
+  private resumeResolver: ((_: any) => any) | null = null
+
+  constructor(
+    private readonly fileSyncHandle: FileSystemSyncAccessHandle,
+    private readonly summary: Summary,
+    ringBufferArray: SharedArrayBuffer,
+  ) {
+    this.ringBuffer = new RingBuffer(ringBufferArray, Float32Array)
+    this.writeBuffer = new Float32Array(new ArrayBuffer(32 * 1024))
+  }
+
+  stop() {
+    this.stopped = true
+  }
+
+  pause() {
+    this.pausePromise = new Promise((resolve, reject) => (this.resumeResolver = resolve))
+  }
+
+  resume() {
+    this.resumeResolver?.('')
+    this.pausePromise = null
+    this.resumeResolver = null
+  }
+
+  async runFileWritingLoop(): Promise<any> {
+    try {
+      while (await this.maybeGetChunkAndWrite()) {
+        await new Promise((resolver) => setTimeout(resolver, 10))
+      }
+    } catch (e: any) {
+      console.error('error ' + e)
+      postMessage({ error: e })
+    } finally {
+      this.fileSyncHandle.close()
+      this.summary.finishSummarizing()
+      console.log('Closed file handle. Completing the job.')
+    }
+  }
+
+  async maybeGetChunkAndWrite(): Promise<boolean> {
+    const poppedLength = this.ringBuffer.pop(this.writeBuffer)
+    if (poppedLength > 0) {
+      if (this.position % 44100 < 128) {
+        console.log('Writer heartbeat at frame ' + this.position)
+      }
+      const start = Date.now()
+      this.fileSyncHandle.write(
+        (this.writeBuffer.buffer as ArrayBuffer).slice(0, poppedLength * Float32Array.BYTES_PER_ELEMENT),
+        { at: this.position },
+      )
+
+      this.summary.summarizeInterleavedData(this.writeBuffer, poppedLength)
+      this.transcriber.transcribe(this.writeBuffer.subarray(0, poppedLength))
+      this.position += poppedLength * Float32Array.BYTES_PER_ELEMENT
+      this.fileSyncHandle.flush()
+
+      return true
+    } else if (this.stopped) {
+      console.log(`Wrote a file of size ${this.fileSyncHandle.getSize()}`)
+      return false
+    } else if (this.pausePromise) {
+      await this.pausePromise
+    }
+    return true
+  }
+}

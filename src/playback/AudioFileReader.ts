@@ -1,0 +1,158 @@
+import { FileSystemSyncAccessHandle } from '../filesystem/FileSystemSyncAccessHandle'
+import { FileSystemUtils } from '../filesystem/FileSystemUtils'
+import { RingBuffer } from 'ringbuf.js'
+
+export interface ClipViewSubset {
+  startPosition: number
+  offset: number
+  length: number
+  clip: { id: number; channelCount: number }
+}
+
+export class AudioFileReader {
+  private static MAX_EXACT_FLOAT32_INT = 8388608
+
+  private clipViewIndex: number = 0
+  private isStopped: boolean = false
+  private initialOffset: number = 0
+  private position: number = 0
+  private pausePromise: Promise<any> | null = null
+  private resumeResolver: ((_: any) => any) | null = null
+  private ringBuffer: RingBuffer
+  private activeFileHandle: FileSystemSyncAccessHandle | null = null
+  readyPromise: Promise<any>
+  private readyResolver: Function | null = null // will always be set in constructor
+  private waitPromiseWithResolvers = Promise.withResolvers()
+
+  constructor(
+    private projectName: string,
+    position: number,
+    private clipViews: Array<ClipViewSubset>,
+    private sampleRate: number,
+    ringBufferArray: SharedArrayBuffer,
+  ) {
+    this.ringBuffer = new RingBuffer(ringBufferArray, Float32Array)
+    this.setPosition(position)
+    this.readyPromise = new Promise((resolve) => (this.readyResolver = resolve))
+  }
+
+  pause() {
+    this.pausePromise = new Promise((resolve, _) => {
+      this.resumeResolver = resolve
+    })
+  }
+
+  resume() {
+    if (this.resumeResolver) {
+      this.resumeResolver('')
+    }
+  }
+
+  stop() {
+    this.waitPromiseWithResolvers.resolve('')
+    this.isStopped = true
+    this.resume()
+  }
+
+  async runBufferFillingLoopInternal(id: string) {
+    const readBuffer = new Float32Array(32 * 1024)
+    while (this.clipViewIndex < this.clipViews.length) {
+      const clipView = this.clipViews[this.clipViewIndex]
+
+      // Push pairs of (NaN, number of silent samples)
+      const silenceSamples = clipView.startPosition - this.position
+      if (silenceSamples > 0) {
+        const bufferToPush = new Float32Array(2 * Math.ceil(silenceSamples / AudioFileReader.MAX_EXACT_FLOAT32_INT))
+        for (let i = 0; i < bufferToPush.length; i += 2) {
+          bufferToPush[i] = Number.NaN
+          bufferToPush[i + 1] = AudioFileReader.MAX_EXACT_FLOAT32_INT
+        }
+        bufferToPush[bufferToPush.length - 1] = silenceSamples % AudioFileReader.MAX_EXACT_FLOAT32_INT
+        while (this.ringBuffer.availableWrite() < bufferToPush.length) {
+          await Promise.resolve(null)
+        }
+        this.ringBuffer.push(bufferToPush)
+      }
+      let msToPlaySilence = (silenceSamples / this.sampleRate) * 1000
+
+      var samplesToPush = (clipView.length - this.initialOffset) * clipView.clip.channelCount
+
+      this.activeFileHandle = await (
+        (await FileSystemUtils.getFileHandle(this.projectName, `${clipView.clip.id}`)) as any
+      ).createSyncAccessHandle()
+      console.debug(`File reading worker opened ${this.projectName}/${clipView.clip.id}`)
+      var filePosition =
+        (this.initialOffset + clipView.offset) * Float32Array.BYTES_PER_ELEMENT * clipView.clip.channelCount
+      this.initialOffset = 0
+      var bytesRead = 0
+      var totalSamplesRead = 0
+      do {
+        console.debug(`Reading from position ${filePosition}`)
+        bytesRead = this.activeFileHandle!.read(readBuffer.buffer, {
+          at: filePosition,
+        })
+        filePosition += bytesRead
+        let bufferOffset = 0
+        while (true) {
+          await this.pausePromise
+          if (this.isStopped) {
+            return
+          }
+          const samplesPushed = this.ringBuffer.push(
+            readBuffer,
+            Math.min(bytesRead / Float32Array.BYTES_PER_ELEMENT - bufferOffset, samplesToPush),
+            bufferOffset,
+          )
+          this.readyResolver!()
+          samplesToPush -= samplesPushed
+          totalSamplesRead += samplesPushed
+          bufferOffset += samplesPushed
+          if (bufferOffset == bytesRead / Float32Array.BYTES_PER_ELEMENT || samplesToPush == 0) {
+            break
+          }
+
+          const timeout = Math.max(msToPlaySilence - 250, 10)
+          msToPlaySilence = 0 // done with the silenceSamples
+          setTimeout(this.waitPromiseWithResolvers.resolve, timeout)
+          await this.waitPromiseWithResolvers.promise
+          this.waitPromiseWithResolvers = Promise.withResolvers()
+        }
+      } while (samplesToPush > 0 && bytesRead > 0)
+      console.debug('Finished reading a clipView for ' + totalSamplesRead)
+
+      ++this.clipViewIndex
+
+      this.position = clipView.startPosition + clipView.length
+      this.activeFileHandle!.close()
+    }
+    console.debug('Finished reading this track.')
+    this.readyResolver!() // in case we never hit it before
+  }
+
+  async runBufferFillingLoop() {
+    const id = Date.now()
+    try {
+      await this.runBufferFillingLoopInternal(id.toString())
+    } catch (e: any) {
+      console.error(e)
+      postMessage({ error: e, type: 'error' })
+    } finally {
+      this.resumeResolver?.('')
+      this.resumeResolver = null
+      this.activeFileHandle?.close()
+    }
+  }
+
+  private setPosition(position: number) {
+    this.clipViewIndex = 0
+    this.position = position
+    while (this.clipViewIndex < this.clipViews.length && this.clipViews[this.clipViewIndex].startPosition < position) {
+      const clipView = this.clipViews[this.clipViewIndex]
+      if (clipView.startPosition + clipView.length > position) {
+        this.initialOffset = position - clipView.startPosition
+        break
+      }
+      ++this.clipViewIndex
+    }
+  }
+}

@@ -1,0 +1,669 @@
+button {
+  all: unset;
+}
+
+button:focus {
+  outline: revert;
+}
+
+[popover] {
+  padding: 0;
+}
+
+:root {
+  --bg-color: #f8f9fa; /* https://www.color-hex.com/color/c0cbcd */
+  --color: #46494a;
+  --waveform-stroke: #000000;
+  --waveform-header-bg: #46494a;
+  --waveform-header-text: #f8f9fa;
+  --clickable-hover: rgba(0, 0, 0, 0.15);
+  --clickable-active: rgba(0, 0, 0, 0.25);
+  --alt-background: #e7eef1; /* https://www.color-hex.com/color/d8e4e9 */
+  --waveform-0: hsla(0, 100%, 90%, 1);
+  --waveform-1: hsla(60, 100%, 90%, 1);
+  --waveform-2: hsla(120, 100%, 90%, 1);
+  --waveform-3: hsla(180, 100%, 90%, 1);
+  --waveform-4: hsla(240, 100%, 90%, 1);
+  --waveform-5: hsla(300, 100%, 90%, 1);
+  --record-button-red: hsla(0, 100%, 25%, 0.9);
+  --play-button-green: hsla(147, 74%, 20%, 0.9);
+}
+
+@media (prefers-color-scheme: dark) {
+  :root {
+    --bg-color: #404445;
+    --color: #d2d4d5;
+    --clickable-hover: rgba(255, 255, 255, 0.25);
+    --clickable-active: rgba(255, 255, 255, 0.35);
+    --alt-background: #565b5d;
+    --record-button-red: hsla(0, 100%, 45%, 0.9);
+    --play-button-green: hsla(147, 74%, 45%, 0.9);
+  }
+}
+
+.overlay-content::backdrop {
+  backdrop-filter: blur(12px);
+  pointer-events: all;
+}
+
+.slider-value {
+  position: absolute;
+  top: -1.5rem;
+  background-color: var(--color);
+  color: var(--bg-color);
+  opacity: 0;
+  white-space: nowrap;
+  padding: 0.25rem;
+  z-index: 999;
+  transition: opacity 0.1s ease;
+}
+
+body {
+  touch-action: manipulation;
+  font-family: Georgia, Palantino, serif;
+  overflow-x: hidden;
+  padding: 0;
+  margin: 0;
+  height: 100vh;
+  background-color: var(--bg-color);
+  color: var(--color);
+}
+
+.menu-button {
+  display: grid;
+  align-items: center;
+  justify-items: center;
+  position: relative;
+  user-select: none;
+  aspect-ratio: 1 / 1;
+}
+
+#menu-container {
+  position: relative;
+  display: grid;
+  z-index: 5;
+}
+
+#menu-dropdown {
+  margin: 0;
+  top: anchor(bottom);
+  min-width: 10rem;
+  border: solid;
+}
+
+.menu-item {
+  background-color: var(--bg-color);
+  padding: 0.25rem;
+  border: solid;
+  font-size: 1.5rem;
+  user-select: none;
+  z-index: 1;
+  display: block;
+  text-align: left;
+  width: 100%;
+  box-sizing: border-box;
+}
+
+#title {
+  font-variant: small-caps;
+  letter-spacing: 0.35rem;
+  font-weight: bolder;
+  font-size: 3rem;
+  padding-left: 0.5rem;
+  padding-right: 0.5rem;
+  user-select: none;
+  align-items: center;
+  display: grid;
+  border: 1px solid transparent;
+}
+
+.topdiv {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  grid-template-rows: auto 1fr;
+  grid-template-columns: 14rem 1fr;
+  grid-template-areas:
+    'header header'
+    'info timeline';
+  overscroll-behavior: none;
+  overflow-y: scroll;
+}
+
+.clickable {
+  position: relative;
+}
+
+.clickable::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background: rgba(0, 0, 0, 0);
+  transition: background-color 0.1s ease;
+  pointer-events: none;
+}
+
+.clickable:hover::after {
+  background-color: var(--clickable-hover);
+}
+
+.clickable:active::after {
+  background-color: var(--clickable-active);
+}
+
+.header-container {
+  display: flex;
+  height: 4rem;
+  background: var(--alt-background);
+  grid-area: header;
+}
+
+.header-button {
+  margin: auto;
+  display: inline-block;
+  position: absolute;
+  height: 60%;
+  transition: opacity 0.15s ease;
+}
+
+.meeting-icon {
+  display: block;
+  width: 1.5rem;
+  height: 100%;
+  margin: 1rem;
+  position: relative;
+  top: 50%;
+  transform: translateY(-50%);
+}
+
+.overlay-close-button {
+  position: absolute;
+  top: 0;
+  left: 0;
+  display: grid;
+  place-items: center;
+  z-index: 10;
+}
+
+.project-button {
+  height: 100%;
+  display: grid;
+  flex: 1;
+  place-items: center;
+  position: relative;
+  user-select: none;
+  border: 1px solid transparent;
+}
+
+.meeting-button {
+  position: relative;
+  text-align: center;
+  font-size: larger;
+  display: grid;
+  place-items: center;
+  border: solid;
+  background: #dbe1e3;
+}
+
+.project-button span,
+.audio-input-button span,
+.meeting-button span {
+  position: absolute;
+  bottom: -2rem;
+  background-color: var(--color);
+  color: var(--bg-color);
+  opacity: 0;
+  white-space: nowrap;
+  padding: 0.25rem;
+  z-index: 999;
+  transition: opacity 0.1s ease;
+  pointer-events: none;
+}
+
+#project-header {
+  display: flex;
+  flex: 1;
+}
+
+.meeting-button:hover {
+  background-color: #c0cbcd;
+}
+
+.meeting-button:active {
+  background-color: white;
+}
+
+.meeting-button span {
+  transform: translateY(-100%);
+}
+
+.error-span {
+  background: rgb(220, 50, 50, 0.95);
+  text-align: center;
+  position: absolute;
+  padding: 1rem;
+  bottom: 100%;
+  left: 0;
+  max-width: 100%;
+  box-sizing: border-box;
+  margin-bottom: 2px;
+  color: white;
+  z-index: 99;
+  transition: opacity 35ms 0ms ease-in;
+  pointer-events: none;
+}
+
+.project-button:hover span,
+.audio-input-button:hover span,
+.meeting-button:hover span {
+  visibility: visible;
+  opacity: 1;
+}
+
+.overlay {
+  height: 100%;
+  width: 100%;
+  position: absolute;
+  z-index: 6;
+  left: 0;
+  top: 0;
+  backdrop-filter: blur(12px);
+  overflow-x: hidden;
+  transition: opacity 300ms;
+  place-items: center;
+}
+
+.overlay-content {
+  position: absolute;
+  background-color: var(--bg-color);
+  height: 70%;
+  width: 80%;
+  place-items: center;
+  z-index: 6;
+}
+
+#meeting-room-content {
+  backdrop-filter: blur(15px);
+  height: 100%;
+  width: 100%;
+  display: flex;
+  gap: 1rem;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  position: absolute;
+}
+
+.overlay-box {
+  letter-spacing: 0.1rem;
+  font-size: xx-large;
+  border: 2px solid rgba(255, 255, 255, 0.5);
+  padding: 1em;
+  min-width: 75%;
+  min-height: 30%;
+  display: grid;
+  place-items: center;
+}
+
+svg {
+  fill: currentColor;
+  stroke: currentColor;
+}
+
+#clock {
+  padding: 1rem;
+  position: relative;
+  flex: 1;
+  display: grid;
+  align-items: center;
+  text-align: center;
+  font-size: x-large;
+  font-family: 'Courier New', Courier, monospace;
+}
+
+video {
+  position: relative;
+  width: fit-content;
+  height: 100%;
+  object-fit: contain;
+}
+
+.vidDiv {
+  position: relative;
+  /* border: solid; */
+  justify-content: center;
+}
+
+.vid-grid {
+  display: flex;
+  flex: 0 0 1;
+  width: 49%;
+  height: 50%;
+}
+
+.vid-spotlight {
+  display: flex;
+  flex: 0% 0% 1;
+  width: 100%;
+  height: 70%;
+}
+
+.vid-unspotlight {
+  display: flex;
+  height: 25%;
+  flex: 0;
+}
+
+.vid-solo {
+  display: flex;
+  flex: 1;
+  height: 100%;
+  width: 100%;
+}
+
+.vid-unsolo {
+  display: none;
+  flex: 0;
+}
+
+#meeting-device-setup-controls {
+  height: 3rem;
+  width: 50%;
+  display: flex;
+  bottom: 1rem;
+  margin-left: auto;
+  margin-right: auto;
+  gap: 0.5rem;
+}
+
+#meeting-controls {
+  height: 3rem;
+  width: 70%;
+  display: flex;
+  bottom: 1rem;
+  position: absolute;
+  margin-left: auto;
+  margin-right: auto;
+  gap: 1rem;
+  opacity: 0.2;
+}
+
+#meeting-controls:hover {
+  opacity: 1;
+}
+
+#timeline-area {
+  display: flex;
+  flex-direction: column;
+  grid-area: timeline;
+  cursor: crosshair;
+  overflow-y: scroll;
+  overscroll-behavior: none;
+  overflow: visible;
+}
+
+#timeline-info-area {
+  display: flex;
+  flex-direction: column;
+  grid-area: info;
+}
+
+.audio-input-button {
+  display: grid;
+  place-items: center;
+  flex: 1;
+  margin: 0.25rem;
+  padding: 0.25rem;
+  position: relative;
+}
+
+#audio-input-buttons {
+  height: 4rem;
+  width: 14rem;
+  display: flex;
+  user-select: none;
+  position: relative;
+}
+
+#timeline {
+  height: 4rem;
+  width: 100%;
+  overflow-x: hidden;
+  overflow-y: hidden;
+  display: inline-block;
+}
+
+#input-list {
+  width: 100%;
+  overflow-y: scroll;
+  overscroll-behavior: none;
+}
+
+.input-info {
+  width: 100%;
+  user-select: none;
+  display: grid;
+  grid-template-areas:
+    'name name'
+    'mute silence'
+    'meter meter';
+  /* grid-template-rows: auto 1fr;
+  grid-template-columns: 14rem 1fr; */
+}
+
+#track-list {
+  width: 100%;
+}
+
+.tracklist-item {
+  width: 100%;
+  height: 8rem;
+  border-top: solid;
+  flex: 1;
+}
+
+.tracklist-item:last-child {
+  border-bottom: solid;
+}
+
+.track-info {
+  display: inline-flex;
+  flex-direction: column;
+  vertical-align: top;
+}
+
+.main-track-info {
+  height: 100%;
+  width: 12rem;
+  display: inline-flex;
+  flex-direction: column;
+  vertical-align: top;
+}
+
+.track-peak-meter {
+  height: 100%;
+  width: 2rem;
+  display: inline-block;
+}
+
+.waveform {
+  overflow-x: hidden;
+  display: inline-block;
+  user-select: none;
+}
+
+.audio-source-label {
+  display: inline-block;
+  vertical-align: middle;
+  font-size: x-large;
+  width: 30rem;
+  margin-left: 1rem;
+  flex: 0 75% 1;
+  text-overflow: ellipsis;
+}
+
+#active-audio-sources {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  width: 100%;
+  height: 100%;
+}
+
+#meeting-room-setup {
+  font-size: larger;
+  display: grid;
+  gap: 0.25rem;
+  grid-template-areas:
+    'room-label room-form room-form'
+    'username-label username-form username-form'
+    '. create-button join-button';
+  width: 60%;
+  top: 1rem;
+  margin-left: auto;
+  margin-right: auto;
+  height: 9rem;
+}
+
+.context-menu {
+  position: absolute;
+  display: none;
+  z-index: 9999;
+  width: 15rem;
+  background-color: var(--bg-color);
+  color: var(--color);
+  font-size: larger;
+  user-select: none;
+}
+
+.context-menu ul {
+  list-style: none;
+  margin: 0;
+  padding: 0;
+}
+
+.context-menu li div {
+  display: block;
+  padding: 0.5rem;
+  border: solid;
+  border-bottom: none;
+}
+
+.context-menu-item-enabled:hover {
+  background: #dddddd;
+}
+
+.context-menu-item-disabled {
+  color: darkgray;
+}
+
+.context-menu li div:last-child {
+  display: block;
+  border-bottom: solid;
+}
+
+#notification-parent {
+  position: absolute;
+  top: 1rem;
+  margin-left: auto;
+  margin-right: auto;
+  left: 0;
+  right: 0;
+  top: 0;
+  text-align: center;
+  width: 80%;
+  height: 100%;
+  font-size: x-large;
+  pointer-events: none;
+  display: block;
+  z-index: 2147483647;
+}
+
+.notification-info {
+  width: 100%;
+  height: 3rem;
+  margin: 0.5rem;
+  align-items: center;
+  display: grid;
+  transition: opacity 35ms 0ms ease-in;
+}
+
+.notification-error {
+  width: 100%;
+  height: 3rem;
+  background: rgba(220, 50, 50, 0.95);
+  margin: 0.5rem;
+  align-items: center;
+  color: white;
+  display: grid;
+  transition: opacity 35ms 0ms ease-in;
+}
+
+.waveform-selection {
+  fill: #3b90e680;
+  stroke: none;
+  cursor: grab;
+}
+
+.waveform-rect {
+  fill: rgba(0, 0, 0, 0.1);
+  stroke: none;
+}
+
+@keyframes brighten {
+  0% {
+    filter: brightness(2);
+  }
+  100% {
+    filter: brightness(0.5);
+  }
+}
+
+.animated-brightness svg {
+  animation: brighten 1.5s linear infinite alternate;
+}
+
+#main-menu-open-button {
+  width: 75%;
+}
+
+.clip-view-handle {
+  stroke-width: 6;
+  opacity: 0;
+}
+
+.clip-view-handle:hover {
+  /* transition: opacity 50ms 0ms; */
+  opacity: 1;
+}
+
+.export-option-row {
+  padding: 1rem;
+  flex: 1;
+  width: calc(100%-2rem);
+  background-color: var(--bg-color);
+  height: 4rem;
+}
+
+.export-options-container {
+  display: none; /* will be flex */
+  flex-direction: column;
+  gap: 1rem;
+  width: 70%;
+  height: 80%;
+  overflow: scroll;
+}
+
+.radio-option {
+  display: inline-block;
+}
+
+.blink {
+  animation: blink-animation 1.5s steps(3, start) infinite;
+}
+
+@keyframes blink-animation {
+  to {
+    visibility: hidden;
+  }
+}

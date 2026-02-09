@@ -1,0 +1,58 @@
+file(COPY ${CMAKE_CURRENT_LIST_DIR}/flac/FlacEncoderCallbacks.js DESTINATION ${CMAKE_CURRENT_BINARY_DIR})
+file(COPY ${CMAKE_CURRENT_LIST_DIR}/opus/OpusEncoderCallbacks.js DESTINATION ${CMAKE_CURRENT_BINARY_DIR})
+
+add_executable(flac_encoder flac/flac_encoder.c)
+set_target_properties(flac_encoder PROPERTIES
+                      RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}/flac)
+target_link_options(flac_encoder PUBLIC -sENVIRONMENT=worker,node)
+target_link_options(flac_encoder PUBLIC --js-library FlacEncoderCallbacks.js)
+target_link_options(flac_encoder PUBLIC -sASSERTIONS=1)
+target_link_options(flac_encoder PUBLIC -sUSE_PTHREADS=1)
+target_link_options(flac_encoder PUBLIC -sMODULARIZE=1)
+target_link_options(flac_encoder PUBLIC -sEXPORT_NAME=createModule)
+target_link_options(flac_encoder PUBLIC -sSINGLE_FILE=1)
+target_link_options(flac_encoder PUBLIC --emit-tsd flac_encoder.d.ts)
+set(CMAKE_EXECUTABLE_SUFFIX ".mjs")
+target_link_libraries(flac_encoder FLAC)
+
+add_executable(opus_encoder opus/opus_encoder2.c)
+set_target_properties(opus_encoder PROPERTIES
+                      RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}/opus)
+target_link_options(opus_encoder PUBLIC -sENVIRONMENT=worker,node)
+target_link_options(opus_encoder PUBLIC --js-library OpusEncoderCallbacks.js)
+target_link_options(opus_encoder PUBLIC -sASSERTIONS=1)
+target_link_options(opus_encoder PUBLIC -sUSE_PTHREADS=1)
+target_link_options(opus_encoder PUBLIC -sMODULARIZE=1)
+target_link_options(opus_encoder PUBLIC -sEXPORTED_FUNCTIONS=_malloc)
+target_link_options(opus_encoder PUBLIC -sEXPORT_NAME=createModule)
+target_link_options(opus_encoder PUBLIC -sSINGLE_FILE=1)
+target_link_options(opus_encoder PUBLIC --emit-tsd opus_encoder.d.ts)
+set(CMAKE_EXECUTABLE_SUFFIX ".mjs")
+target_link_libraries(opus_encoder opus)
+
+ExternalProject_Get_Property(libopusenc INSTALL_DIR)
+
+target_include_directories(opus_encoder PRIVATE ${INSTALL_DIR}/include)
+target_link_libraries(opus_encoder ${INSTALL_DIR}/lib/libopusenc.a)
+add_dependencies(opus_encoder libopusenc)
+
+ExternalProject_Get_Property(lame INSTALL_DIR)
+
+add_executable(mp3_encoder mp3/lame_bridge.c)
+target_include_directories(mp3_encoder PRIVATE ${INSTALL_DIR}/src/lame/include/)
+target_link_libraries(mp3_encoder PRIVATE ${INSTALL_DIR}/src/lame/libmp3lame/.libs/libmp3lame.a)
+
+set_target_properties(mp3_encoder PROPERTIES
+                      RUNTIME_OUTPUT_DIRECTORY ${CMAKE_CURRENT_LIST_DIR}/mp3)
+target_link_options(mp3_encoder PUBLIC -sMODULARIZE=1)
+target_link_options(mp3_encoder PUBLIC -sENVIRONMENT=web,worker)
+target_link_options(mp3_encoder PUBLIC -sEXPORT_ES6=1)
+target_link_options(mp3_encoder PUBLIC -sSINGLE_FILE=1)
+target_link_options(mp3_encoder PUBLIC -sEXPORTED_RUNTIME_METHODS=cwrap,HEAPU8)
+target_link_options(mp3_encoder PUBLIC -sALLOW_MEMORY_GROWTH=1)
+target_link_options(mp3_encoder PUBLIC -sEXPORTED_FUNCTIONS=_malloc,_free)
+target_link_options(mp3_encoder PUBLIC -msimd128)
+target_link_options(mp3_encoder PUBLIC -O3)
+target_link_options(mp3_encoder PUBLIC -obuild/lame.js)
+target_link_options(mp3_encoder PUBLIC --emit-tsd mp3_encoder.d.ts)
+set(CMAKE_EXECUTABLE_SUFFIX ".mjs")

@@ -1,0 +1,34 @@
+{
+  "compilerOptions": {
+    "target": "ESNext",
+    "lib": ["ESNext", "DOM"],
+    "allowUmdGlobalAccess": false,
+    "declaration": false,
+    "outDir": "./dist",
+    "esModuleInterop": true,
+    "forceConsistentCasingInFileNames": true,
+    "baseUrl": "./src",
+    "skipLibCheck": true,
+    "strict": true,
+    "types": ["jest", "@types/jest", "@types/wicg-file-system-access", "node"],
+    "module": "preserve",
+    "moduleResolution": "bundler"
+  },
+  "include": [
+    "**/*.ts",
+    "**/*.d.ts",
+    "src/export/FlacConverterWorker.cjs",
+    "src/export/FlacConverter.test.js",
+    "src/WebEntrypoint.js",
+    "src/playback/AudioFileReadingWorker.test.js",
+    "jest.config.js",
+    "tests/TrackReader.test.js",
+    "tests/ClipReader.test.js",
+    "src/audiocontext/AudioContextControlledWorkerScript.js",
+    "src/audiocontext/EnhancedAudioWorkletProcessor.js",
+    "src/analyzers/RmsCalculator.test.js",
+    "src/analyzers/PeakUtils.js",
+    "src/analyzers/Peak.test.js"
+, "src/encoders/Mp3Transformer.test.js", "src/encoders/Mp3FileWriter.test.js", "src/noisereduction/DenoisingWorker.js"  ],
+  "exclude": ["dist", "tests", "jest.config.js", "**/CMakeFiles"]
+}
