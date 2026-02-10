@@ -108,7 +108,6 @@
           <button
             id="open-logs-modal-button"
             class="menu-item clickable"
-            popovertarget="logs-modal"
           >
             Logs
           </button>
@@ -379,7 +378,7 @@
         </div>
       </div>
     </div>
-    <div id="logs-modal" class="overlay-content logs-modal" popover="auto" onclick="event.stopPropagation()">
+    <dialog id="logs-modal" class="overlay-content logs-modal">
       <div class="logs-modal-toolbar">
         <button id="logs-modal-download-button" class="menu-item clickable logs-modal-button">
           Download .txt
@@ -387,7 +386,7 @@
         <button id="logs-modal-refresh-button" class="menu-item clickable logs-modal-button">Refresh</button>
       </div>
       <pre id="logs-modal-content-text" class="logs-modal-content-text"></pre>
-    </div>
+    </dialog>
     <div id="export-project-modal" class="overlay-content" popover="auto" onclick="event.stopPropagation()">
       <h1 style="top: 1rem">Audio Export Settings</h1>
 

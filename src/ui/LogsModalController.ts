@@ -2,9 +2,17 @@ import { Logger } from '../global/Logger'
 
 export class LogsModalController {
   private readonly logsDisplay: HTMLPreElement
+  private readonly logsDialog: HTMLDialogElement
 
   constructor() {
     this.logsDisplay = document.getElementById('logs-modal-content-text') as HTMLPreElement
+    this.logsDialog = document.getElementById('logs-modal') as HTMLDialogElement
+
+    this.logsDialog.onclick = (event) => {
+      if (event.target === this.logsDialog) {
+        this.logsDialog.close()
+      }
+    }
 
     const refreshButton = document.getElementById('logs-modal-refresh-button') as HTMLButtonElement
     refreshButton.onclick = () => this.refresh()
@@ -16,6 +24,7 @@ export class LogsModalController {
     openButton.onclick = () => {
       this.refresh()
       document.getElementById('menu-dropdown')?.hidePopover()
+      this.logsDialog.showModal()
     }
 
     this.refresh()
