@@ -31,6 +31,14 @@
         console.error('test failed ;(')
       }
     }
+    function closeOverlay() {
+      document.querySelectorAll('.overlay').forEach((overlay) => {
+        if (overlay.open) {
+          overlay.close()
+        }
+      })
+    }
+
     document.addEventListener('DOMContentLoaded', () => {
       window.trackListController = new window.TrackListController()
       window.clockController = new window.ClockController()
@@ -45,20 +53,41 @@
           showMeetingOverlay()
         }
       }
-      document.getElementById('menu-dropdown').addEventListener('toggle', (event) => {
+      const menuDropdown = document.getElementById('menu-dropdown')
+      const meetingRoomDialog = document.getElementById('meeting-room')
+      const exportProjectDialog = document.getElementById('export-project-modal')
+
+      menuDropdown.addEventListener('toggle', () => {
         toggleMenuOpenedState()
       })
-      document.getElementById('meeting-room').addEventListener('toggle', (event) => {
-        if (!window.meetingRoomController) {
+
+      const showDialog = (dialogElement) => {
+        if (menuDropdown.matches(':popover-open')) {
+          menuDropdown.hidePopover()
+        }
+        if (dialogElement === meetingRoomDialog && !window.meetingRoomController) {
           window.meetingRoomController = new window.MeetingRoomController()
         }
+        dialogElement.showModal()
+      }
+
+      document.getElementById('meeting-room-button').addEventListener('click', () => {
+        showDialog(meetingRoomDialog)
       })
+
+      document.getElementById('open-export-project-modal-button').addEventListener('click', () => {
+        showDialog(exportProjectDialog)
+      })
+
+      document.querySelectorAll('dialog.overlay').forEach((dialogElement) => {
+        dialogElement.addEventListener('click', (event) => {
+          if (event.target === dialogElement) {
+            dialogElement.close()
+          }
+        })
+      })
+
     })
-    function closeOverlay() {
-      document.querySelectorAll('.overlay').forEach((o) => {
-        o.hidePopover()
-      })
-    }
     //For my testing. Open with Audacity: File > Import > Raw Data
     async function downloadClip(id) {
       const activeProject = ProjectManager.getActiveProject()
@@ -102,7 +131,7 @@
         <div popover="auto" id="menu-dropdown">
           <div class="menu-item clickable">Edit</div>
           <button class="menu-item clickable">Settings</button>
-          <button class="menu-item clickable" popovertarget="export-project-modal">Export</button>
+          <button id="open-export-project-modal-button" class="menu-item clickable">Export</button>
           <button class="menu-item clickable">Manage Clips</button>
           <button class="menu-item clickable">About</button>
         </div>
@@ -156,7 +185,7 @@
             </svg>
             <span>Screen / Tab</span>
           </button>
-          <button id="meeting-room-button" class="audio-input-button clickable" popovertarget="meeting-room">
+          <button id="meeting-room-button" class="audio-input-button clickable">
             <svg style="width: 100%; height: 100%" viewBox="0 0 500 500">
               <use xlink:href="#meeting" />
             </svg>
@@ -194,7 +223,7 @@
         </svg>
       </div>
     </div>
-    <div id="add-clip-modal" class="overlay" onclick="closeOverlay()" popover="auto">
+    <dialog id="add-clip-modal" class="overlay">
       <div id="add-clip-modal-content" class="add-clip-modal-content" onclick="event.stopPropagation()">
         <label class="overlay-box clickable" for="audio-file-local">Choose local file...</label>
         <input type="file" id="audio-file-local" accept="audio/*" hidden onchange="audioFileLocalHandler()" />
@@ -208,8 +237,8 @@
           />
         </label>
       </div>
-    </div>
-    <div id="meeting-room" popover="auto" class="overlay">
+    </dialog>
+    <dialog id="meeting-room" class="overlay">
       <div id="meeting-room-content" onclick="event.stopPropagation()">
         <div class="overlay-close-button clickable" onclick="closeOverlay()">
           <svg class="meeting-icon" viewBox="0 0 500 500">
@@ -370,8 +399,8 @@
           </div>
         </div>
       </div>
-    </div>
-    <div id="export-project-modal" class="overlay-content" popover="auto" onclick="event.stopPropagation()">
+    </dialog>
+    <dialog id="export-project-modal" class="overlay overlay-content">
       <h1 style="top: 1rem">Audio Export Settings</h1>
 
       <div class="form-group">
@@ -541,7 +570,7 @@
       </div>
 
       <button onclick="exportAudio()">Export Audio</button>
-    </div>
+    </dialog>
     <div id="notification-parent"></div>
   </body>
   <svg xmlns="http://www.w3.org/2000/svg" style="height: 0; position: absolute; width: 0">

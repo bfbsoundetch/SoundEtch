@@ -99,8 +99,7 @@ export class HeaderController {
   }
 
   private showAddClipModal() {
-    const overlay = document.getElementById('add-clip-modal')!
-    overlay.style.opacity = '1'
-    overlay.style.display = 'grid'
+    const overlay = document.getElementById('add-clip-modal') as HTMLElement
+    overlay.showModal()
   }
 }
