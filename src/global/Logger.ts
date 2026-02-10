@@ -20,6 +20,10 @@ export class Logger {
     this.logAtLevel(text, Level.INFO)
   }
 
+  debug(text: string, tag: string | null = null) {
+    this.logAtLevel(text, Level.DEBUG)
+  }
+
   error(text: string, tag: string | null = null) {
     this.logAtLevel(text, Level.ERROR)
   }

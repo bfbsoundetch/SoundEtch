@@ -1,7 +1,9 @@
 import { Summary } from '../project/Summary'
 import { FileSystemUtils } from '../filesystem/FileSystemUtils'
+import { Logger } from '../global/Logger'
 
 export class BatchAudioFileWriter {
+  private static readonly logger = new Logger('BatchAudioFileWriter')
   static async writeAudioArray(dirname: string, filename: string, audioArray: Array<Float32Array>, summary: Summary) {
     const summarySyncHandle = await (
       (await FileSystemUtils.getFileHandle(dirname, `${filename}_summary`)) as any
@@ -22,12 +24,12 @@ export class BatchAudioFileWriter {
           outputBuffer[index] = audioArray[channel][i]
           if (index == outputBuffer.length - 1) {
             fileSyncHandle.write(outputBuffer)
-            console.debug('File is now size ' + fileSyncHandle.getSize())
+            BatchAudioFileWriter.logger.debug('File is now size ' + fileSyncHandle.getSize())
           }
         }
       }
       fileSyncHandle.write(outputBuffer.slice(0, (i * channelCount) % outputBuffer.length))
-      console.debug('The final size of the file is ' + fileSyncHandle.getSize())
+      BatchAudioFileWriter.logger.debug('The final size of the file is ' + fileSyncHandle.getSize())
       summary.summarizeSeparateChannelData(audioArray, audioArray[0].length)
     } finally {
       fileSyncHandle.close()

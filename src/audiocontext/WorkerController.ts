@@ -1,8 +1,10 @@
 import { JobType } from './ControllableWorkerJob'
+import { Logger } from '../global/Logger'
 
 export class WorkerController {
   private audioWorkletNodes = new Array<AudioWorkletNode>()
   readonly worker: Worker
+  private readonly logger = new Logger('WorkerController')
 
   constructor(options?: WorkerOptions) {
     // https://v3.vitejs.dev/guide/features.html#import-with-constructors
@@ -13,7 +15,7 @@ export class WorkerController {
       type: 'module',
     })
     this.worker.addEventListener('message', async (event) => {
-      console.debug('worker sent ' + JSON.stringify(event.data))
+      this.logger.debug('worker sent ' + JSON.stringify(event.data))
       switch (event.data.type) {
         case 'finished':
           this.audioWorkletNodes.forEach((node) =>
@@ -26,7 +28,7 @@ export class WorkerController {
           {
             const audioContext = this.audioWorkletNodes[0]?.context
             if ((audioContext as any)?.startRendering) {
-              console.error('really rendering')
+              this.logger.error('really rendering')
               ;(audioContext as any)?.startRendering?.()
             } else {
               await (audioContext as any)?.resume?.()
@@ -52,14 +54,14 @@ export class WorkerController {
     audioWorkletNodes.forEach((node) =>
       node.port.addEventListener('message', (e) => {
         node.addEventListener('processorerror', (e) => {
-          console.error(e.error)
+          this.logger.error(e.error?.toString?.() ?? String(e.error))
           ;(audioContext as any)?.close?.() ?? (audioContext as any)?.suspend()
         })
       }),
     )
     const context = audioWorkletNodes[0]!.context
     context.addEventListener('statechange', () => {
-      console.debug('Audio context state is now ' + context.state)
+      this.logger.debug('Audio context state is now ' + context.state)
       switch (context.state) {
         case 'closed':
           this.worker.postMessage({ type: 'stop' })
@@ -75,7 +77,7 @@ export class WorkerController {
   }
 
   finish() {
-    console.debug('Worker is finished.')
+    this.logger.debug('Worker is finished.')
     this.audioWorkletNodes.forEach((node) =>
       node.port.postMessage({
         type: 'finished',
@@ -85,7 +87,7 @@ export class WorkerController {
   }
 
   start(jobType: JobType, argument: any, transferables: Transferable[] = []) {
-    console.debug('Starting worker')
+    this.logger.debug('Starting worker')
     this.worker.postMessage(
       {
         type: 'start',

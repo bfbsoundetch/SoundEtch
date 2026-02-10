@@ -6,6 +6,7 @@ import { Direction, ErrorBubbleController } from './ErrorBubbleController'
 import { NotificationsController } from './NotificationsController'
 import { AudioInputs } from '../audioinputs/AudioInputs'
 import { AudioInput } from '../audioinputs/AudioInput'
+import { Logger } from '../global/Logger'
 
 type VideoLayout = 'spotlight' | 'solo' | 'grid'
 
@@ -30,6 +31,7 @@ export class MeetingRoomController {
   private readonly notificationsController = new NotificationsController()
   private readonly micButtonController: MediaStreamButtonController
   private readonly videoButtonController: MediaStreamButtonController
+  private readonly logger = new Logger('MeetingRoomController')
 
   constructor() {
     this.remoteMediaClient.addChatMessageListener((message) => {
@@ -81,7 +83,7 @@ export class MeetingRoomController {
       this.meetingRoomNameErrorBubble.showError('No meeting room provided', 5000)
       return false
     }
-    console.log('About to join ' + meetingId)
+    this.logger.log('About to join ' + meetingId)
     this.remoteMediaClient.joinRoom(meetingId)
     return true
   }
@@ -217,7 +219,7 @@ export class MeetingRoomController {
       }
 
       const divs = vidDiv.getElementsByTagName('div')
-      console.error(`${member.username}: ${member.mediaStream.getAudioTracks().length}`)
+      this.logger.error(`${member.username}: ${member.mediaStream.getAudioTracks().length}`)
       if (
         divs.length == 0 &&
         member.mediaStream.getAudioTracks().length > 0 &&
