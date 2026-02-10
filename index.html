@@ -38,6 +38,7 @@
       window.keyPressController = new window.KeyPressController()
       window.headerController = new window.HeaderController()
       window.exportProjectController = new window.ExportProjectController()
+      window.logsModalController = new window.LogsModalController()
       if (window.location.search) {
         const meetingParam = new URL(window.location).searchParams.get('meeting')
         if (meetingParam) {
@@ -104,6 +105,13 @@
           <button class="menu-item clickable">Settings</button>
           <button class="menu-item clickable" popovertarget="export-project-modal">Export</button>
           <button class="menu-item clickable">Manage Clips</button>
+          <button
+            id="open-logs-modal-button"
+            class="menu-item clickable"
+            popovertarget="logs-modal"
+          >
+            Logs
+          </button>
           <button class="menu-item clickable">About</button>
         </div>
         <div id="title">
@@ -370,6 +378,15 @@
           </div>
         </div>
       </div>
+    </div>
+    <div id="logs-modal" class="overlay-content logs-modal" popover="auto" onclick="event.stopPropagation()">
+      <div class="logs-modal-toolbar">
+        <button id="logs-modal-download-button" class="menu-item clickable logs-modal-button">
+          Download .txt
+        </button>
+        <button id="logs-modal-refresh-button" class="menu-item clickable logs-modal-button">Refresh</button>
+      </div>
+      <pre id="logs-modal-content-text" class="logs-modal-content-text"></pre>
     </div>
     <div id="export-project-modal" class="overlay-content" popover="auto" onclick="event.stopPropagation()">
       <h1 style="top: 1rem">Audio Export Settings</h1>

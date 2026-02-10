@@ -667,3 +667,36 @@ video {
     visibility: hidden;
   }
 }
+
+.logs-modal {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  box-sizing: border-box;
+}
+
+.logs-modal-toolbar {
+  display: flex;
+  gap: 0.5rem;
+  width: 100%;
+}
+
+.logs-modal-button {
+  width: auto;
+  font-size: 1rem;
+  padding: 0.5rem 0.75rem;
+}
+
+.logs-modal-content-text {
+  margin: 0;
+  padding: 0.5rem;
+  border: 1px solid;
+  height: 100%;
+  width: 100%;
+  box-sizing: border-box;
+  overflow: auto;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 0.85rem;
+  white-space: pre-wrap;
+}

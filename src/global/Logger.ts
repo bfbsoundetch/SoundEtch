@@ -8,6 +8,14 @@ export class Logger {
     Logger.callback = callback
   }
 
+  static getLogItems(): Array<LogItem> {
+    return Logger.logItems.slice()
+  }
+
+  static getLogText(): string {
+    return Logger.logItems.map((item) => item.toString()).join('\n')
+  }
+
   log(text: string, tag: string | null = null) {
     this.logAtLevel(text, Level.INFO)
   }
