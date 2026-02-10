@@ -1,6 +1,7 @@
 import { FileSystemSyncAccessHandle } from '../filesystem/FileSystemSyncAccessHandle'
 import { FileSystemUtils } from '../filesystem/FileSystemUtils'
 import { RingBuffer } from 'ringbuf.js'
+import { Logger } from '../global/Logger'
 
 export interface ClipViewSubset {
   startPosition: number
@@ -20,6 +21,7 @@ export class AudioFileReader {
   private resumeResolver: ((_: any) => any) | null = null
   private ringBuffer: RingBuffer
   private activeFileHandle: FileSystemSyncAccessHandle | null = null
+  private readonly logger = new Logger('AudioFileReader')
   readyPromise: Promise<any>
   private readyResolver: Function | null = null // will always be set in constructor
   private waitPromiseWithResolvers = Promise.withResolvers()
@@ -80,14 +82,14 @@ export class AudioFileReader {
       this.activeFileHandle = await (
         (await FileSystemUtils.getFileHandle(this.projectName, `${clipView.clip.id}`)) as any
       ).createSyncAccessHandle()
-      console.debug(`File reading worker opened ${this.projectName}/${clipView.clip.id}`)
+      this.logger.debug(`File reading worker opened ${this.projectName}/${clipView.clip.id}`)
       var filePosition =
         (this.initialOffset + clipView.offset) * Float32Array.BYTES_PER_ELEMENT * clipView.clip.channelCount
       this.initialOffset = 0
       var bytesRead = 0
       var totalSamplesRead = 0
       do {
-        console.debug(`Reading from position ${filePosition}`)
+        this.logger.debug(`Reading from position ${filePosition}`)
         bytesRead = this.activeFileHandle!.read(readBuffer.buffer, {
           at: filePosition,
         })
@@ -118,14 +120,14 @@ export class AudioFileReader {
           this.waitPromiseWithResolvers = Promise.withResolvers()
         }
       } while (samplesToPush > 0 && bytesRead > 0)
-      console.debug('Finished reading a clipView for ' + totalSamplesRead)
+      this.logger.debug('Finished reading a clipView for ' + totalSamplesRead)
 
       ++this.clipViewIndex
 
       this.position = clipView.startPosition + clipView.length
       this.activeFileHandle!.close()
     }
-    console.debug('Finished reading this track.')
+    this.logger.debug('Finished reading this track.')
     this.readyResolver!() // in case we never hit it before
   }
 
@@ -134,7 +136,7 @@ export class AudioFileReader {
     try {
       await this.runBufferFillingLoopInternal(id.toString())
     } catch (e: any) {
-      console.error(e)
+      this.logger.error(e?.toString?.() ?? String(e))
       postMessage({ error: e, type: 'error' })
     } finally {
       this.resumeResolver?.('')

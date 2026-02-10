@@ -2,11 +2,13 @@ import { FileSystemSyncAccessHandle } from 'filesystem/FileSystemSyncAccessHandl
 import { RingBuffer } from 'ringbuf.js'
 import { Summary } from '../project/Summary'
 import { Transcriber } from '../transcription/Transcriber'
+import { Logger } from '../global/Logger'
 
 export class AudioFileWriter {
   private readonly ringBuffer: RingBuffer
   private readonly writeBuffer: Float32Array
   private readonly transcriber = new Transcriber(48_000)
+  private readonly logger = new Logger('AudioFileWriter')
 
   private position = 0
   private stopped: boolean = false
@@ -42,12 +44,12 @@ export class AudioFileWriter {
         await new Promise((resolver) => setTimeout(resolver, 10))
       }
     } catch (e: any) {
-      console.error('error ' + e)
+      this.logger.error('error ' + e)
       postMessage({ error: e })
     } finally {
       this.fileSyncHandle.close()
       this.summary.finishSummarizing()
-      console.log('Closed file handle. Completing the job.')
+      this.logger.log('Closed file handle. Completing the job.')
     }
   }
 
@@ -55,7 +57,7 @@ export class AudioFileWriter {
     const poppedLength = this.ringBuffer.pop(this.writeBuffer)
     if (poppedLength > 0) {
       if (this.position % 44100 < 128) {
-        console.log('Writer heartbeat at frame ' + this.position)
+        this.logger.log('Writer heartbeat at frame ' + this.position)
       }
       const start = Date.now()
       this.fileSyncHandle.write(
@@ -70,7 +72,7 @@ export class AudioFileWriter {
 
       return true
     } else if (this.stopped) {
-      console.log(`Wrote a file of size ${this.fileSyncHandle.getSize()}`)
+      this.logger.log(`Wrote a file of size ${this.fileSyncHandle.getSize()}`)
       return false
     } else if (this.pausePromise) {
       await this.pausePromise
