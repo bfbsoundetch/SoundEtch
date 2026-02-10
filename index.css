@@ -10,6 +10,21 @@ button:focus {
   padding: 0;
 }
 
+
+dialog.overlay {
+  border: none;
+  padding: 0;
+  margin: 0;
+  background: transparent;
+  max-width: none;
+  max-height: none;
+}
+
+dialog.overlay::backdrop {
+  backdrop-filter: blur(12px);
+  background: rgba(0, 0, 0, 0.2);
+}
+
 :root {
   --bg-color: #f8f9fa; /* https://www.color-hex.com/color/c0cbcd */
   --color: #46494a;
@@ -39,11 +54,6 @@ button:focus {
     --record-button-red: hsla(0, 100%, 45%, 0.9);
     --play-button-green: hsla(147, 74%, 45%, 0.9);
   }
-}
-
-.overlay-content::backdrop {
-  backdrop-filter: blur(12px);
-  pointer-events: all;
 }
 
 .slider-value {
@@ -267,7 +277,6 @@ body {
   z-index: 6;
   left: 0;
   top: 0;
-  backdrop-filter: blur(12px);
   overflow-x: hidden;
   transition: opacity 300ms;
   place-items: center;
