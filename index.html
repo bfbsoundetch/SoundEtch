@@ -231,7 +231,7 @@
       </div>
     </div>
     <dialog id="add-clip-modal" class="overlay">
-      <div id="add-clip-modal-content" class="add-clip-modal-content" onclick="event.stopPropagation()">
+      <div id="add-clip-modal-content" class="overlay-content add-clip-modal-content" onclick="event.stopPropagation()">
         <label class="overlay-box clickable" for="audio-file-local">Choose local file...</label>
         <input type="file" id="audio-file-local" accept="audio/*" hidden onchange="audioFileLocalHandler()" />
         <label class="overlay-box clickable" for="audio-file-url"
@@ -246,7 +246,7 @@
       </div>
     </dialog>
     <dialog id="meeting-room" class="overlay">
-      <div id="meeting-room-content" onclick="event.stopPropagation()">
+      <div id="meeting-room-content" class="overlay-content" onclick="event.stopPropagation()">
         <div class="overlay-close-button clickable" onclick="closeOverlay()">
           <svg class="meeting-icon" viewBox="0 0 500 500">
             <use xlink:href="#menu-close" />
@@ -406,17 +406,20 @@
           </div>
         </div>
       </div>
-    </div>
-    <dialog id="logs-modal" class="overlay-content logs-modal">
-      <div class="logs-modal-toolbar">
-        <button id="logs-modal-download-button" class="menu-item clickable logs-modal-button">
-          Download .txt
-        </button>
-        <button id="logs-modal-refresh-button" class="menu-item clickable logs-modal-button">Refresh</button>
-      </div>
-      <pre id="logs-modal-content-text" class="logs-modal-content-text"></pre>
     </dialog>
-    <dialog id="export-project-modal" class="overlay overlay-content">
+    <dialog id="logs-modal" class="overlay">
+      <div class="overlay-content logs-modal" onclick="event.stopPropagation()">
+        <div class="logs-modal-toolbar">
+          <button id="logs-modal-download-button" class="menu-item clickable logs-modal-button">
+            Download .txt
+          </button>
+          <button id="logs-modal-refresh-button" class="menu-item clickable logs-modal-button">Refresh</button>
+        </div>
+        <pre id="logs-modal-content-text" class="logs-modal-content-text"></pre>
+      </div>
+    </dialog>
+    <dialog id="export-project-modal" class="overlay">
+      <div class="overlay-content" onclick="event.stopPropagation()">
       <h1 style="top: 1rem">Audio Export Settings</h1>
 
       <div class="form-group">
@@ -586,6 +589,7 @@
       </div>
 
       <button onclick="exportAudio()">Export Audio</button>
+      </div>
     </dialog>
     <div id="notification-parent"></div>
   </body>
