@@ -25,6 +25,10 @@ dialog.overlay::backdrop {
   background: rgba(0, 0, 0, 0.2);
 }
 
+dialog.overlay:not([open]) {
+  display: none;
+}
+
 dialog.overlay[open] {
   display: grid;
 }
