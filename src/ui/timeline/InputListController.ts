@@ -93,15 +93,7 @@ class AudioInputController {
     }
 
     const muteButton = document.createElement('button')
-    muteButton.className = 'clickable'
-    muteButton.style.gridArea = 'mute'
-    muteButton.style.border = '1px solid var(--color)'
-    muteButton.style.padding = '.25rem'
-    muteButton.style.display = 'grid'
-    muteButton.style.placeItems = 'center'
-    muteButton.style.width = '100%'
-    muteButton.style.height = '100%'
-    muteButton.style.boxSizing = 'border-box'
+    muteButton.className = 'clickable mute-button'
     muteButton.innerText = 'mute'
     const muteOnClick = () => {
       audioInput.mute()
