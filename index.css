@@ -25,6 +25,10 @@ dialog.overlay::backdrop {
   background: rgba(0, 0, 0, 0.2);
 }
 
+dialog.overlay[open] {
+  display: grid;
+}
+
 :root {
   --bg-color: #f8f9fa; /* https://www.color-hex.com/color/c0cbcd */
   --color: #46494a;
