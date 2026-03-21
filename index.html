@@ -365,7 +365,7 @@
         </svg>
       </div>
       <div class="overlay-content">
-        <h1 style="top: 1rem">Audio Export Settings</h1>
+        <h1>Audio Export Settings</h1>
 
         <div class="form-group">
           <label for="format">Export Format</label>
@@ -387,6 +387,23 @@
               <option value="int8">8-bit Integer</option>
             </select>
             <div class="info-text">Higher bit depth = better dynamic range</div>
+          </div>
+
+          <div class="export-option-row">
+            <label for="wav-sample-rate">Sample Rate</label>
+            <select id="wav-sample-rate">
+              <option value="8000">8000 Hz</option>
+              <option value="11025">11025 Hz</option>
+              <option value="12000">12000 Hz</option>
+              <option value="16000">16000 Hz</option>
+              <option value="22050">22050 Hz</option>
+              <option value="24000">24000 Hz</option>
+              <option value="32000">32000 Hz</option>
+              <option value="44100" selected>44100 Hz</option>
+              <option value="48000">48000 Hz</option>
+              <option value="96000">96000 Hz</option>
+            </select>
+            <div class="info-text">Choose the output sample rate for the rendered WAV file</div>
           </div>
         </div>
 
@@ -412,7 +429,7 @@
             <div class="info-text">Higher compression = smaller file, slower encoding</div>
           </div>
         </div>
-        <div id="mp3-options-container" class="export-options-container" style="display: flex">
+        <div id="mp3-options-container" class="export-options-container">
           <div class="export-option-row">
             <div class="radio-group">
               <label>Bitrate Mode</label>
@@ -425,7 +442,7 @@
             </div>
           </div>
 
-          <div class="export-option-row">
+          <div id="mp3-cbr-options" class="export-option-row">
             <label for="mp3-cbr-bitrate">Bitrate</label>
             <select id="mp3-cbr-bitrate">
               <option value="8">8 kbps</option>
@@ -447,7 +464,7 @@
             </select>
           </div>
 
-          <div class="export-option-row">
+          <div id="mp3-vbr-options" class="export-option-row" hidden>
             <label for="mp3-vbr-quality">Quality</label>
             <input
               type="range"
@@ -533,7 +550,7 @@
           </div>
         </div>
 
-        <button onclick="exportAudio()">Export Audio</button>
+        <button class="menu-item clickable export-project-button" onclick="exportAudio()">Export Audio</button>
       </div>
     </dialog>
     <div id="notification-parent"></div>
