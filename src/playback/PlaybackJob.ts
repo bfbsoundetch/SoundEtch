@@ -10,8 +10,10 @@ export class PlaybackJob implements ControllableWorkerJob {
         new AudioFileReader(
           argument.projectName,
           argument.position,
+          argument.endSample,
           playbackInfo.clipViews,
           argument.sampleRate,
+          argument.loop,
           playbackInfo.ringBufferArray,
         ),
     )

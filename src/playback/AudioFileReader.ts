@@ -1,7 +1,7 @@
+import { Logger } from '../global/Logger'
 import { FileSystemSyncAccessHandle } from '../filesystem/FileSystemSyncAccessHandle'
 import { FileSystemUtils } from '../filesystem/FileSystemUtils'
 import { RingBuffer } from 'ringbuf.js'
-import { Logger } from '../global/Logger'
 
 export interface ClipViewSubset {
   startPosition: number
@@ -13,6 +13,8 @@ export interface ClipViewSubset {
 export class AudioFileReader {
   private static MAX_EXACT_FLOAT32_INT = 8388608
 
+  private readonly logger = new Logger('AudioFileReader')
+
   private clipViewIndex: number = 0
   private isStopped: boolean = false
   private initialOffset: number = 0
@@ -21,20 +23,20 @@ export class AudioFileReader {
   private resumeResolver: ((_: any) => any) | null = null
   private ringBuffer: RingBuffer
   private activeFileHandle: FileSystemSyncAccessHandle | null = null
-  private readonly logger = new Logger('AudioFileReader')
   readyPromise: Promise<any>
   private readyResolver: Function | null = null // will always be set in constructor
   private waitPromiseWithResolvers = Promise.withResolvers()
 
   constructor(
-    private projectName: string,
-    position: number,
-    private clipViews: Array<ClipViewSubset>,
-    private sampleRate: number,
+    private readonly projectName: string,
+    private startPosition: number,
+    private readonly endSample: number,
+    private readonly clipViews: Array<ClipViewSubset>,
+    private readonly sampleRate: number,
+    private readonly loop: boolean,
     ringBufferArray: SharedArrayBuffer,
   ) {
     this.ringBuffer = new RingBuffer(ringBufferArray, Float32Array)
-    this.setPosition(position)
     this.readyPromise = new Promise((resolve) => (this.readyResolver = resolve))
   }
 
@@ -58,75 +60,79 @@ export class AudioFileReader {
 
   async runBufferFillingLoopInternal(id: string) {
     const readBuffer = new Float32Array(32 * 1024)
-    while (this.clipViewIndex < this.clipViews.length) {
-      const clipView = this.clipViews[this.clipViewIndex]
+    do {
+      this.setPosition(this.startPosition)
+      while (this.position < this.endSample && this.clipViewIndex < this.clipViews.length) {
+        const clipView = this.clipViews[this.clipViewIndex]
 
-      // Push pairs of (NaN, number of silent samples)
-      const silenceSamples = clipView.startPosition - this.position
-      if (silenceSamples > 0) {
-        const bufferToPush = new Float32Array(2 * Math.ceil(silenceSamples / AudioFileReader.MAX_EXACT_FLOAT32_INT))
-        for (let i = 0; i < bufferToPush.length; i += 2) {
-          bufferToPush[i] = Number.NaN
-          bufferToPush[i + 1] = AudioFileReader.MAX_EXACT_FLOAT32_INT
+        // Push pairs of (NaN, number of silent samples)
+        const silenceSamples = Math.min(this.endSample - this.position, clipView.startPosition - this.position)
+        if (silenceSamples > 0) {
+          const bufferToPush = new Float32Array(2 * Math.ceil(silenceSamples / AudioFileReader.MAX_EXACT_FLOAT32_INT))
+          for (let i = 0; i < bufferToPush.length; i += 2) {
+            bufferToPush[i] = Number.NaN
+            bufferToPush[i + 1] = AudioFileReader.MAX_EXACT_FLOAT32_INT
+          }
+          bufferToPush[bufferToPush.length - 1] = silenceSamples % AudioFileReader.MAX_EXACT_FLOAT32_INT
+          while (this.ringBuffer.availableWrite() < bufferToPush.length) {
+            await Promise.resolve(null)
+          }
+          this.ringBuffer.push(bufferToPush)
         }
-        bufferToPush[bufferToPush.length - 1] = silenceSamples % AudioFileReader.MAX_EXACT_FLOAT32_INT
-        while (this.ringBuffer.availableWrite() < bufferToPush.length) {
-          await Promise.resolve(null)
-        }
-        this.ringBuffer.push(bufferToPush)
+        let msToPlaySilence = (silenceSamples / this.sampleRate) * 1000
+
+        var samplesToPush =
+          Math.min(this.endSample - this.position, clipView.length - this.initialOffset) * clipView.clip.channelCount
+
+        this.activeFileHandle = await (
+          (await FileSystemUtils.getFileHandle(this.projectName, `${clipView.clip.id}`)) as any
+        ).createSyncAccessHandle()
+        this.logger.debug(`File reading worker opened ${this.projectName}/${clipView.clip.id}`)
+        var filePosition =
+          (this.initialOffset + clipView.offset) * Float32Array.BYTES_PER_ELEMENT * clipView.clip.channelCount
+        this.initialOffset = 0
+        var bytesRead = 0
+        var totalSamplesRead = 0
+        do {
+          this.logger.debug(`Reading from position ${filePosition}`)
+          bytesRead = this.activeFileHandle!.read(readBuffer.buffer, {
+            at: filePosition,
+          })
+          filePosition += bytesRead
+          let bufferOffset = 0
+          while (true) {
+            await this.pausePromise
+            if (this.isStopped) {
+              return
+            }
+            const samplesPushed = this.ringBuffer.push(
+              readBuffer,
+              Math.min(bytesRead / Float32Array.BYTES_PER_ELEMENT - bufferOffset, samplesToPush),
+              bufferOffset,
+            )
+            this.readyResolver!()
+            samplesToPush -= samplesPushed
+            totalSamplesRead += samplesPushed
+            bufferOffset += samplesPushed
+            if (bufferOffset == bytesRead / Float32Array.BYTES_PER_ELEMENT || samplesToPush == 0) {
+              break
+            }
+
+            const timeout = Math.max(msToPlaySilence - 250, 10)
+            msToPlaySilence = 0 // done with the silenceSamples
+            setTimeout(this.waitPromiseWithResolvers.resolve, timeout)
+            await this.waitPromiseWithResolvers.promise
+            this.waitPromiseWithResolvers = Promise.withResolvers()
+          }
+        } while (samplesToPush > 0 && bytesRead > 0)
+        this.logger.debug('Finished reading a clipView for ' + totalSamplesRead)
+
+        ++this.clipViewIndex
+
+        this.position = clipView.startPosition + clipView.length
+        this.activeFileHandle!.close()
       }
-      let msToPlaySilence = (silenceSamples / this.sampleRate) * 1000
-
-      var samplesToPush = (clipView.length - this.initialOffset) * clipView.clip.channelCount
-
-      this.activeFileHandle = await (
-        (await FileSystemUtils.getFileHandle(this.projectName, `${clipView.clip.id}`)) as any
-      ).createSyncAccessHandle()
-      this.logger.debug(`File reading worker opened ${this.projectName}/${clipView.clip.id}`)
-      var filePosition =
-        (this.initialOffset + clipView.offset) * Float32Array.BYTES_PER_ELEMENT * clipView.clip.channelCount
-      this.initialOffset = 0
-      var bytesRead = 0
-      var totalSamplesRead = 0
-      do {
-        this.logger.debug(`Reading from position ${filePosition}`)
-        bytesRead = this.activeFileHandle!.read(readBuffer.buffer, {
-          at: filePosition,
-        })
-        filePosition += bytesRead
-        let bufferOffset = 0
-        while (true) {
-          await this.pausePromise
-          if (this.isStopped) {
-            return
-          }
-          const samplesPushed = this.ringBuffer.push(
-            readBuffer,
-            Math.min(bytesRead / Float32Array.BYTES_PER_ELEMENT - bufferOffset, samplesToPush),
-            bufferOffset,
-          )
-          this.readyResolver!()
-          samplesToPush -= samplesPushed
-          totalSamplesRead += samplesPushed
-          bufferOffset += samplesPushed
-          if (bufferOffset == bytesRead / Float32Array.BYTES_PER_ELEMENT || samplesToPush == 0) {
-            break
-          }
-
-          const timeout = Math.max(msToPlaySilence - 250, 10)
-          msToPlaySilence = 0 // done with the silenceSamples
-          setTimeout(this.waitPromiseWithResolvers.resolve, timeout)
-          await this.waitPromiseWithResolvers.promise
-          this.waitPromiseWithResolvers = Promise.withResolvers()
-        }
-      } while (samplesToPush > 0 && bytesRead > 0)
-      this.logger.debug('Finished reading a clipView for ' + totalSamplesRead)
-
-      ++this.clipViewIndex
-
-      this.position = clipView.startPosition + clipView.length
-      this.activeFileHandle!.close()
-    }
+    } while (this.loop)
     this.logger.debug('Finished reading this track.')
     this.readyResolver!() // in case we never hit it before
   }
@@ -136,7 +142,7 @@ export class AudioFileReader {
     try {
       await this.runBufferFillingLoopInternal(id.toString())
     } catch (e: any) {
-      this.logger.error(e?.toString?.() ?? String(e))
+      this.logger.error(e)
       postMessage({ error: e, type: 'error' })
     } finally {
       this.resumeResolver?.('')

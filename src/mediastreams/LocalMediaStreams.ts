@@ -98,6 +98,7 @@ export class LocalMediaStreams {
       track.stop()
       LocalMediaStreams.localAVDeviceMediaStream.removeTrack(track)
       LocalMediaStreams.updateAVDeviceListeners(false, track)
+      console.error('oko' + LocalMediaStreams.localAVDeviceMediaStream.getVideoTracks().length)
     })
   }
 

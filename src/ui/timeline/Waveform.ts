@@ -20,6 +20,9 @@ export class Waveform extends TrackListItemController {
   } | null = null
 
   private readonly clipViewControllerMap = new Map<ClipView, ClipViewController>()
+  readonly clipViewGroupElement = document.createElementNS('http://www.w3.org/2000/svg', 'g')
+  private readonly axesPathElement = document.createElementNS('http://www.w3.org/2000/svg', 'path')
+  private readonly channelSeparatorPathElement = document.createElementNS('http://www.w3.org/2000/svg', 'path')
   private readonly color: string
   width = 0
   private height = 0
@@ -57,31 +60,31 @@ export class Waveform extends TrackListItemController {
       this.selection.leftExpand.style.strokeWidth = '10'
       this.selection.leftExpand.style.strokeOpacity = '0'
       this.selection.leftExpand.setAttribute('y1', '0')
-      this.selection.leftExpand.setAttribute('y2', `${this.getHeight()}`)
+      this.selection.leftExpand.setAttribute('y2', `${this.height + Waveform.HEADER_HEIGHT}`)
 
       this.selection.rightExpand.style.cursor = 'col-resize'
       this.selection.rightExpand.style.strokeWidth = '10'
       this.selection.rightExpand.style.strokeOpacity = '0'
       this.selection.rightExpand.setAttribute('y1', '0')
-      this.selection.rightExpand.setAttribute('y2', `${this.getHeight()}`)
+      this.selection.rightExpand.setAttribute('y2', `${this.height + Waveform.HEADER_HEIGHT}`)
 
       this.selection.leftExpand.addEventListener('mousedown', (event) => {
         if (event.buttons == 1 && event.button == 0) {
-          this.trackListController.updateSelectionStartSample(true)
+          this.trackListController.pointerStateManager.startResizingSelection(true)
           event.stopPropagation()
         }
       })
 
       this.selection.rightExpand.addEventListener('mousedown', (event) => {
         if (event.buttons == 1 && event.button == 0) {
-          this.trackListController.updateSelectionStartSample(false)
+          this.trackListController.pointerStateManager.startResizingSelection(false)
           event.stopPropagation()
         }
       })
 
-      this.topSvgElement.appendChild(this.selection.rect)
-      this.topSvgElement.appendChild(this.selection.leftExpand)
-      this.topSvgElement.appendChild(this.selection.rightExpand)
+      this.clipViewGroupElement.appendChild(this.selection.rect)
+      this.clipViewGroupElement.appendChild(this.selection.leftExpand)
+      this.clipViewGroupElement.appendChild(this.selection.rightExpand)
     }
 
     this.selection.rect.setAttribute('x', `${lowX}`)
@@ -132,6 +135,18 @@ export class Waveform extends TrackListItemController {
     this.topSvgElement.addEventListener('mouseleave', (mouseEvent) => {
       this.trackListController.pointerStateManager.removePointedOverTrack(this)
     })
+
+    this.topSvgElement.appendChild(this.clipViewGroupElement)
+
+    this.axesPathElement.style.strokeWidth = '2'
+    this.axesPathElement.style.stroke = 'currentColor'
+    this.axesPathElement.style.fill = 'none'
+    this.topSvgElement.appendChild(this.axesPathElement)
+
+    this.channelSeparatorPathElement.style.strokeWidth = '1'
+    this.channelSeparatorPathElement.style.stroke = 'currentColor'
+    this.channelSeparatorPathElement.style.fill = 'none'
+    this.topSvgElement.appendChild(this.channelSeparatorPathElement)
   }
 
   private getTopSvgElement(): SVGSVGElement {
@@ -156,7 +171,7 @@ export class Waveform extends TrackListItemController {
     const topSvgElement = this.getTopSvgElement()
 
     this.drawAudioDataForCanvasXRange(this, topSvgElement, 0, this.width)
-    this.drawAxes(topSvgElement)
+    this.drawAxes()
   }
 
   resize() {
@@ -165,22 +180,23 @@ export class Waveform extends TrackListItemController {
     this.topSvgElement.setAttribute('viewBox', `0 0 ${this.width} ${this.height + Waveform.HEADER_HEIGHT}`)
   }
 
-  private drawAxes(topSvgElement: SVGSVGElement) {
-    const id = `waveform-axes-${this.track.id}`
+  private drawAxes() {
+    const channelHeight = this.height / this.track.getChannelCount()
 
-    let svgPathElement: SVGPathElement | null = document.getElementById(id) as unknown as SVGPathElement
-    if (!svgPathElement) {
-      svgPathElement = document.createElementNS('http://www.w3.org/2000/svg', 'path')
-      svgPathElement.id = id
-      svgPathElement.style.strokeWidth = '2'
-      svgPathElement.style.stroke = 'currentColor'
-      svgPathElement.style.fill = 'none'
-      topSvgElement.appendChild(svgPathElement)
+    let axesPath = `M 1 0 L 1 ${this.height + Waveform.HEADER_HEIGHT} `
+    let channelSeparatorPath = ''
+    for (let channel = 0; channel < this.track.getChannelCount(); ++channel) {
+      const xAxis = Waveform.HEADER_HEIGHT + channel * channelHeight + channelHeight / 2
+      axesPath += `M 0 ${xAxis} L ${this.width * this.PIXEL_RATIO} ${xAxis}`
+
+      if (channel > 0) {
+        channelSeparatorPath +=
+          `M 0 ${Waveform.HEADER_HEIGHT + channel * channelHeight}` +
+          `L ${this.width * this.PIXEL_RATIO} ${Waveform.HEADER_HEIGHT + channel * channelHeight}`
+      }
     }
-
-    const axesPath = `M 1 0 L 1 ${this.height + Waveform.HEADER_HEIGHT} M 0 ${Waveform.HEADER_HEIGHT + this.height / 2} L ${this.width * this.PIXEL_RATIO} ${Waveform.HEADER_HEIGHT + this.height / 2}`
-
-    svgPathElement.setAttribute('d', axesPath)
+    this.axesPathElement.setAttribute('d', axesPath)
+    this.channelSeparatorPathElement.setAttribute('d', channelSeparatorPath)
   }
 
   async removeClipView(clipViewIndex: number) {
@@ -254,12 +270,12 @@ export class Waveform extends TrackListItemController {
     clipViewController.svgPathElement.remove()
     clipViewController.headerElement.remove()
     clipViewController.headerTitleElement.remove()
-    this.topSvgElement.appendChild(clipViewController.rectElement)
-    this.topSvgElement.appendChild(clipViewController.leftHandle)
-    this.topSvgElement.appendChild(clipViewController.rightHandle)
-    this.topSvgElement.appendChild(clipViewController.svgPathElement)
-    this.topSvgElement.appendChild(clipViewController.headerElement)
-    this.topSvgElement.appendChild(clipViewController.headerTitleElement)
+    this.clipViewGroupElement.appendChild(clipViewController.rectElement)
+    this.clipViewGroupElement.appendChild(clipViewController.leftHandle)
+    this.clipViewGroupElement.appendChild(clipViewController.rightHandle)
+    this.clipViewGroupElement.appendChild(clipViewController.svgPathElement)
+    this.clipViewGroupElement.appendChild(clipViewController.headerElement)
+    this.clipViewGroupElement.appendChild(clipViewController.headerTitleElement)
   }
 }
 
@@ -301,10 +317,10 @@ export class ClipViewController extends TrackListItemController {
     headerTitleDivElement.style.whiteSpace = 'nowrap'
     headerTitleDivElement.style.color = 'var(--waveform-header-text)'
 
-    this.waveform.topSvgElement.appendChild(this.rectElement)
-    this.waveform.topSvgElement.appendChild(this.headerElement)
-    this.waveform.topSvgElement.appendChild(this.headerTitleElement)
-    this.waveform.topSvgElement.appendChild(this.fullClipGrayFilter)
+    this.waveform.clipViewGroupElement.appendChild(this.rectElement)
+    this.waveform.clipViewGroupElement.appendChild(this.headerElement)
+    this.waveform.clipViewGroupElement.appendChild(this.headerTitleElement)
+    this.waveform.clipViewGroupElement.appendChild(this.fullClipGrayFilter)
     this.rectElement.setAttribute('y', `${Waveform.HEADER_HEIGHT}`)
     this.rectElement.setAttribute('height', `${this.waveformHeight}`)
     this.rectElement.classList = 'waveform-rect'
@@ -324,7 +340,7 @@ export class ClipViewController extends TrackListItemController {
     this.headerTitleElement.height.baseVal.value = Waveform.HEADER_HEIGHT
     this.headerTitleElement.style.fill = 'none'
 
-    this.waveform.topSvgElement.appendChild(this.leftHandle)
+    this.waveform.clipViewGroupElement.appendChild(this.leftHandle)
     this.leftHandle.setAttribute('y1', '0')
     this.leftHandle.setAttribute('y2', `${this.waveform.getHeight() + Waveform.HEADER_HEIGHT}`)
     this.leftHandle.classList = 'clip-view-handle'
@@ -336,14 +352,14 @@ export class ClipViewController extends TrackListItemController {
     this.leftHandle.addEventListener('mousedown', this.leftHandleMouseDownListener)
     this.rightHandle.addEventListener('mousedown', this.rightHandleMouseDownListener)
 
-    this.waveform.topSvgElement.appendChild(this.rightHandle)
+    this.waveform.clipViewGroupElement.appendChild(this.rightHandle)
     this.rightHandle.setAttribute('y1', '0')
     this.rightHandle.setAttribute('y2', `${this.waveform.getHeight() + Waveform.HEADER_HEIGHT}`)
     this.rightHandle.classList = 'clip-view-handle'
 
     this.rightHandle.style.cursor = this.clipView.length < this.clipView.clip.length ? 'ew-resize' : 'w-resize'
 
-    this.waveform.topSvgElement.appendChild(this.svgPathElement)
+    this.waveform.clipViewGroupElement.appendChild(this.svgPathElement)
     this.svgPathElement.style.strokeWidth = '1'
     this.svgPathElement.style.stroke = 'var(--waveform-stroke)'
     this.svgPathElement.style.fill = 'none'
@@ -442,36 +458,41 @@ export class ClipViewController extends TrackListItemController {
       realEnd = Math.min(realStart + endSample - startSample, this.clipView.clip.length)
     }
 
+    this.svgPathElement.setAttribute('transform', `translate(${this.pathElementTranslation}, 0)`)
+
     const summary = await SummaryGenerator.summarizeClipChannel(
       this.clipView.clip,
-      0,
       realStart,
       realEnd,
       this.samplesPerUnit,
     )
 
-    this.svgPathElement.setAttribute('transform', `translate(${this.pathElementTranslation}, 0)`)
+    const channelCount = this.clipView.clip.getChannelCount()
+    const channelHeight = this.waveformHeight / channelCount
 
-    const xAxis = Waveform.HEADER_HEIGHT + this.waveformHeight / 2
+    let fullPath = ''
+    for (let channel = 0; channel < channelCount; ++channel) {
+      const xAxis = Waveform.HEADER_HEIGHT + channel * channelHeight + channelHeight / 2
+      const pathSegments = new Array(summary[channel].length)
+      const xIncrement = this.samplesPerUnit > 2 ? 1 : 1 / this.samplesPerUnit
+      for (let i = 0; i < summary[channel].length; i += 2) {
+        let maximum = xAxis - (summary[channel][i] * channelHeight) / 2
+        let minimum = xAxis - (summary[channel][i + 1] * channelHeight) / 2
 
-    const pathSegments = new Array(summary[0].length)
-    const xIncrement = this.samplesPerUnit > 2 ? 1 : 1 / this.samplesPerUnit
-    for (let i = 0; i < summary[0].length; i += 2) {
-      let maximum = xAxis - (summary[0][i] * this.waveformHeight) / 2
-      let minimum = xAxis - (summary[0][i + 1] * this.waveformHeight) / 2
-
-      if (maximum - minimum < 1 && !(maximum > 0 && minimum < 0)) {
-        if (maximum > 0) {
-          --minimum
-        } else {
-          ++maximum
+        if (maximum - minimum < 1 && !(maximum > 0 && minimum < 0)) {
+          if (maximum > 0) {
+            --minimum
+          } else {
+            ++maximum
+          }
         }
+        pathSegments.push(
+          `${this.samplesPerUnit > 2 ? 'L' : 'M'} ${(i / 2) * xIncrement} ${maximum} L ${(i / 2) * xIncrement} ${minimum}`,
+        )
       }
-      pathSegments.push(
-        `${this.samplesPerUnit > 2 ? 'L' : 'M'} ${(i / 2) * xIncrement} ${maximum} L ${(i / 2) * xIncrement} ${minimum}`,
-      )
+      fullPath += `M 0 ${xAxis} ` + pathSegments.join(' ')
     }
-    this.svgPathElement.setAttribute('d', `M 0 ${xAxis} ` + pathSegments.join(' '))
+    this.svgPathElement.setAttribute('d', fullPath)
     if (this.samplesPerUnit < 2) {
       this.svgPathElement.style.strokeWidth = '2'
     } else {
@@ -480,11 +501,11 @@ export class ClipViewController extends TrackListItemController {
   }
 
   reset() {
-    this.waveform.topSvgElement.appendChild(this.rectElement)
-    this.waveform.topSvgElement.appendChild(this.headerElement)
-    this.waveform.topSvgElement.appendChild(this.svgPathElement)
-    this.waveform.topSvgElement.appendChild(this.leftHandle)
-    this.waveform.topSvgElement.appendChild(this.rightHandle)
+    this.waveform.clipViewGroupElement.appendChild(this.rectElement)
+    this.waveform.clipViewGroupElement.appendChild(this.headerElement)
+    this.waveform.clipViewGroupElement.appendChild(this.svgPathElement)
+    this.waveform.clipViewGroupElement.appendChild(this.leftHandle)
+    this.waveform.clipViewGroupElement.appendChild(this.rightHandle)
 
     this.rectElement.setAttribute('transform', '')
     this.headerElement.setAttribute('transform', '')

@@ -16,17 +16,18 @@ export class EnhancedAudioContext extends AudioContext {
     this.reporterNode = reporterNode
   }
 
-  static async create(mode: ActiveAudioState, position: number, sampleRate: number = 48000) {
+  static async create(mode: ActiveAudioState, position: number, loopEnd: number = 0, sampleRate: number = 48000) {
     const result = new EnhancedAudioContext(mode, sampleRate)
     await result.audioWorklet.addModule(new URL('./ReportingAudioWorkletProcessor.js', import.meta.url))
+    result.position[0] = position
     result.setReporterNode(
       new AudioWorkletNode(result, 'ReportingAudioWorkletProcessor', {
         processorOptions: {
           position: result.position,
+          loopEnd: loopEnd,
         },
       }),
     )
-    result.position[0] = position
     result.reporterNode!.connect(result.destination)
     return result
   }

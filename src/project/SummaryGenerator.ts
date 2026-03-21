@@ -10,7 +10,6 @@ export class SummaryGenerator {
 
   static async summarizeClipChannel(
     clip: Clip,
-    channel: number,
     startPosition: number,
     endPosition: number,
     skip: number,
@@ -20,7 +19,7 @@ export class SummaryGenerator {
       clipSummarizer = new ClipSummarizer(clip)
       this.clipSummarizers.set(clip, clipSummarizer)
     }
-    return await clipSummarizer.summarizeChannel(channel, startPosition, endPosition, skip)
+    return await clipSummarizer.summarizeChannel(startPosition, endPosition, skip)
   }
 }
 
@@ -41,15 +40,7 @@ class ClipSummarizer {
     return fileHandle.getFile()
   }
 
-  async summarizeChannel(
-    channel: number,
-    startPosition: number,
-    endPosition: number,
-    skip: number,
-  ): Promise<Array<Array<number>>> {
-    if (channel >= this.clip.getChannelCount()) {
-      throw new Error('Channel out of range ' + channel)
-    }
+  async summarizeChannel(startPosition: number, endPosition: number, skip: number): Promise<Array<Array<number>>> {
     if (startPosition < 0 || endPosition > this.clip.length) {
       throw new Error(
         `Range provided does not cover this ClipView : start ${startPosition} end ${endPosition} ${this.clip.length}`,
@@ -62,6 +53,7 @@ class ClipSummarizer {
   }
 
   private async getPcmSlice(startPosition: number, endPosition: number, skip: number) {
+    const channelCount = this.clip.getChannelCount()
     let data: Float32Array
     if (startPosition < this.fileCacheStart || endPosition > this.fileCacheEnd) {
       const diskReadSamples = Math.max(1_000_000, endPosition + 1 - startPosition)
@@ -76,32 +68,27 @@ class ClipSummarizer {
       this.fileCacheStart = startPoint
       this.fileCacheEnd = endPoint
     }
-    const sliceStart = (startPosition - this.fileCacheStart) * this.clip.getChannelCount()
-    data = this.fileCache!.subarray(
-      sliceStart,
-      sliceStart + (endPosition - startPosition) * this.clip.getChannelCount(),
-    )
+    const sliceStart = (startPosition - this.fileCacheStart) * channelCount
+    data = this.fileCache!.subarray(sliceStart, sliceStart + (endPosition - startPosition) * channelCount)
 
+    const result = new Array<Array<number>>(channelCount)
     if (skip < 2) {
-      const result = new Array<Array<number>>(this.clip.getChannelCount()).fill(
-        new Array<number>((2 * data.length) / this.clip.getChannelCount()),
-      )
+      for (let i = 0; i < channelCount; ++i) {
+        result[i] = new Array<number>((2 * data.length) / channelCount)
+      }
       for (let i = 0; i < data.length; ++i) {
-        result[i % this.clip.getChannelCount()][2 * Math.floor(i / this.clip.getChannelCount())] = Math.max(data[i], 0)
-        result[i % this.clip.getChannelCount()][2 * Math.floor(i / this.clip.getChannelCount()) + 1] = Math.min(
-          data[i],
-          0,
-        )
+        result[i % channelCount][2 * Math.floor(i / channelCount)] = Math.max(data[i], 0)
+        result[i % channelCount][2 * Math.floor(i / channelCount) + 1] = Math.min(data[i], 0)
       }
       return result
     }
 
-    const result = new Array<Array<number>>(this.clip.getChannelCount()).fill(
-      new Array<number>(2 * Math.round(data.length / this.clip.getChannelCount() / skip)),
-    )
+    for (let i = 0; i < channelCount; ++i) {
+      result[i] = new Array<number>(2 * Math.round(data.length / channelCount / skip))
+    }
 
-    let max = new Array<number>(this.clip.getChannelCount()).fill(-1)
-    let min = new Array<number>(this.clip.getChannelCount()).fill(1)
+    let max = new Array<number>(channelCount).fill(-1)
+    let min = new Array<number>(channelCount).fill(1)
     let resultIndex = 0
     for (let i = 0; i < data.length; ++i) {
       const channel = i % this.clip.getChannelCount()

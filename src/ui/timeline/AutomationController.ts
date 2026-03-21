@@ -1,4 +1,4 @@
-import { ParameterValueSequence } from 'effects/ParameterValueSequence'
+import { ParameterValueSequence, ParamValueTransition } from 'effects/ParameterValueSequence'
 import { Track } from 'project/Track'
 import { TrackListItemController } from './TrackListItemController'
 import { TrackListController } from './TrackListController'
@@ -28,7 +28,10 @@ export class AutomationController extends TrackListItemController {
     this.topSvgElement.setAttribute('viewBox', `0 0 ${this.width} ${this.height}`)
 
     this.svgPathElement = document.createElementNS('http://www.w3.org/2000/svg', 'path')
-    this.svgPathElement.addEventListener('mousedown', () => {})
+    this.svgPathElement.addEventListener('mousedown', () => {
+      console.log('path down')
+    })
+    this.topSvgElement.appendChild(this.svgPathElement)
 
     switch (this.paramVals.param.type) {
       case 'boolean':
@@ -48,14 +51,27 @@ export class AutomationController extends TrackListItemController {
   }
 
   draw() {
+    const pointCircles = new Array<SVGCircleElement>()
     let path = 'M '
     for (const point of this.paramVals.transitionSequence) {
       const pointX = this.getXValueForSample(point.position)
       if (pointX >= 0 && pointX <= this.width) {
-        path += ` ${pointX} ${this.height * (1 - (point.startValue - this.rangeMin) / (this.rangeMax - this.rangeMin))} L`
+        const pointY = this.height * (1 - (point.startValue - this.rangeMin) / (this.rangeMax - this.rangeMin))
+        path += ` ${pointX} ${pointY} L`
+
+        const circleElement = new SVGCircleElement()
+        circleElement.r.baseVal.value = 3
+        circleElement.cx.baseVal.value = pointX
+        circleElement.cy.baseVal.value = pointY
+        this.topSvgElement.appendChild(circleElement)
+
+        circleElement.addEventListener('mousedown', () => {
+          console.log('circle down')
+        })
       }
     }
     path = path.substring(0, path.length - 2)
+    this.svgPathElement.setAttribute('d', path)
   }
 
   resize() {
@@ -64,8 +80,23 @@ export class AutomationController extends TrackListItemController {
     this.topSvgElement.setAttribute('viewBox', `0 0 ${this.width} ${this.height}`)
   }
 
+  modifyPoint(point: ParamValueTransition, x: number, y: number) {
+    const position = this.getSampleForXValue(x)
+    const value = ((this.height - y) / this.height) * (this.rangeMax - this.rangeMin) + this.rangeMin
+    point.position = position
+    point.startValue = value
+  }
+
   addNewPoint(x: number, y: number) {
     const position = this.getSampleForXValue(x)
     const value = ((this.height - y) / this.height) * (this.rangeMax - this.rangeMin) + this.rangeMin
+    let i = 0
+    for (; i < this.paramVals.transitionSequence.length; ++i) {
+      if (this.paramVals.transitionSequence[i].position > position) {
+        break
+      }
+    }
+    this.paramVals.transitionSequence.splice(i, 0, new ParamValueTransition('linear', value, position))
+    this.draw()
   }
 }

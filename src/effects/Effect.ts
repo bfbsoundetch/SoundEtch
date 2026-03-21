@@ -1,3 +1,1 @@
-export class Effect {
-    
-}
+export class Effect {}

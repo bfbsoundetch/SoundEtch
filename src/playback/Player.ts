@@ -5,11 +5,19 @@ import { WorkerController } from '../audiocontext/WorkerController'
 import { JobType } from '../audiocontext/ControllableWorkerJob'
 import { AudioControl, AudioState } from '../audiocontext/AudioControl'
 import { cloneWithGetters } from '../global/ObjectUtils'
+import { TrackListController } from 'ui/timeline/TrackListController'
+import { Track } from '../project/Track'
+
+export type SelectedRegion = {
+  startSample: number
+  endSample: number
+  tracks: Array<Track>
+}
 
 export class Player {
   private static readingWorkerController: WorkerController | null = null
 
-  static async playActiveProject2() {
+  static async playActiveProject2(loopRegion: SelectedRegion | null = null) {
     if (AudioControl.isPaused()) {
       AudioControl.unpause()
       return
@@ -18,7 +26,11 @@ export class Player {
     if (project.getTracks().length == 0) {
       return
     }
-    const audioContext = await AudioControl.createNewAudioContext(AudioState.PLAYING)
+
+    const startSample = loopRegion?.startSample ?? AudioControl.startPosition
+    const endSample = loopRegion?.endSample ?? Math.max(...project.getTracks().map((t) => t.length))
+
+    const audioContext = await AudioControl.createNewAudioContext(AudioState.PLAYING, startSample, endSample)
     await audioContext.audioWorklet.addModule('./assets/playingAudioWorklet.js')
     const workerController = Player.getReadingWorkerController()
 
@@ -28,6 +40,9 @@ export class Player {
     // to be shared because it's created on the main thread.
     const underrunBits = new BigUint64Array(new SharedArrayBuffer(8))
     project.getTracks().forEach((track, i) => {
+      if (loopRegion && !loopRegion.tracks.find((t) => t == track)) {
+        return
+      }
       track.stopPlayback()
       const ringBufferArray = RingBuffer.getStorageForCapacity(32 * 1024, Float32Array)
 
@@ -70,8 +85,10 @@ export class Player {
     workerController.setAudioWorkletNode(playerNodes)
     workerController.start(JobType.PLAYER, {
       projectName: `${project.id}`,
-      position: AudioControl.startPosition,
+      position: startSample,
+      endSample: endSample,
       sampleRate: audioContext.sampleRate,
+      loop: !!loopRegion,
       playbackInfos: playbackInfos,
     })
   }

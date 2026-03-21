@@ -1,14 +1,15 @@
-import { Summary } from "project/Summary"
+import { Summary } from 'project/Summary'
 
 export class AudioDecoderImporter {
-
-    readonly decoder: AudioDecoder
-    constructor(private readonly dirname: string, private readonly filename: string, private readonly summary: Summary,) {
-
-        this.decoder = new AudioDecoder({output: () => {}, error: () => {}})
-        
-    }
-/*
+  readonly decoder: AudioDecoder
+  constructor(
+    private readonly dirname: string,
+    private readonly filename: string,
+    private readonly summary: Summary,
+  ) {
+    this.decoder = new AudioDecoder({ output: () => {}, error: () => {} })
+  }
+  /*
         const summarySyncHandle = await (
           (await FileSystemUtils.getFileHandle(dirname, `${filename}_summary`)) as any
         ).createSyncAccessHandle()
@@ -39,5 +40,4 @@ export class AudioDecoderImporter {
           fileSyncHandle.close()
           summary.finishSummarizing()
         }*/
-
 }

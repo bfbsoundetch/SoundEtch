@@ -92,6 +92,7 @@ export class NotificationsController {
         this.notifications[i].updateElement(this.htmlElements[i])
       }
     }
+    console.error('ok!!!')
     const notif = new Notification(this.htmlElements[0], message, level)
     this.notifications[0] = notif
     return notif

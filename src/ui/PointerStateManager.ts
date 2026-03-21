@@ -120,6 +120,7 @@ export class PointerStateManager extends TrackListItemController {
         case State.MARKING:
           break
         case State.SELECTING:
+          this.changeState(State.DEFAULT)
           break
         case State.MOVING_CLIPVIEW:
           this.changeState(State.DEFAULT)
@@ -149,6 +150,13 @@ export class PointerStateManager extends TrackListItemController {
           break
       }
     })
+  }
+
+  startResizingSelection(leftExpand: boolean) {
+    this.activeClipViewController = null
+    this.activeWaveform = null
+    this.trackListController.updateSelectionStartSample(leftExpand)
+    this.changeState(State.SELECTING)
   }
 
   startResizingClipView(controller: ClipViewController) {
@@ -219,8 +227,10 @@ export class PointerStateManager extends TrackListItemController {
     }
     switch (this.state) {
       case State.SELECTING:
-        this.trackListController.clearSelection()
-        this.trackListController.positionMarkerController.hidePositionMarker()
+        if (newState != State.DEFAULT && newState != State.READ_ONLY) {
+          this.trackListController.clearSelection()
+          this.trackListController.positionMarkerController.hidePositionMarker()
+        }
         break
       case State.DEFAULT:
         break

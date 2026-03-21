@@ -1,6 +1,7 @@
 import { Player } from '../playback/Player'
 import { AudioControl, AudioState } from '../audiocontext/AudioControl'
 import { Recorder } from '../recording/Recorder'
+import { TrackListController } from './timeline/TrackListController'
 
 export class HeaderController {
   private firstHeaderButton = document.getElementById('first-header-button') as HTMLFormElement
@@ -40,13 +41,11 @@ export class HeaderController {
     this.firstHeaderButton.className = 'project-button animated-brightness'
     this.firstHeaderButton.onclick = () => {}
     this.firstHeaderButton.style.background = 'rgba(0,0,0,.2)'
-
     ;(this.secondHeaderButton.getElementsByClassName('pause')[0] as SVGUseElement).style.opacity = '1'
     ;(this.secondHeaderButton.getElementsByClassName('play')[0] as SVGUseElement).style.opacity = '0'
     this.secondHeaderButton.getElementsByTagName('span')[0].innerText = 'Pause'
     this.secondHeaderButton.onclick = AudioControl.pause
     this.secondHeaderButton.style.background = 'none'
-
     ;(this.thirdHeaderButton.getElementsByClassName('stop')[0] as SVGUseElement).style.opacity = '1'
     ;(this.thirdHeaderButton.getElementsByClassName('plus')[0] as SVGUseElement).style.opacity = '0'
     this.thirdHeaderButton.getElementsByTagName('span')[0].innerText = 'Stop'
@@ -65,13 +64,11 @@ export class HeaderController {
     }
     this.firstHeaderButton.className = 'project-button clickable'
     this.firstHeaderButton.onclick = AudioControl.unpause
-
     ;(this.secondHeaderButton.getElementsByClassName('pause')[0] as SVGUseElement).style.opacity = '1'
     ;(this.secondHeaderButton.getElementsByClassName('play')[0] as SVGUseElement).style.opacity = '0'
     this.secondHeaderButton.getElementsByTagName('span')[0].innerText = 'Unpause'
     this.secondHeaderButton.onclick = AudioControl.unpause
     this.secondHeaderButton.style.background = 'rgba(0,0,0,.2)'
-
     ;(this.thirdHeaderButton.getElementsByClassName('stop')[0] as SVGUseElement).style.opacity = '1'
     ;(this.thirdHeaderButton.getElementsByClassName('plus')[0] as SVGUseElement).style.opacity = '0'
     this.thirdHeaderButton.getElementsByTagName('span')[0].innerText = 'Stop'
@@ -85,13 +82,12 @@ export class HeaderController {
     this.firstHeaderButton.classList = 'project-button clickable'
     this.firstHeaderButton.onclick = Recorder.startRecordingActiveAudioInputs
     this.firstHeaderButton.style.background = 'none'
-
     ;(this.secondHeaderButton.getElementsByClassName('pause')[0] as SVGUseElement).style.opacity = '0'
     ;(this.secondHeaderButton.getElementsByClassName('play')[0] as SVGUseElement).style.opacity = '1'
     this.secondHeaderButton.getElementsByTagName('span')[0].innerText = 'Play'
-    this.secondHeaderButton.onclick = Player.playActiveProject2
+    this.secondHeaderButton.onclick = () =>
+      Player.playActiveProject2(((window as any).trackListController as TrackListController).selectedRegion)
     this.secondHeaderButton.style.background = 'none'
-
     ;(this.thirdHeaderButton.getElementsByClassName('stop')[0] as SVGUseElement).style.opacity = '0'
     ;(this.thirdHeaderButton.getElementsByClassName('plus')[0] as SVGUseElement).style.opacity = '1'
     this.thirdHeaderButton.getElementsByTagName('span')[0].innerText = 'Add clip...'
@@ -99,7 +95,6 @@ export class HeaderController {
   }
 
   private showAddClipModal() {
-    const overlay = document.getElementById('add-clip-modal') as HTMLElement
-    overlay.showModal()
+    ;(window as any).showDialog(document.getElementById('add-clip-modal'))
   }
 }

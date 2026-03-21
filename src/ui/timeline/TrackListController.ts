@@ -9,8 +9,9 @@ import { PointerStateManager } from '../PointerStateManager'
 import { ClipView, cloneClipViewWithNewStartPosition } from '../../project/ClipView'
 import { Clipboard } from '../Clipboard'
 import { PeakMeterController } from 'ui/PeakMeterController'
-import { TrackListTrack } from './TrackListTrack'
+import { TrackListTrack as TrackListInfo } from './TrackListTrack'
 import { InputListController } from './InputListController'
+import { SelectedRegion } from '../../playback/Player'
 
 interface Selection {
   startSample: number
@@ -41,6 +42,17 @@ export class TrackListController {
 
   get height() {
     return this.timelineController.getHeight() + this.tracklistElement.clientHeight
+  }
+
+  get selectedRegion(): SelectedRegion | null {
+    if (!this.selection) {
+      return null
+    }
+    return {
+      startSample: Math.min(this.selection.startSample, this.selection.endSample),
+      endSample: Math.max(this.selection.startSample, this.selection.endSample),
+      tracks: [...this.selection.waveforms.values().map((w) => w.track)],
+    }
   }
 
   private waveforms = new Array<Waveform>()
@@ -158,6 +170,8 @@ export class TrackListController {
         passive: false,
       })
 
+      const rootFontSize = parseFloat(getComputedStyle(document.documentElement).fontSize)
+
       for (let i = 0; i < project.getTracks().length; ++i) {
         const track = project.getTracks()[i]
         const existing = this.infoWaveformPairs.get(`${track.id}`)
@@ -167,16 +181,19 @@ export class TrackListController {
           continue
         }
 
-        const trackListTrack = new TrackListTrack(track)
+        const trackInfoDiv = document.createElement('div')
+        trackInfoDiv.style.height = `${7 * track.getChannelCount() + 1.5}rem`
+        const trackListInfo = new TrackListInfo(track, trackInfoDiv)
 
         const waveformDiv = document.createElement('div')
+        waveformDiv.style.height = `${7 * track.getChannelCount() + 1.5}rem`
         waveformDiv.id = `waveform-track-${track.id}`
 
         waveformDiv.addEventListener('wheel', this.scrollListener, {
           passive: false,
         })
 
-        this.tracklistInfoElement.appendChild(trackListTrack.trackInfoDiv)
+        this.tracklistInfoElement.appendChild(trackInfoDiv)
         this.tracklistElement.appendChild(waveformDiv)
 
         // const trackPeakMeterController = new PeakMeterController(trackPeakMeterDiv)
@@ -189,7 +206,7 @@ export class TrackListController {
           waveform.draw()
         }).observe(waveformDiv)
 
-        infoDivs.push(trackListTrack.trackInfoDiv)
+        infoDivs.push(trackInfoDiv)
         waveformDivs.push(waveformDiv)
       }
       this.tracklistInfoElement.replaceChildren(...infoDivs)
@@ -232,7 +249,7 @@ export class TrackListController {
   updateSelection(xCoord: number, waveform: Waveform | null, dragged: boolean) {
     xCoord = Math.max(xCoord, 0)
     const hasSelectionAlready = !!this.selection
-    if (!dragged) {
+    if (!dragged || !waveform) {
       this.selection = {
         startSample: this.selection?.startSample ?? xCoord,
         endSample: xCoord,
@@ -244,7 +261,6 @@ export class TrackListController {
       this.drawSelection()
       return
     }
-    let firstWaveform: Waveform | null = null
     if (!this.draggedFirstWaveform) {
       this.draggedFirstWaveform = waveform
     }
@@ -257,7 +273,8 @@ export class TrackListController {
       AudioControl.startPosition = 0
       this.positionMarkerController.draw()
     }
-    this.waveforms.forEach((w) => {
+    let firstWaveform: Waveform | null = null
+    for (const w of this.waveforms) {
       if (!firstWaveform && (w == this.draggedFirstWaveform || w == waveform)) {
         firstWaveform = w
       }
@@ -267,12 +284,12 @@ export class TrackListController {
         this.selection!.waveforms.delete(w)
       }
       if (
-        (firstWaveform != w && (w == this.draggedFirstWaveform || w == waveform)) ||
+        (w != firstWaveform && (w == this.draggedFirstWaveform || w == waveform)) ||
         this.draggedFirstWaveform == waveform
       ) {
         firstWaveform = null
       }
-    })
+    }
     this.drawSelection()
   }
 
@@ -383,6 +400,7 @@ export class TrackListController {
     }
     this.timelineController.draw()
     this.waveforms.forEach((waveform) => waveform.draw())
+    this.drawSelection()
     this.positionMarkerController.draw(position)
 
     requestAnimationFrame(() => controller.translateToFollowPosition(controller))

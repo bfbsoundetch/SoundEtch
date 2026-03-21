@@ -2,15 +2,11 @@ import { ProjectManager } from '../../project/ProjectManager'
 import { Track } from '../../project/Track'
 
 export class TrackListTrack {
-  readonly trackInfoDiv = document.createElement('div')
-
-  constructor(track: Track) {
+  constructor(
+    track: Track,
+    private readonly trackInfoDiv: HTMLDivElement,
+  ) {
     this.trackInfoDiv.classList = 'track-info tracklist-item'
-
-    const mainTrackInfoDiv = document.createElement('div')
-    mainTrackInfoDiv.className = 'main-track-info'
-    const trackPeakMeterDiv = document.createElement('div')
-    trackPeakMeterDiv.className = 'track-peak-meter'
 
     const trackTitle = document.createElement('div')
     trackTitle.style.margin = '.25rem'
@@ -19,32 +15,34 @@ export class TrackListTrack {
     trackTitle.style.maxHeight = '3em'
     trackTitle.style.overflow = 'hidden'
     trackTitle.style.wordBreak = 'break-all'
+    trackTitle.style.gridArea = 'title'
     trackTitle.innerText = track.name
 
     trackTitle.addEventListener('dblclick', () => this.makeEditable(trackTitle, track))
     trackTitle.addEventListener('blur', () => this.saveChanges(trackTitle, track))
 
-    mainTrackInfoDiv.appendChild(trackTitle)
+    this.trackInfoDiv.appendChild(trackTitle)
 
     const deleteTrackButton = document.createElement('div')
     deleteTrackButton.className = 'clickable'
     deleteTrackButton.style.height = '1.5rem'
     deleteTrackButton.style.width = '1.5rem'
     deleteTrackButton.style.margin = '.25rem'
-    deleteTrackButton.style.display = 'inline-block'
     deleteTrackButton.style.flex = '0 0 1'
+    deleteTrackButton.style.gridArea = 'delete'
     const deleteTrackIcon = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
     deleteTrackIcon.setAttribute('viewBox', '0 0 500 500')
     const trashIcon = document.createElementNS('http://www.w3.org/2000/svg', 'use')
     trashIcon.setAttributeNS('http://www.w3.org/1999/xlink', 'href', '#trash')
     deleteTrackIcon.appendChild(trashIcon)
     deleteTrackButton.appendChild(deleteTrackIcon)
-    mainTrackInfoDiv.appendChild(deleteTrackButton)
+    this.trackInfoDiv.appendChild(deleteTrackButton)
 
     const gainSliderParent = document.createElement('div')
     gainSliderParent.style.width = '100%'
     gainSliderParent.style.display = 'grid'
-    mainTrackInfoDiv.appendChild(gainSliderParent)
+    gainSliderParent.style.gridArea = 'gain'
+    this.trackInfoDiv.appendChild(gainSliderParent)
     gainSliderParent.style.position = 'relative'
 
     const gainSlider = document.createElement('input')
@@ -54,7 +52,6 @@ export class TrackListTrack {
     gainSlider.style.width = '90%'
     gainSlider.style.margin = 'auto'
     gainSlider.style.accentColor = 'var(--color)'
-    gainSliderParent.style.padding = '.25rem'
     const initialGainNumber = 20 * Math.log10(track.getGain())
     gainSlider.value = `${initialGainNumber}`
     const gainOutput = document.createElement('output')
@@ -80,7 +77,8 @@ export class TrackListTrack {
     const panSliderParent = document.createElement('div')
     panSliderParent.style.width = '100%'
     panSliderParent.style.display = 'grid'
-    mainTrackInfoDiv.appendChild(panSliderParent)
+    panSliderParent.style.gridArea = 'pan'
+    this.trackInfoDiv.appendChild(panSliderParent)
     panSliderParent.style.position = 'relative'
 
     const panSlider = document.createElement('input')
@@ -90,7 +88,6 @@ export class TrackListTrack {
     panSlider.style.width = '90%'
     panSlider.style.margin = 'auto'
     panSlider.style.accentColor = 'var(--color)'
-    panSliderParent.style.padding = '.25rem'
     const initialPanValue = track.getPan() * 10
     panSlider.value = `${initialPanValue}`
     panSlider.style.background =
@@ -128,10 +125,32 @@ export class TrackListTrack {
     panSliderParent.appendChild(panSlider)
     panSliderParent.appendChild(panOutput)
 
-    deleteTrackButton.onclick = () => ProjectManager.deleteTrack(track)
+    const peakMeterDiv = document.createElement('div')
+    peakMeterDiv.style.gridArea = 'peak'
+    peakMeterDiv.style.height = '100%'
+    peakMeterDiv.style.width = '100%'
+    this.trackInfoDiv.appendChild(peakMeterDiv)
 
-    this.trackInfoDiv.appendChild(mainTrackInfoDiv)
-    this.trackInfoDiv.appendChild(trackPeakMeterDiv)
+    // const effectsDropdown = document.createElement('select')
+    // track.effectParams.forEach((value, key) => {
+    //   const effectElement = document.createElement('select')
+    //   effectElement.innerHTML = key
+    //   effectElement.value = key
+    //   effectsDropdown.appendChild(effectElement)
+    // })
+    // const newEffectElement = document.createElement('option')
+    // newEffectElement.innerText = 'Add New...'
+    // newEffectElement.value = '__new__'
+
+    // newEffectElement.addEventListener('change', (event) => {
+    //   if (effectsDropdown.value == newEffectElement.value) {
+    //     // TODO
+    //   }
+    // })
+
+    // effectsDropdown.appendChild(newEffectElement)
+
+    deleteTrackButton.onclick = () => ProjectManager.deleteTrack(track)
   }
 
   private makeEditable(div: HTMLDivElement, track: Track) {

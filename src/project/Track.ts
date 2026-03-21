@@ -2,8 +2,9 @@ import { ClipView } from './ClipView'
 import { DatabasePersisted } from '../persistence/DatabasePersisted'
 import { Restorable } from '../persistence/Restoration'
 import { Analyzable } from '../analyzers/Analyzable'
-import { Effect } from '../effects/Effects'
 import { ProjectManager } from './ProjectManager'
+import { Effect } from 'effects/Effect'
+import { WamParameterInfoMap } from '@webaudiomodules/api'
 
 class Playback {
   constructor(
@@ -20,7 +21,7 @@ export class Track extends DatabasePersisted implements Analyzable {
   private playback: Playback | null = null
   private pan: number = 0
   private gain: number = 1
-  private readonly effects: Effect[] = []
+  readonly effectParams = new Map<string, WamParameterInfoMap>()
 
   constructor(
     public name: string,

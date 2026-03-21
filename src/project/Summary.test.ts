@@ -14,8 +14,9 @@ test('interleaved test', async () => {
   }
 
   summary.summarizeInterleavedData(sampleData, sampleDataLength * channelCount)
-  const firstChannelSummary = summary.getSummaryOfRange(0, sampleDataLength, Summary.SAMPLES_PER_SUMMARY)
-  const secondChannelSummary = summary.getSummaryOfRange(0, sampleDataLength, Summary.SAMPLES_PER_SUMMARY)
+  const bothChannelSummary = summary.getSummaryOfRange(0, sampleDataLength, Summary.SAMPLES_PER_SUMMARY)
+  const firstChannelSummary = bothChannelSummary[0]
+  const secondChannelSummary = bothChannelSummary[1]
 
   console.log(firstChannelSummary + ' ' + secondChannelSummary)
 
@@ -55,8 +56,9 @@ test('interleaved multiple input test', async () => {
     }
   }
 
-  const firstChannelSummary = summary.getSummaryOfRange(0, sampleDataLength, Summary.SAMPLES_PER_SUMMARY)
-  const secondChannelSummary = summary.getSummaryOfRange(0, sampleDataLength, Summary.SAMPLES_PER_SUMMARY)
+  const bothChannelSummary = summary.getSummaryOfRange(0, sampleDataLength, Summary.SAMPLES_PER_SUMMARY)
+  const firstChannelSummary = bothChannelSummary[0]
+  const secondChannelSummary = bothChannelSummary[1]
 
   console.log(firstChannelSummary + ' ' + secondChannelSummary)
 
@@ -96,8 +98,9 @@ test('separate channel multiple input test', async () => {
     }
   }
 
-  const firstChannelSummary = summary.getSummaryOfRange(0, sampleDataLength, Summary.SAMPLES_PER_SUMMARY)
-  const secondChannelSummary = summary.getSummaryOfRange(0, sampleDataLength, Summary.SAMPLES_PER_SUMMARY)
+  const bothChannelSummary = summary.getSummaryOfRange(0, sampleDataLength, Summary.SAMPLES_PER_SUMMARY)
+  const firstChannelSummary = bothChannelSummary[0]
+  const secondChannelSummary = bothChannelSummary[1]
 
   console.log(firstChannelSummary + ' ' + secondChannelSummary)
 

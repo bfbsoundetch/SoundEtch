@@ -1,4 +1,4 @@
-import { RemoteMediaClient, State } from '../remote/RemoteMediaClient'
+import { RemoteMediaClient2, State } from '../remote/RemoteMediaClient2'
 import { AudioControl, AudioState } from '../audiocontext/AudioControl'
 import { MediaStreamButtonController } from './MediaStreamButtonController'
 import { PeakMeterController } from './PeakMeterController'
@@ -6,6 +6,7 @@ import { Direction, ErrorBubbleController } from './ErrorBubbleController'
 import { NotificationsController } from './NotificationsController'
 import { AudioInputs } from '../audioinputs/AudioInputs'
 import { AudioInput } from '../audioinputs/AudioInput'
+import { LocalMediaStreams } from '../mediastreams/LocalMediaStreams'
 import { Logger } from '../global/Logger'
 
 type VideoLayout = 'spotlight' | 'solo' | 'grid'
@@ -13,17 +14,10 @@ type VideoLayout = 'spotlight' | 'solo' | 'grid'
 export class MeetingRoomController {
   private videoLayout: VideoLayout = 'grid'
   private centralVideoIndex = 0
-  private meetingRoomNameForm = document.getElementById('meeting-room-form') as HTMLFormElement
   private usernameForm = document.getElementById('username-form') as HTMLFormElement
-  private currentState: State = { type: 'state', members: [], amInRoom: false }
-  private remoteMediaClient = new RemoteMediaClient(
-    btoa(Math.random().toString().slice(10)),
-    (import.meta as any).env.VITE_SIGNALING_SERVER,
-  )
+  private currentState: State = { members: [], amInRoom: false }
+  private remoteMediaClient = new RemoteMediaClient2(btoa(Math.random().toString().slice(10)))
 
-  private readonly meetingRoomNameErrorBubble = new ErrorBubbleController(
-    this.meetingRoomNameForm.parentElement as HTMLDivElement,
-  )
   private readonly usernameErrorBubble = new ErrorBubbleController(this.usernameForm.parentElement as HTMLDivElement)
   private readonly createMeetingErrorBubble = new ErrorBubbleController(
     document.getElementById('create-meeting-button') as HTMLDivElement,
@@ -34,34 +28,18 @@ export class MeetingRoomController {
   private readonly logger = new Logger('MeetingRoomController')
 
   constructor() {
-    this.remoteMediaClient.addChatMessageListener((message) => {
-      const e = document.createElement('p')
-      e.textContent = `${message.fromUser}: ${message.text}`
-      document.getElementById('chat')!.appendChild(e)
-    })
-    // For UI
     this.remoteMediaClient.addStateListener((state: State) => this.stateListener(this, state))
-    this.remoteMediaClient.addErrorListener(
-      (e) => this.notificationsController.showError(e),
-      // this.createMeetingErrorBubble.showError(e, 9500, Direction.LEFT),
-    )
 
     const micButton = document.getElementById('meeting-mic-button')!
     this.micButtonController = new MediaStreamButtonController(micButton, 'audio', false)
     const vidButton = document.getElementById('meeting-camera-button')!
     this.videoButtonController = new MediaStreamButtonController(vidButton, 'video', false)
-    this.remoteMediaClient.getRoomNameSuggestion().then((name) => (this.meetingRoomNameForm.value = name))
     this.setUiForDisconnectedState()
     this.applyVideoLayout()
   }
 
   async createMeeting(): Promise<boolean> {
-    if (this.remoteMediaClient.amInRoom()) {
-      return false
-    }
-    const meetingId = this.meetingRoomNameForm.value
-    if (!meetingId || (meetingId as string).trim().length == 0) {
-      this.meetingRoomNameErrorBubble.showError('Please enter a meeting room name', 2000)
+    if (await this.remoteMediaClient.amInRoom()) {
       return false
     }
     const username = this.usernameForm.value
@@ -69,35 +47,27 @@ export class MeetingRoomController {
       this.usernameErrorBubble.showError('Please enter your username', 2000)
       return false
     }
-    await this.remoteMediaClient.takeRoom(meetingId)
     return true
   }
 
   async joinMeeting(): Promise<boolean> {
-    if (this.remoteMediaClient.amInRoom()) {
+    if (await this.remoteMediaClient.amInRoom()) {
       return false
     }
 
-    const meetingId = this.meetingRoomNameForm.value
-    if (!meetingId || (meetingId as string).trim().length == 0) {
-      this.meetingRoomNameErrorBubble.showError('No meeting room provided', 5000)
-      return false
+    if (window.location.search) {
+      const meetingId = new URL(window.location.toString()).searchParams.get('meeting')
+      if (meetingId) {
+        this.logger.log('About to join ' + meetingId)
+        this.remoteMediaClient.joinRoom(meetingId)
+      }
+      return true
     }
-    this.logger.log('About to join ' + meetingId)
-    this.remoteMediaClient.joinRoom(meetingId)
-    return true
+    return false
   }
 
   async amInRoom(): Promise<boolean> {
     return this.remoteMediaClient.amInRoom()
-  }
-
-  onChatInputKeyDown(event: KeyboardEvent) {
-    if (event.key == 'Enter') {
-      const inputElement = document.getElementById('chatInput') as HTMLInputElement
-      this.remoteMediaClient.sendChatToPeers(inputElement.value)
-      inputElement.value = ''
-    }
   }
 
   toggleVidLayoutChange() {
@@ -170,9 +140,9 @@ export class MeetingRoomController {
   // `this` appears to be undefined when you set this up in the constructor.
   // But you can still pass `this` in as an argument!
   private async stateListener(meetingRoomController: MeetingRoomController, state: State) {
-    if (this.currentState == state) {
-      return
-    }
+    // if (this.currentState == state) {
+    //   return
+    // }
     if (this.currentState.amInRoom != state.amInRoom) {
       if (state.amInRoom) {
         this.setUiForConnectedState()
@@ -180,6 +150,7 @@ export class MeetingRoomController {
         this.setUiForDisconnectedState()
       }
     }
+    console.error(JSON.stringify(state))
     const vidsParentElement = document.getElementById('vids') as HTMLDivElement
     const elementIds = new Array<string>()
     const audioContext = await AudioControl.getOrCreateAudioContext(AudioState.MONITORING)
@@ -214,12 +185,12 @@ export class MeetingRoomController {
       } else {
         videoElement = vidDiv.getElementsByTagName('video').item(0)!
         if (member.mediaStream.getVideoTracks().length == 0 || member.mediaStream.getVideoTracks()[0].muted) {
-          videoElement.srcObject = member.mediaStream
+          videoElement.srcObject = null
         }
       }
 
       const divs = vidDiv.getElementsByTagName('div')
-      this.logger.error(`${member.username}: ${member.mediaStream.getAudioTracks().length}`)
+      console.error(`${member.username}: ${member.mediaStream.getAudioTracks().length}`)
       if (
         divs.length == 0 &&
         member.mediaStream.getAudioTracks().length > 0 &&

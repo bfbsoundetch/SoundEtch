@@ -172,28 +172,16 @@ export class TimelineController extends TrackListItemController {
       this.selection.rightLabel.style.fontSize = '18px'
       this.selection.rightLabel.style.fontWeight = 'bold'
 
-      const mouseMoveListener = (event: MouseEvent) => {
-        if (event.buttons == 1 && event.button == 0) {
-          this.trackListController.updateSelection(
-            this.getSampleForXValue(this.mouseEventToSvgCoord(event).x),
-            null,
-            false,
-          )
-        }
-      }
-
       this.selection.leftExpand.addEventListener('mousedown', (event) => {
         if (event.buttons == 1 && event.button == 0) {
-          this.trackListController.updateSelectionStartSample(true)
-          this.svg.addEventListener('mousemove', mouseMoveListener)
+          this.trackListController.pointerStateManager.startResizingSelection(true)
           event.stopPropagation()
         }
       })
 
       this.selection.rightExpand.addEventListener('mousedown', (event) => {
         if (event.buttons == 1 && event.button == 0) {
-          this.trackListController.updateSelectionStartSample(false)
-          this.svg.addEventListener('mousemove', mouseMoveListener)
+          this.trackListController.pointerStateManager.startResizingSelection(false)
           event.stopPropagation()
         }
       })

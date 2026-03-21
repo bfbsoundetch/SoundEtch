@@ -16,12 +16,12 @@ export class Logger {
     return Logger.logItems.map((item) => item.toString()).join('\n')
   }
 
-  log(text: string, tag: string | null = null) {
-    this.logAtLevel(text, Level.INFO)
-  }
-
   debug(text: string, tag: string | null = null) {
     this.logAtLevel(text, Level.DEBUG)
+  }
+
+  log(text: string, tag: string | null = null) {
+    this.logAtLevel(text, Level.INFO)
   }
 
   error(text: string, tag: string | null = null) {

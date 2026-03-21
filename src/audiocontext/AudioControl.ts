@@ -82,9 +82,10 @@ export class AudioControl {
   static async createNewAudioContext(
     mode: ActiveAudioState,
     position = AudioControl.startPosition,
+    loopEnd: number = 0,
   ): Promise<EnhancedAudioContext> {
     await AudioControl.closeAndRemoveAudioContext()
-    AudioControl.audioContext = await EnhancedAudioContext.create(mode, position)
+    AudioControl.audioContext = await EnhancedAudioContext.create(mode, position, loopEnd)
     await AudioControl.audioContext.suspend()
     AudioControl.audioContext.addEventListener('statechange', (_) => {
       const state = this.getState()

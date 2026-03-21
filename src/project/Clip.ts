@@ -1,10 +1,12 @@
 import { Restorable } from '../persistence/Restoration'
 import { DatabasePersisted } from '../persistence/DatabasePersisted'
 import { Summary } from './Summary'
+import { TranscribedRange } from '../transcription/Transcriber'
 
 @Restorable('Clip')
 export class Clip extends DatabasePersisted {
   readonly summary: Summary
+  readonly transcription = new Array<TranscribedRange>()
 
   constructor(
     readonly name: string,

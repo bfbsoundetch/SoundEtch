@@ -34,9 +34,10 @@ export class Summary {
     if (endSample > this.samplesRepresented[0]) {
       endSample = this.samplesRepresented[0]
     }
-    const result = new Array<Array<number>>(this.channelCount).fill(
-      new Array<number>(2 * Math.round((endSample - startSample) / skip)),
-    )
+    const result = new Array<Array<number>>(this.channelCount)
+    for (let i = 0; i < this.channelCount; ++i) {
+      result[i] = new Array<number>(2 * Math.round((endSample - startSample) / skip))
+    }
 
     for (let channel = 0; channel < this.channelCount; ++channel) {
       let resultIndex = 0
@@ -145,7 +146,7 @@ export class Summary {
         }
       }
     }
-    this.syncFileHandle!.flush()
+    this.syncFileHandle?.flush()
   }
 
   private writeValueToDisk(chunkPosition: number, chunkIndex: number) {
