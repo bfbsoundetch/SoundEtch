@@ -2,6 +2,7 @@
 <html>
   <head>
     <link rel="stylesheet" href="index.css" />
+    <link rel="icon" type="image/svg+xml" href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 500 500'%3E%3Cstyle%3E svg %7B --c: rgb(0, 0, 0); %7D @media (prefers-color-scheme: dark) %7B svg %7B --c: rgb(255,255,255); %7D %7D %3C/style%3E%3Cpath style='fill: none; stroke-width: 19px; stroke: var(--c);' d='M -5 165 A 250 250 0 0 1 100 250 A 250 250 0 0 1 490 250 A 250 250 0 0 1 100 250 A 250 250 0 0 1 -5 335'%3E%3C/path%3E%3Ctext style='fill: var(--c); font-family: Georgia; font-size: 41px; font-weight: 700; letter-spacing: 2px; white-space: pre;' x='400' y='260'%3ESE%3C/text%3E%3C/svg%3E"/>
   </head>
   <title>SoundEtch</title>
   <script type="module" src="./src/WebEntrypoint.js"></script>
@@ -368,7 +369,7 @@
         <h1>Audio Export Settings</h1>
 
         <div class="form-group">
-          <label for="format">Export Format</label>
+          <label for="format" style="">Export Format</label>
           <select id="format" onchange="exportProjectController.handleFormatSwitch(this.value)">
             <option value="wav">WAV - Uncompressed Audio</option>
             <option value="flac">FLAC - Lossless Compression</option>
@@ -386,7 +387,6 @@
               <option value="float32">32-bit Float</option>
               <option value="int8">8-bit Integer</option>
             </select>
-            <div class="info-text">Higher bit depth = better dynamic range</div>
           </div>
 
           <div class="export-option-row">
@@ -399,11 +399,10 @@
               <option value="22050">22050 Hz</option>
               <option value="24000">24000 Hz</option>
               <option value="32000">32000 Hz</option>
-              <option value="44100" selected>44100 Hz</option>
-              <option value="48000">48000 Hz</option>
+              <option value="44100">44100 Hz</option>
+              <option value="48000" selected>48000 Hz</option>
               <option value="96000">96000 Hz</option>
             </select>
-            <div class="info-text">Choose the output sample rate for the rendered WAV file</div>
           </div>
         </div>
 
@@ -442,9 +441,9 @@
             </div>
           </div>
 
-          <div id="mp3-cbr-options" class="export-option-row">
+          <div id="mp3-cbr-options" class="export-option-row" style="display:block;">
             <label for="mp3-cbr-bitrate">Bitrate</label>
-            <select id="mp3-cbr-bitrate">
+            <select id="mp3-cbr-bitrate" style="margin-top:.5rem;">
               <option value="8">8 kbps</option>
               <option value="16">16 kbps</option>
               <option value="24">24 kbps</option>
@@ -464,19 +463,20 @@
             </select>
           </div>
 
-          <div id="mp3-vbr-options" class="export-option-row" hidden>
-            <label for="mp3-vbr-quality">Quality</label>
+          <div id="mp3-vbr-options" class="export-option-row" style="display:block;" hidden>
+            <label for="vbr-quality-slider">Quality (0 for best sound, 9 for smallest file)</label>
             <input
               type="range"
-              id="mp3-vbr-quality"
-              oninput="this.nextElementSibling.value = this.value"
-              value="4"
+              id="vbr-quality-slider"
+              style="margin-top:.5rem;"
+              value="2"
               min="0"
               max="9"
               step="1"
             />
-            <output>4</output>
-            <div class="info-text">0 = best quality, 9 = smallest file</div>
+            <div style="position:relative;">
+              <output id="vbr-quality-output" class="slider-value" style="top: 50%;">2</output>
+            </div>
           </div>
 
           <div class="export-option-row">

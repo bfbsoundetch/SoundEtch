@@ -57,9 +57,6 @@ export class TrackListTrack {
     const gainOutput = document.createElement('output')
     gainOutput.classList = 'slider-value'
     gainOutput.value = `gain: ${initialGainNumber > 0 ? '+' : ''}${initialGainNumber} dB`
-    gainOutput.style.transform = 'translate(-50%,0)'
-    gainOutput.style.left = `50%`
-    gainOutput.style.pointerEvents = 'none'
     gainSlider.oninput = () => {
       const gainNumber = Number(gainSlider.value)
       track.setGain(10 ** (gainNumber / 20))
@@ -101,9 +98,6 @@ export class TrackListTrack {
     } else {
       panOutput.value = `pan: ${initialPanValue * 100}% right`
     }
-    panOutput.style.transform = 'translate(-50%,0)'
-    panOutput.style.left = `50%`
-    panOutput.style.pointerEvents = 'none'
 
     panSlider.oninput = () => {
       const value = Number(panSlider.value) / 10

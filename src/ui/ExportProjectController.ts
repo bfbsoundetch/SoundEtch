@@ -6,7 +6,7 @@ export class ExportProjectController {
 
   constructor() {
     this.formatSelect = document.getElementById('format') as HTMLSelectElement
-    this.mp3ModeInputs = [...document.querySelectorAll('input[name="mp3-mode"]')] as HTMLInputElement[]
+    this.mp3ModeInputs = Array.from(document.querySelectorAll('input[name="mp3-mode"]')) as HTMLInputElement[]
 
     this.formatContainerMap.set(Format.WAV, document.getElementById('wav-options-container') as HTMLDivElement)
     this.formatContainerMap.set(Format.FLAC, document.getElementById('flac-options-container') as HTMLDivElement)
@@ -22,6 +22,24 @@ export class ExportProjectController {
       })
     })
 
+    const vbrSlider = document.getElementById('vbr-quality-slider') as HTMLInputElement
+    const vbrOutput = document.getElementById('vbr-quality-output') as HTMLOutputElement
+    const percentage = vbrSlider.valueAsNumber / .09
+    vbrOutput.style.left = `calc(${percentage}% + (${9 - percentage * 0.15}px))`
+    vbrSlider.oninput = () => {
+      const percentage = vbrSlider.valueAsNumber / .09
+      // adjust for handle width
+      vbrOutput.style.left = `calc(${percentage}% + (${9 - percentage * 0.15}px))`
+      vbrOutput.value = vbrSlider.value
+    }
+    vbrSlider.addEventListener('mouseenter', () => {
+      vbrOutput.style.opacity = '1'
+    })
+    vbrSlider.addEventListener('mouseleave', () => {
+      vbrOutput.style.opacity = '0'
+    })
+
+
     this.handleFormatSwitch(this.formatSelect.value as Format)
     this.handleMp3ModeSwitch(this.getSelectedMp3Mode())
   }
@@ -34,7 +52,7 @@ export class ExportProjectController {
 
   handleMp3ModeSwitch(newMode: Mp3Mode) {
     this.mp3ModeContainerMap.forEach((element, mode) => {
-      element.hidden = mode !== newMode
+      element.style.display = mode !== newMode ? 'none' : 'block'
     })
   }
 

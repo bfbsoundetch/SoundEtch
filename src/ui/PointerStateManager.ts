@@ -214,11 +214,6 @@ export class PointerStateManager extends TrackListItemController {
     AudioControl.startPosition = Math.round(this.getSampleForXValue(this.mouseEventToSvgCoord(mouseEvent).x))
     this.trackListController.positionMarkerController.draw()
     this.trackListController.clearSelection()
-    this.trackListController.updateSelection(
-      this.getSampleForXValue(this.mouseEventToSvgCoord(mouseEvent).x),
-      this.activeWaveform!,
-      false,
-    )
   }
 
   private changeState(newState: State) {

@@ -15,10 +15,8 @@ export class MediaStreamButtonController {
       LocalMediaStreams.registerScreenListener((added, track) => {
         this.toggleSlashIcon(added)
         if (added) {
-          mainElement.style.backdropFilter = 'brightness(.75)'
           mainElement.onclick = LocalMediaStreams.endScreenShare
         } else {
-          mainElement.style.backdropFilter = ''
           mainElement.onclick = LocalMediaStreams.startCapturingTab
         }
       })
@@ -31,11 +29,6 @@ export class MediaStreamButtonController {
       LocalMediaStreams.registerAVDeviceListener((added, track) => {
         if (track.kind != this.mediaType) {
           return
-        }
-        if (added) {
-          mainElement.style.backdropFilter = 'brightness(.75)'
-        } else {
-          mainElement.style.backdropFilter = ''
         }
         this.toggleSlashIcon(added)
         if (this.mediaType == 'audio') {

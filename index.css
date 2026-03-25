@@ -56,8 +56,11 @@ button:focus {
   opacity: 0;
   white-space: nowrap;
   padding: 0.25rem;
+  transform: translate(-50%,0);
+  left: 50%;
   z-index: 999;
   transition: opacity 0.1s ease;
+  pointer-events: none;
 }
 
 body {
@@ -777,6 +780,7 @@ video {
   box-sizing: border-box;
   background-color: var(--alt-background);
   border: 1px solid var(--color);
+  position: relative;
 }
 
 .export-options-container {
@@ -784,6 +788,7 @@ video {
   flex-direction: column;
   gap: 0.75rem;
   width: 100%;
+  user-select: none;
 }
 
 .radio-group {

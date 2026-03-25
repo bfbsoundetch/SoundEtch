@@ -1,5 +1,4 @@
 import { RingBuffer, AudioReader, AudioWriter } from 'ringbuf.js'
-// import * as wasm from "./wasm/df_bg.wasm";
 import * as wasm_bindgen from './wasm/df_bg.js'
 
 let frame_length
