@@ -219,18 +219,18 @@
       </div>
     </div>
     <dialog id="add-clip-modal" class="overlay">
-      <div id="add-clip-modal-content" class="add-clip-modal-content" onclick="event.stopPropagation()">
+      <div id="add-clip-modal-content" class="overlay-content add-clip-modal-content" onclick="event.stopPropagation()">
         <div class="overlay-close-button clickable" onclick="closeOverlay()">
           <svg class="meeting-icon" viewBox="0 0 500 500">
             <use xlink:href="#menu-close" />
           </svg>
         </div>
-        <label class="overlay-box clickable" for="audio-file-local">Choose local file...</label>
+        <h1>Add Clip</h1>
+        <label class="menu-item clickable add-clip-option" for="audio-file-local">Choose local file...</label>
         <input type="file" id="audio-file-local" accept="audio/*" hidden onchange="audioFileLocalHandler()" />
-        <label class="overlay-box clickable" for="audio-file-url"
-          >From URL<br />
+        <label class="add-clip-url-option" for="audio-file-url"
+          >From URL
           <input
-            style="padding: 0.5em; min-width: 95%"
             type="text"
             id="audio-file-url"
             onchange="audioFileUrlHandler()"

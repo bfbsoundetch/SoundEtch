@@ -332,6 +332,51 @@ dialog.overlay[open] {
   place-items: center;
 }
 
+#add-clip-modal-content {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.75rem;
+  padding: 3.5rem 1rem 1rem;
+  box-sizing: border-box;
+  width: min(90vw, 36rem);
+  height: auto;
+  max-height: 85vh;
+}
+
+#add-clip-modal-content h1 {
+  margin: 0 0 0.25rem;
+  font-size: 2rem;
+}
+
+.add-clip-option,
+.add-clip-url-option {
+  font-size: 1.1rem;
+  border: 1px solid;
+  background-color: var(--alt-background);
+  box-sizing: border-box;
+}
+
+.add-clip-option {
+  padding: 0.75rem;
+}
+
+.add-clip-url-option {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  padding: 0.75rem;
+}
+
+#audio-file-url {
+  padding: 0.5rem;
+  width: 100%;
+  box-sizing: border-box;
+  border: 1px solid;
+  color: inherit;
+  background: var(--bg-color);
+}
+
 svg {
   fill: currentColor;
   stroke: currentColor;
