@@ -492,6 +492,13 @@ video {
   opacity: 1;
 }
 
+.meeting-peak-meter-div {
+  height: 100%;
+  aspect-ratio: 1/5;
+  font-family: monospace;
+  display: none;
+}
+
 #timeline-area {
   display: flex;
   flex-direction: column;

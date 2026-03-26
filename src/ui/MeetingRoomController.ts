@@ -1,4 +1,4 @@
-import { RemoteMediaClient2, State } from '../remote/RemoteMediaClient2'
+import { Member, RemoteMediaClient2, State } from '../remote/RemoteMediaClient2'
 import { AudioControl, AudioState } from '../audiocontext/AudioControl'
 import { MediaStreamButtonController } from './MediaStreamButtonController'
 import { PeakMeterController } from './PeakMeterController'
@@ -27,6 +27,10 @@ export class MeetingRoomController {
   private readonly videoButtonController: MediaStreamButtonController
   private readonly logger = new Logger('MeetingRoomController')
 
+  private readonly selfVideoElement = document.getElementById('self-vid') as HTMLVideoElement
+  private readonly selfAudioElement = document.getElementById('self-meeting-peak') as HTMLDivElement
+  private selfPeakMeter: PeakMeterController | null = null
+
   constructor() {
     this.remoteMediaClient.addStateListener((state: State) => this.stateListener(this, state))
 
@@ -36,6 +40,46 @@ export class MeetingRoomController {
     this.videoButtonController = new MediaStreamButtonController(vidButton, 'video', false)
     this.setUiForDisconnectedState()
     this.applyVideoLayout()
+    LocalMediaStreams.registerAVDeviceListener((added, track) => {
+      if (track.kind == 'video') {
+        if (added) {
+          this.selfVideoElement.srcObject = LocalMediaStreams.localAVDeviceMediaStream
+        } else {
+          this.selfVideoElement.srcObject = null
+        }
+      } else {
+        if (added) {
+          this.selfPeakMeter = new PeakMeterController(this.selfAudioElement, AudioInputs.localAVDevice!, false)
+          this.selfPeakMeter.draw(this.selfPeakMeter)
+          this.selfAudioElement.style.display = 'inline-block'
+        } else {
+          this.selfPeakMeter!.remove()
+          this.selfPeakMeter!.stop()
+          this.selfPeakMeter = null
+          this.selfAudioElement.style.display = 'none'
+        }
+      }
+    })
+    this.selfVideoElement.style.transform = 'scale(-1,1)'
+    this.selfVideoElement.poster = this.getSvgPosterForUser('You', true)
+    this.selfVideoElement.onloadedmetadata = () => {
+      this.selfVideoElement.play()
+    }
+
+    // LocalMediaStreams.registerScreenListener((added, mediaStreamTrack) => {
+    //   if (added) {
+    //     this.state.members.push({
+    //       peerId: this.peer.id,
+    //       username: this.username,
+    //       mediaStream: LocalMediaStreams.localScreenMediaStream,
+    //       isScreenShare: true,
+    //       isSelf: true,
+    //     })
+    //   } else {
+    //     this.deleteMember(this.peer.id, true)
+    //   }
+    //   this.notifyStateListeners()
+    // })
   }
 
   async createMeeting(): Promise<boolean> {
@@ -44,9 +88,10 @@ export class MeetingRoomController {
     }
     const username = this.usernameForm.value
     if (!username || (username as string).trim().length == 0) {
-      this.usernameErrorBubble.showError('Please enter your username', 2000)
+      this.usernameErrorBubble.showError('Please enter your name', 2000)
       return false
     }
+    this.remoteMediaClient.createRoom()
     return true
   }
 
@@ -117,6 +162,7 @@ export class MeetingRoomController {
         break
     }
   }
+
   spotlightElement(id: string) {
     const vidsParentElement = document.getElementById('vids')!
     const newChildren = []
@@ -137,12 +183,10 @@ export class MeetingRoomController {
     this.remoteMediaClient.disconnect()
   }
 
-  // `this` appears to be undefined when you set this up in the constructor.
-  // But you can still pass `this` in as an argument!
   private async stateListener(meetingRoomController: MeetingRoomController, state: State) {
-    // if (this.currentState == state) {
-    //   return
-    // }
+    if (this.currentState == state) {
+      return
+    }
     if (this.currentState.amInRoom != state.amInRoom) {
       if (state.amInRoom) {
         this.setUiForConnectedState()
@@ -184,9 +228,6 @@ export class MeetingRoomController {
         videoElement.srcObject = member.mediaStream
       } else {
         videoElement = vidDiv.getElementsByTagName('video').item(0)!
-        if (member.mediaStream.getVideoTracks().length == 0 || member.mediaStream.getVideoTracks()[0].muted) {
-          videoElement.srcObject = null
-        }
       }
 
       const divs = vidDiv.getElementsByTagName('div')
@@ -223,15 +264,19 @@ export class MeetingRoomController {
         vidDiv.removeChild(divs.item(0)!)
       }
     }
-    for (let i = 0; i < vidsParentElement.children.length; ++i) {
-      const node = vidsParentElement.children[i]
-      if (!elementIds.includes(node.id)) {
-        console.log('oh dear ;()' + node.id + ' ' + JSON.stringify(elementIds))
-        node.remove()
-      }
-    }
+    // for (let i = 0; i < vidsParentElement.children.length; ++i) {
+    //   const node = vidsParentElement.children[i]
+    //   if (!elementIds.includes(node.id)) {
+    //     console.log('oh dear ;()' + node.id + ' ' + JSON.stringify(elementIds))
+    //     node.remove()
+    //   }
+    // }
     meetingRoomController.applyVideoLayout()
     this.currentState = state
+  }
+
+  private updateUiForMediaStream(div: HTMLDivElement, mediaStream: MediaStream) {
+    // div.addEventListener('click', () => this.spotlightElement(div))
   }
 
   private setUiForDisconnectedState() {
@@ -265,7 +310,7 @@ export class MeetingRoomController {
   }
 
   private getSvgPosterForUser(username: string, isSelf: boolean) {
-    const svgString = `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><style>svg { background-color:rgb(50, 50, 50); fill: white;}</style><text x="${isSelf ? '-' : ''}50" y="50" font-family="Georgia, Palantino, serif" dominant-baseline="middle" text-anchor="middle" ${isSelf ? 'transform="scale(-1, 1)"' : ''}>${isSelf ? 'You' : username}</text></svg>`
+    const svgString = `<svg viewBox="0 0 100 100" xmlns="http://www.w3.org/2000/svg"><style>svg { background-color:rgb(50, 50, 50); fill: white;}</style><text x="${isSelf ? '-' : ''}50" y="50" font-family="Georgia, Palantino, serif" dominant-baseline="middle" text-anchor="middle" ${isSelf ? 'transform="scale(-1, 1)"' : ''}>${username}</text></svg>`
     return 'data:image/svg+xml,' + encodeURIComponent(svgString)
   }
 }
