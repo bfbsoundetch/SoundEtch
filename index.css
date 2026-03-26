@@ -360,6 +360,18 @@ dialog.overlay[open] {
   box-sizing: border-box;
 }
 
+.add-clip-source-toggle {
+  display: flex;
+  gap: 1rem;
+  flex-wrap: wrap;
+}
+
+.add-clip-source-option {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
 .add-clip-option {
   padding: 0.75rem;
 }

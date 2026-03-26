@@ -18,18 +18,30 @@
         document.getElementById('main-menu-close-button').style.display
       document.getElementById('main-menu-close-button').style.display = openButtonDisplay
     }
-    function audioFileUrlHandler() {
-      const inputForm = document.getElementById('audio-file-url')
-      if (URL.canParse(inputForm.value)) {
-        Recorder.createFromUrl(inputForm.value)
-      }
-    }
     function audioFileLocalHandler() {
       const inputForm = document.getElementById('audio-file-local')
       if (inputForm.files.length == 1) {
         Recorder.createFromFile(inputForm.files[0])
       } else {
         console.error('test failed ;(')
+      }
+    }
+    function audioFileRemoteHandler() {
+      const inputForm = document.getElementById('audio-file-url')
+      if (!URL.canParse(inputForm.value)) {
+        return
+      }
+      Recorder.createFromUrl(inputForm.value)
+    }
+    function setAddClipSource(sourceType) {
+      const localSection = document.getElementById('add-clip-local-section')
+      const remoteSection = document.getElementById('add-clip-remote-section')
+      if (sourceType === 'local') {
+        localSection.style.display = 'block'
+        remoteSection.style.display = 'none'
+      } else {
+        localSection.style.display = 'none'
+        remoteSection.style.display = 'flex'
       }
     }
 
@@ -227,16 +239,25 @@
           </svg>
         </div>
         <h1>Add Clip</h1>
-        <label class="menu-item clickable add-clip-option" for="audio-file-local">Choose local file...</label>
-        <input type="file" id="audio-file-local" accept="audio/*" hidden onchange="audioFileLocalHandler()" />
-        <label class="add-clip-url-option" for="audio-file-url"
-          >From URL
-          <input
-            type="text"
-            id="audio-file-url"
-            onchange="audioFileUrlHandler()"
-          />
-        </label>
+        <div class="add-clip-source-toggle">
+          <label class="add-clip-source-option">
+            <input type="radio" name="add-clip-source" checked onchange="setAddClipSource('local')" />
+            Local file
+          </label>
+          <label class="add-clip-source-option">
+            <input type="radio" name="add-clip-source" onchange="setAddClipSource('remote')" />
+            Remote URL
+          </label>
+        </div>
+        <div id="add-clip-local-section">
+          <label class="menu-item clickable add-clip-option" for="audio-file-local">Choose local file...</label>
+          <input type="file" id="audio-file-local" accept="audio/*" hidden onchange="audioFileLocalHandler()" />
+        </div>
+        <div id="add-clip-remote-section" class="add-clip-url-option" style="display: none">
+          <label for="audio-file-url">From URL</label>
+          <input type="text" id="audio-file-url" placeholder="https://example.com/audio-file.wav" />
+          <button class="menu-item clickable add-clip-option" onclick="audioFileRemoteHandler()">Load remote file</button>
+        </div>
       </div>
     </dialog>
     <dialog id="meeting-room" class="overlay">
