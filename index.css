@@ -685,7 +685,10 @@ video {
   height: 3rem;
   margin: 0.5rem;
   align-items: center;
-  display: grid;
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  pointer-events: auto;
   transition: opacity 35ms 0ms ease-in;
 }
 
@@ -696,8 +699,27 @@ video {
   margin: 0.5rem;
   align-items: center;
   color: white;
-  display: grid;
+  display: flex;
+  justify-content: space-between;
+  gap: 0.75rem;
+  pointer-events: auto;
   transition: opacity 35ms 0ms ease-in;
+}
+
+.notification-message {
+  flex: 1;
+  text-align: left;
+  margin-left: 0.75rem;
+}
+
+.notification-close {
+  border: none;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+  font-size: 1.5rem;
+  line-height: 1;
+  padding: 0 0.75rem;
 }
 
 .waveform-selection {

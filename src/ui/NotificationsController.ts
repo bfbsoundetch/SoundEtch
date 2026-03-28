@@ -15,9 +15,7 @@ export class Notification {
     private message: string,
     private readonly level: Level,
   ) {
-    element.innerText = message
-    element.style.opacity = '1'
-    element.className = level == Level.ERROR ? 'notification-error' : 'notification-info'
+    this.renderElement()
     this.timeout = this.startTimeout()
   }
 
@@ -26,9 +24,7 @@ export class Notification {
       return
     }
     this.element = element
-    element.innerText = this.message
-    element.style.opacity = '1'
-    element.className = this.level == Level.ERROR ? 'notification-error' : 'notification-info'
+    this.renderElement()
   }
 
   updateMessage(message: string) {
@@ -36,6 +32,8 @@ export class Notification {
       return
     }
     this.message = message
+    clearTimeout(this.timeout)
+    this.renderElement()
     this.timeout = this.startTimeout()
   }
 
@@ -51,9 +49,27 @@ export class Notification {
 
   private startTimeout(): ReturnType<typeof setTimeout> {
     return setTimeout(() => {
-      this.element.style.opacity = '0'
-      this.finished = true
+      this.remove()
     }, this.level)
+  }
+
+  private renderElement() {
+    this.element.style.opacity = '1'
+    this.element.className = this.level == Level.ERROR ? 'notification-error' : 'notification-info'
+    this.element.innerHTML = ''
+
+    const messageElement = document.createElement('span')
+    messageElement.innerText = this.message
+    messageElement.className = 'notification-message'
+    this.element.appendChild(messageElement)
+
+    const closeButton = document.createElement('button')
+    closeButton.className = 'notification-close'
+    closeButton.innerText = '×'
+    closeButton.type = 'button'
+    closeButton.setAttribute('aria-label', 'Dismiss notification')
+    closeButton.onclick = () => this.remove()
+    this.element.appendChild(closeButton)
   }
 }
 
@@ -92,7 +108,6 @@ export class NotificationsController {
         this.notifications[i].updateElement(this.htmlElements[i])
       }
     }
-    console.error('ok!!!')
     const notif = new Notification(this.htmlElements[0], message, level)
     this.notifications[0] = notif
     return notif
