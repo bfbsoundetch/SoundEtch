@@ -254,51 +254,61 @@
           <use xlink:href="#menu-close" />
         </svg>
       </div>
-      <div id="vids">
-        <div id="self-meeting">
+      <div id="vids" class="meeting-solo">
+        <div id="self-meeting" class="vid-div">
           <video id="self-vid" style="display:inline-block;"></video>
           <div id="self-meeting-peak" class="meeting-peak-meter-div"></div>
         </div>
+        <div id="screen-share-meeting" class="vid-div">
+          <video id="screen-share-vid" style="display:inline-block;"></video>
+        </div>
+        <div id="guest-one-meeting" class="vid-div">
+          <video id="guest-one-vid" style="display:inline-block;"></video>
+          <div id="guest-one-meeting-peak" class="meeting-peak-meter-div"></div>
+        </div>
+        <div id="guest-two-meeting" class="vid-div">
+          <video id="guest-two-vid" style="display:inline-block;"></video>
+          <div id="guest-two-meeting-peak" class="meeting-peak-meter-div"></div>
+        </div>
+        <div id="guest-three-meeting" class="vid-div">
+          <video id="guest-three-vid" style="display:inline-block;"></video>
+          <div id="guest-three-peak" class="meeting-peak-meter-div"></div>
+        </div>
       </div>
-      <div id="meeting-device-setup-controls">
-        <div id="meeting-mic-button" class="meeting-button clickable" style="user-select: none; flex: 1"
-          onclick="LocalMediaStreams.startAudioDevice()">
-          <svg class="meeting-icon" viewBox="0 0 500 500">
-            <use xlink:href="#microphone" />
-          </svg>
-          <span>Microphone</span>
+      <div id="meeting-setup">
+        <div id="meeting-device-setup-controls">
+          <div id="meeting-mic-button" class="meeting-button clickable" style="user-select: none; flex: 1"
+            onclick="LocalMediaStreams.startAudioDevice()">
+            <svg class="meeting-icon" viewBox="0 0 500 500">
+              <use xlink:href="#microphone" />
+            </svg>
+            <span>Microphone</span>
+          </div>
+          <div id="meeting-camera-button" class="meeting-button clickable" style="user-select: none; flex: 1"
+            onclick="LocalMediaStreams.startVideoDevice()">
+            <svg class="meeting-icon" viewBox="0 0 500 500">
+              <use xlink:href="#camera" />
+            </svg>
+            <span>Camera</span>
+          </div>
         </div>
-        <div id="meeting-camera-button" class="meeting-button clickable" style="user-select: none; flex: 1"
-          onclick="LocalMediaStreams.startVideoDevice()">
-          <svg class="meeting-icon" viewBox="0 0 500 500">
-            <use xlink:href="#camera" />
-          </svg>
-          <span>Camera</span>
-        </div>
-      </div>
-      <div id="meeting-room-setup" style="user-select: none; padding: 0.25rem">
-        <label for="username-form" style="
-              font-size: x-large;
-              grid-area: username-label;
-              align-items: center;
-              justify-content: right;
-              display: grid;
-            ">Your Name</label>
-        <div style="grid-area: username-form; position: relative">
-          <input type="text" name="Username" id="username-form" autocomplete="off" required minlength="4" maxlength="32"
-            size="16" title="Username"
-            style="font-size: x-large; box-sizing: border-box; width: 100%; height: 100%; text-align: center"
-            oninput="this.value = this.value.replace(/[^a-zA-Z0-9 \-_]/g, '')" />
-        </div>
-        <div id="create-meeting-button" class="meeting-button clickable" style="
-              user-select: none;
-              grid-area: create-button;
-              display: grid;
-              align-items: center;
-              justify-content: center;
-              position: relative;
-            " onclick="meetingRoomController.createMeeting()">
-          Create Meeting
+        <div id="meeting-room-setup" style="user-select: none; padding: 0.25rem">
+          <div style="grid-area: username-form; position: relative">
+            <input type="text" name="Username" id="username-form" autocomplete="off" required minlength="4" maxlength="32"
+              size="16" title="Username" placeholder="Enter Your Name"
+              style="font-size: x-large; box-sizing: border-box; width: 100%; height: 100%; text-align: center"
+              oninput="this.value = this.value.replace(/[^a-zA-Z0-9 \-_]/g, '')" />
+          </div>
+          <div id="create-meeting-button" class="meeting-button clickable" style="
+                user-select: none;
+                grid-area: create-button;
+                display: grid;
+                align-items: center;
+                justify-content: center;
+                position: relative;
+              " onclick="meetingRoomController.createMeeting()">
+            Create Meeting
+          </div>
         </div>
       </div>
       <div id="meeting-controls">

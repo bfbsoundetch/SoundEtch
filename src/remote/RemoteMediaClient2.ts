@@ -5,96 +5,93 @@ import { Peer, DataConnection, MediaConnection, PeerOptions, ConnectionType } fr
 
 type PeerMessage =
   | {
-      type: 'self'
-      username: string
-    }
+    type: 'self'
+    username: string
+  }
   | {
-      type: 'otherPeer'
-      peer: string
-    }
+    type: 'otherPeer'
+    peer: string
+  }
   | {
-      type: 'peerDisconnected'
-      peer: string
-    }
+    type: 'peerDisconnected'
+    peer: string
+  }
   | {
-      type: 'chat'
-      message: string
-    }
+    type: 'chat'
+    message: string
+  }
 
 export interface Member {
   peerId: string
   username: string
   mediaStream: MediaStream
-  isScreenShare: boolean
-  isSelf: boolean
+  error: string | null
 }
 
 export interface State {
   members: Array<Member>
-  amInRoom: boolean
+  roomName: string | null
+  screenShare: Member | 'self' | null
+  error: string | null
 }
 
 export type StateListener = (state: State) => {}
 
 export class RemoteMediaClient2 {
   private readonly peer: Peer
-  private readonly state: State = { members: new Array<Member>(), amInRoom: false }
+  private readonly state: State = { members: new Array<Member>(), roomName: null, screenShare: null, error: null }
   private readonly stateListeners = new Array<StateListener>()
-  private readonly roomNamePromise = Promise.withResolvers<string>()
+  private readonly logger = new Logger('RemoteMediaClient')
 
   constructor(
     private readonly username: string,
     roomName: string | null = null,
   ) {
-    if (roomName) {
-      this.roomNamePromise.resolve(roomName)
-    }
-
-    LocalMediaStreams.localAVDeviceMediaStream.addEventListener('addtrack', (trackEvent: MediaStreamTrackEvent) => {
-      console.log('new track!!')
-      this.notifyStateListeners()
+    LocalMediaStreams.registerScreenListener((added) => {
+      if (added) {
+        if (this.state.screenShare) {
+          LocalMediaStreams.endScreenShare()
+        } else {
+          this.state.screenShare = 'self'
+          this.connections.forEach((peerConnections) => {
+            peerConnections.forEach(connection => {
+              if (connection.type == ConnectionType.Media) {
+                (connection as MediaConnection).addStream(LocalMediaStreams.localScreenMediaStream)
+              }
+            })
+          })
+        }
+      } else if (this.state.screenShare == 'self') {
+        this.state.screenShare = null
+      }
     })
-    LocalMediaStreams.localScreenMediaStream.addEventListener('addtrack', (trackEvent: MediaStreamTrackEvent) => {
-      console.log('new track!!')
-      this.notifyStateListeners()
-    })
-    LocalMediaStreams.localAVDeviceMediaStream.addEventListener('removetrack', (trackEvent) => {
-      console.error('no more track!!')
-      this.notifyStateListeners()
-    })
-    LocalMediaStreams.localScreenMediaStream.addEventListener('removetrack', (trackEvent) => {
-      this.notifyStateListeners()
-    })
-    console.error('here')
-
+    this.state.roomName = roomName
     this.peer = new Peer({ config: rtcConfig })
 
-    LocalMediaStreams.registerScreenListener((added, mediaStreamTrack) => {
-      if (added) {
-        this.state.members.push({
-          peerId: this.peer.id,
-          username: this.username,
-          mediaStream: LocalMediaStreams.localScreenMediaStream,
-          isScreenShare: true,
-          isSelf: true,
-        })
-      } else {
-        this.deleteMember(this.peer.id, true)
-      }
-      this.notifyStateListeners()
-    })
-    this.state.members.push({
-      peerId: this.peer.id,
-      username: this.username,
-      mediaStream: LocalMediaStreams.localAVDeviceMediaStream,
-      isScreenShare: false,
-      isSelf: true,
-    })
-    this.notifyStateListeners()
-
     this.peer.on('open', () => {
-      this.roomNamePromise.resolve(this.peer.id) // might be set already
-      this.state.members.forEach((member) => (member.peerId = member.peerId ?? this.peer.id))
+      if (!this.state.roomName) {
+        this.state.roomName = this.peer.id
+        this.notifyStateListeners()
+      }
+    })
+    this.peer.on('error', (error) => {
+      switch (error.type) {
+        case 'disconnected':
+        case 'browser-incompatible':
+        case 'invalid-id':
+        case 'invalid-key':
+        case 'network':
+        case 'peer-unavailable':
+        case 'ssl-unavailable':
+        case 'server-error':
+        case 'socket-error':
+        case 'socket-closed':
+        case 'unavailable-id':
+        case 'webrtc':
+          this.state.error = error.message
+          this.notifyStateListeners()
+          break
+      }
     })
     this.peer.on('connection', (dataConnection) => {
       if (!dataConnection.metadata.soundetch) {
@@ -114,45 +111,7 @@ export class RemoteMediaClient2 {
         return
       }
       mediaConnection.answer(LocalMediaStreams.localAVDeviceMediaStream, {})
-      mediaConnection.on('stream', (remoteStream) => {
-        AudioInputs.maybeAddRemoteAudioSource(
-          mediaConnection.peer,
-          mediaConnection.metadata.isScreenShare,
-          remoteStream.getAudioTracks()[0]!,
-        )
-        this.state.members.push({
-          peerId: mediaConnection.peer,
-          username: mediaConnection.metadata.username,
-          mediaStream: remoteStream,
-          isScreenShare: mediaConnection.metadata.isScreenShare,
-          isSelf: false,
-        })
-        this.notifyStateListeners()
-        this.connections.keys().forEach((key) => {
-          if (key != mediaConnection.peer) {
-            this.getDataConnection(mediaConnection.peer).send({
-              type: 'otherPeer',
-              peer: key,
-            })
-          }
-        })
-      })
-      mediaConnection.on('close', () => {
-        this.deleteMember(mediaConnection.peer, mediaConnection.metadata.isScreenShare)
-        this.notifyStateListeners()
-        AudioInputs.removeRemoteAudioSource(mediaConnection.peer, mediaConnection.metadata.isScreenShare)
-      })
-      mediaConnection.on('error', () => {
-        this.deleteMember(mediaConnection.peer, mediaConnection.metadata.isScreenShare)
-        this.notifyStateListeners()
-        AudioInputs.removeRemoteAudioSource(mediaConnection.peer, mediaConnection.metadata.isScreenShare)
-
-        this.connections.keys().forEach((key) => {
-          if (key != mediaConnection.peer) {
-            this.getDataConnection(key).send({ type: 'peerDisconnected', peer: key })
-          }
-        })
-      })
+      this.setUpMediaConnection(mediaConnection)
     })
     if (roomName) {
       this.joinRoom(roomName)
@@ -174,15 +133,13 @@ export class RemoteMediaClient2 {
     )
   }
 
-  private getMediaConnection(peerId: string, isScreenShare: boolean): MediaConnection | undefined {
+  private getMediaConnection(peerId: string): MediaConnection | undefined {
     return this.connections
       .get(peerId)
-      ?.find((c) => c.type === ConnectionType.Media && c.metadata.isScreenShare === isScreenShare) as
+      ?.find((c) => c.type === ConnectionType.Media) as
       | MediaConnection
       | undefined
   }
-
-  createRoom() {}
 
   joinRoom(roomName: string) {
     this.join(roomName)
@@ -192,19 +149,13 @@ export class RemoteMediaClient2 {
     this.peer.destroy()
   }
 
-  getRoomName(): Promise<string> {
-    return this.roomNamePromise.promise
-  }
-
   addStateListener(listener: StateListener) {
     this.stateListeners.push(listener)
     listener(this.state)
   }
 
   async amInRoom() {
-    return (
-      this.peer.id == (await this.roomNamePromise.promise) || this.connections.has(await this.roomNamePromise.promise)
-    )
+    return !!this.state.roomName && !this.state.error
   }
 
   private join(peer: string) {
@@ -222,18 +173,18 @@ export class RemoteMediaClient2 {
     }
   }
 
-  private getMember(peerId: string, isScreenShare: boolean): Member | null {
+  private getMember(peerId: string): Member | null {
     for (let i = 0; i < this.state.members.length; ++i) {
-      if (this.state.members[i].isScreenShare === isScreenShare && this.state.members[i].peerId === peerId) {
+      if (this.state.members[i].peerId === peerId) {
         return this.state.members[i]
       }
     }
     return null
   }
 
-  private deleteMember(peerId: string, isScreenShare: boolean) {
+  private deleteMember(peerId: string) {
     for (let i = 0; i < this.state.members.length; ++i) {
-      if (this.state.members[i].isScreenShare === isScreenShare && this.state.members[i].peerId === peerId) {
+      if (this.state.members[i].peerId === peerId) {
         this.state.members.splice(i, 1)
         break
       }
@@ -244,7 +195,7 @@ export class RemoteMediaClient2 {
     const peerMessage = data as PeerMessage
     switch (peerMessage.type) {
       case 'self':
-        this.getMember(self.peer, false)!.username = peerMessage.username
+        this.getMember(self.peer)!.username = peerMessage.username
         this.notifyStateListeners()
         break
       case 'otherPeer':
@@ -261,6 +212,62 @@ export class RemoteMediaClient2 {
       case 'chat':
         break
     }
+  }
+
+  private setUpMediaConnection(mediaConnection: MediaConnection) {
+    mediaConnection.on('stream', (remoteStream) => {
+      const isScreenShare = !!remoteStream.getVideoTracks().find(track => !!track.getCapabilities().displaySurface)
+      if (isScreenShare) {
+        this.state.screenShare = this.getMember(mediaConnection.peer)
+      } else {
+        this.state.members.push({
+          peerId: mediaConnection.peer,
+          username: mediaConnection.metadata.username,
+          mediaStream: remoteStream,
+          error: null,
+        })
+      }
+      AudioInputs.maybeAddRemoteAudioSource(
+        mediaConnection.peer,
+        isScreenShare,
+        remoteStream.getAudioTracks()[0]!,
+      )
+      this.notifyStateListeners()
+      this.connections.keys().forEach((key) => {
+        if (key != mediaConnection.peer) {
+          this.getDataConnection(mediaConnection.peer).send({
+            type: 'otherPeer',
+            peer: key,
+          })
+        }
+      })
+    })
+    mediaConnection.on('close', () => {
+      this.logger.log('Closed connection to "' + mediaConnection.peer + '"')
+      this.deleteMember(mediaConnection.peer)
+      if (this.state.screenShare != 'self' && this.state.screenShare?.peerId == mediaConnection.peer) {
+        this.state.screenShare = null
+        AudioInputs.removeRemoteAudioSource(mediaConnection.peer, true)
+      }
+      this.notifyStateListeners()
+      AudioInputs.removeRemoteAudioSource(mediaConnection.peer, false)
+    })
+    mediaConnection.on('error', (error) => {
+      this.logger.error('Lost connection to "' + mediaConnection.peer + '" due to: ' + error.message)
+      this.deleteMember(mediaConnection.peer)
+      if (this.state.screenShare != 'self' && this.state.screenShare?.peerId == mediaConnection.peer) {
+        AudioInputs.removeRemoteAudioSource(mediaConnection.peer, true)
+        this.state.screenShare = null
+      }
+      this.notifyStateListeners()
+      AudioInputs.removeRemoteAudioSource(mediaConnection.peer, false)
+
+      this.connections.keys().forEach((key) => {
+        if (key != mediaConnection.peer) {
+          this.getDataConnection(key).send({ type: 'peerDisconnected', peer: key })
+        }
+      })
+    })
   }
 }
 

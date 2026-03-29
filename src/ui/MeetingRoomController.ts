@@ -11,15 +11,53 @@ import { Logger } from '../global/Logger'
 
 type VideoLayout = 'spotlight' | 'solo' | 'grid'
 
+class VideoContainer {
+
+  private peakMeter: PeakMeterController | null = null
+
+  constructor(
+    readonly divElement: HTMLDivElement, 
+    readonly vidElement: HTMLVideoElement,
+    meetingRoomController: MeetingRoomController,
+    readonly audioElement: HTMLDivElement | null = null,
+  ) {
+    this.vidElement.onloadedmetadata = () => {
+      this.vidElement.play()
+    }
+    this.divElement.onclick = () => meetingRoomController.spotlightElement(this)
+  }
+
+  startPeakMeter(audioInput: AudioInput) {
+    if (!this.audioElement) {
+      return null
+    }
+    if (!this.peakMeter) {
+      this.peakMeter = new PeakMeterController(this.audioElement, audioInput)
+    }
+    this.peakMeter!.draw(this.peakMeter!)
+    this.audioElement!.style.display = 'inline-block'
+  }
+
+  stopPeakMeter() {
+    if (!this.peakMeter) {
+      return
+    }
+    this.peakMeter.remove()
+    this.peakMeter.stop()
+    this.peakMeter = null
+    this.audioElement!.style.display = 'none'
+  }
+}
+
 export class MeetingRoomController {
   private videoLayout: VideoLayout = 'grid'
-  private centralVideoIndex = 0
   private usernameForm = document.getElementById('username-form') as HTMLFormElement
-  private currentState: State = { members: [], amInRoom: false }
-  private remoteMediaClient = new RemoteMediaClient2(btoa(Math.random().toString().slice(10)))
+  private currentState: State = { members: [], roomName: null, screenShare: null, error: null }
+  private remoteMediaClient: RemoteMediaClient2 | null = null
 
-  private readonly usernameErrorBubble = new ErrorBubbleController(this.usernameForm.parentElement as HTMLDivElement)
+  private readonly usernameErrorBubble = new ErrorBubbleController('MeetingUsername', this.usernameForm.parentElement as HTMLDivElement)
   private readonly createMeetingErrorBubble = new ErrorBubbleController(
+    'CreateMeetingButton',
     document.getElementById('create-meeting-button') as HTMLDivElement,
   )
   private readonly notificationsController = new NotificationsController()
@@ -27,13 +65,43 @@ export class MeetingRoomController {
   private readonly videoButtonController: MediaStreamButtonController
   private readonly logger = new Logger('MeetingRoomController')
 
-  private readonly selfVideoElement = document.getElementById('self-vid') as HTMLVideoElement
-  private readonly selfAudioElement = document.getElementById('self-meeting-peak') as HTMLDivElement
-  private selfPeakMeter: PeakMeterController | null = null
+  private readonly selfVideoContainer = new VideoContainer(
+    document.getElementById('self-meeting') as HTMLDivElement,
+    document.getElementById('self-vid') as HTMLVideoElement,
+    this,
+    document.getElementById('self-meeting-peak') as HTMLDivElement,
+  )
+
+  private readonly screenVideoContainer = new VideoContainer(
+    document.getElementById('screen-share-meeting') as HTMLDivElement,
+    document.getElementById('screen-share-vid') as HTMLVideoElement,
+    this,
+  )
+
+  private readonly guestContainers = [
+    new VideoContainer(
+      document.getElementById('guest-one-meeting') as HTMLDivElement,
+      document.getElementById('guest-one-vid') as HTMLVideoElement,
+      this,
+      document.getElementById('guest-one-meeting-peak') as HTMLDivElement,
+    ),
+    new VideoContainer(
+      document.getElementById('guest-two-meeting') as HTMLDivElement,
+      document.getElementById('guest-two-vid') as HTMLVideoElement,
+      this,
+      document.getElementById('guest-two-meeting-peak') as HTMLDivElement,
+    ),
+    new VideoContainer(
+      document.getElementById('guest-three-meeting') as HTMLDivElement,
+      document.getElementById('guest-three-vid') as HTMLVideoElement,
+      this,
+      document.getElementById('guest-three-meeting-peak') as HTMLDivElement,
+    ),
+  ]
+
+  private firstContainer = this.selfVideoContainer
 
   constructor() {
-    this.remoteMediaClient.addStateListener((state: State) => this.stateListener(this, state))
-
     const micButton = document.getElementById('meeting-mic-button')!
     this.micButtonController = new MediaStreamButtonController(micButton, 'audio', false)
     const vidButton = document.getElementById('meeting-camera-button')!
@@ -43,47 +111,27 @@ export class MeetingRoomController {
     LocalMediaStreams.registerAVDeviceListener((added, track) => {
       if (track.kind == 'video') {
         if (added) {
-          this.selfVideoElement.srcObject = LocalMediaStreams.localAVDeviceMediaStream
+          this.selfVideoContainer.vidElement.srcObject = LocalMediaStreams.localAVDeviceMediaStream
         } else {
-          this.selfVideoElement.srcObject = null
+          this.selfVideoContainer.vidElement.srcObject = null
         }
       } else {
         if (added) {
-          this.selfPeakMeter = new PeakMeterController(this.selfAudioElement, AudioInputs.localAVDevice!, false)
-          this.selfPeakMeter.draw(this.selfPeakMeter)
-          this.selfAudioElement.style.display = 'inline-block'
+          this.selfVideoContainer.startPeakMeter(AudioInputs.localAVDevice!)
         } else {
-          this.selfPeakMeter!.remove()
-          this.selfPeakMeter!.stop()
-          this.selfPeakMeter = null
-          this.selfAudioElement.style.display = 'none'
+          this.selfVideoContainer.stopPeakMeter()
         }
       }
     })
-    this.selfVideoElement.style.transform = 'scale(-1,1)'
-    this.selfVideoElement.poster = this.getSvgPosterForUser('You', true)
-    this.selfVideoElement.onloadedmetadata = () => {
-      this.selfVideoElement.play()
-    }
-
-    // LocalMediaStreams.registerScreenListener((added, mediaStreamTrack) => {
-    //   if (added) {
-    //     this.state.members.push({
-    //       peerId: this.peer.id,
-    //       username: this.username,
-    //       mediaStream: LocalMediaStreams.localScreenMediaStream,
-    //       isScreenShare: true,
-    //       isSelf: true,
-    //     })
-    //   } else {
-    //     this.deleteMember(this.peer.id, true)
-    //   }
-    //   this.notifyStateListeners()
-    // })
+    // mirror and mute your own video feed
+    this.selfVideoContainer.vidElement.style.transform = 'scale(-1,1)'
+    this.selfVideoContainer.vidElement.muted = true
+    this.selfVideoContainer.vidElement.poster = this.getSvgPosterForUser('You', true)
   }
 
   async createMeeting(): Promise<boolean> {
-    if (await this.remoteMediaClient.amInRoom()) {
+    if (this.remoteMediaClient) {
+      this.createMeetingErrorBubble.showError('You are already connected.')
       return false
     }
     const username = this.usernameForm.value
@@ -91,28 +139,38 @@ export class MeetingRoomController {
       this.usernameErrorBubble.showError('Please enter your name', 2000)
       return false
     }
-    this.remoteMediaClient.createRoom()
+    this.remoteMediaClient = new RemoteMediaClient2(username)
+    this.remoteMediaClient.addStateListener(state => this.stateListener(this, state))
+    this.setUiForConnectedState()
     return true
   }
 
   async joinMeeting(): Promise<boolean> {
-    if (await this.remoteMediaClient.amInRoom()) {
+    if (this.remoteMediaClient) {
       return false
     }
 
     if (window.location.search) {
       const meetingId = new URL(window.location.toString()).searchParams.get('meeting')
-      if (meetingId) {
-        this.logger.log('About to join ' + meetingId)
-        this.remoteMediaClient.joinRoom(meetingId)
+      if (!meetingId) {
+        return false
       }
-      return true
+      const username = this.usernameForm.value
+      if (!username || (username as string).trim().length == 0) {
+        this.usernameErrorBubble.showError('Please enter your name', 2000)
+        return false
+      }
+
+      this.logger.log('About to join ' + meetingId)
+      this.remoteMediaClient = new RemoteMediaClient2(username, meetingId)
+      this.remoteMediaClient.addStateListener(state => this.stateListener(this, state))
+      this.setUiForConnectedState()
     }
     return false
   }
 
-  async amInRoom(): Promise<boolean> {
-    return this.remoteMediaClient.amInRoom()
+  async amInRoom() {
+    return this.remoteMediaClient?.amInRoom() ?? false
   }
 
   toggleVidLayoutChange() {
@@ -134,149 +192,67 @@ export class MeetingRoomController {
     const vidsParentElement = document.getElementById('vids')!
     switch (this.videoLayout) {
       case 'spotlight':
-        for (let i = 0; i < vidsParentElement.children.length; ++i) {
-          const element = vidsParentElement.children.item(i) as HTMLElement
-          if (i == this.centralVideoIndex) {
-            element.classList.value = 'vidDiv vid-spotlight'
-          } else {
-            element.classList.value = 'vidDiv vid-unspotlight'
-          }
-        }
+        vidsParentElement.classList = 'meeting-vids-spotlight'
         break
       case 'solo':
-        for (let i = 0; i < vidsParentElement.children.length; ++i) {
-          const element = vidsParentElement.children.item(i) as HTMLElement
-          if (i == this.centralVideoIndex) {
-            element.classList.value = 'vidDiv vid-solo'
-          } else {
-            element.classList.value = 'vidDiv vid-unsolo'
-          }
-        }
+        vidsParentElement.classList = 'meeting-vids-solo'
         break
       case 'grid':
-        const newFlex = vidsParentElement.children.length < 3 ? '100%' : '50%'
-        for (let i = 0; i < vidsParentElement.children.length; ++i) {
-          const element = vidsParentElement.children.item(i) as HTMLElement
-          element.classList.value = 'vidDiv vid-grid'
-        }
+        vidsParentElement.classList = 'meeting-vids-grid'
         break
     }
   }
 
-  spotlightElement(id: string) {
-    const vidsParentElement = document.getElementById('vids')!
-    const newChildren = []
-    const oldChildren = vidsParentElement.childNodes
-    for (let i = 0; i < oldChildren.length; ++i) {
-      if ((oldChildren.item(i) as Element).id == id) {
-        newChildren.push(oldChildren.item(0))
-        newChildren.unshift(oldChildren.item(i))
-      } else if (i > 0) {
-        newChildren.push(oldChildren.item(i))
-      }
-    }
-    vidsParentElement.replaceChildren(...newChildren)
-    this.applyVideoLayout()
+  spotlightElement(videoContainer: VideoContainer) {
+    videoContainer.divElement.classList.add('first-meeting-container')
+    this.firstContainer.divElement.classList.remove('first-meeting-container')
+    this.firstContainer = videoContainer
   }
 
   disconnect() {
-    this.remoteMediaClient.disconnect()
+    this.remoteMediaClient?.disconnect()
+    this.remoteMediaClient = null
+    this.setUiForDisconnectedState()
   }
 
   private async stateListener(meetingRoomController: MeetingRoomController, state: State) {
+    console.error(`new state ${JSON.stringify(state)}`)
     if (this.currentState == state) {
       return
     }
-    if (this.currentState.amInRoom != state.amInRoom) {
-      if (state.amInRoom) {
-        this.setUiForConnectedState()
-      } else {
-        this.setUiForDisconnectedState()
-      }
+    if (state.error) {
+      this.notificationsController.showError(state.error)
+      this.setUiForDisconnectedState()
+      return
     }
-    console.error(JSON.stringify(state))
+    
     const vidsParentElement = document.getElementById('vids') as HTMLDivElement
     const elementIds = new Array<string>()
     const audioContext = await AudioControl.getOrCreateAudioContext(AudioState.MONITORING)
     await audioContext.resume()
-    for (const member of state.members) {
-      const elementId = member.username + (member.isScreenShare ? '_share' : '_vid')
-      elementIds.push(elementId)
-      let vidDiv = document.getElementById(elementId)
-
-      let videoElement: HTMLVideoElement
-      if (!vidDiv) {
-        vidDiv = document.createElement('div')
-        vidDiv.setAttribute('class', 'vidDiv')
-        vidDiv.addEventListener('click', () => meetingRoomController.spotlightElement(elementId))
-        vidDiv.id = elementId
-        vidsParentElement.appendChild(vidDiv)
-
-        videoElement = document.createElement('video')
-        videoElement.poster = meetingRoomController.getSvgPosterForUser(member.username.substring(0, 1), member.isSelf)
-        // mirror and mute your own video feed
-        if (member.isSelf) {
-          videoElement.muted = true
-          if (!member.isScreenShare) {
-            videoElement.style.transform = 'scale(-1,1)'
-          }
-        }
-        videoElement.onloadedmetadata = () => {
-          videoElement.play()
-        }
-        vidDiv.appendChild(videoElement)
-        videoElement.srcObject = member.mediaStream
+    if (state.screenShare) {
+      if (state.screenShare == 'self') {
+        this.screenVideoContainer.vidElement.srcObject = LocalMediaStreams.localScreenMediaStream
       } else {
-        videoElement = vidDiv.getElementsByTagName('video').item(0)!
+        this.screenVideoContainer.vidElement.srcObject = state.screenShare.mediaStream
       }
-
-      const divs = vidDiv.getElementsByTagName('div')
-      console.error(`${member.username}: ${member.mediaStream.getAudioTracks().length}`)
-      if (
-        divs.length == 0 &&
-        member.mediaStream.getAudioTracks().length > 0 &&
-        !member.mediaStream.getAudioTracks()[0].muted
-      ) {
-        let audioInput: AudioInput
-        if (member.isSelf) {
-          if (member.isScreenShare) {
-            audioInput = AudioInputs.localScreenShare!
-          } else {
-            audioInput = AudioInputs.localAVDevice!
-          }
-        } else {
-          audioInput = AudioInputs.remoteStreams.get({
-            username: member.username,
-            isScreenShare: member.isScreenShare,
-          })!
-        }
-        const peakMeterElement = divs.length > 0 ? divs.item(0)! : document.createElement('div')
-        const meter = new PeakMeterController(peakMeterElement, audioInput, false)
-        meter.draw(meter)
-        vidDiv.appendChild(peakMeterElement)
-        peakMeterElement.style.height = '100%'
-        peakMeterElement.style.width = '2.5rem'
-        peakMeterElement.style.fontFamily = 'monospace'
-      } else if (
-        divs.length > 0 &&
-        (member.mediaStream.getAudioTracks().length == 0 || member.mediaStream.getAudioTracks()[0].muted)
-      ) {
-        vidDiv.removeChild(divs.item(0)!)
+    } else {
+      this.screenVideoContainer.vidElement.srcObject = null
+    }
+    for (let i = 0; i < this.guestContainers.length; ++i) {
+      
+      if (state.members.length > i) {
+        this.guestContainers[i].vidElement.srcObject = state.members[i].mediaStream
+        this.guestContainers[i].startPeakMeter(AudioInputs.remoteStreams.get(
+          { username: state.members[i].username, isScreenShare: false}
+        )!)
+      } else {
+        this.guestContainers[i].vidElement.srcObject = null
+        this.guestContainers[i].stopPeakMeter()
       }
     }
-    // for (let i = 0; i < vidsParentElement.children.length; ++i) {
-    //   const node = vidsParentElement.children[i]
-    //   if (!elementIds.includes(node.id)) {
-    //     console.log('oh dear ;()' + node.id + ' ' + JSON.stringify(elementIds))
-    //     node.remove()
-    //   }
-    // }
     meetingRoomController.applyVideoLayout()
-    this.currentState = state
-  }
-
-  private updateUiForMediaStream(div: HTMLDivElement, mediaStream: MediaStream) {
-    // div.addEventListener('click', () => this.spotlightElement(div))
+    this.currentState = { ...state }
   }
 
   private setUiForDisconnectedState() {
@@ -292,6 +268,7 @@ export class MeetingRoomController {
     document.getElementById('meeting-room-setup')!.style.display = 'grid'
     document.getElementById('vids')!.style.height = '60%'
     this.videoLayout = 'solo'
+    this.applyVideoLayout()
   }
 
   private setUiForConnectedState() {
@@ -307,6 +284,7 @@ export class MeetingRoomController {
     document.getElementById('meeting-room-setup')!.style.display = 'none'
     document.getElementById('vids')!.style.height = '100%'
     this.videoLayout = 'grid'
+    this.applyVideoLayout()
   }
 
   private getSvgPosterForUser(username: string, isSelf: boolean) {

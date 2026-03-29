@@ -1,3 +1,5 @@
+import { Logger } from "../global/Logger"
+
 export enum Direction {
   UP,
   RIGHT,
@@ -8,15 +10,18 @@ export enum Direction {
 export class ErrorBubbleController {
   private readonly errorSpan: HTMLSpanElement
   private timeout: number | null = null
+  private readonly logger: Logger
 
-  constructor(private readonly parentDiv: HTMLDivElement) {
+  constructor(label: string, private readonly parentDiv: HTMLDivElement) {
     this.errorSpan = document.createElement('span')
     this.errorSpan.className = 'error-span'
     this.errorSpan.style.opacity = '0'
     this.parentDiv.appendChild(this.errorSpan)
+    this.logger = new Logger(label)
   }
 
   showError(message: string, timeoutMs: number = 0, direction: Direction = Direction.UP) {
+    this.logger.error(message)
     const errorSpan = this.errorSpan
     if (this.timeout) {
       clearTimeout(this.timeout)
