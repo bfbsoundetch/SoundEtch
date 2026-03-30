@@ -8,7 +8,11 @@ import { AudioInput } from '../audioinputs/AudioInput'
 import { LocalMediaStreams } from '../mediastreams/LocalMediaStreams'
 import { Logger } from '../global/Logger'
 
-type VideoLayout = 'spotlight' | 'solo' | 'grid'
+enum VideoLayout {
+  SPOTLIGHT = 'spotlight',
+  SOLO = 'solo',
+  GRID = 'grid'
+}
 
 class VideoContainer {
 
@@ -49,7 +53,7 @@ class VideoContainer {
 }
 
 export class MeetingRoomController {
-  private videoLayout: VideoLayout = 'grid'
+  private videoLayout = VideoLayout.GRID
   private usernameForm = document.getElementById('username-form') as HTMLFormElement
   private currentState: State = { members: [], roomName: null, screenShare: null, error: null }
   private remoteMediaClient: RemoteMediaClient2 | null = null
@@ -122,10 +126,11 @@ export class MeetingRoomController {
         }
       }
     })
-    this.selfVideoElement.style.transform = 'scale(-1,1)'
-    this.selfVideoElement.poster = this.getSvgPosterForUser('You', true)
-    this.selfVideoElement.onloadedmetadata = () => {
-      this.selfVideoElement.play()
+    this.selfVideoContainer.vidElement.style.transform = 'scale(-1,1)'
+    this.selfVideoContainer.vidElement.muted = true
+    this.selfVideoContainer.vidElement.poster = this.getSvgPosterForUser('You', true)
+    this.selfVideoContainer.vidElement.onloadedmetadata = () => {
+      this.selfVideoContainer.vidElement.play()
     }
     document.addEventListener('click', (event) => {
       const layoutSelector = document.getElementById('meeting-layout-selector')
@@ -196,15 +201,15 @@ export class MeetingRoomController {
   }
 
   toggleLayoutMenu() {
-    const layoutMenu = document.getElementById('meeting-layout-menu')
-    layoutMenu?.classList.toggle('open')
-    const layoutButton = document.getElementById('switch-meeting-layout-button')
-    layoutButton?.setAttribute('aria-expanded', layoutMenu?.classList.contains('open') ? 'true' : 'false')
+    const layoutMenu = document.getElementById('meeting-layout-menu')!
+    layoutMenu.classList.toggle('open')
+    const layoutButton = document.getElementById('switch-meeting-layout-button')!
+    layoutButton.setAttribute('aria-expanded', layoutMenu.classList.contains('open') ? 'true' : 'false')
   }
 
   closeLayoutMenu() {
-    document.getElementById('meeting-layout-menu')?.classList.remove('open')
-    document.getElementById('switch-meeting-layout-button')?.setAttribute('aria-expanded', 'false')
+    document.getElementById('meeting-layout-menu')!.classList.remove('open')
+    document.getElementById('switch-meeting-layout-button')!.setAttribute('aria-expanded', 'false')
   }
 
   selectVideoLayout(layout: VideoLayout) {
@@ -223,10 +228,7 @@ export class MeetingRoomController {
         vidsParentElement.classList = 'meeting-vids-solo'
         break
       case 'grid':
-        for (let i = 0; i < vidsParentElement.children.length; ++i) {
-          const element = vidsParentElement.children.item(i) as HTMLElement
-          element.classList.value = 'vidDiv vid-grid'
-        }
+        vidsParentElement.classList = 'meeting-vids-grid'
         break
     }
     this.updateLayoutSelectionUi()
@@ -255,7 +257,6 @@ export class MeetingRoomController {
       return
     }
     
-    const vidsParentElement = document.getElementById('vids') as HTMLDivElement
     if (state.screenShare) {
       this.screenVideoContainer.divElement.style.display = ''
       if (state.screenShare == 'self') {
@@ -296,7 +297,7 @@ export class MeetingRoomController {
     meetingControlsDiv!.style.display = 'flex'
     document.getElementById('meeting-room-setup')!.style.display = 'grid'
     document.getElementById('vids')!.style.height = '60%'
-    this.videoLayout = 'solo'
+    this.videoLayout = VideoLayout.SOLO
     this.closeLayoutMenu()
     this.updateLayoutSelectionUi()
   }
@@ -313,17 +314,16 @@ export class MeetingRoomController {
     document.getElementById('meeting-device-setup-controls')!.style.display = 'none'
     document.getElementById('meeting-room-setup')!.style.display = 'none'
     document.getElementById('vids')!.style.height = '100%'
-    this.videoLayout = 'grid'
+    this.videoLayout = VideoLayout.GRID
     this.closeLayoutMenu()
     this.updateLayoutSelectionUi()
   }
 
   private updateLayoutSelectionUi() {
-    const options: VideoLayout[] = ['grid', 'spotlight', 'solo']
-    for (const option of options) {
-      const selected = option == this.videoLayout
-      document.getElementById(`meeting-layout-check-${option}`)?.classList.toggle('selected', selected)
-      document.getElementById(`meeting-layout-option-${option}`)?.setAttribute('aria-checked', selected ? 'true' : 'false')
+    for (const layout of Object.values(VideoLayout)) {
+      const selected = layout == this.videoLayout
+      document.getElementById(`meeting-layout-check-${layout}`)!.classList.toggle('selected', selected)
+      document.getElementById(`meeting-layout-option-${layout}`)!.setAttribute('aria-checked', selected ? 'true' : 'false')
     }
   }
 
