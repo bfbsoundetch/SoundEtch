@@ -299,7 +299,7 @@ export class MeetingRoomController {
     document.getElementById('vids')!.style.height = '60%'
     this.videoLayout = VideoLayout.SOLO
     this.closeLayoutMenu()
-    this.updateLayoutSelectionUi()
+    this.applyVideoLayout()
   }
 
   private setUiForConnectedState() {
@@ -316,7 +316,7 @@ export class MeetingRoomController {
     document.getElementById('vids')!.style.height = '100%'
     this.videoLayout = VideoLayout.GRID
     this.closeLayoutMenu()
-    this.updateLayoutSelectionUi()
+    this.applyVideoLayout()
   }
 
   private updateLayoutSelectionUi() {
