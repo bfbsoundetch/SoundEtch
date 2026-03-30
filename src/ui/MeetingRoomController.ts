@@ -125,16 +125,18 @@ export class MeetingRoomController {
   toggleLayoutMenu() {
     const layoutMenu = document.getElementById('meeting-layout-menu')
     layoutMenu?.classList.toggle('open')
+    const layoutButton = document.getElementById('switch-meeting-layout-button')
+    layoutButton?.setAttribute('aria-expanded', layoutMenu?.classList.contains('open') ? 'true' : 'false')
   }
 
   closeLayoutMenu() {
     document.getElementById('meeting-layout-menu')?.classList.remove('open')
+    document.getElementById('switch-meeting-layout-button')?.setAttribute('aria-expanded', 'false')
   }
 
   selectVideoLayout(layout: VideoLayout) {
     this.videoLayout = layout
     this.closeLayoutMenu()
-    this.updateLayoutSelectionUi()
     this.applyVideoLayout()
   }
 
@@ -162,7 +164,6 @@ export class MeetingRoomController {
         }
         break
       case 'grid':
-        const newFlex = vidsParentElement.children.length < 3 ? '100%' : '50%'
         for (let i = 0; i < vidsParentElement.children.length; ++i) {
           const element = vidsParentElement.children.item(i) as HTMLElement
           element.classList.value = 'vidDiv vid-grid'
@@ -301,6 +302,7 @@ export class MeetingRoomController {
     document.getElementById('meeting-room-setup')!.style.display = 'grid'
     document.getElementById('vids')!.style.height = '60%'
     this.videoLayout = 'solo'
+    this.closeLayoutMenu()
     this.updateLayoutSelectionUi()
   }
 
@@ -317,13 +319,16 @@ export class MeetingRoomController {
     document.getElementById('meeting-room-setup')!.style.display = 'none'
     document.getElementById('vids')!.style.height = '100%'
     this.videoLayout = 'grid'
+    this.closeLayoutMenu()
     this.updateLayoutSelectionUi()
   }
 
   private updateLayoutSelectionUi() {
     const options: VideoLayout[] = ['grid', 'spotlight', 'solo']
     for (const option of options) {
-      document.getElementById(`meeting-layout-check-${option}`)?.classList.toggle('selected', option == this.videoLayout)
+      const selected = option == this.videoLayout
+      document.getElementById(`meeting-layout-check-${option}`)?.classList.toggle('selected', selected)
+      document.getElementById(`meeting-layout-option-${option}`)?.setAttribute('aria-checked', selected ? 'true' : 'false')
     }
   }
 
