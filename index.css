@@ -433,7 +433,7 @@ video {
   width: 100%;
   gap: 0.25rem;
   place-items: center;
-  transition: all 0.5s ease-in-out;
+  transition: height 0.5s ease-in-out;
 }
 
 .vid-div {
@@ -442,6 +442,7 @@ video {
   position: relative;
   justify-content: center;
   display: flex;
+  transition: width 0.5s ease-in-out, height 0.5s ease-in-out;
 }
 
 #meeting-setup {
