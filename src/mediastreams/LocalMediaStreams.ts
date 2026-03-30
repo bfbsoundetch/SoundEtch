@@ -137,6 +137,8 @@ export class LocalMediaStreams {
   }
 
   private static updateScreenListeners(added: boolean, track: MediaStreamTrack) {
+    console.error('start')
     LocalMediaStreams.screenChangeListeners.forEach((listener) => listener(added, track))
+    console.error('end')
   }
 }

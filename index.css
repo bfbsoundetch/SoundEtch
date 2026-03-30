@@ -418,8 +418,11 @@ svg {
 }
 
 video {
-  position: relative;
-  width: fit-content;
+  flex: 1;
+  object-fit: cover; 
+}
+
+#screen-share-vid {
   object-fit: contain;
 }
 
@@ -432,9 +435,12 @@ video {
   place-items: center;
 }
 
-.vidDiv {
+.vid-div {
+  height: 100%;
+  width: 100%;
   position: relative;
   justify-content: center;
+  display: flex;
 }
 
 #meeting-setup {
@@ -475,23 +481,18 @@ video {
 
 .meeting-vids-spotlight {
   grid-template-rows: 70% 30%;
-  animation: all 0.5s ease;
-  transition: 500ms;
 }
 
 .meeting-vids-grid {
   /* "Give me as many columns as fit, but make them at least 30% wide" */
   grid-template-columns: repeat(auto-fit, minmax(30%, 1fr));
   grid-auto-rows: 1fr; /* Make all rows equal height */
-  animation: all 0.5s ease;
-  transition: 500ms;
 }
 
 .meeting-vids-solo {
+  grid-template-columns: 1fr; /* Only one cell allowed */
   grid-template-rows: 100%;
-  grid-template-columns: 100%;
-  animation: all 0.5s ease;
-  transition: 500ms;
+  overflow: hidden;
 }
 
 .first-meeting-container {

@@ -1,5 +1,4 @@
 import { Member, RemoteMediaClient2, State } from '../remote/RemoteMediaClient2'
-import { AudioControl, AudioState } from '../audiocontext/AudioControl'
 import { MediaStreamButtonController } from './MediaStreamButtonController'
 import { PeakMeterController } from './PeakMeterController'
 import { Direction, ErrorBubbleController } from './ErrorBubbleController'
@@ -227,26 +226,26 @@ export class MeetingRoomController {
     }
     
     const vidsParentElement = document.getElementById('vids') as HTMLDivElement
-    const elementIds = new Array<string>()
-    const audioContext = await AudioControl.getOrCreateAudioContext(AudioState.MONITORING)
-    await audioContext.resume()
     if (state.screenShare) {
+      this.screenVideoContainer.divElement.style.display = ''
       if (state.screenShare == 'self') {
         this.screenVideoContainer.vidElement.srcObject = LocalMediaStreams.localScreenMediaStream
       } else {
         this.screenVideoContainer.vidElement.srcObject = state.screenShare.mediaStream
       }
     } else {
+      this.screenVideoContainer.divElement.style.display = 'none'
       this.screenVideoContainer.vidElement.srcObject = null
     }
     for (let i = 0; i < this.guestContainers.length; ++i) {
-      
       if (state.members.length > i) {
+        this.guestContainers[i].divElement.style.display = ''
         this.guestContainers[i].vidElement.srcObject = state.members[i].mediaStream
         this.guestContainers[i].startPeakMeter(AudioInputs.remoteStreams.get(
           { username: state.members[i].username, isScreenShare: false}
         )!)
       } else {
+        this.guestContainers[i].divElement.style.display = 'none'
         this.guestContainers[i].vidElement.srcObject = null
         this.guestContainers[i].stopPeakMeter()
       }

@@ -47,8 +47,8 @@ export class RemoteMediaClient2 {
     private readonly username: string,
     roomName: string | null = null,
   ) {
-    LocalMediaStreams.registerScreenListener((added) => {
-      if (added) {
+    LocalMediaStreams.registerScreenListener((added, _) => {
+      if (added && this.state.screenShare != 'self') {
         if (this.state.screenShare) {
           LocalMediaStreams.endScreenShare()
         } else {
@@ -61,8 +61,10 @@ export class RemoteMediaClient2 {
             })
           })
         }
-      } else if (this.state.screenShare == 'self') {
+        this.notifyStateListeners()
+      } else if (!added && this.state.screenShare == 'self') {
         this.state.screenShare = null
+        this.notifyStateListeners()
       }
     })
     this.state.roomName = roomName
