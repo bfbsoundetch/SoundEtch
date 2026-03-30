@@ -492,6 +492,41 @@ video {
   opacity: 1;
 }
 
+.meeting-layout-menu {
+  position: absolute;
+  bottom: calc(100% + 0.35rem);
+  width: 100%;
+  display: none;
+  flex-direction: column;
+  border: 1px solid var(--color);
+  background: var(--bg-color);
+}
+
+.meeting-layout-menu.open {
+  display: flex;
+}
+
+.meeting-layout-option {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.4rem 0.65rem;
+}
+
+.meeting-layout-option:hover {
+  background: var(--alt-background);
+}
+
+.meeting-layout-check {
+  width: 1rem;
+  text-align: center;
+  visibility: hidden;
+}
+
+.meeting-layout-check.selected {
+  visibility: visible;
+}
+
 .meeting-peak-meter-div {
   height: 100%;
   aspect-ratio: 1/5;

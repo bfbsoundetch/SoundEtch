@@ -65,6 +65,13 @@ export class MeetingRoomController {
     this.selfVideoElement.onloadedmetadata = () => {
       this.selfVideoElement.play()
     }
+    document.addEventListener('click', (event) => {
+      const layoutSelector = document.getElementById('meeting-layout-selector')
+      if (!layoutSelector?.contains(event.target as Node)) {
+        this.closeLayoutMenu()
+      }
+    })
+    this.updateLayoutSelectionUi()
 
     // LocalMediaStreams.registerScreenListener((added, mediaStreamTrack) => {
     //   if (added) {
@@ -115,18 +122,19 @@ export class MeetingRoomController {
     return this.remoteMediaClient.amInRoom()
   }
 
-  toggleVidLayoutChange() {
-    switch (this.videoLayout) {
-      case 'grid':
-        this.videoLayout = 'spotlight'
-        break
-      case 'spotlight':
-        this.videoLayout = 'solo'
-        break
-      case 'solo':
-        this.videoLayout = 'grid'
-        break
-    }
+  toggleLayoutMenu() {
+    const layoutMenu = document.getElementById('meeting-layout-menu')
+    layoutMenu?.classList.toggle('open')
+  }
+
+  closeLayoutMenu() {
+    document.getElementById('meeting-layout-menu')?.classList.remove('open')
+  }
+
+  selectVideoLayout(layout: VideoLayout) {
+    this.videoLayout = layout
+    this.closeLayoutMenu()
+    this.updateLayoutSelectionUi()
     this.applyVideoLayout()
   }
 
@@ -161,6 +169,7 @@ export class MeetingRoomController {
         }
         break
     }
+    this.updateLayoutSelectionUi()
   }
 
   spotlightElement(id: string) {
@@ -292,6 +301,7 @@ export class MeetingRoomController {
     document.getElementById('meeting-room-setup')!.style.display = 'grid'
     document.getElementById('vids')!.style.height = '60%'
     this.videoLayout = 'solo'
+    this.updateLayoutSelectionUi()
   }
 
   private setUiForConnectedState() {
@@ -307,6 +317,14 @@ export class MeetingRoomController {
     document.getElementById('meeting-room-setup')!.style.display = 'none'
     document.getElementById('vids')!.style.height = '100%'
     this.videoLayout = 'grid'
+    this.updateLayoutSelectionUi()
+  }
+
+  private updateLayoutSelectionUi() {
+    const options: VideoLayout[] = ['grid', 'spotlight', 'solo']
+    for (const option of options) {
+      document.getElementById(`meeting-layout-check-${option}`)?.classList.toggle('selected', option == this.videoLayout)
+    }
   }
 
   private getSvgPosterForUser(username: string, isSelf: boolean) {

@@ -306,9 +306,25 @@
           style="user-select: none; flex: 1; color: rgba(255, 100, 100)" onclick="meetingRoomController.disconnect()">
           Disconnect
         </div>
-        <div id="switch-meeting-layout-button" class="meeting-button clickable" style="user-select: none; flex: 1"
-          onclick="meetingRoomController.toggleVidLayoutChange()">
-          Switch Layout
+        <div id="meeting-layout-selector" style="position: relative; flex: 1">
+          <div id="switch-meeting-layout-button" class="meeting-button clickable" style="user-select: none; height: 100%"
+            onclick="meetingRoomController.toggleLayoutMenu()">
+            Select Layout
+          </div>
+          <div id="meeting-layout-menu" class="meeting-layout-menu">
+            <div class="meeting-layout-option clickable" onclick="meetingRoomController.selectVideoLayout('grid')">
+              <span id="meeting-layout-check-grid" class="meeting-layout-check">✓</span>
+              <span>grid</span>
+            </div>
+            <div class="meeting-layout-option clickable" onclick="meetingRoomController.selectVideoLayout('spotlight')">
+              <span id="meeting-layout-check-spotlight" class="meeting-layout-check">✓</span>
+              <span>spotlight</span>
+            </div>
+            <div class="meeting-layout-option clickable" onclick="meetingRoomController.selectVideoLayout('solo')">
+              <span id="meeting-layout-check-solo" class="meeting-layout-check">✓</span>
+              <span>solo</span>
+            </div>
+          </div>
         </div>
         <div id="meeting-screen-share-button" class="meeting-button clickable" style="user-select: none; flex: 1"
           onclick="LocalMediaStreams.startCapturingTab()">
