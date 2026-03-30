@@ -122,10 +122,33 @@ export class MeetingRoomController {
         }
       }
     })
-    // mirror and mute your own video feed
-    this.selfVideoContainer.vidElement.style.transform = 'scale(-1,1)'
-    this.selfVideoContainer.vidElement.muted = true
-    this.selfVideoContainer.vidElement.poster = this.getSvgPosterForUser('You', true)
+    this.selfVideoElement.style.transform = 'scale(-1,1)'
+    this.selfVideoElement.poster = this.getSvgPosterForUser('You', true)
+    this.selfVideoElement.onloadedmetadata = () => {
+      this.selfVideoElement.play()
+    }
+    document.addEventListener('click', (event) => {
+      const layoutSelector = document.getElementById('meeting-layout-selector')
+      if (!layoutSelector?.contains(event.target as Node)) {
+        this.closeLayoutMenu()
+      }
+    })
+    this.updateLayoutSelectionUi()
+
+    // LocalMediaStreams.registerScreenListener((added, mediaStreamTrack) => {
+    //   if (added) {
+    //     this.state.members.push({
+    //       peerId: this.peer.id,
+    //       username: this.username,
+    //       mediaStream: LocalMediaStreams.localScreenMediaStream,
+    //       isScreenShare: true,
+    //       isSelf: true,
+    //     })
+    //   } else {
+    //     this.deleteMember(this.peer.id, true)
+    //   }
+    //   this.notifyStateListeners()
+    // })
   }
 
   async createMeeting(): Promise<boolean> {
@@ -172,18 +195,21 @@ export class MeetingRoomController {
     return this.remoteMediaClient?.amInRoom() ?? false
   }
 
-  toggleVidLayoutChange() {
-    switch (this.videoLayout) {
-      case 'grid':
-        this.videoLayout = 'spotlight'
-        break
-      case 'spotlight':
-        this.videoLayout = 'solo'
-        break
-      case 'solo':
-        this.videoLayout = 'grid'
-        break
-    }
+  toggleLayoutMenu() {
+    const layoutMenu = document.getElementById('meeting-layout-menu')
+    layoutMenu?.classList.toggle('open')
+    const layoutButton = document.getElementById('switch-meeting-layout-button')
+    layoutButton?.setAttribute('aria-expanded', layoutMenu?.classList.contains('open') ? 'true' : 'false')
+  }
+
+  closeLayoutMenu() {
+    document.getElementById('meeting-layout-menu')?.classList.remove('open')
+    document.getElementById('switch-meeting-layout-button')?.setAttribute('aria-expanded', 'false')
+  }
+
+  selectVideoLayout(layout: VideoLayout) {
+    this.videoLayout = layout
+    this.closeLayoutMenu()
     this.applyVideoLayout()
   }
 
@@ -197,9 +223,13 @@ export class MeetingRoomController {
         vidsParentElement.classList = 'meeting-vids-solo'
         break
       case 'grid':
-        vidsParentElement.classList = 'meeting-vids-grid'
+        for (let i = 0; i < vidsParentElement.children.length; ++i) {
+          const element = vidsParentElement.children.item(i) as HTMLElement
+          element.classList.value = 'vidDiv vid-grid'
+        }
         break
     }
+    this.updateLayoutSelectionUi()
   }
 
   spotlightElement(videoContainer: VideoContainer) {
@@ -267,7 +297,8 @@ export class MeetingRoomController {
     document.getElementById('meeting-room-setup')!.style.display = 'grid'
     document.getElementById('vids')!.style.height = '60%'
     this.videoLayout = 'solo'
-    this.applyVideoLayout()
+    this.closeLayoutMenu()
+    this.updateLayoutSelectionUi()
   }
 
   private setUiForConnectedState() {
@@ -283,7 +314,17 @@ export class MeetingRoomController {
     document.getElementById('meeting-room-setup')!.style.display = 'none'
     document.getElementById('vids')!.style.height = '100%'
     this.videoLayout = 'grid'
-    this.applyVideoLayout()
+    this.closeLayoutMenu()
+    this.updateLayoutSelectionUi()
+  }
+
+  private updateLayoutSelectionUi() {
+    const options: VideoLayout[] = ['grid', 'spotlight', 'solo']
+    for (const option of options) {
+      const selected = option == this.videoLayout
+      document.getElementById(`meeting-layout-check-${option}`)?.classList.toggle('selected', selected)
+      document.getElementById(`meeting-layout-option-${option}`)?.setAttribute('aria-checked', selected ? 'true' : 'false')
+    }
   }
 
   private getSvgPosterForUser(username: string, isSelf: boolean) {
