@@ -9,7 +9,7 @@
 #include <emscripten.h>
 #include "lame.h"
 
-#define OUTPUT_BUFFER_SIZE 16 * 1024
+#define OUTPUT_BUFFER_SIZE 1024 * 1024
 
 lame_global_flags *gfp;
 const float* leftBuffer;

@@ -3,6 +3,7 @@ import { RawDataAudioContext } from '@descript/web-audio-js'
 import { Effect } from '../effects/Effects'
 import { FileSystemUtils } from '../filesystem/FileSystemUtils'
 import { FileSystemSyncAccessHandle } from '../filesystem/FileSystemSyncAccessHandle'
+import { EncoderInfo, encoderInforWritableStreamFactory } from '../encoders/EncoderType'
 
 console.error('created!!!!!')
 
@@ -17,7 +18,8 @@ export type TrackSubset = {
 }
 
 export type RenderingArgument = {
-  writableStream: WritableStream
+  file: FileSystemFileHandle
+  encoderInfo: EncoderInfo
   projectId: number
   sampleRate: number
   channelCount: number
@@ -28,11 +30,10 @@ export type RenderingArgument = {
 self.onmessage = async (e) => {
   console.error('started!!!')
   const argument = e.data as RenderingArgument
-  // argument.channelCount = 1
 
   const length = argument.trackSubsets.reduce((m, t) => Math.max(m, t.length), 0)
 
-  const blockSize = 128
+  const blockSize = 1024
 
   const audioContext = new RawDataAudioContext({
     sampleRate: argument.sampleRate,
@@ -41,16 +42,20 @@ self.onmessage = async (e) => {
   })
   audioContext.resume()
 
-  const writer = argument.writableStream.getWriter()
+  const encoderWriter = await encoderInforWritableStreamFactory(
+    await argument.file.createWritable(), 
+    argument.encoderInfo
+  )
 
   const processors = new Array<ReadingOfflineProcessor>()
 
   argument.trackSubsets.forEach((track) => {
-    const readingProcessorNode = audioContext.createScriptProcessor(128, 0, track.channelCount)
+    const readingProcessorNode = audioContext.createScriptProcessor(blockSize, 0, track.channelCount)
     const processor = new ReadingOfflineProcessor(
       argument.projectId,
       track.clipViews,
       track.channelCount,
+      blockSize,
       argument.startPosition,
     )
     processors.push(processor)
@@ -73,34 +78,57 @@ self.onmessage = async (e) => {
     }
   })
 
+  const inputBuffer = encoderWriter.getInputBuffer()
+
+  const isPlanar = argument.channelCount == 1 || encoderWriter.inputSampleFormat == 'planar'
+
   const output = new Array(argument.channelCount)
-  const interleaved = argument.channelCount > 1 ? new Float32Array(blockSize * argument.channelCount) : []
-  for (let i = 0; i < argument.channelCount; ++i) {
-    output[i] = new Float32Array(blockSize)
-  }
-  for (let i = 0; i < length; i += blockSize) {
-    await Promise.all(processors.map((p) => p.maybeFillBuffer()))
-    audioContext.process(output)
-    if (argument.channelCount > 1) {
-      for (let i = 0; i < blockSize; ++i) {
+  const channelLength = inputBuffer.length / argument.channelCount
+
+  if (isPlanar) {
+    for (let i = 0; i < argument.channelCount; ++i) {
+      output[i] = inputBuffer.subarray(channelLength * i, channelLength * (i + 1))
+    }
+
+    for (let i = 0; i < length; i += blockSize) {
+      await Promise.all(processors.map((p) => p.maybeFillBuffer()))
+      audioContext.process(output, i % channelLength)
+      if (i > 0 && i % channelLength == 0) {
+        await encoderWriter.writeChunk(inputBuffer.length)
+        postMessage({progress: i / length})
+      }
+    }
+  } else {
+    const inputBuffer = encoderWriter.getInputBuffer()
+    for (let i = 0; i < argument.channelCount; ++i) {
+      output[i] = new Float32Array(blockSize)
+    }
+
+    for (let i = 0; i < length; i += blockSize) {
+      await Promise.all(processors.map((p) => p.maybeFillBuffer()))
+      audioContext.process(output)
+      const offset = i % inputBuffer.length
+      if (i > 0 && offset == 0) {
+        await encoderWriter.writeChunk(inputBuffer.length)
+        postMessage({progress: i / length})
+      }
+      for (let j = 0; j < blockSize; ++j) {
         for (let channel = 0; channel < argument.channelCount; ++channel) {
-          interleaved[i * argument.channelCount + channel] = output[channel][i]
+          inputBuffer[offset + j * argument.channelCount + channel] = output[channel][j]
         }
       }
-      await writer.write(interleaved)
-    } else {
-      await writer.write(output[0])
     }
   }
+  await encoderWriter.writeChunk((length * argument.channelCount) % inputBuffer.length)
   console.error('done')
-  await writer.close()
+  await encoderWriter.finish()
 }
 
 class ReadingOfflineProcessor {
   private clipViewIndex = 0
   private clipView: ClipViewSubset
 
-  private buffer = new Float32Array(300)
+  private buffer = new Float32Array(3000)
   private bufferReadPosition = 0
   private bufferWritePosition = 0
   private clipViewFile: FileSystemSyncAccessHandle | null = null
@@ -116,13 +144,14 @@ class ReadingOfflineProcessor {
     private readonly projectId: number,
     private readonly clipViews: Array<ClipViewSubset>,
     private readonly channelCount: number,
+    private readonly blockSize: number,
     startPosition: number,
   ) {
     this.clipView = this.clipViews[0]
     this.position = startPosition
     this.outputBuffers = new Array<Float32Array>(channelCount)
     for (let i = 0; i < channelCount; ++i) {
-      this.outputBuffers[i] = new Float32Array(128)
+      this.outputBuffers[i] = new Float32Array(blockSize)
     }
     while (this.position >= this.clipView.startPosition + this.clipView.length) {
       console.error(`${this.position} ${this.clipView.startPosition} ${this.clipView.length}`)
@@ -159,14 +188,14 @@ class ReadingOfflineProcessor {
     }
 
     for (let channel = 0; channel < this.channelCount; ++channel) {
-      output.copyToChannel(this.outputBuffers[channel], channel)
+      output.copyToChannel(this.outputBuffers[channel] as any, channel)
     }
 
     this.position += output.length
   }
 
   async maybeFillBuffer() {
-    if (this.bufferWritePosition - this.bufferReadPosition > 128 * this.channelCount || !this.clipView) {
+    if (this.bufferWritePosition - this.bufferReadPosition > this.blockSize * this.channelCount || !this.clipView) {
       return
     }
     ;(this.buffer.copyWithin(0, this.bufferReadPosition, this.bufferWritePosition),
@@ -191,40 +220,15 @@ class ReadingOfflineProcessor {
           at: this.clipFileOffset + this.clipViewWritten,
         },
       )
-      // console.error(' <> ' + this.clipViewWritten + ' ' + loaded + ' '  + new Float32Array(this.buffer.buffer,
-      //     this.bufferWritePosition * Float32Array.BYTES_PER_ELEMENT).reduce((m, n) => m+n))
       this.clipViewWritten += loaded
       this.bufferWritePosition += loaded / Float32Array.BYTES_PER_ELEMENT
       if (this.bufferWritePosition == this.buffer.length) {
         break
       }
-      console.error(
-        'uuuhhh' + loaded + ' ' + this.bufferWritePosition + ' ' + this.bufferReadPosition + ' ' + this.buffer.length,
-      )
       this.clipViewWritten = 0
       this.clipViewFile.close()
       this.clipViewFile = null
       currentClipViewIndex++
     }
   }
-
-  // async maybeFillBuffer() {
-  //   if ((this.clipViewFile && this.bufferPosition < this.buffer.length) || !this.clipView) {
-  //     return
-  //   }
-  //   if (!this.clipViewFile) {
-  //     const file = await FileSystemUtils.getFileHandle(
-  //       `${this.projectId}`,
-  //       `${this.clipView.clip.id}`,
-  //     )
-  //     this.clipViewFile = await (
-  //       file as any
-  //     ).createSyncAccessHandle() as FileSystemSyncAccessHandle
-  //   }
-  //   this.clipViewFile.read(this.buffer.buffer, {
-  //     at: this.clipView.offset + this.position - this.clipView.startPosition,
-  //   })
-
-  //   this.bufferPosition = 0
-  // }
 }

@@ -11,7 +11,7 @@ export class OpusFileWriter {
   private readonly inputBuffer: Float32Array
 
   static async create(fileWritable: FileSystemWritableFileStream, flacEncoderInfo: OpusEncoderInfo) {
-    const privateTmpFile = await ((await FileSystemUtils.getFileHandle('.', 'exportTmp.flac')) as any)
+    const privateTmpFile = await ((await FileSystemUtils.getFileHandle('.', 'exportTmp.opus')) as any)
     const module = await createModule()
     return new OpusFileWriter(
       fileWritable,
@@ -37,13 +37,11 @@ export class OpusFileWriter {
       bufferPointer: number,
       length: number,
     ) {
-      privateTmpFileSync.write(module.HEAP8.slice(bufferPointer, bufferPointer + length))
+      privateTmpFileSync.write(module.HEAPU8.slice(bufferPointer, bufferPointer + length))
 
       return 0
     }
     ;(globalThis as any).opusEncoderCloseCallback = async function () {
-      privateTmpFileSync.close()
-      await (await privateTmpFile.getFile()).stream().pipeTo(fileWritable)
       return 0
     }
 
@@ -70,5 +68,8 @@ export class OpusFileWriter {
 
   async finish() {
     this.module._finalize_encoding()
+    this.privateTmpFileSync.close()
+    await (await this.privateTmpFile.getFile()).stream().pipeTo(this.fileWritable)
+    await FileSystemUtils.deleteFile('.', 'exportTmp.opus')
   }
 }

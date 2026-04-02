@@ -29,7 +29,7 @@ test('vbr test', async () => {
 })
 
 test('cbr test', async () => {
-  const fileHandle = await await FileSystemUtils.getFileHandle('.', 'cbrTest.mp3')
+  const fileHandle = await (await FileSystemUtils.getFileHandle('.', 'cbrTest.mp3')).createSyncAccessHandle()
   const encoderInfo = {
     encoder: 'mp3',
     sampleRate: 48000,

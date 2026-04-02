@@ -32,14 +32,14 @@ export class FlacFileWriter {
     this.inputBuffer = module.HEAPF32.subarray(start, start + flacEncoderInfo.channelCount * this.inputBufferSize)
     this.int32BufferView = module.HEAP32.subarray(start, start + flacEncoderInfo.channelCount * this.inputBufferSize)
     let fileWritePosition = 0
-    ;(globalThis as any).flacEncoderWriteCallback = function (bufferPointer: number, length: number, samples: number) {
-      privateTmpFileSync.write(module.HEAP8.slice(bufferPointer, bufferPointer + length))
-      fileWritePosition += length
+    ;(globalThis as any).flacEncoderWriteCallback = function (bufferPointer: number, length: BigInt, samples: number) {
+      privateTmpFileSync.write(module.HEAPU8.slice(bufferPointer, bufferPointer + Number(length)))
+      fileWritePosition += Number(length)
 
       return 0 // FLAC__STREAM_ENCODER_WRITE_STATUS_OK
     }
     ;(globalThis as any).flacEncoderSeekCallback = function (newPosition: number) {
-      fileWritePosition = newPosition
+      fileWritePosition = Number(newPosition)
       return 0 // FLAC__STREAM_ENCODER_SEEK_STATUS_OK
     }
     ;(globalThis as any).flacEncoderTellCallback = function (valuePointer: number) {
@@ -72,5 +72,6 @@ export class FlacFileWriter {
     this.module._finish_encoding()
     this.privateTmpFileSync.close()
     await (await this.privateTmpFile.getFile()).stream().pipeTo(this.fileWritable)
+    await FileSystemUtils.deleteFile('.', 'exportTmp.flac')
   }
 }

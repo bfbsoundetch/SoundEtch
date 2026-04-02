@@ -45,7 +45,7 @@ export class FileSystemUtils {
       memfs.MemoryBackedFileSystem.deleteFile(dirName, fileName)
     } else {
       const nodefs = await import('./NodeFileSystem')
-      nodefs.NodeFileSystem.deleteFile(dirName, fileName)
+      await nodefs.NodeFileSystem.deleteFile(dirName, fileName)
     }
   }
 }

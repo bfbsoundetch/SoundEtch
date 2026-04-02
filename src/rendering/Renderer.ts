@@ -7,7 +7,7 @@ import { cloneWithGetters } from '../global/ObjectUtils'
 import { ClipViewSubset } from '../playback/AudioFileReader'
 import { AudioFilePublishingJobArgument } from './AudioFilePublishingJob'
 import { ProjectManager } from '../project/ProjectManager'
-import { encoderInfoTransformerFactory, Mp3EncoderInfo, OpusEncoderInfo, WavEncoderInfo } from '../encoders/EncoderType'
+import { encoderInforWritableStreamFactory, encoderInfoTransformerFactory, Mp3EncoderInfo, OpusEncoderInfo, WavEncoderInfo } from '../encoders/EncoderType'
 import { RenderingArgument } from './RenderingJob'
 import { Mp3OutputSampleRate } from 'encoders/Mp3Transformer'
 
@@ -16,16 +16,15 @@ export class Renderer {
 
   static async exportProject() {
     const project = await ProjectManager.getActiveProject()
-    // vscode complaining about startIn property
     const file = await showSaveFilePicker({
       startIn: 'downloads',
-      suggestedName: `${project.title}.wav`,
+      suggestedName: `${project.title}.mp3`,
     } as any)
-    await Renderer.renderNew(await file.createWritable(), 1, project, 0, ...project.getTracks())
+    await Renderer.renderNew(file, 1, project, 0, ...project.getTracks())
   }
 
   static async renderNew(
-    outputFileStream: FileSystemWritableFileStream,
+    file: FileSystemFileHandle,
     outputChannelCount: number,
     project: Project,
     startPosition: number,
@@ -38,16 +37,21 @@ export class Renderer {
       bitrate: 64000,
       vbrQuality: undefined,
     }
-    const transformStream = await encoderInfoTransformerFactory(length, encoding)
-    transformStream?.readable.pipeTo(outputFileStream)
-    const writableStream = transformStream?.writable ?? outputFileStream
+    // const encoding: WavEncoderInfo = {
+    //   encoder: 'wav',
+    //   sampleRate: project.sampleRate,
+    //   channelCount: outputChannelCount,
+    //   sampleFormat: 'int16',
+    //   sampleCount: Math.max(...tracks.map(t => t.length))
+    // }
 
     const argument: RenderingArgument = {
-      writableStream: writableStream,
+      file: file,
       projectId: project.id!,
       sampleRate: project.sampleRate,
       channelCount: outputChannelCount,
       startPosition: startPosition,
+      encoderInfo: encoding,
       trackSubsets: tracks.map((track) => {
         return {
           name: track.name,
@@ -72,7 +76,7 @@ export class Renderer {
     }
 
     const worker = new Worker('./assets/renderingWorker.js', { type: 'module' })
-    worker.postMessage(argument, [writableStream])
+    worker.postMessage(argument)
   }
 
   static async render(

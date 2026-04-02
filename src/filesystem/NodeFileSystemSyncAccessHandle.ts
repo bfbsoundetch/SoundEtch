@@ -49,7 +49,7 @@ export class NodeFileSystemSyncAccessHandle implements FileSystemSyncAccessHandl
     let position = 0
     const result = new WritableStream({
       write(chunk, controller) {
-        position += fs.writeSync(fd, new DataView(chunk), 0, chunk.byteLength, position)
+        position += fs.writeSync(fd, chunk, 0, chunk.byteLength, position)
       },
     })
     ;(result as any).seek = async function (p: number): Promise<void> {
@@ -59,7 +59,7 @@ export class NodeFileSystemSyncAccessHandle implements FileSystemSyncAccessHandl
       throw new Error('Function not implemented.')
     }
     ;(result as any).write = async function (data: FileSystemWriteChunkType): Promise<void> {
-      throw new Error('Function not implemented.')
+      position += fs.writeSync(fd, data, 0, (data as any).byteLength, position)
     }
     return result as FileSystemWritableFileStream
   }

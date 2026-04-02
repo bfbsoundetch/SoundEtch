@@ -2,7 +2,7 @@ import { Mp3EncoderInfo } from './EncoderType'
 import createModule, { MainModule } from './wasm/mp3/mp3_encoder'
 
 export class Mp3FileWriter {
-  static readonly INPUT_BUFFER_SAMPLE_SIZE = 4 * 1024
+  static readonly INPUT_BUFFER_SAMPLE_SIZE = 256 * 1024
   private static readonly INPUT_BUFFER_BYTE_SIZE =
     Mp3FileWriter.INPUT_BUFFER_SAMPLE_SIZE * Float32Array.BYTES_PER_ELEMENT
 
@@ -32,7 +32,7 @@ export class Mp3FileWriter {
         Mp3FileWriter.INPUT_BUFFER_SAMPLE_SIZE * mp3EncoderInfo.channelCount,
     )
     this.outputBufferPointer = module._getOutputBufferPointer()
-    this.outputBuffer = module.HEAP8.subarray(this.outputBufferPointer, this.outputBufferPointer + 16 * 1024)
+    this.outputBuffer = module.HEAPU8.subarray(this.outputBufferPointer, this.outputBufferPointer + 16 * 1024)
   }
 
   static async create(fileWritable: FileSystemWritableFileStream, mp3EncoderInfo: Mp3EncoderInfo) {
@@ -47,26 +47,21 @@ export class Mp3FileWriter {
   async writeChunk(length: number) {
     const outputSize = this.module._encode_samples(length)
     await this.fileWritable.write(
-      this.module.HEAPU8.subarray(this.outputBufferPointer, this.outputBufferPointer + outputSize),
+      this.module.HEAPU8.subarray(this.outputBufferPointer, this.outputBufferPointer + outputSize) as any,
     )
   }
 
   async finish() {
     const outputSize = this.module._flush_lame()
     await this.fileWritable.write(
-      this.module.HEAPU8.subarray(this.outputBufferPointer, this.outputBufferPointer + outputSize),
+      this.module.HEAPU8.subarray(this.outputBufferPointer, this.outputBufferPointer + outputSize) as any,
     )
 
     const tagSize = this.module._get_lame_tag()
     this.fileWritable.seek(0)
     await this.fileWritable.write(
-      this.module.HEAPU8.subarray(this.outputBufferPointer, this.outputBufferPointer + tagSize),
+      this.module.HEAPU8.subarray(this.outputBufferPointer, this.outputBufferPointer + tagSize) as any,
     )
-    let sm = 0
-    const o = this.module.HEAPU8.subarray(this.outputBufferPointer, this.outputBufferPointer + tagSize)
-    for (let i = 0; i < tagSize; ++i) {
-      sm += Math.abs(o[i])
-    }
 
     this.module._close_lame()
     await this.fileWritable.close()

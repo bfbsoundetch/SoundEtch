@@ -1,5 +1,9 @@
+import { FlacFileWriter } from './FlacFileWriter'
+import { Mp3FileWriter } from './Mp3FileWriter'
 import { Mp3Transformer } from './Mp3Transformer'
+import { OpusFileWriter } from './OpusFileWriter'
 import { OpusTransformer } from './OpusTransformer'
+import { WavFileWriter } from './WavFileWriter'
 import { WavTransformer } from './WavTransformer'
 
 export type EncoderInfo = WavEncoderInfo | OpusEncoderInfo | Mp3EncoderInfo | FlacEncoderInfo
@@ -68,6 +72,22 @@ export type FlacEncoderInfo = {
   channelCount: number
   bitDepth: 8 | 16 | 24
   compressionLevel: 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8
+}
+
+export async function encoderInforWritableStreamFactory(
+  fileWritable: FileSystemWritableFileStream,
+  encoderInfo: EncoderInfo,
+) {
+  switch (encoderInfo.encoder) {
+    case 'wav':
+      return new WavFileWriter(fileWritable, encoderInfo)
+    case 'opus':
+      return OpusFileWriter.create(fileWritable, encoderInfo)
+    case 'mp3':
+      return Mp3FileWriter.create(fileWritable, encoderInfo)
+    case 'flac':
+      return FlacFileWriter.create(fileWritable, encoderInfo)
+  }
 }
 
 export async function encoderInfoTransformerFactory(

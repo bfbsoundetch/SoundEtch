@@ -5,6 +5,7 @@ ExternalProject_Add(lame
   URL_HASH MD5=83e260acbe4389b54fe08e0bdbf7cddb
   CONFIGURE_COMMAND emconfigure <SOURCE_DIR>/configure
     CFLAGS=-DNDEBUG\ -DNO_STDIO\ -O3\ -msimd128
+    --host=none-none-none
     --disable-dependency-tracking
     --disable-shared
     --disable-gtktest

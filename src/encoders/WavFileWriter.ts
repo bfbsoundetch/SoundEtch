@@ -1,7 +1,7 @@
 import { WavEncoderInfo, WavSampleFormat } from './EncoderType'
 
 export class WavFileWriter {
-  static readonly INPUT_BUFFER_SIZE = 4 * 1024
+  static readonly INPUT_BUFFER_SIZE = 1024 * 1024
 
   private readonly inputBuffer = new Float32Array(WavFileWriter.INPUT_BUFFER_SIZE)
 
@@ -102,6 +102,6 @@ export class WavFileWriter {
     view.setUint32(36, 0x64617461, false) // 'data'
     view.setUint32(40, sampleCount * channelCount * bytesPerSample, true) // Data size
 
-    return header
+    return view
   }
 }
