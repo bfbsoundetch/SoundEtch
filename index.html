@@ -66,6 +66,7 @@
     window.headerController = new window.HeaderController()
     window.exportProjectController = new window.ExportProjectController()
     window.logsModalController = new window.LogsModalController()
+    window.processingModalController = new window.ProcessingModalController()
     if (window.location.search) {
       const meetingParam = new URL(window.location).searchParams.get('meeting')
       if (meetingParam) {
@@ -80,7 +81,7 @@
 
     document.querySelectorAll('dialog.overlay').forEach((dialogElement) => {
       dialogElement.addEventListener('click', (event) => {
-        if (event.target === dialogElement) {
+        if (event.target === dialogElement && !dialogElement.classList.contains('no-backdrop-close')) {
           dialogElement.close()
         }
       })
@@ -546,7 +547,19 @@
         </div>
       </div>
 
-      <button class="menu-item clickable export-project-button" onclick="window.Renderer.exportProject()">Export Audio</button>
+      <button class="menu-item clickable export-project-button" onclick="window.exportProjectController.exportProject()">
+        Export Audio
+      </button>
+    </div>
+  </dialog>
+  <dialog id="processing-modal" class="overlay no-backdrop-close">
+    <div id="processing-modal-content" class="overlay-content" onclick="event.stopPropagation()">
+      <h1 id="processing-modal-title">Processing...</h1>
+      <div id="processing-progress-row">
+        <progress id="processing-progress-bar" max="100" value="0"></progress>
+        <span id="processing-progress-percent">0%</span>
+      </div>
+      <button id="processing-cancel-button" class="menu-item clickable">Cancel</button>
     </div>
   </dialog>
   <div id="notification-parent"></div>
