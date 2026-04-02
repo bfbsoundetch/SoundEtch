@@ -13,14 +13,23 @@ import { Mp3OutputSampleRate } from 'encoders/Mp3Transformer'
 
 export class Renderer {
   private static readingWorkerController: WorkerController | null = null
+  private static renderingWorker: Worker | null = null
+  private static cancelRenderingCallback: (() => void) | null = null
 
   static async exportProject() {
     const project = await ProjectManager.getActiveProject()
-    const file = await showSaveFilePicker({
-      startIn: 'downloads',
-      suggestedName: `${project.title}.mp3`,
-    } as any)
-    await Renderer.renderNew(file, 1, project, 0, ...project.getTracks())
+    try {
+      const file = await showSaveFilePicker({
+        startIn: 'downloads',
+        suggestedName: `${project.title}.mp3`,
+      } as any)
+
+      ;(window as any).processingModalController?.show('Exporting project...', () => Renderer.cancelRender())
+      await Renderer.renderNew(file, 1, project, 0, ...project.getTracks())
+      ;(window as any).processingModalController?.hide()
+    } catch {
+      ;(window as any).processingModalController?.hide()
+    }
   }
 
   static async renderNew(
@@ -76,7 +85,42 @@ export class Renderer {
     }
 
     const worker = new Worker('./assets/renderingWorker.js', { type: 'module' })
-    worker.postMessage(argument)
+    Renderer.renderingWorker = worker
+
+    await new Promise<void>((resolve, reject) => {
+      Renderer.cancelRenderingCallback = () => {
+        worker.terminate()
+        Renderer.cancelRenderingCallback = null
+        Renderer.renderingWorker = null
+        reject(new Error('Render canceled'))
+      }
+      worker.onmessage = (e) => {
+        const progress = e.data?.progress
+        if (typeof progress === 'number') {
+          ;(window as any).processingModalController?.setProgress(progress)
+        }
+        if (e.data?.done) {
+          Renderer.cancelRenderingCallback = null
+          Renderer.renderingWorker = null
+          resolve()
+        }
+      }
+      worker.onerror = (error) => {
+        Renderer.cancelRenderingCallback = null
+        Renderer.renderingWorker = null
+        reject(error)
+      }
+
+      worker.postMessage(argument)
+    }).finally(() => {
+      worker.terminate()
+      Renderer.cancelRenderingCallback = null
+      Renderer.renderingWorker = null
+    })
+  }
+
+  static cancelRender() {
+    Renderer.cancelRenderingCallback?.()
   }
 
   static async render(

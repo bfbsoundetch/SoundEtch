@@ -17,6 +17,7 @@ import { HeaderController } from './ui/HeaderController.ts'
 import { Renderer } from './rendering/Renderer.ts'
 import { ExportProjectController } from './ui/ExportProjectController.ts'
 import { LogsModalController } from './ui/LogsModalController.ts'
+import { ProcessingModalController } from './ui/ProcessingModalController.ts'
 
 window.AudioInputs = AudioInputs
 window.LocalMediaStreams = LocalMediaStreams
@@ -37,3 +38,4 @@ window.HeaderController = HeaderController
 window.Renderer = Renderer
 window.ExportProjectController = ExportProjectController
 window.LogsModalController = LogsModalController
+window.ProcessingModalController = ProcessingModalController

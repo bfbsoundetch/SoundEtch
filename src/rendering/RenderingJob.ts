@@ -122,6 +122,7 @@ self.onmessage = async (e) => {
   await encoderWriter.writeChunk((length * argument.channelCount) % inputBuffer.length)
   console.error('done')
   await encoderWriter.finish()
+  postMessage({ done: true, progress: 1 })
 }
 
 class ReadingOfflineProcessor {

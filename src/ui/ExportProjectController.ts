@@ -1,3 +1,5 @@
+import { Renderer } from '../rendering/Renderer'
+
 export class ExportProjectController {
   private readonly formatContainerMap = new Map<Format, HTMLDivElement>()
   private readonly mp3ModeContainerMap = new Map<Mp3Mode, HTMLDivElement>()
@@ -59,6 +61,11 @@ export class ExportProjectController {
   private getSelectedMp3Mode(): Mp3Mode {
     const selectedInput = this.mp3ModeInputs.find((input) => input.checked)
     return (selectedInput?.value as Mp3Mode | undefined) ?? Mp3Mode.CBR
+  }
+
+  async exportProject() {
+    ;(document.getElementById('export-project-modal') as HTMLDialogElement).close()
+    await Renderer.exportProject()
   }
 }
 
