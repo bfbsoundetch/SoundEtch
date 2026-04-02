@@ -67,6 +67,7 @@
     window.exportProjectController = new window.ExportProjectController()
     window.logsModalController = new window.LogsModalController()
     window.processingModalController = new window.ProcessingModalController()
+    window.clipManagerController = new window.ClipManagerController()
     if (window.location.search) {
       const meetingParam = new URL(window.location).searchParams.get('meeting')
       if (meetingParam) {
@@ -139,7 +140,7 @@
         <button class="menu-item clickable" onclick="showDialog(document.getElementById('export-project-modal'))">
           Export
         </button>
-        <button class="menu-item clickable">Manage Clips</button>
+        <button id="open-clip-manager-modal-button" class="menu-item clickable">Manage Clips</button>
         <button id="open-logs-modal-button" class="menu-item clickable">Logs</button>
         <button class="menu-item clickable">About</button>
       </div>
@@ -362,6 +363,17 @@
         <button id="logs-modal-download-button" class="menu-item clickable logs-modal-button">Download .txt</button>
       </div>
       <pre id="logs-modal-content-text"></pre>
+    </div>
+  </dialog>
+  <dialog id="clip-manager-modal" class="overlay">
+    <div class="overlay-close-button clickable" onclick="closeOverlay()">
+      <svg class="meeting-icon" viewBox="0 0 500 500">
+        <use xlink:href="#menu-close" />
+      </svg>
+    </div>
+    <div id="clip-manager-modal-content" class="overlay-content" onclick="event.stopPropagation()">
+      <h1>Manage Clips</h1>
+      <div id="clip-manager-list"></div>
     </div>
   </dialog>
   <dialog id="export-project-modal" class="overlay">

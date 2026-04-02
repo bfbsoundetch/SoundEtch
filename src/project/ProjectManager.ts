@@ -130,4 +130,37 @@ export class ProjectManager {
     await DatabasePersister.save(project)
     this.projectListeners.forEach((listener) => listener(project))
   }
+
+  static async deleteClip(clip: Clip) {
+    const project = await ProjectManager.getActiveProject()
+
+    for (const track of project.getTracks()) {
+      const clipViewIndexesToRemove: number[] = []
+      for (let i = 0; i < track.clipViews.length; ++i) {
+        if (track.clipViews[i].clip === clip) {
+          clipViewIndexesToRemove.push(i)
+        }
+      }
+      for (let i = clipViewIndexesToRemove.length - 1; i >= 0; --i) {
+        track.removeClipView(clipViewIndexesToRemove[i])
+      }
+      if (clipViewIndexesToRemove.length > 0) {
+        await DatabasePersister.save(track)
+        ProjectManager.trackListeners.get((track as any).id)?.forEach((listener) => listener(track))
+      }
+    }
+
+    await Promise.all([
+      FileSystemUtils.deleteFile(project.directoryName, clip.filename),
+      FileSystemUtils.deleteFile(project.directoryName, `${clip.filename}_summary`),
+    ])
+
+    if (clip.id) {
+      this.clipListeners.delete(clip.id)
+      await DatabasePersister.deleteObjectById(clip.id)
+    }
+    project.deleteClip(clip)
+    await DatabasePersister.save(project)
+    this.projectListeners.forEach((listener) => listener(project))
+  }
 }

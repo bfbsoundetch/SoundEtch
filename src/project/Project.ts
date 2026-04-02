@@ -37,6 +37,13 @@ export class Project extends DatabasePersisted {
     this.clips.push(clip)
   }
 
+  deleteClip(clip: Clip) {
+    const index = this.clips.indexOf(clip)
+    if (index >= 0) {
+      this.clips.splice(index, 1)
+    }
+  }
+
   deleteTrack(track: Track) {
     const index = this.tracks.indexOf(track)
     this.tracks.splice(index, 1)
