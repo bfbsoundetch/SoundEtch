@@ -31,7 +31,7 @@ export class TimeUtils {
     return TimeUtils.toString(Math.round((samples * 1000) / sampleRate), removeZeroes)
   }
 
-  static toString(ms: number, removeZeroes: boolean): string {
+  static toString(ms: number, removeZeroes: boolean, roundSeconds = false): string {
     const sign = ms < 0 ? '-' : ''
     ms = Math.abs(ms)
     const days = TimeUtils.toDays(ms)
@@ -41,7 +41,10 @@ export class TimeUtils {
     const daysString = days === 0 ? '' : `${days}:`
     const hoursString = removeZeroes && hours === 0 ? '' : `${(hours % 24).toString().padStart(2, '0')}:`
     const minutesString = removeZeroes && minutes === 0 ? '' : `${(minutes % 60).toString().padStart(2, '0')}:`
-    const secondsString = `${(seconds % 60).toString().padStart(2, '0')}.${(ms % 1000).toString().padStart(3, '0')}`
+    let secondsString = `${(seconds % 60).toString().padStart(2, '0')}`
+    if (!roundSeconds) {
+      secondsString += `.${(ms % 1000).toString().padStart(3, '0')}`
+    }
     return sign + daysString + hoursString + minutesString + secondsString
   }
 }

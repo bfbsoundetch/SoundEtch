@@ -95,11 +95,11 @@ export class Renderer {
         reject(new Error('Render canceled'))
       }
       worker.onmessage = (e) => {
-        const progress = e.data?.progress
+        const progress = e.data.progress
         if (typeof progress === 'number') {
           ;(window as any).processingModalController?.setProgress(progress)
         }
-        if (e.data?.done) {
+        if (e.data.done) {
           Renderer.cancelRenderingCallback = null
           Renderer.renderingWorker = null
           resolve()
