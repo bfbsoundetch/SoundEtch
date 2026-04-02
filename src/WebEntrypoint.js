@@ -18,6 +18,7 @@ import { Renderer } from './rendering/Renderer.ts'
 import { ExportProjectController } from './ui/ExportProjectController.ts'
 import { LogsModalController } from './ui/LogsModalController.ts'
 import { ProcessingModalController } from './ui/ProcessingModalController.ts'
+import { ClipManagerController } from './ui/ClipManagerController.ts'
 
 window.AudioInputs = AudioInputs
 window.LocalMediaStreams = LocalMediaStreams
@@ -39,3 +40,4 @@ window.Renderer = Renderer
 window.ExportProjectController = ExportProjectController
 window.LogsModalController = LogsModalController
 window.ProcessingModalController = ProcessingModalController
+window.ClipManagerController = ClipManagerController

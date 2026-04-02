@@ -910,6 +910,64 @@ grid-template-columns: 1fr 0fr 0fr 0fr 0fr;
   box-sizing: border-box;
 }
 
+#clip-manager-modal-content {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.75rem;
+  padding: 3.5rem 1rem 1rem;
+  box-sizing: border-box;
+  width: min(90vw, 42rem);
+  height: auto;
+  max-height: 85vh;
+}
+
+#clip-manager-modal-content h1 {
+  margin: 0;
+  font-size: 2rem;
+}
+
+#clip-manager-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  overflow: auto;
+}
+
+.clip-manager-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    'name button'
+    'size button'
+    'usage button';
+  gap: 0.35rem 0.75rem;
+  padding: 0.75rem;
+  background-color: var(--alt-background);
+  border: 1px solid var(--color);
+}
+
+.clip-manager-name {
+  grid-area: name;
+  font-size: 1.1rem;
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.clip-manager-meta {
+  font-size: 0.95rem;
+  opacity: 0.9;
+}
+
+.clip-manager-delete-button {
+  grid-area: button;
+  align-self: center;
+  width: auto;
+  font-size: 1rem;
+  padding: 0.5rem 0.75rem;
+}
+
 #logs-modal-toolbar {
   display: flex;
   gap: 0.5rem;
