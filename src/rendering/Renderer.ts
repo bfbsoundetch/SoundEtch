@@ -7,7 +7,14 @@ import { cloneWithGetters } from '../global/ObjectUtils'
 import { ClipViewSubset } from '../playback/AudioFileReader'
 import { AudioFilePublishingJobArgument } from './AudioFilePublishingJob'
 import { ProjectManager } from '../project/ProjectManager'
-import { encoderInforWritableStreamFactory, encoderInfoTransformerFactory, Mp3EncoderInfo, OpusEncoderInfo, WavEncoderInfo } from '../encoders/EncoderType'
+import {
+  encoderInforWritableStreamFactory,
+  encoderInfoTransformerFactory,
+  EncoderInfo,
+  Mp3EncoderInfo,
+  OpusEncoderInfo,
+  WavEncoderInfo,
+} from '../encoders/EncoderType'
 import { RenderingArgument } from './RenderingJob'
 import { Mp3OutputSampleRate } from 'encoders/Mp3Transformer'
 
@@ -16,16 +23,18 @@ export class Renderer {
   private static renderingWorker: Worker | null = null
   private static cancelRenderingCallback: (() => void) | null = null
 
-  static async exportProject() {
+  static async exportProject(encoderInfo: EncoderInfo) {
     const project = await ProjectManager.getActiveProject()
+    const trackLength = project.getTracks().reduce((maxLength, track) => Math.max(maxLength, track.length), 0)
+    const exportInfo = encoderInfo.encoder === 'wav' ? { ...encoderInfo, sampleCount: trackLength } : encoderInfo
     try {
       const file = await showSaveFilePicker({
         startIn: 'downloads',
-        suggestedName: `${project.title}.mp3`,
+        suggestedName: `${project.title}.${exportInfo.encoder}`,
       } as any)
 
       ;(window as any).processingModalController?.show('Exporting project...', () => Renderer.cancelRender())
-      await Renderer.renderNew(file, 1, project, 0, ...project.getTracks())
+      await Renderer.renderNew(file, 1, project, exportInfo, 0, ...project.getTracks())
       ;(window as any).processingModalController?.hide()
     } catch {
       ;(window as any).processingModalController?.hide()
@@ -36,31 +45,17 @@ export class Renderer {
     file: FileSystemFileHandle,
     outputChannelCount: number,
     project: Project,
+    encoderInfo: EncoderInfo,
     startPosition: number,
     ...tracks: Array<Track>
   ) {
-    const encoding: Mp3EncoderInfo = {
-      encoder: 'mp3',
-      sampleRate: project.sampleRate as Mp3OutputSampleRate,
-      channelCount: outputChannelCount,
-      bitrate: 64000,
-      vbrQuality: undefined,
-    }
-    // const encoding: WavEncoderInfo = {
-    //   encoder: 'wav',
-    //   sampleRate: project.sampleRate,
-    //   channelCount: outputChannelCount,
-    //   sampleFormat: 'int16',
-    //   sampleCount: Math.max(...tracks.map(t => t.length))
-    // }
-
     const argument: RenderingArgument = {
       file: file,
       projectId: project.id!,
       sampleRate: project.sampleRate,
       channelCount: outputChannelCount,
       startPosition: startPosition,
-      encoderInfo: encoding,
+      encoderInfo,
       trackSubsets: tracks.map((track) => {
         return {
           name: track.name,
