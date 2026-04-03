@@ -7,6 +7,7 @@ import { TranscribedRange } from '../transcription/Transcriber'
 export class Clip extends DatabasePersisted {
   readonly summary: Summary
   readonly transcription = new Array<TranscribedRange>()
+  importedMetadata: Record<string, unknown> | null = null
 
   constructor(
     readonly name: string,
