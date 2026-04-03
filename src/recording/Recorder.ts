@@ -93,11 +93,11 @@ export class Recorder {
 
   private static async createFromArrayBuffer(arrayBuffer: ArrayBuffer, name: string): Promise<Track> {
     const activeProject = await ProjectManager.getActiveProject()
-    const audioBuffer = await (await globalThis.createNewAudioContext()).decodeAudioData(arrayBuffer)
+    const channelCount = await Recorder.getImportedAudioChannelCount(arrayBuffer)
 
     const track = await ProjectManager.addClipWithTrack(
       name,
-      audioBuffer.numberOfChannels,
+      channelCount,
       0, // to be overwritten
       AudioControl.startPosition,
       'File',
@@ -106,30 +106,32 @@ export class Recorder {
     const clip = clipView.clip
     const dirname = activeProject.id
     const filename = clip.filename
-    const worker = new Worker(new URL('./AudioFileWritingWorker.js', import.meta.url), {
+    const worker = new Worker(new URL('./AudioImportWorker.js', import.meta.url), {
       type: 'module',
     })
-    const audioArray = new Array<Float32Array>(audioBuffer.numberOfChannels)
-    for (let i = 0; i < audioBuffer.numberOfChannels; ++i) {
-      audioArray[i] = audioBuffer.getChannelData(i)
-    }
     worker.postMessage({
-      type: 'batch',
+      type: 'import',
       dirname: dirname,
       filename: filename,
-      audioArray: audioArray,
+      arrayBuffer: arrayBuffer,
       summary: clip.summary,
     })
     worker.addEventListener('message', clip.summary.getWorkerMessageListener())
     worker.addEventListener('message', (e) => {
       if (e.data.type == 'finished') {
         track.clipViews[0] = new ClipView(clip, 0, AudioControl.startPosition, e.data.length)
+        clip.importedMetadata = e.data.metadata
         ProjectManager.saveClip(clip)
         ProjectManager.saveTrack(track)
         ;(window as any).trackListController.draw()
       }
     })
     return track
+  }
+
+  private static async getImportedAudioChannelCount(arrayBuffer: ArrayBuffer): Promise<number> {
+    const audioBuffer = await (await globalThis.createNewAudioContext()).decodeAudioData(arrayBuffer.slice(0))
+    return audioBuffer.numberOfChannels
   }
 
   static getWritingWorkerController(): WorkerController {
