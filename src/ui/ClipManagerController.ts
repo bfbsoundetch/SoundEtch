@@ -4,15 +4,11 @@ import { Project } from '../project/Project'
 import { ProjectManager } from '../project/ProjectManager'
 
 export class ClipManagerController {
-  private readonly dialog: HTMLDialogElement
-  private readonly openButton: HTMLButtonElement
-  private readonly listContainer: HTMLDivElement
+  private readonly dialog = document.getElementById('clip-manager-modal') as HTMLDialogElement
+  private readonly openButton = document.getElementById('open-clip-manager-modal-button') as HTMLButtonElement
+  private readonly listContainer = document.getElementById('clip-manager-list') as HTMLDivElement
 
   constructor() {
-    this.dialog = document.getElementById('clip-manager-modal') as HTMLDialogElement
-    this.openButton = document.getElementById('open-clip-manager-modal-button') as HTMLButtonElement
-    this.listContainer = document.getElementById('clip-manager-list') as HTMLDivElement
-
     this.openButton.onclick = () => this.open()
   }
 
@@ -53,7 +49,7 @@ export class ClipManagerController {
     const usedTrackCount = this.countTracksUsingClip(project, clip)
     const usageElement = document.createElement('div')
     usageElement.className = 'clip-manager-meta'
-    usageElement.innerText = `used in ${usedTrackCount} tracks`
+    usageElement.innerText = `used in ${usedTrackCount} track${usedTrackCount == 1 ? '' : 's'}`
 
     const deleteButton = document.createElement('button')
     deleteButton.className = 'menu-item clickable clip-manager-delete-button'

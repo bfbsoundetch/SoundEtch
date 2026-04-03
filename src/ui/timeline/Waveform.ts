@@ -176,7 +176,7 @@ export class Waveform extends TrackListItemController {
 
   resize() {
     this.width = this.div.clientWidth
-    this.height = this.div.clientHeight - Waveform.HEADER_HEIGHT
+    this.height = Math.max(0, this.div.clientHeight - Waveform.HEADER_HEIGHT)
     this.topSvgElement.setAttribute('viewBox', `0 0 ${this.width} ${this.height + Waveform.HEADER_HEIGHT}`)
   }
 

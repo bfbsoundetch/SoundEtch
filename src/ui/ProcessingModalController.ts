@@ -36,7 +36,7 @@ export class ProcessingModalController {
     const elapsedTime = Date.now() - this.startTime
     const totalTime = Math.round(elapsedTime / progress)
     this.elapsedTimeElement.textContent = 'Elapsed time: ' + TimeUtils.toString(elapsedTime, false, true)
-    if (elapsedTime > 1000) {
+    if (progress > .005) {
       this.remainingTimeElement.textContent = 'Remaining time: ' + TimeUtils.toString(totalTime - elapsedTime, false, true)
     } else {
       this.remainingTimeElement.textContent = 'Remaining time: ...'

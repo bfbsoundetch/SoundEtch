@@ -47,14 +47,17 @@ class ClipSummarizer {
       )
     }
 
+    // prewarm to reduce laggy transitions from summary to raw file
+    if (skip > Summary.SAMPLES_PER_SUMMARY && skip < Summary.SAMPLES_PER_SUMMARY * 1.2) {
+      this.warmFileCache(startPosition, endPosition)
+    }
+
     return skip < Summary.SAMPLES_PER_SUMMARY
       ? this.getPcmSlice(startPosition, endPosition, skip)
       : (this.clip.summary?.getSummaryOfRange(startPosition, endPosition, skip) ?? [])
   }
 
-  private async getPcmSlice(startPosition: number, endPosition: number, skip: number) {
-    const channelCount = this.clip.getChannelCount()
-    let data: Float32Array
+  private async warmFileCache(startPosition: number, endPosition: number) {
     if (startPosition < this.fileCacheStart || endPosition > this.fileCacheEnd) {
       const diskReadSamples = Math.max(1_000_000, endPosition + 1 - startPosition)
       const twiceMidPoint = endPosition + startPosition + 1
@@ -68,6 +71,12 @@ class ClipSummarizer {
       this.fileCacheStart = startPoint
       this.fileCacheEnd = endPoint
     }
+  }
+
+  private async getPcmSlice(startPosition: number, endPosition: number, skip: number) {
+    const channelCount = this.clip.getChannelCount()
+    let data: Float32Array
+    await this.warmFileCache(startPosition, endPosition)
     const sliceStart = (startPosition - this.fileCacheStart) * channelCount
     data = this.fileCache!.subarray(sliceStart, sliceStart + (endPosition - startPosition) * channelCount)
 
