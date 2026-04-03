@@ -1,4 +1,17 @@
 import { Renderer } from '../rendering/Renderer'
+import {
+  EncoderInfo,
+  FlacEncoderInfo,
+  Mp3CbrValue,
+  Mp3EncoderInfo,
+  Mp3OutputSampleRate,
+  OpusApplication,
+  OpusBandwidth,
+  OpusBitrateMode,
+  OpusEncoderInfo,
+  WavEncoderInfo,
+  WavSampleFormat,
+} from '../encoders/EncoderType'
 
 export class ExportProjectController {
   private readonly formatContainerMap = new Map<Format, HTMLDivElement>()
@@ -26,10 +39,10 @@ export class ExportProjectController {
 
     const vbrSlider = document.getElementById('vbr-quality-slider') as HTMLInputElement
     const vbrOutput = document.getElementById('vbr-quality-output') as HTMLOutputElement
-    const percentage = vbrSlider.valueAsNumber / .09
+    const percentage = vbrSlider.valueAsNumber / 0.09
     vbrOutput.style.left = `calc(${percentage}% + (${9 - percentage * 0.15}px))`
     vbrSlider.oninput = () => {
-      const percentage = vbrSlider.valueAsNumber / .09
+      const percentage = vbrSlider.valueAsNumber / 0.09
       // adjust for handle width
       vbrOutput.style.left = `calc(${percentage}% + (${9 - percentage * 0.15}px))`
       vbrOutput.value = vbrSlider.value
@@ -40,7 +53,6 @@ export class ExportProjectController {
     vbrSlider.addEventListener('mouseleave', () => {
       vbrOutput.style.opacity = '0'
     })
-
 
     this.handleFormatSwitch(this.formatSelect.value as Format)
     this.handleMp3ModeSwitch(this.getSelectedMp3Mode())
@@ -64,8 +76,61 @@ export class ExportProjectController {
   }
 
   async exportProject() {
+    const encoderInfo = this.createEncoderInfo()
     ;(document.getElementById('export-project-modal') as HTMLDialogElement).close()
-    await Renderer.exportProject()
+    await Renderer.exportProject(encoderInfo)
+  }
+
+  private createEncoderInfo(): EncoderInfo {
+    const channelCount = 1
+    switch (this.formatSelect.value as Format) {
+      case Format.WAV:
+        return {
+          encoder: 'wav',
+          sampleRate: this.getNumberValue('wav-sample-rate'),
+          channelCount,
+          sampleFormat: this.getSelectValue('wav-sample-format') as WavSampleFormat,
+          sampleCount: 0,
+        } as WavEncoderInfo
+      case Format.FLAC:
+        return {
+          encoder: 'flac',
+          sampleRate: this.getNumberValue('flac-sample-rate'),
+          channelCount,
+          bitDepth: this.getNumberValue('flac-bit-depth') as FlacEncoderInfo['bitDepth'],
+          compressionLevel: this.getNumberValue('flac-compression') as FlacEncoderInfo['compressionLevel'],
+        }
+      case Format.OPUS:
+        return {
+          encoder: 'opus',
+          sampleRate: 48000,
+          channelCount,
+          bitrate: this.getNumberValue('opus-bitrate'),
+          bitrateMode: this.getNumberValue('opus-bitrate-mode') as OpusBitrateMode,
+          complexity: this.getNumberValue('opus-complexity') as OpusEncoderInfo['complexity'],
+          bandwidth: this.getNumberValue('opus-bandwidth') as OpusBandwidth,
+          application: this.getNumberValue('opus-application') as OpusApplication,
+          frameSize: this.getNumberValue('opus-frame-size') as OpusEncoderInfo['frameSize'],
+        }
+      case Format.MP3:
+      default:
+        const mode = this.getSelectedMp3Mode()
+        return {
+          encoder: 'mp3',
+          sampleRate: this.getNumberValue('mp3-sample-rate') as Mp3OutputSampleRate,
+          channelCount,
+          bitrate: mode === Mp3Mode.CBR ? (this.getNumberValue('mp3-cbr-bitrate') as Mp3CbrValue) : undefined,
+          vbrQuality: mode === Mp3Mode.VBR ? this.getNumberValue('vbr-quality-slider') : undefined,
+        } as Mp3EncoderInfo
+    }
+  }
+
+  private getSelectValue(id: string): string {
+    return (document.getElementById(id) as HTMLSelectElement).value
+  }
+
+  private getNumberValue(id: string): number {
+    return Number((document.getElementById(id) as HTMLInputElement | HTMLSelectElement).value)
   }
 }
 
