@@ -9,14 +9,14 @@ export class FlacFileWriter {
   private readonly int32BufferView: Int32Array
 
   static async create(fileWritable: FileSystemWritableFileStream, flacEncoderInfo: FlacEncoderInfo) {
-    const privateTmpFile = await ((await FileSystemUtils.getFileHandle('.', 'exportTmp.flac')) as any)
+    const privateTmpFile = await ((await FileSystemUtils.getFileHandle('tmp', 'exportTmp.flac')) as any)
     const module = await createModule()
     return new FlacFileWriter(
       fileWritable,
       flacEncoderInfo,
       module,
       privateTmpFile,
-      privateTmpFile.createSyncAccessHandle(),
+      await privateTmpFile.createSyncAccessHandle(),
     )
   }
 
@@ -27,6 +27,7 @@ export class FlacFileWriter {
     private readonly privateTmpFile: FileSystemFileHandle,
     private readonly privateTmpFileSync: FileSystemSyncAccessHandle,
   ) {
+    console.error(privateTmpFileSync)
     const inputBufferPointer = module._get_input_buffer_pointer(flacEncoderInfo.channelCount, this.inputBufferSize)
     const start = inputBufferPointer / Float32Array.BYTES_PER_ELEMENT
     this.inputBuffer = module.HEAPF32.subarray(start, start + flacEncoderInfo.channelCount * this.inputBufferSize)
@@ -72,6 +73,6 @@ export class FlacFileWriter {
     this.module._finish_encoding()
     this.privateTmpFileSync.close()
     await (await this.privateTmpFile.getFile()).stream().pipeTo(this.fileWritable)
-    await FileSystemUtils.deleteFile('.', 'exportTmp.flac')
+    await FileSystemUtils.deleteFile('tmp', 'exportTmp.flac')
   }
 }

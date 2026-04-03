@@ -18,7 +18,7 @@ export class OpusFileWriter {
       flacEncoderInfo,
       module,
       privateTmpFile,
-      privateTmpFile.createSyncAccessHandle(),
+      await privateTmpFile.createSyncAccessHandle(),
     )
   }
 
