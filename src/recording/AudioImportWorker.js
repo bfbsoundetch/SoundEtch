@@ -1,7 +1,6 @@
 import { BatchAudioFileWriter } from './BatchAudioFileWriter.ts'
 import { Summary } from '../project/Summary.ts'
-
-const WEB_DEMUXER_ESM_URL = 'https://cdn.jsdelivr.net/npm/web-demuxer/+esm'
+import { WebDemuxer } from 'web-demuxer'
 
 self.onmessage = async (e) => {
   if (e.data.type !== 'import') {
@@ -24,12 +23,12 @@ self.onmessage = async (e) => {
 }
 
 async function decodeAudio(arrayBuffer) {
-  const { WebDemuxer } = await import(WEB_DEMUXER_ESM_URL)
-  const demuxer = new WebDemuxer()
+  const demuxer = new WebDemuxer({ wasmFilePath: "https://localhost:8443/soundetch_gh/web-demuxer.wasm" })
   await demuxer.load(new File([arrayBuffer], 'imported-audio'))
-
   const metadata = await demuxer.getMediaInfo()
   const decoderConfig = await demuxer.getDecoderConfig('audio')
+  decoderConfig.sampleRate = 48000
+  console.error(decoderConfig)
 
   const channelParts = []
   let frameCount = 0

@@ -45,6 +45,13 @@ export class PositionMarkerController extends TrackListItemController {
     this.positionLineSvg.x1.baseVal.value = x
     this.positionLineSvg.x2.baseVal.value = x
 
+    this.positionLineSvg.addEventListener('mousedown', (event) => {
+      if (event.buttons == 1 && event.button == 0) {
+        this.trackListController.pointerStateManager.startMovingMark()
+        event.stopPropagation()
+      }
+    })
+
     this.positionLineSvg.style.visibility = 'visible'
     this.positionTimeText.style.visibility = 'visible'
     this.positionTimeText.style.fontWeight = 'bold'

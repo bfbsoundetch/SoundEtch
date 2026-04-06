@@ -38,19 +38,13 @@ export class PointerStateManager extends TrackListItemController {
         case State.MARKING:
           if (
             mouseEvent.buttons == 1 &&
-            mouseEvent.button == 0 &&
-            Math.abs(mouseEvent.clientX - this.mouseDownPoint!.x) >= 2
+            mouseEvent.button == 0
           ) {
-            trackListController.updateSelection(
-              this.getSampleForXValue(this.mouseEventToSvgCoord(mouseEvent).x),
-              this.activeWaveform,
-              true,
-            )
-            this.changeState(State.SELECTING)
+            this.markPointerDown(mouseEvent)
           }
           break
         case State.SELECTING:
-          if (mouseEvent.buttons == 1 && mouseEvent.button == 0) {
+          if (mouseEvent.buttons == 1 && mouseEvent.button == 0 && Math.abs(mouseEvent.clientX - this.mouseDownPoint!.x) >= 2) {
             trackListController.updateSelection(
               this.getSampleForXValue(this.mouseEventToSvgCoord(mouseEvent).x),
               this.activeWaveform,
@@ -82,7 +76,7 @@ export class PointerStateManager extends TrackListItemController {
           if (mouseEvent.buttons == 1 && mouseEvent.button == 0) {
             if (AudioControl.getState() == AudioState.STOPPED || AudioControl.getState() == AudioState.MONITORING) {
               this.markPointerDown(mouseEvent)
-              this.changeState(State.MARKING)
+              this.changeState(State.SELECTING)
             }
           }
           break
@@ -118,6 +112,7 @@ export class PointerStateManager extends TrackListItemController {
         case State.DEFAULT:
           break
         case State.MARKING:
+          this.changeState(State.DEFAULT)
           break
         case State.SELECTING:
           this.changeState(State.DEFAULT)
@@ -157,6 +152,10 @@ export class PointerStateManager extends TrackListItemController {
     this.activeWaveform = null
     this.trackListController.updateSelectionStartSample(leftExpand)
     this.changeState(State.SELECTING)
+  }
+
+  startMovingMark() {
+    this.changeState(State.MARKING)
   }
 
   startResizingClipView(controller: ClipViewController) {

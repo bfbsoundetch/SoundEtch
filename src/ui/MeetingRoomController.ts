@@ -17,6 +17,7 @@ enum VideoLayout {
 class VideoContainer {
 
   private peakMeter: PeakMeterController | null = null
+  isActive = false
 
   constructor(
     readonly divElement: HTMLDivElement, 
@@ -111,6 +112,9 @@ export class MeetingRoomController {
     this.videoButtonController = new MediaStreamButtonController(vidButton, 'video', false)
     this.setUiForDisconnectedState()
     this.applyVideoLayout()
+    this.selfVideoContainer.isActive = true
+    this.guestContainers.forEach(c => c.isActive = false)
+
     LocalMediaStreams.registerAVDeviceListener((added, track) => {
       if (track.kind == 'video') {
         if (added) {
@@ -139,21 +143,6 @@ export class MeetingRoomController {
       }
     })
     this.updateLayoutSelectionUi()
-
-    // LocalMediaStreams.registerScreenListener((added, mediaStreamTrack) => {
-    //   if (added) {
-    //     this.state.members.push({
-    //       peerId: this.peer.id,
-    //       username: this.username,
-    //       mediaStream: LocalMediaStreams.localScreenMediaStream,
-    //       isScreenShare: true,
-    //       isSelf: true,
-    //     })
-    //   } else {
-    //     this.deleteMember(this.peer.id, true)
-    //   }
-    //   this.notifyStateListeners()
-    // })
   }
 
   async createMeeting(): Promise<boolean> {
@@ -219,24 +208,83 @@ export class MeetingRoomController {
   }
 
   applyVideoLayout() {
-    const vidsParentElement = document.getElementById('vids')!
     switch (this.videoLayout) {
       case 'spotlight':
-        vidsParentElement.classList = 'meeting-vids-spotlight'
+        this.firstContainer.divElement.classList = 'vid-div meeting-spotlit'
+        const containers = [...this.containers().filter(c => c.isActive)]
+        let i = 0
+        for (const container of containers) {
+          if (container != this.firstContainer) {
+            container.divElement.classList = 'vid-div meeting-unspotlit'
+            container.divElement.style.top = '70%'
+            container.divElement.style.left = `${(5 - containers.length) * 12.5 + i * 25}%`
+            ++i
+          } else {
+            container.divElement.style.top = ''
+            container.divElement.style.left = ''
+          }
+        }
         break
       case 'solo':
-        vidsParentElement.classList = 'meeting-vids-solo'
+        for (const container of this.containers()) {
+          container.divElement.style.top = ''
+          container.divElement.style.left = ''
+          if (container == this.firstContainer) {
+            container.divElement.classList = 'vid-div meeting-solo'
+          } else {
+            container.divElement.classList = 'vid-div meeting-hidden'
+          }
+        }
         break
       case 'grid':
-        vidsParentElement.classList = 'meeting-vids-grid'
+        const guestCount = this.currentState.members.length
+        switch(guestCount) {
+          case 0:
+            this.selfVideoContainer.divElement.classList = 'vid-div meeting-solo'
+            this.selfVideoContainer.divElement.style.top = ''
+            this.selfVideoContainer.divElement.style.left = ''
+            break
+          case 1:
+            for (const container of this.containers()) {
+              container.divElement.classList = 'vid-div meeting-grid-half'
+              container.divElement.style.left = ''
+              if (container != this.firstContainer) {
+                container.divElement.style.top = '50%'
+              } else {
+                container.divElement.style.top = ''
+              }
+            }
+            break
+          case 2:
+          case 3:
+            let i = 1
+            for (const container of this.containers()) {
+              container.divElement.classList = 'vid-div meeting-grid-quarter'
+              if (container != this.firstContainer) {
+                container.divElement.style.top = `${Math.floor(i / 2) * 50}%`
+                container.divElement.style.left = `${(i % 2) * 50}%`
+              } else {
+                container.divElement.style.top = ''
+                container.divElement.style.left = ''
+              }
+              ++i
+            }
+            break
+        }
         break
     }
+    this.firstContainer.divElement.classList.add('first-meeting-container')
     this.updateLayoutSelectionUi()
   }
 
   spotlightElement(videoContainer: VideoContainer) {
-    videoContainer.divElement.classList.add('first-meeting-container')
-    this.firstContainer.divElement.classList.remove('first-meeting-container')
+    const oldClassList = videoContainer.divElement.classList.toString()
+    videoContainer.divElement.classList = this.firstContainer.divElement.classList.toString()
+    this.firstContainer.divElement.classList = oldClassList
+    this.firstContainer.divElement.style.top = videoContainer.divElement.style.top
+    this.firstContainer.divElement.style.left = videoContainer.divElement.style.left
+    videoContainer.divElement.style.top = ''
+    videoContainer.divElement.style.left = ''
     this.firstContainer = videoContainer
   }
 
@@ -244,6 +292,14 @@ export class MeetingRoomController {
     this.remoteMediaClient?.disconnect()
     this.remoteMediaClient = null
     this.setUiForDisconnectedState()
+  }
+
+  private *containers() {
+    yield this.selfVideoContainer
+    yield this.screenVideoContainer
+    for (const c of this.guestContainers) {
+      yield c
+    }
   }
 
   private async stateListener(meetingRoomController: MeetingRoomController, state: State) {
@@ -258,27 +314,31 @@ export class MeetingRoomController {
     }
     
     if (state.screenShare) {
-      this.screenVideoContainer.divElement.style.display = ''
       if (state.screenShare == 'self') {
         this.screenVideoContainer.vidElement.srcObject = LocalMediaStreams.localScreenMediaStream
       } else {
         this.screenVideoContainer.vidElement.srcObject = state.screenShare.mediaStream
       }
+      if (!this.screenVideoContainer.isActive) {
+        meetingRoomController.videoLayout = VideoLayout.SPOTLIGHT
+        this.spotlightElement(this.screenVideoContainer)
+      }
+      this.screenVideoContainer.isActive = true
     } else {
-      this.screenVideoContainer.divElement.style.display = 'none'
       this.screenVideoContainer.vidElement.srcObject = null
+      this.screenVideoContainer.isActive = false
     }
     for (let i = 0; i < this.guestContainers.length; ++i) {
       if (state.members.length > i) {
-        this.guestContainers[i].divElement.style.display = ''
         this.guestContainers[i].vidElement.srcObject = state.members[i].mediaStream
         this.guestContainers[i].startPeakMeter(AudioInputs.remoteStreams.get(
           { username: state.members[i].username, isScreenShare: false}
         )!)
+        this.guestContainers[i].isActive = true
       } else {
-        this.guestContainers[i].divElement.style.display = 'none'
         this.guestContainers[i].vidElement.srcObject = null
         this.guestContainers[i].stopPeakMeter()
+        this.guestContainers[i].isActive = false
       }
     }
     meetingRoomController.applyVideoLayout()
@@ -299,6 +359,7 @@ export class MeetingRoomController {
     document.getElementById('vids')!.style.height = '60%'
     this.videoLayout = VideoLayout.SOLO
     this.closeLayoutMenu()
+    this.spotlightElement(this.selfVideoContainer)
     this.applyVideoLayout()
   }
 

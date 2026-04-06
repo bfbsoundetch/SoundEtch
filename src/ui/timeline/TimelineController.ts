@@ -146,11 +146,6 @@ export class TimelineController extends TrackListItemController {
       this.selection.rightExpand.setAttribute('y1', '30')
       this.selection.rightExpand.setAttribute('y2', `${this.height}`)
 
-      this.selection.leftLabel.innerHTML = TimeUtils.positionToString(
-        lowSample,
-        this.trackListController.sampleRate,
-        false,
-      )
       this.selection.leftLabel.setAttribute('y', '15')
       this.selection.leftLabel.style.stroke = 'none'
       this.selection.leftLabel.style.dominantBaseline = 'middle'
@@ -159,11 +154,6 @@ export class TimelineController extends TrackListItemController {
       this.selection.leftLabel.style.fontSize = '18px'
       this.selection.leftLabel.style.fontWeight = 'bold'
 
-      this.selection.rightLabel.innerHTML = TimeUtils.positionToString(
-        highSample,
-        this.trackListController.sampleRate,
-        false,
-      )
       this.selection.rightLabel.setAttribute('y', '15')
       this.selection.rightLabel.style.stroke = 'none'
       this.selection.rightLabel.style.dominantBaseline = 'middle'
@@ -205,7 +195,10 @@ export class TimelineController extends TrackListItemController {
     this.selection.rightExpand.setAttribute('x1', `${endX}`)
     this.selection.rightExpand.setAttribute('x2', `${endX}`)
 
-    const labelPush = Math.max(0, Number(this.selection.leftLabel.style.width) - (endX - startX)) / 2
+    const labelPush = Math.max(0, 
+      (Number(this.selection.rightLabel.getBoundingClientRect().width) + 
+      Number(this.selection.leftLabel.getBoundingClientRect().width)) * 
+      1.1 / 2 - (endX - startX)) / 2
 
     this.selection.leftLabel.setAttribute('x', `${startX - labelPush}`)
     this.selection.rightLabel.setAttribute('x', `${endX + labelPush}`)
