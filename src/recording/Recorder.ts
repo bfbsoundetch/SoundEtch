@@ -9,6 +9,7 @@ import { JobType } from '../audiocontext/ControllableWorkerJob'
 import { AudioControl, AudioState } from '../audiocontext/AudioControl'
 import { cloneWithGetters } from '../global/ObjectUtils'
 import { ClipView } from '../project/ClipView'
+import { AudioImporter } from './AudioImporter'
 
 export class Recorder {
   private static writingWorkerController: WorkerController | null = null
@@ -83,20 +84,20 @@ export class Recorder {
 
   static async createFromUrl(url: string): Promise<Track> {
     const responseBody = await NetworkUtils.getSuccessfulResponseBody(url)
-    return Recorder.createFromArrayBuffer(responseBody, url)
+    const importedFile = new File([responseBody], Recorder.filenameFromUrl(url))
+    return Recorder.createFromSourceFile(importedFile)
   }
 
   static async createFromFile(file: File): Promise<Track> {
-    const bytes = await file.arrayBuffer()
-    return Recorder.createFromArrayBuffer(bytes, file.name)
+    return Recorder.createFromSourceFile(file)
   }
 
-  private static async createFromArrayBuffer(arrayBuffer: ArrayBuffer, name: string): Promise<Track> {
+  private static async createFromSourceFile(file: File): Promise<Track> {
     const activeProject = await ProjectManager.getActiveProject()
-    const channelCount = await Recorder.getImportedAudioChannelCount(arrayBuffer)
+    const channelCount = await AudioImporter.getChannelCount(file)
 
     const track = await ProjectManager.addClipWithTrack(
-      name,
+      file.name,
       channelCount,
       0, // to be overwritten
       AudioControl.startPosition,
@@ -104,34 +105,26 @@ export class Recorder {
     )
     const clipView = track.clipViews[0]!
     const clip = clipView.clip
-    const dirname = activeProject.id
+    const dirname = `${activeProject.id}`
     const filename = clip.filename
-    const worker = new Worker(new URL('./AudioImportWorker.js', import.meta.url), {
-      type: 'module',
-    })
-    worker.postMessage({
-      type: 'import',
-      dirname: dirname,
-      filename: filename,
-      arrayBuffer: arrayBuffer,
-      summary: clip.summary,
-    })
-    worker.addEventListener('message', clip.summary.getWorkerMessageListener())
-    worker.addEventListener('message', (e) => {
-      if (e.data.type == 'finished') {
-        track.clipViews[0] = new ClipView(clip, 0, AudioControl.startPosition, e.data.length)
-        clip.importedMetadata = e.data.metadata
-        ProjectManager.saveClip(clip)
-        ProjectManager.saveTrack(track)
-        ;(window as any).trackListController.draw()
-      }
-    })
+    const importResult = await AudioImporter.importFile(file, dirname, filename, clip.summary)
+    track.clipViews[0] = new ClipView(clip, 0, AudioControl.startPosition, importResult.length)
+    clip.importedMetadata = importResult.metadata as unknown as Record<string, unknown>
+    await ProjectManager.saveClip(clip)
+    await ProjectManager.saveTrack(track)
+    ;(window as any).trackListController.draw()
     return track
   }
 
-  private static async getImportedAudioChannelCount(arrayBuffer: ArrayBuffer): Promise<number> {
-    const audioBuffer = await (await globalThis.createNewAudioContext()).decodeAudioData(arrayBuffer.slice(0))
-    return audioBuffer.numberOfChannels
+  private static filenameFromUrl(url: string): string {
+    try {
+      const urlObject = new URL(url)
+      const pathname = decodeURIComponent(urlObject.pathname)
+      const basename = pathname.split('/').pop()
+      return basename && basename.length > 0 ? basename : url
+    } catch (_) {
+      return url
+    }
   }
 
   static getWritingWorkerController(): WorkerController {

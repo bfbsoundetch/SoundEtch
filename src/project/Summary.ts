@@ -164,11 +164,13 @@ export class Summary {
       newValueArray[2 * c + 1] = 2 ** 15 - 1
     }
     this.summaryValues.push(newValueArray)
-    postMessage({
-      id: this.id,
-      type: 'summaryValues',
-      summaryValues: newValueArray,
-    })
+    if (typeof (globalThis as any).importScripts === 'function') {
+      postMessage({
+        id: this.id,
+        type: 'summaryValues',
+        summaryValues: newValueArray,
+      })
+    }
   }
 
   async populateFromFile(summaryFile: File, mainFile: File, channelCount: number) {
