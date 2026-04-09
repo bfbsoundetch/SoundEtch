@@ -1,5 +1,6 @@
 {
   "dependencies": {
+    "@alexanderolsen/libsamplerate-js": "^2.1.2",
     "@descript/web-audio-js": "^0.15.3-patched.6",
     "@huggingface/transformers": "^3.8.0",
     "@skilitics-public/two-fingers": "^2.1.0",

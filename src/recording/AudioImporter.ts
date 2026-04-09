@@ -1,6 +1,10 @@
+import { ProjectManager } from '../project/ProjectManager'
 import { FileSystemUtils } from '../filesystem/FileSystemUtils'
 import { Summary } from '../project/Summary'
 import { WebDemuxer, type WebMediaInfo } from 'web-demuxer'
+import { AudioControl } from '../audiocontext/AudioControl'
+import { ClipView } from '../project/ClipView'
+import { create, ConverterType } from '@alexanderolsen/libsamplerate-js';
 
 const DEMUXER_WASM_PATH = 'https://localhost:8443/soundetch_gh/web-demuxer.wasm'
 
@@ -24,29 +28,42 @@ export class AudioImporter {
     }
   }
 
-  static async importFile(file: File, dirname: string, filename: string, summary: Summary): Promise<AudioImportResult> {
+  static async importFile(file: File): Promise<AudioImportResult> {
+    const activeProject = await ProjectManager.getActiveProject()
+
     const demuxer = new WebDemuxer({ wasmFilePath: DEMUXER_WASM_PATH })
-    const summarySyncHandle = await (
-      (await FileSystemUtils.getFileHandle(dirname, `${filename}_summary`)) as any
-    ).createSyncAccessHandle()
-    summary.setSyncFileHandle(summarySyncHandle)
 
-    const fileSyncHandle = await (
-      (await FileSystemUtils.getFileHandle(dirname, filename)) as any
-    ).createSyncAccessHandle()
+    try {
+      await demuxer.load(file)
+      const metadata = await demuxer.getMediaInfo()
+      const decoderConfig = await demuxer.getDecoderConfig('audio')
+      const track = await ProjectManager.addClipWithTrack(
+        file.name,
+        decoderConfig.numberOfChannels,
+        metadata.duration * decoderConfig.sampleRate,
+        AudioControl.startPosition,
+        'File',
+      )
+      const clipView = track.clipViews[0]!
+      const clip = clipView.clip
+      const summary = clip.summary
+      const dirname = `${activeProject.id}`
+      const filename = clip.filename
+      // track.clipViews[0] = new ClipView(clip, 0, AudioControl.startPosition, importResult.length)
+      // clip.importedMetadata = importResult.metadata as unknown as Record<string, unknown>
+      await ProjectManager.saveClip(clip)
+      await ProjectManager.saveTrack(track)
+      ;(window as any).trackListController.draw()
 
-    let metadata: WebMediaInfo | null = null
-    const outputBuffer = new Float32Array(32 * 1024)
-    let outputBufferOffset = 0
-    let decodeError: Error | null = null
+      const outputBuffer = new Float32Array(32 * 1024)
+      let outputBufferOffset = 0
 
-    const flushOutputBuffer = () => {
-      if (outputBufferOffset === 0) {
-        return
+      const flushOutputBuffer = () => {
+        if (outputBufferOffset === 0) {
+          return
+        }
+
       }
-      fileSyncHandle.write(outputBuffer.slice(0, outputBufferOffset))
-      outputBufferOffset = 0
-    }
 
     const appendInterleavedSamples = (interleaved: Float32Array) => {
       let offset = 0
@@ -63,12 +80,7 @@ export class AudioImporter {
       }
     }
 
-    try {
-      await demuxer.load(file)
-      metadata = await demuxer.getMediaInfo()
-      const decoderConfig = await demuxer.getDecoderConfig('audio')
-      decoderConfig.sampleRate = 48000
-
+      let decodeError: Error | null = null
       const decoder = new AudioDecoder({
         output: (audioData) => {
           if (decodeError) {
@@ -77,8 +89,9 @@ export class AudioImporter {
           }
 
           try {
-            const channelData = extractChannelData(audioData)
-            const interleavedData = interleaveAudioData(channelData, audioData.numberOfFrames)
+            const interleavedData = new Float32Array(audioData.numberOfFrames * audioData.numberOfChannels)
+            audioData.copyTo(interleavedData, { planeIndex: 0 })
+            planarChannels[i] = plane
             appendInterleavedSamples(interleavedData)
             summary.summarizeInterleavedData(interleavedData, interleavedData.length)
           } catch (error) {
@@ -113,7 +126,8 @@ export class AudioImporter {
         throw decodeError
       }
 
-      flushOutputBuffer()
+      fileSyncHandle.write(outputBuffer.slice(0, outputBufferOffset))
+      outputBufferOffset = 0
       summary.finishSummarizing()
 
       return {
