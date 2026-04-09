@@ -9,7 +9,7 @@ export class SampleRateConverter {
       length: pcmSamples.length,
     })
     const toDecode = new Uint8Array(header.byteLength + pcmSamples.byteLength)
-    toDecode.set(new Uint8Array(header))
+    toDecode.set(new Uint8Array(header.buffer))
     toDecode.set(new Uint8Array(pcmSamples.buffer), header.byteLength)
     return context.decodeAudioData(toDecode.buffer)
   }
