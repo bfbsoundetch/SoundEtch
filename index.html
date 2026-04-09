@@ -142,7 +142,7 @@
         </button>
         <button id="open-clip-manager-modal-button" class="menu-item clickable">Manage Clips</button>
         <button id="open-logs-modal-button" class="menu-item clickable">Logs</button>
-        <button class="menu-item clickable">About</button>
+        <button class="menu-item clickable" onclick="showDialog(document.getElementById('about-modal'))">About</button>
       </div>
       <div id="title">
         <svg style="height: 100%" viewBox="0 0 600 100">
@@ -246,6 +246,30 @@
         <label for="audio-file-url">From URL</label>
         <input type="text" id="audio-file-url" placeholder="https://example.com/audio-file.wav" />
         <button class="menu-item clickable add-clip-option" onclick="audioFileRemoteHandler()">Load remote file</button>
+      </div>
+    </div>
+  </dialog>
+  <dialog id="about-modal" class="overlay">
+    <div id="about-modal-content" class="overlay-content" onclick="event.stopPropagation()">
+      <div class="overlay-close-button clickable" onclick="closeOverlay()">
+        <svg class="meeting-icon" viewBox="0 0 500 500">
+          <use xlink:href="#menu-close" />
+        </svg>
+      </div>
+      <h1>About SoundEtch</h1>
+      <p>
+        SoundEtch is a browser-based audio recorder and editor built for quickly capturing ideas, interviews,
+        and collaborative sessions without installing a desktop app.
+      </p>
+      <p>
+        You can record from microphones, tab/screen audio, or imported files, then trim, layer, and export in
+        multiple formats.
+      </p>
+      <p>
+        Thanks for trying this preview. Feedback and rough edges are both welcome while the app keeps evolving.
+      </p>
+      <div class="about-modal-actions">
+        <button class="menu-item clickable" onclick="closeOverlay()">Close</button>
       </div>
     </div>
   </dialog>
