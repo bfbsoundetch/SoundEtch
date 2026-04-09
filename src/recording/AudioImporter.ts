@@ -67,18 +67,19 @@ export class AudioImporter {
       await ProjectManager.saveTrack(track)
       ;(window as any).trackListController.draw()
 
-      const outputBuffer = new Float32Array(32 * 1024)
+      let outputBuffer = new Float32Array(32 * 1024)
       let outputBufferOffset = 0
       let writeChain = Promise.resolve()
+      const resampleInputChunkSize = 32 * 1024
+      const resampleInputBuffer = resampler ? new Float32Array(resampleInputChunkSize) : null
+      let resampleInputOffset = 0
 
       const queueWrite = (buffer: Float32Array): Promise<void> => {
         writeChain = writeChain.then(async () => {
           if (!writable) {
             throw new Error('Audio output writable stream was not initialized.')
           }
-          const writeBytes = new Uint8Array(buffer.byteLength)
-          writeBytes.set(new Uint8Array(buffer.buffer, buffer.byteOffset, buffer.byteLength))
-          await writable.write(writeBytes)
+          await writable.write(new Uint8Array(buffer.buffer, buffer.byteOffset, buffer.byteLength))
         })
         return writeChain
       }
@@ -101,11 +102,37 @@ export class AudioImporter {
           offset += toCopy
 
           if (outputBufferOffset === outputBuffer.length) {
-            const pendingChunk = outputBuffer.slice(0)
+            const pendingChunk = outputBuffer
+            outputBuffer = new Float32Array(32 * 1024)
             outputBufferOffset = 0
             void queueWrite(pendingChunk).catch((error) => {
               decodeError = error as Error
             })
+          }
+        }
+      }
+
+      const processInterleavedSamples = (interleaved: Float32Array) => {
+        if (!resampler || !resampleInputBuffer) {
+          appendInterleavedSamples(interleaved)
+          summary.summarizeInterleavedData(interleaved, interleaved.length)
+          return
+        }
+
+        let offset = 0
+        while (offset < interleaved.length) {
+          const toCopy = Math.min(resampleInputBuffer.length - resampleInputOffset, interleaved.length - offset)
+          resampleInputBuffer.set(interleaved.subarray(offset, offset + toCopy), resampleInputOffset)
+          resampleInputOffset += toCopy
+          offset += toCopy
+
+          if (resampleInputOffset === resampleInputBuffer.length) {
+            const resampled = resampler.full(resampleInputBuffer)
+            if (resampled.length > 0) {
+              appendInterleavedSamples(resampled)
+              summary.summarizeInterleavedData(resampled, resampled.length)
+            }
+            resampleInputOffset = 0
           }
         }
       }
@@ -120,9 +147,7 @@ export class AudioImporter {
 
           try {
             const interleavedData = toInterleavedAudioData(audioData)
-            const processedInterleaved = resampler ? resampler.full(interleavedData) : interleavedData
-            appendInterleavedSamples(processedInterleaved)
-            summary.summarizeInterleavedData(processedInterleaved, processedInterleaved.length)
+            processInterleavedSamples(interleavedData)
           } catch (error) {
             decodeError = error as Error
           } finally {
@@ -156,6 +181,15 @@ export class AudioImporter {
       }
 
       if (resampler) {
+        if (resampleInputBuffer && resampleInputOffset > 0) {
+          const pendingResampleInput = resampleInputBuffer.subarray(0, resampleInputOffset)
+          const resampledPendingInput = resampler.full(pendingResampleInput)
+          if (resampledPendingInput.length > 0) {
+            appendInterleavedSamples(resampledPendingInput)
+            summary.summarizeInterleavedData(resampledPendingInput, resampledPendingInput.length)
+          }
+        }
+
         const flushedInterleaved = resampler.full(new Float32Array(0))
         if (flushedInterleaved.length > 0) {
           appendInterleavedSamples(flushedInterleaved)
