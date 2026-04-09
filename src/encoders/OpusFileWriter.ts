@@ -11,7 +11,7 @@ export class OpusFileWriter {
   private readonly inputBuffer: Float32Array
 
   static async create(fileWritable: FileSystemWritableFileStream, flacEncoderInfo: OpusEncoderInfo) {
-    const privateTmpFile = await ((await FileSystemUtils.getFileHandle('.', 'exportTmp.opus')) as any)
+    const privateTmpFile = await ((await FileSystemUtils.getFileHandle('tmp', 'exportTmp.opus')) as any)
     const module = await createModule()
     return new OpusFileWriter(
       fileWritable,
@@ -24,7 +24,7 @@ export class OpusFileWriter {
 
   constructor(
     private readonly fileWritable: FileSystemWritableFileStream,
-    private readonly opusEncoderInfo: OpusEncoderInfo,
+    opusEncoderInfo: OpusEncoderInfo,
     private readonly module: MainModule,
     private readonly privateTmpFile: FileSystemFileHandle,
     private readonly privateTmpFileSync: FileSystemSyncAccessHandle,
