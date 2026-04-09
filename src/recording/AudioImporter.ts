@@ -188,11 +188,11 @@ function interleaveAudioData(channelData: Float32Array[], frameCount: number): F
 }
 
 function toInterleavedAudioData(audioData: AudioData): Float32Array {
-  const sourceFormat = audioData.format ?? ''
+  const sourceFormat = audioData.format
   const frameCount = audioData.numberOfFrames
   const channelCount = audioData.numberOfChannels
 
-  if (!sourceFormat.endsWith('-planar')) {
+  if (!sourceFormat?.endsWith('-planar')) {
     const interleaved = new Float32Array(frameCount * channelCount)
     audioData.copyTo(interleaved, { planeIndex: 0, format: 'f32' })
     return interleaved
@@ -203,12 +203,12 @@ function toInterleavedAudioData(audioData: AudioData): Float32Array {
 }
 
 function extractChannelData(audioData: AudioData): Float32Array[] {
-  const sourceFormat = audioData.format ?? ''
+  const sourceFormat = audioData.format
   const channelCount = audioData.numberOfChannels
   const frameCount = audioData.numberOfFrames
   const planarChannels = new Array<Float32Array>(channelCount)
 
-  if (!sourceFormat.endsWith('-planar')) {
+  if (!sourceFormat?.endsWith('-planar')) {
     throw new Error(`extractChannelData expects planar AudioData, received "${sourceFormat}".`)
   }
 
