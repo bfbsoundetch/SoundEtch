@@ -89,9 +89,7 @@ export class AudioImporter {
           }
 
           try {
-            const interleavedData = new Float32Array(audioData.numberOfFrames * audioData.numberOfChannels)
-            audioData.copyTo(interleavedData, { planeIndex: 0 })
-            planarChannels[i] = plane
+            const interleavedData = toInterleavedAudioData(audioData)
             appendInterleavedSamples(interleavedData)
             summary.summarizeInterleavedData(interleavedData, interleavedData.length)
           } catch (error) {
@@ -152,29 +150,35 @@ function interleaveAudioData(channelData: Float32Array[], frameCount: number): F
   return result
 }
 
+function toInterleavedAudioData(audioData: AudioData): Float32Array {
+  const sourceFormat = audioData.format ?? ''
+  const frameCount = audioData.numberOfFrames
+  const channelCount = audioData.numberOfChannels
+
+  if (!sourceFormat.endsWith('-planar')) {
+    const interleaved = new Float32Array(frameCount * channelCount)
+    audioData.copyTo(interleaved, { planeIndex: 0, format: 'f32' })
+    return interleaved
+  }
+
+  const channelData = extractChannelData(audioData)
+  return interleaveAudioData(channelData, frameCount)
+}
+
 function extractChannelData(audioData: AudioData): Float32Array[] {
+  const sourceFormat = audioData.format ?? ''
   const channelCount = audioData.numberOfChannels
   const frameCount = audioData.numberOfFrames
   const planarChannels = new Array<Float32Array>(channelCount)
 
-  try {
-    for (let i = 0; i < channelCount; ++i) {
-      const plane = new Float32Array(frameCount)
-      audioData.copyTo(plane, { planeIndex: i, format: 'f32-planar' })
-      planarChannels[i] = plane
-    }
-    return planarChannels
-  } catch (_) {
-    const interleaved = new Float32Array(frameCount * channelCount)
-    audioData.copyTo(interleaved, { planeIndex: 0, format: 'f32' })
-    for (let i = 0; i < channelCount; ++i) {
-      planarChannels[i] = new Float32Array(frameCount)
-    }
-    for (let frame = 0; frame < frameCount; ++frame) {
-      for (let channel = 0; channel < channelCount; ++channel) {
-        planarChannels[channel]![frame] = interleaved[frame * channelCount + channel]!
-      }
-    }
-    return planarChannels
+  if (!sourceFormat.endsWith('-planar')) {
+    throw new Error(`extractChannelData expects planar AudioData, received "${sourceFormat}".`)
   }
+
+  for (let i = 0; i < channelCount; ++i) {
+    const plane = new Float32Array(frameCount)
+    audioData.copyTo(plane, { planeIndex: i, format: 'f32-planar' })
+    planarChannels[i] = plane
+  }
+  return planarChannels
 }
