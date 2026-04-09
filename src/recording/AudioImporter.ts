@@ -32,6 +32,8 @@ export class AudioImporter {
     const activeProject = await ProjectManager.getActiveProject()
 
     const demuxer = new WebDemuxer({ wasmFilePath: DEMUXER_WASM_PATH })
+    let writable: FileSystemWritableFileStream | null = null
+    let importError: unknown = null
 
     try {
       await demuxer.load(file)
@@ -49,6 +51,8 @@ export class AudioImporter {
       const summary = clip.summary
       const dirname = `${activeProject.id}`
       const filename = clip.filename
+      const fileHandle = await FileSystemUtils.getFileHandle(dirname, filename)
+      writable = await fileHandle.createWritable()
       // track.clipViews[0] = new ClipView(clip, 0, AudioControl.startPosition, importResult.length)
       // clip.importedMetadata = importResult.metadata as unknown as Record<string, unknown>
       await ProjectManager.saveClip(clip)
@@ -57,28 +61,46 @@ export class AudioImporter {
 
       const outputBuffer = new Float32Array(32 * 1024)
       let outputBufferOffset = 0
+      let writeChain = Promise.resolve()
 
-      const flushOutputBuffer = () => {
+      const queueWrite = (buffer: Float32Array): Promise<void> => {
+        writeChain = writeChain.then(async () => {
+          if (!writable) {
+            throw new Error('Audio output writable stream was not initialized.')
+          }
+          const writeBytes = new Uint8Array(buffer.byteLength)
+          writeBytes.set(new Uint8Array(buffer.buffer, buffer.byteOffset, buffer.byteLength))
+          await writable.write(writeBytes)
+        })
+        return writeChain
+      }
+
+      const flushOutputBuffer = async () => {
         if (outputBufferOffset === 0) {
           return
         }
-
+        const pendingChunk = outputBuffer.slice(0, outputBufferOffset)
+        outputBufferOffset = 0
+        await queueWrite(pendingChunk)
       }
 
-    const appendInterleavedSamples = (interleaved: Float32Array) => {
-      let offset = 0
-      while (offset < interleaved.length) {
-        const toCopy = Math.min(outputBuffer.length - outputBufferOffset, interleaved.length - offset)
-        outputBuffer.set(interleaved.subarray(offset, offset + toCopy), outputBufferOffset)
-        outputBufferOffset += toCopy
-        offset += toCopy
+      const appendInterleavedSamples = (interleaved: Float32Array) => {
+        let offset = 0
+        while (offset < interleaved.length) {
+          const toCopy = Math.min(outputBuffer.length - outputBufferOffset, interleaved.length - offset)
+          outputBuffer.set(interleaved.subarray(offset, offset + toCopy), outputBufferOffset)
+          outputBufferOffset += toCopy
+          offset += toCopy
 
-        if (outputBufferOffset === outputBuffer.length) {
-          fileSyncHandle.write(outputBuffer)
-          outputBufferOffset = 0
+          if (outputBufferOffset === outputBuffer.length) {
+            const pendingChunk = outputBuffer.slice(0)
+            outputBufferOffset = 0
+            void queueWrite(pendingChunk).catch((error) => {
+              decodeError = error as Error
+            })
+          }
         }
       }
-    }
 
       let decodeError: Error | null = null
       const decoder = new AudioDecoder({
@@ -124,16 +146,31 @@ export class AudioImporter {
         throw decodeError
       }
 
-      fileSyncHandle.write(outputBuffer.slice(0, outputBufferOffset))
-      outputBufferOffset = 0
+      await flushOutputBuffer()
+      await writeChain
       summary.finishSummarizing()
 
       return {
         metadata,
         length: summary.length,
       }
+    } catch (error) {
+      importError = error
+      throw error
     } finally {
-      fileSyncHandle.close()
+      if (writable) {
+        try {
+          if (importError && typeof writable.abort === 'function') {
+            await writable.abort()
+          } else {
+            await writable.close()
+          }
+        } catch (closeError) {
+          if (!importError) {
+            throw closeError
+          }
+        }
+      }
       demuxer.destroy()
     }
   }
