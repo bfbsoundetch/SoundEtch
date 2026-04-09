@@ -105,7 +105,7 @@ export class Recorder {
     )
     const clipView = track.clipViews[0]!
     const clip = clipView.clip
-    const importResult = await AudioImporter.importFile(file)
+    const importResult = await AudioImporter.importFile(file, track)
     track.clipViews[0] = new ClipView(clip, 0, AudioControl.startPosition, importResult.length)
     clip.importedMetadata = importResult.metadata as unknown as Record<string, unknown>
     await ProjectManager.saveClip(clip)

@@ -4,6 +4,7 @@ import { Summary } from '../project/Summary'
 import { WebDemuxer, type WebMediaInfo } from 'web-demuxer'
 import { AudioControl } from '../audiocontext/AudioControl'
 import { create, ConverterType } from '@alexanderolsen/libsamplerate-js'
+import { Track } from '../project/Track'
 
 const DEMUXER_WASM_PATH = 'https://localhost:8443/soundetch_gh/web-demuxer.wasm'
 
@@ -27,7 +28,7 @@ export class AudioImporter {
     }
   }
 
-  static async importFile(file: File): Promise<AudioImportResult> {
+  static async importFile(file: File, track: Track): Promise<AudioImportResult> {
     const activeProject = await ProjectManager.getActiveProject()
 
     const demuxer = new WebDemuxer({ wasmFilePath: DEMUXER_WASM_PATH })
@@ -47,13 +48,6 @@ export class AudioImporter {
             converterType: ConverterType.SRC_SINC_MEDIUM_QUALITY,
           })
         : null
-      const track = await ProjectManager.addClipWithTrack(
-        file.name,
-        decoderConfig.numberOfChannels,
-        Math.round(metadata.duration * targetSampleRate),
-        AudioControl.startPosition,
-        'File',
-      )
       const clipView = track.clipViews[0]!
       const clip = clipView.clip
       const summary = clip.summary
@@ -61,10 +55,6 @@ export class AudioImporter {
       const filename = clip.filename
       const fileHandle = await FileSystemUtils.getFileHandle(dirname, filename)
       writable = await fileHandle.createWritable()
-      // track.clipViews[0] = new ClipView(clip, 0, AudioControl.startPosition, importResult.length)
-      // clip.importedMetadata = importResult.metadata as unknown as Record<string, unknown>
-      await ProjectManager.saveClip(clip)
-      await ProjectManager.saveTrack(track)
       ;(window as any).trackListController.draw()
 
       let outputBuffer = new Float32Array(32 * 1024)
