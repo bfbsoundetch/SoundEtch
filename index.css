@@ -433,12 +433,13 @@ svg {
 #clock {
   padding: 1rem;
   position: relative;
-  flex: 1;
+  height: 4rem;
   display: grid;
   align-items: center;
   text-align: center;
   font-size: x-large;
   font-family: 'Courier New', Courier, monospace;
+  box-sizing: border-box;
 }
 
 video {
@@ -637,7 +638,8 @@ video {
 
 #timeline {
   height: 4rem;
-  width: 100%;
+  width: calc(100% + 14rem);
+  margin-left: -14rem;
   overflow-x: hidden;
   overflow-y: hidden;
   display: inline-block;

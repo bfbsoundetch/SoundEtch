@@ -177,31 +177,31 @@
           </svg>
           <span>Add Clip...</span>
         </button>
-        <div id="clock">00:00:00.000</div>
+        <div id="audio-input-buttons">
+          <button id="mic-button" class="audio-input-button clickable">
+            <svg style="width: 100%; height: 100%" viewBox="0 0 500 500">
+              <use xlink:href="#microphone" />
+            </svg>
+            <span style="margin-left: 1.5rem">Microphone</span>
+          </button>
+          <button id="capture-tab-button" class="audio-input-button clickable">
+            <svg style="width: 100%; height: 100%" viewBox="0 0 500 500">
+              <use xlink:href="#browser-tab" />
+            </svg>
+            <span>Screen / Tab</span>
+          </button>
+          <button id="meeting-room-button" class="audio-input-button clickable"
+            onclick="showDialog(document.getElementById('meeting-room'))">
+            <svg style="width: 100%; height: 100%" viewBox="0 0 500 500">
+              <use xlink:href="#meeting" />
+            </svg>
+            <span>Guests...</span>
+          </button>
+        </div>
       </div>
     </div>
     <div id="timeline-info-area">
-      <div id="audio-input-buttons">
-        <button id="mic-button" class="audio-input-button clickable">
-          <svg style="width: 100%; height: 100%" viewBox="0 0 500 500">
-            <use xlink:href="#microphone" />
-          </svg>
-          <span style="margin-left: 1.5rem">Microphone</span>
-        </button>
-        <button id="capture-tab-button" class="audio-input-button clickable">
-          <svg style="width: 100%; height: 100%" viewBox="0 0 500 500">
-            <use xlink:href="#browser-tab" />
-          </svg>
-          <span>Screen / Tab</span>
-        </button>
-        <button id="meeting-room-button" class="audio-input-button clickable"
-          onclick="showDialog(document.getElementById('meeting-room'))">
-          <svg style="width: 100%; height: 100%" viewBox="0 0 500 500">
-            <use xlink:href="#meeting" />
-          </svg>
-          <span>Guests...</span>
-        </button>
-      </div>
+      <div id="clock">00:00:00.000</div>
       <div id="input-info-list"></div>
       <div id="track-info-list"></div>
     </div>
