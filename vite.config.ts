@@ -1,13 +1,11 @@
 import { fileURLToPath } from 'url'
 import { defineConfig, PluginOption } from 'vite'
 import wasm from 'vite-plugin-wasm'
+import { nodePolyfills } from 'vite-plugin-node-polyfills'
 
 // https://vitejs.dev/config/
 export default defineConfig({
   base: '/soundetch',
-  define: {
-    global: {}, // Or global: 'window'
-  },
   resolve: {
     alias: {
       assert: '/src/global/EmptyNodeAssert.ts',
@@ -55,6 +53,14 @@ export default defineConfig({
       ],
     },
   },
+  plugins: [
+    nodePolyfills({
+      globals: {
+        Buffer: true,
+        global: true,
+      },
+    }),
+  ],
   worker: {
     plugins: () => [wasm() as PluginOption],
     format: 'es',

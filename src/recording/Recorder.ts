@@ -10,6 +10,7 @@ import { AudioControl, AudioState } from '../audiocontext/AudioControl'
 import { cloneWithGetters } from '../global/ObjectUtils'
 import { ClipView } from '../project/ClipView'
 import { AudioImporter } from './AudioImporter'
+import { AudioImporter2 } from './AudioImporter2'
 
 export class Recorder {
   private static writingWorkerController: WorkerController | null = null
@@ -94,20 +95,20 @@ export class Recorder {
 
   private static async createFromSourceFile(file: File): Promise<Track> {
     const activeProject = await ProjectManager.getActiveProject()
-    const channelCount = await AudioImporter.getChannelCount(file)
+    const decoderConfig = await AudioImporter.getDecoderConfig(file)
 
     const track = await ProjectManager.addClipWithTrack(
       file.name,
-      channelCount,
+      decoderConfig.numberOfChannels,
       0, // to be overwritten
       AudioControl.startPosition,
       'File',
     )
     const clipView = track.clipViews[0]!
     const clip = clipView.clip
-    const importResult = await AudioImporter.importFile(file, track)
+    const importResult = await AudioImporter2.importFile(file, activeProject, track, decoderConfig)
+    // const importResult = await AudioImporter.importFile(file, activeProject, track)
     track.clipViews[0] = new ClipView(clip, 0, AudioControl.startPosition, importResult.length)
-    clip.importedMetadata = importResult.metadata as unknown as Record<string, unknown>
     await ProjectManager.saveClip(clip)
     await ProjectManager.saveTrack(track)
     ;(window as any).trackListController.draw()

@@ -1,0 +1,15 @@
+export default function audioType(buf: any): "opus" | "wav" | "aiff" | "mp3" | "aac" | "flac" | "m4a" | "oga" | "qoa" | "mid" | "caf" | "wma" | "amr" | "webm";
+export function isMp3(buf: any): boolean;
+export function isWav(buf: any): boolean;
+export function isOgg(buf: any): boolean;
+export function isFlac(buf: any): boolean;
+export function isM4a(buf: any): boolean;
+export function isOpus(buf: any): boolean;
+export function isQoa(buf: any): boolean;
+export function isAiff(buf: any): boolean;
+export function isAac(buf: any): boolean;
+export function isMidi(buf: any): boolean;
+export function isCaf(buf: any): boolean;
+export function isWma(buf: any): boolean;
+export function isAmr(buf: any): boolean;
+export function isWebm(buf: any): boolean;

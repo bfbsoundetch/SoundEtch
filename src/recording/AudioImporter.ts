@@ -1,10 +1,8 @@
-import { ProjectManager } from '../project/ProjectManager'
 import { FileSystemUtils } from '../filesystem/FileSystemUtils'
-import { Summary } from '../project/Summary'
 import { WebDemuxer, type WebMediaInfo } from 'web-demuxer'
-import { AudioControl } from '../audiocontext/AudioControl'
-import { create, ConverterType } from '@alexanderolsen/libsamplerate-js'
 import { Track } from '../project/Track'
+import SoxrResampler, {SoxrDatatype, SoxrQuality} from 'wasm-audio-resampler'
+import { Project } from '../project/Project'
 
 const DEMUXER_WASM_PATH = 'https://localhost:8443/soundetch_gh/web-demuxer.wasm'
 
@@ -14,6 +12,13 @@ type AudioImportResult = {
 }
 
 export class AudioImporter {
+
+  static async getDecoderConfig(file: File) {
+    const demuxer = new WebDemuxer({ wasmFilePath: DEMUXER_WASM_PATH })
+    await demuxer.load(file)
+    return demuxer.getDecoderConfig('audio')
+  }
+
   static async getChannelCount(file: File): Promise<number> {
     const demuxer = new WebDemuxer({ wasmFilePath: DEMUXER_WASM_PATH })
     try {
@@ -28,26 +33,30 @@ export class AudioImporter {
     }
   }
 
-  static async importFile(file: File, track: Track): Promise<AudioImportResult> {
-    const activeProject = await ProjectManager.getActiveProject()
-
+  static async importFile(file: File, activeProject: Project, track: Track): Promise<AudioImportResult> {
+    const realStart = Date.now()
     const demuxer = new WebDemuxer({ wasmFilePath: DEMUXER_WASM_PATH })
     let writable: FileSystemWritableFileStream | null = null
     let importError: unknown = null
-    let resampler: Awaited<ReturnType<typeof create>> | null = null
 
     try {
+      const startTime = Date.now()
       await demuxer.load(file)
       const metadata = await demuxer.getMediaInfo()
       const decoderConfig = await demuxer.getDecoderConfig('audio')
+      console.error('done', Date.now() - startTime)
       const sourceSampleRate = decoderConfig.sampleRate
-      const targetSampleRate = activeProject.sampleRate || AudioControl.audioContext?.sampleRate || sourceSampleRate
-      const needsResampling = sourceSampleRate !== targetSampleRate
-      resampler = needsResampling
-        ? await create(decoderConfig.numberOfChannels, sourceSampleRate, targetSampleRate, {
-            converterType: ConverterType.SRC_SINC_MEDIUM_QUALITY,
-          })
-        : null
+      const targetSampleRate = activeProject.sampleRate
+      const resampler = sourceSampleRate !== targetSampleRate
+            ? new SoxrResampler(
+                decoderConfig.numberOfChannels,
+                sourceSampleRate,
+                targetSampleRate,
+                SoxrDatatype.SOXR_FLOAT32,
+                SoxrDatatype.SOXR_FLOAT32,
+                SoxrQuality.SOXR_HQ
+            ) : null
+      const resamplerPromise = resampler?.init()
       const clipView = track.clipViews[0]!
       const clip = clipView.clip
       const summary = clip.summary
@@ -69,7 +78,7 @@ export class AudioImporter {
           if (!writable) {
             throw new Error('Audio output writable stream was not initialized.')
           }
-          await writable.write(new Uint8Array(buffer.buffer, buffer.byteOffset, buffer.byteLength))
+          await writable.write(buffer as any)
         })
         return writeChain
       }
@@ -117,7 +126,7 @@ export class AudioImporter {
           offset += toCopy
 
           if (resampleInputOffset === resampleInputBuffer.length) {
-            const resampled = resampler.full(resampleInputBuffer)
+            const resampled = new Float32Array(resampler.processChunk(new Uint8Array(resampleInputBuffer.buffer)).buffer)
             if (resampled.length > 0) {
               appendInterleavedSamples(resampled)
               summary.summarizeInterleavedData(resampled, resampled.length)
@@ -152,6 +161,7 @@ export class AudioImporter {
       decoder.configure(decoderConfig)
 
       const reader = demuxer.read('audio').getReader()
+      await resamplerPromise
       while (true) {
         if (decodeError) {
           throw decodeError
@@ -173,14 +183,14 @@ export class AudioImporter {
       if (resampler) {
         if (resampleInputBuffer && resampleInputOffset > 0) {
           const pendingResampleInput = resampleInputBuffer.subarray(0, resampleInputOffset)
-          const resampledPendingInput = resampler.full(pendingResampleInput)
+          const resampledPendingInput = new Float32Array(resampler.processChunk(new Uint8Array(pendingResampleInput.buffer)).buffer)
           if (resampledPendingInput.length > 0) {
             appendInterleavedSamples(resampledPendingInput)
             summary.summarizeInterleavedData(resampledPendingInput, resampledPendingInput.length)
           }
         }
 
-        const flushedInterleaved = resampler.full(new Float32Array(0))
+        const flushedInterleaved = new Float32Array(resampler.processChunk(null as any).buffer)
         if (flushedInterleaved.length > 0) {
           appendInterleavedSamples(flushedInterleaved)
           summary.summarizeInterleavedData(flushedInterleaved, flushedInterleaved.length)
@@ -191,6 +201,7 @@ export class AudioImporter {
       await writeChain
       summary.finishSummarizing()
 
+      console.error('real end', Date.now() - realStart)
       return {
         metadata,
         length: summary.length,
@@ -199,11 +210,6 @@ export class AudioImporter {
       importError = error
       throw error
     } finally {
-      try {
-        resampler?.destroy()
-      } catch {
-        // best-effort cleanup
-      }
       if (writable) {
         try {
           if (importError && typeof writable.abort === 'function') {

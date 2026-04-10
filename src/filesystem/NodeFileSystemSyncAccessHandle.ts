@@ -16,8 +16,8 @@ export class NodeFileSystemSyncAccessHandle implements FileSystemSyncAccessHandl
 
   static async create(path: string): Promise<NodeFileSystemSyncAccessHandle> {
     const fs = await import('fs')
-    const fsPromises = await import('fs/promises')
-    return new NodeFileSystemSyncAccessHandle(fs, fsPromises, path)
+    // const fsPromises = await import('fs/promises')
+    return new NodeFileSystemSyncAccessHandle(fs, null, path)
   }
 
   close(): void {

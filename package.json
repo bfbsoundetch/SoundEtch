@@ -1,23 +1,18 @@
 {
   "dependencies": {
-    "@alexanderolsen/libsamplerate-js": "^2.1.2",
     "@descript/web-audio-js": "^0.15.3-patched.6",
     "@huggingface/transformers": "^3.8.0",
-    "@skilitics-public/two-fingers": "^2.1.0",
     "@webaudiomodules/api": "^2.0.0-alpha.6",
-    "cardinal-spline-js": "^2.3.10",
+    "audio-decode": "^3.8.1",
+    "audio-type": "^2.4.1",
     "file-system-access": "^1.0.4",
     "glob": "^11.0.0",
-    "kissfft-wasm": "^2.0.1",
-    "new-javascript": "^0.4.3",
     "peerjs": "^1.5.5",
     "ringbuf.js": "^0.4.0",
     "ts-loader": "^9.5.1",
-    "vite-plugin-wasm": "^3.5.0",
+    "wasm-audio-resampler": "^2.0.0",
     "wasm-media-encoders": "^0.7.0",
     "web-demuxer": "^4.0.0",
-    "webpack": "^5.97.1",
-    "webpack-cli": "^6.0.1",
     "websocket": "^1.0.35",
     "worker-loader": "^3.0.8",
     "ws": "^8.18.0",
@@ -65,6 +60,8 @@
     "typescript": "^5.6.2",
     "vite": "^6.2.0",
     "vitest": "^3.1.4",
+    "vite-plugin-node-polyfills": "^0.26.0",
+    "vite-plugin-wasm": "^3.5.0",
     "web-worker": "1.2.0"
   }
 }
