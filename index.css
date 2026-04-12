@@ -638,8 +638,7 @@ video {
 
 #timeline {
   height: 4rem;
-  width: calc(100% + 14rem);
-  margin-left: -14rem;
+  width: 100%;
   overflow-x: hidden;
   overflow-y: hidden;
   display: inline-block;

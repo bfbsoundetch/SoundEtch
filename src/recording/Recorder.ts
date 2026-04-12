@@ -8,9 +8,7 @@ import { WorkerController } from '../audiocontext/WorkerController'
 import { JobType } from '../audiocontext/ControllableWorkerJob'
 import { AudioControl, AudioState } from '../audiocontext/AudioControl'
 import { cloneWithGetters } from '../global/ObjectUtils'
-import { ClipView } from '../project/ClipView'
 import { AudioImporter } from './AudioImporter'
-import { AudioImporter2 } from './AudioImporter2'
 
 export class Recorder {
   private static writingWorkerController: WorkerController | null = null
@@ -39,7 +37,6 @@ export class Recorder {
       )
       const clipView = track.clipViews[0]!
       const ringBufferArray = RingBuffer.getStorageForCapacity(64 * 1024, Float32Array)
-
       inputs.push({
         dirname: `${(await ProjectManager.getActiveProject()).id}`,
         ringBufferArray: ringBufferArray,
@@ -58,7 +55,7 @@ export class Recorder {
       workerController.worker.addEventListener('message', clipView.clip.summary.getWorkerMessageListener())
       audioInput.connect(recordingWorkletNode)
     }
-    const r = await audioContext.audioWorklet.addModule(
+    await audioContext.audioWorklet.addModule(
       new URL('../audiocontext/ReportingAudioWorkletProcessor.js', import.meta.url),
     )
 
@@ -84,33 +81,40 @@ export class Recorder {
   }
 
   static async createFromUrl(url: string): Promise<Track> {
-    const responseBody = await NetworkUtils.getSuccessfulResponseBody(url)
-    const importedFile = new File([responseBody], Recorder.filenameFromUrl(url))
-    return Recorder.createFromSourceFile(importedFile)
+    const abortController = new AbortController()
+    ;(window as any).processingModalController?.show('Downloading audio...', () => abortController.abort())
+
+    try {
+      const importedFile = await NetworkUtils.downloadFile(
+        url,
+        Recorder.filenameFromUrl(url),
+        (progress) => (window as any).processingModalController?.setProgress(progress),
+        abortController.signal,
+      )
+      ;(window as any).processingModalController?.setTitle('Importing audio...')
+      ;(window as any).processingModalController?.setProgress(0)
+      return await Recorder.createFromSourceFile(importedFile, abortController.signal)
+    } finally {
+      ;(window as any).processingModalController?.hide()
+    }
   }
 
   static async createFromFile(file: File): Promise<Track> {
-    return Recorder.createFromSourceFile(file)
+    const abortController = new AbortController()
+    ;(window as any).processingModalController?.show('Importing audio...', () => abortController.abort())
+
+    try {
+      return await Recorder.createFromSourceFile(file, abortController.signal)
+    } finally {
+      ;(window as any).processingModalController?.hide()
+    }
   }
 
-  private static async createFromSourceFile(file: File): Promise<Track> {
-    const activeProject = await ProjectManager.getActiveProject()
-    const decoderConfig = await AudioImporter.getDecoderConfig(file)
-
-    const track = await ProjectManager.addClipWithTrack(
-      file.name,
-      decoderConfig.numberOfChannels,
-      0, // to be overwritten
-      AudioControl.startPosition,
-      'File',
-    )
-    const clipView = track.clipViews[0]!
-    const clip = clipView.clip
-    const importResult = await AudioImporter2.importFile(file, activeProject, track, decoderConfig)
-    // const importResult = await AudioImporter.importFile(file, activeProject, track)
-    track.clipViews[0] = new ClipView(clip, 0, AudioControl.startPosition, importResult.length)
-    await ProjectManager.saveClip(clip)
-    await ProjectManager.saveTrack(track)
+  private static async createFromSourceFile(file: File, signal?: AbortSignal): Promise<Track> {
+    const track = await AudioImporter.importFile(file, {
+      signal,
+      onProgress: (progress) => (window as any).processingModalController?.setProgress(progress),
+    })
     ;(window as any).trackListController.draw()
     return track
   }

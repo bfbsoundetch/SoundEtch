@@ -1,4 +1,4 @@
-import { TimeUtils } from "../global/TimeUtils"
+import { TimeUtils } from '../global/TimeUtils'
 
 export class ProcessingModalController {
   private readonly dialog = document.getElementById('processing-modal') as HTMLDialogElement
@@ -22,10 +22,17 @@ export class ProcessingModalController {
 
   show(title: string, onCancel: () => void) {
     this.onCancel = onCancel
-    this.titleElement.textContent = title
+    this.startTime = Date.now()
+    this.setTitle(title)
     this.setProgress(0)
     this.dialog.showModal()
-    this.startTime = Date.now()
+  }
+
+  setTitle(title: string) {
+    this.titleElement.textContent = title
+    if (this.dialog.open) {
+      this.startTime = Date.now()
+    }
   }
 
   setProgress(progress: number) {
@@ -36,8 +43,9 @@ export class ProcessingModalController {
     const elapsedTime = Date.now() - this.startTime
     const totalTime = Math.round(elapsedTime / progress)
     this.elapsedTimeElement.textContent = 'Elapsed time: ' + TimeUtils.toString(elapsedTime, false, true)
-    if (progress > .005) {
-      this.remainingTimeElement.textContent = 'Remaining time: ' + TimeUtils.toString(totalTime - elapsedTime, false, true)
+    if (progress > 0.005) {
+      this.remainingTimeElement.textContent =
+        'Remaining time: ' + TimeUtils.toString(totalTime - elapsedTime, false, true)
     } else {
       this.remainingTimeElement.textContent = 'Remaining time: ...'
     }

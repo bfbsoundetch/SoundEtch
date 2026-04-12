@@ -1,13 +1,11 @@
 import { FileSystemSyncAccessHandle } from 'filesystem/FileSystemSyncAccessHandle'
 import { RingBuffer } from 'ringbuf.js'
 import { Summary } from '../project/Summary'
-import { Transcriber } from '../transcription/Transcriber'
 import { Logger } from '../global/Logger'
 
 export class AudioFileWriter {
   private readonly ringBuffer: RingBuffer
   private readonly writeBuffer: Float32Array
-  private readonly transcriber = new Transcriber(48_000)
   private readonly logger = new Logger('AudioFileWriter')
 
   private position = 0
@@ -56,17 +54,15 @@ export class AudioFileWriter {
   async maybeGetChunkAndWrite(): Promise<boolean> {
     const poppedLength = this.ringBuffer.pop(this.writeBuffer)
     if (poppedLength > 0) {
-      if (this.position % 44100 < 128) {
+      if (this.position % 48000 < 128) {
         this.logger.log('Writer heartbeat at frame ' + this.position)
       }
-      const start = Date.now()
       this.fileSyncHandle.write(
         (this.writeBuffer.buffer as ArrayBuffer).slice(0, poppedLength * Float32Array.BYTES_PER_ELEMENT),
         { at: this.position },
       )
 
       this.summary.summarizeInterleavedData(this.writeBuffer, poppedLength)
-      this.transcriber.transcribe(this.writeBuffer.subarray(0, poppedLength))
       this.position += poppedLength * Float32Array.BYTES_PER_ELEMENT
       this.fileSyncHandle.flush()
 
@@ -76,6 +72,8 @@ export class AudioFileWriter {
       return false
     } else if (this.pausePromise) {
       await this.pausePromise
+    } else {
+      this.logger.log('Underrun detected while importing an audio file.')
     }
     return true
   }

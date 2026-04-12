@@ -1,17 +1,27 @@
-import { BatchAudioFileWriter } from './BatchAudioFileWriter.ts'
-import { Summary } from '../project/Summary.ts'
+import { FileSystemUtils } from '../filesystem/FileSystemUtils'
+import { Summary } from '../project/Summary'
 
 self.onmessage = async (e) => {
   console.debug('Writer got message ' + e.data.type)
 
   switch (e.data.type) {
-    case 'batch':
-      const summary = new Summary(e.data.summary.channelCount)
-      Object.keys(e.data.summary).forEach((key) => {
-        summary[key] = e.data.summary[key]
-      })
-      await BatchAudioFileWriter.writeAudioArray(e.data.dirname, e.data.filename, e.data.audioArray, summary)
-      postMessage({ type: 'finished', length: summary.length })
+    case 'init':
+      const input = e.data.input
+      const fileHandle = await FileSystemUtils.getFileHandle(input.dirname, input.clip.filename)
+      const summaryFileHandle = await FileSystemUtils.getFileHandle(input.dirname, `${input.clip.filename}_summary`)
+      self.fileSyncHandle = await fileHandle.createSyncAccessHandle()
+      self.summary = new Summary(input.channelCount)
+      Object.keys(input.clip.summary).forEach((key) => (self.summary[key] = input.clip.summary[key]))
+      self.summary.setSyncFileHandle(await summaryFileHandle.createSyncAccessHandle())
+      self.position = 0
+      break
+    case 'audio':
+      self.fileSyncHandle.write(e.data.audio, { at: self.position })
+      const float32 = new Float32Array(e.data.audio)
+      self.summary.summarizeInterleavedData(float32, float32.length)
+      self.position += e.data.audio.byteLength
+    case 'stop':
+      postMessage({type:'finish'})
       break
   }
 }
