@@ -1,5 +1,4 @@
 import { WebDemuxer } from 'web-demuxer'
-import SoxrResampler, { SoxrDatatype, SoxrQuality } from 'wasm-audio-resampler'
 import { ProjectManager } from '../project/ProjectManager'
 import { AudioControl } from '../audiocontext/AudioControl'
 import { Track } from '../project/Track'
@@ -20,7 +19,8 @@ export class AudioImporter {
     const { onProgress, signal } = options
     let track: Track | null = null
 
-    const writingWorker = new Worker(new URL('./AudioFileWritingWorker.js', import.meta.url), {type: 'module'})
+    const writingWorker = new Worker(new URL('./AudioFileWritingWorker.js', import.meta.url), { type: 'module' })
+    let resamplingWorker: Worker | null = null
 
     try {
       throwIfAborted(signal)
@@ -40,87 +40,121 @@ export class AudioImporter {
       const clip = clipView.clip
 
       const activeProject = await ProjectManager.getActiveProject()
+      const needsResampling = decoderConfig.sampleRate !== activeProject.sampleRate
 
       const workerInput = {
         dirname: `${activeProject.id}`,
         channelCount: decoderConfig.numberOfChannels,
         clip: cloneWithGetters(clip),
       }
-      const writeFinishPromise = Promise.withResolvers()
+      const writeFinishPromise = Promise.withResolvers<void>()
+      const resamplingReadyPromise = Promise.withResolvers<void>()
+      const resamplingFinishPromise = Promise.withResolvers<void>()
+      const rejectWorkerPromises = (error: unknown) => {
+        writeFinishPromise.reject(error)
+        resamplingReadyPromise.reject(error)
+        resamplingFinishPromise.reject(error)
+      }
+
+      writingWorker.addEventListener('error', (e) => rejectWorkerPromises(e.error ?? e))
+      writingWorker.addEventListener('messageerror', (e) => rejectWorkerPromises(e))
+
       writingWorker.addEventListener('message', (e) => {
         if (e.data.type == 'finish') {
-          writeFinishPromise.resolve('')
+          writeFinishPromise.resolve()
         }
       })
       writingWorker.addEventListener('message', clipView.clip.summary.getWorkerMessageListener())
-      writingWorker.postMessage({type: 'init', input: workerInput})
-
-      const sourceSampleRate = decoderConfig.sampleRate
-      const targetSampleRate = activeProject.sampleRate
-      const resampler =
-        sourceSampleRate !== targetSampleRate
-          ? new SoxrResampler(
-              decoderConfig.numberOfChannels,
-              sourceSampleRate,
-              targetSampleRate,
-              SoxrDatatype.SOXR_FLOAT32,
-              SoxrDatatype.SOXR_FLOAT32,
-              SoxrQuality.SOXR_MQ,
-            )
-          : null
+      writingWorker.postMessage({ type: 'init', input: workerInput })
 
       const encodedReader = demuxer.read('audio').getReader()
 
       let pendingAudioLength = 0
       let pendingAudioChunks: Array<AudioData> = []
       let progressMs = 0
+
+      const postAudioForWriting = (audioBuffer: ArrayBuffer) => {
+        const interleaved = new Float32Array(audioBuffer)
+        progressMs += interleaved.length / decoderConfig.sampleRate / mediaInfo.duration
+        writingWorker.postMessage({ type: 'audio', audio: interleaved.buffer }, [interleaved.buffer])
+        onProgress?.(progressMs)
+      }
+
+      if (needsResampling) {
+        resamplingWorker = new Worker(new URL('./AudioResamplingWorker.js', import.meta.url), { type: 'module' })
+        resamplingWorker.addEventListener('error', (e) => rejectWorkerPromises(e.error ?? e))
+        resamplingWorker.addEventListener('messageerror', (e) => rejectWorkerPromises(e))
+
+        resamplingWorker.addEventListener('message', (e) => {
+          if (e.data.type == 'ready') {
+            resamplingReadyPromise.resolve()
+            return
+          }
+
+          if (e.data.type == 'audio') {
+            postAudioForWriting(e.data.audio)
+            return
+          }
+
+          if (e.data.type == 'finish') {
+            resamplingFinishPromise.resolve()
+          }
+        })
+        resamplingWorker.postMessage({
+          type: 'init',
+          input: {
+            channelCount: decoderConfig.numberOfChannels,
+            sourceSampleRate: decoderConfig.sampleRate,
+            targetSampleRate: activeProject.sampleRate,
+          },
+        })
+        await resamplingReadyPromise.promise
+      } else {
+        resamplingReadyPromise.resolve()
+        resamplingFinishPromise.resolve()
+      }
+
       const decoder = new AudioDecoder({
-        output: (audioData) => { 
+        output: (audioData) => {
           throwIfAborted(signal)
 
+          pendingAudioChunks.push(audioData)
+          pendingAudioLength += audioData.numberOfChannels * audioData.numberOfFrames
+
           if (pendingAudioLength >= INTERLEAVE_RESAMPLE_BATCH_SIZE_SAMPLES) {
-            let interleaved = concatenateInterleavedAudioData(pendingAudioChunks, pendingAudioLength)
-
-            if (resampler) {
-              interleaved = resampleInterleavedData(resampler, interleaved)
-            }
-
-            progressMs += interleaved.length / decoderConfig.sampleRate / mediaInfo.duration
-            writingWorker.postMessage({type: 'audio', audio: interleaved.buffer}, [interleaved.buffer])
-
-            onProgress?.(progressMs)
-
-            pendingAudioChunks.splice(0)
+            postPendingAudio(pendingAudioChunks, pendingAudioLength, resamplingWorker, postAudioForWriting)
+            pendingAudioChunks = []
             pendingAudioLength = 0
-          } else {
-            pendingAudioChunks.push(audioData)
-            pendingAudioLength += audioData.numberOfChannels * audioData.numberOfFrames
           }
         },
-        error: (e) => { writeFinishPromise.reject(e) }
+        error: (e) => {
+          rejectWorkerPromises(e)
+        },
       })
       decoder.configure(decoderConfig)
-      await resampler?.init()
 
       while (true) {
         throwIfAborted(signal)
-        const {done, value} = await encodedReader.read()
+        const { done, value } = await encodedReader.read()
         if (done) {
           await decoder.flush()
           decoder.close()
           break
         }
-        if (decoder.decodeQueueSize > 100) {
-          await new Promise(r => setTimeout(r))
+        if (decoder.decodeQueueSize > 200) {
+          // lets the decoder work
+          await new Promise((r) => setTimeout(r))
         }
         decoder.decode(value)
       }
 
-      if (resampler) {
-        const result = flushResampler(resampler)
-        writingWorker.postMessage({type: 'audio', audio: result.buffer}, [result.buffer])
+      if (pendingAudioLength > 0) {
+        postPendingAudio(pendingAudioChunks, pendingAudioLength, resamplingWorker, postAudioForWriting)
       }
-      writingWorker.postMessage({type: 'stop'})
+
+      resamplingWorker?.postMessage({ type: 'stop' })
+      await resamplingFinishPromise.promise
+      writingWorker.postMessage({ type: 'stop' })
       await writeFinishPromise.promise
 
       onProgress?.(1)
@@ -135,10 +169,25 @@ export class AudioImporter {
       }
       throw error
     } finally {
+      resamplingWorker?.terminate()
       writingWorker.terminate()
       demuxer.destroy()
     }
   }
+}
+
+function postPendingAudio(
+  audioDataChunks: AudioData[],
+  totalInterleavedLength: number,
+  resamplingWorker: Worker | null,
+  postAudioForWriting: (audioBuffer: ArrayBuffer) => void,
+) {
+  const interleaved = concatenateInterleavedAudioData(audioDataChunks, totalInterleavedLength)
+  if (resamplingWorker) {
+    resamplingWorker.postMessage({ type: 'audio', audio: interleaved.buffer }, [interleaved.buffer])
+    return
+  }
+  postAudioForWriting(interleaved.buffer as ArrayBuffer)
 }
 
 function concatenateInterleavedAudioData(audioDataChunks: AudioData[], totalInterleavedLength: number): Float32Array {
@@ -174,18 +223,6 @@ function throwIfAborted(signal?: AbortSignal) {
   if (signal?.aborted) {
     throw new DOMException('The operation was aborted.', 'AbortError')
   }
-}
-
-function resampleInterleavedData(resampler: SoxrResampler, interleaved: Float32Array): Float32Array {
-  return new Float32Array(resampler.processChunk(float32ToUint8Array(interleaved)).buffer as ArrayBuffer)
-}
-
-function flushResampler(resampler: SoxrResampler): Float32Array {
-  return new Float32Array(resampler.processChunk(null as any).buffer as ArrayBuffer)
-}
-
-function float32ToUint8Array(data: Float32Array): Uint8Array {
-  return new Uint8Array(data.buffer, data.byteOffset, data.byteLength)
 }
 
 function interleaveAudioData(channelData: Float32Array[], frameCount: number): Float32Array {

@@ -80,7 +80,7 @@ export class Recorder {
     }
   }
 
-  static async createFromUrl(url: string): Promise<Track> {
+  static async createFromUrl(url: string): Promise<Track | null> {
     const abortController = new AbortController()
     ;(window as any).processingModalController?.show('Downloading audio...', () => abortController.abort())
 
@@ -94,17 +94,29 @@ export class Recorder {
       ;(window as any).processingModalController?.setTitle('Importing audio...')
       ;(window as any).processingModalController?.setProgress(0)
       return await Recorder.createFromSourceFile(importedFile, abortController.signal)
+    } catch (error) {
+      if (isAbortError(error)) {
+        Recorder.showImportCanceledNotification()
+        return null
+      }
+      throw error
     } finally {
       ;(window as any).processingModalController?.hide()
     }
   }
 
-  static async createFromFile(file: File): Promise<Track> {
+  static async createFromFile(file: File): Promise<Track | null> {
     const abortController = new AbortController()
     ;(window as any).processingModalController?.show('Importing audio...', () => abortController.abort())
 
     try {
       return await Recorder.createFromSourceFile(file, abortController.signal)
+    } catch (error) {
+      if (isAbortError(error)) {
+        Recorder.showImportCanceledNotification()
+        return null
+      }
+      throw error
     } finally {
       ;(window as any).processingModalController?.hide()
     }
@@ -136,4 +148,14 @@ export class Recorder {
     }
     return (Recorder.writingWorkerController = new WorkerController())
   }
+
+  private static showImportCanceledNotification() {
+    const windowWithNotifications = window as any
+    windowWithNotifications.notificationsController ??= new windowWithNotifications.NotificationsController()
+    windowWithNotifications.notificationsController.showShortDurationMessage('Audio import canceled.')
+  }
+}
+
+function isAbortError(error: unknown) {
+  return error instanceof DOMException && error.name === 'AbortError'
 }

@@ -20,8 +20,11 @@ self.onmessage = async (e) => {
       const float32 = new Float32Array(e.data.audio)
       self.summary.summarizeInterleavedData(float32, float32.length)
       self.position += e.data.audio.byteLength
+      break
     case 'stop':
-      postMessage({type:'finish'})
+      await self.fileSyncHandle?.close()
+      self.summary?.finishSummarizing()
+      postMessage({ type: 'finish' })
       break
   }
 }
