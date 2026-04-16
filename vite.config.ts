@@ -31,7 +31,6 @@ export default defineConfig({
           new URL('./src/noisereduction/RingBufferBackedAudioWorkletProcessor.js', import.meta.url),
         ),
         renderingWorker: fileURLToPath(new URL('./src/rendering/RenderingJob.ts', import.meta.url)),
-        flacEncodingWorker: fileURLToPath(new URL('./src/encoders/FlacEncoderWorker.js', import.meta.url)),
       },
       output: {
         entryFileNames: (assetInfo) => {
@@ -39,7 +38,6 @@ export default defineConfig({
             assetInfo.name == 'playingAudioWorklet' ||
             assetInfo.name == 'recordingAudioWorklet' ||
             assetInfo.name == 'renderingWorker' ||
-            assetInfo.name == 'flacEncodingWorker' ||
             assetInfo.name == 'ringBufferBackedWorklet' ||
             0
           ) {
@@ -53,14 +51,6 @@ export default defineConfig({
       ],
     },
   },
-  plugins: [
-    nodePolyfills({
-      globals: {
-        Buffer: true,
-        global: true,
-      },
-    }),
-  ],
   worker: {
     plugins: () => [wasm() as PluginOption],
     format: 'es',

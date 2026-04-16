@@ -7,7 +7,6 @@ export class Mp3FileWriter {
     Mp3FileWriter.INPUT_BUFFER_SAMPLE_SIZE * Float32Array.BYTES_PER_ELEMENT
 
   private readonly inputBuffer
-  private readonly outputBuffer
   private readonly outputBufferPointer
 
   readonly inputSampleFormat = 'planar'
@@ -32,7 +31,6 @@ export class Mp3FileWriter {
         Mp3FileWriter.INPUT_BUFFER_SAMPLE_SIZE * mp3EncoderInfo.channelCount,
     )
     this.outputBufferPointer = module._getOutputBufferPointer()
-    this.outputBuffer = module.HEAPU8.subarray(this.outputBufferPointer, this.outputBufferPointer + 16 * 1024)
   }
 
   static async create(fileWritable: FileSystemWritableFileStream, mp3EncoderInfo: Mp3EncoderInfo) {

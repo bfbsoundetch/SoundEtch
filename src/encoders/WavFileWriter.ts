@@ -59,7 +59,9 @@ export class WavFileWriter {
     await this.fileWritable.write(outputBuffer as ArrayBufferView<ArrayBuffer>)
   }
 
-  async finish() {}
+  async finish() {
+    await this.fileWritable.close()
+  }
 
   static getWavHeader(sampleFormat: WavSampleFormat, sampleRate: number, sampleCount: number, channelCount: number) {
     let bytesPerSample: number

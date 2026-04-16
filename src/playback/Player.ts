@@ -5,7 +5,6 @@ import { WorkerController } from '../audiocontext/WorkerController'
 import { JobType } from '../audiocontext/ControllableWorkerJob'
 import { AudioControl, AudioState } from '../audiocontext/AudioControl'
 import { cloneWithGetters } from '../global/ObjectUtils'
-import { TrackListController } from 'ui/timeline/TrackListController'
 import { Track } from '../project/Track'
 
 export type SelectedRegion = {

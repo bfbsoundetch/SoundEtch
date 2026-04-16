@@ -3,8 +3,6 @@
     "@descript/web-audio-js": "^0.15.3-patched.6",
     "@huggingface/transformers": "^3.8.0",
     "@webaudiomodules/api": "^2.0.0-alpha.6",
-    "audio-decode": "^3.8.1",
-    "audio-type": "^2.4.1",
     "file-system-access": "^1.0.4",
     "glob": "^11.0.0",
     "music-metadata": "^11.12.3",

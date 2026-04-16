@@ -1,10 +1,7 @@
 import { FlacFileWriter } from './FlacFileWriter'
 import { Mp3FileWriter } from './Mp3FileWriter'
-import { Mp3Transformer } from './Mp3Transformer'
 import { OpusFileWriter } from './OpusFileWriter'
-import { OpusTransformer } from './OpusTransformer'
 import { WavFileWriter } from './WavFileWriter'
-import { WavTransformer } from './WavTransformer'
 
 export type EncoderInfo = WavEncoderInfo | OpusEncoderInfo | Mp3EncoderInfo | FlacEncoderInfo
 
@@ -87,41 +84,5 @@ export async function encoderInforWritableStreamFactory(
       return Mp3FileWriter.create(fileWritable, encoderInfo)
     case 'flac':
       return FlacFileWriter.create(fileWritable, encoderInfo)
-  }
-}
-
-export async function encoderInfoTransformerFactory(
-  length: number,
-  encoderInfo: EncoderInfo,
-): Promise<TransformStream> {
-  switch (encoderInfo.encoder) {
-    case 'wav':
-      return new TransformStream(
-        new WavTransformer(length, encoderInfo.sampleRate, encoderInfo.channelCount, encoderInfo.sampleFormat),
-      )
-    case 'opus':
-      return new TransformStream(new OpusTransformer(encoderInfo.sampleRate, encoderInfo.channelCount))
-    case 'mp3':
-      if (encoderInfo.bitrate) {
-        return new TransformStream(
-          await Mp3Transformer.createCbrEncoder(
-            encoderInfo.sampleRate,
-            encoderInfo.sampleRate as Mp3OutputSampleRate,
-            encoderInfo.channelCount as 1 | 2,
-            encoderInfo.bitrate as Mp3CbrValue,
-          ),
-        )
-      } else {
-        return new TransformStream(
-          await Mp3Transformer.createVbrEncoder(
-            encoderInfo.sampleRate,
-            encoderInfo.sampleRate as Mp3OutputSampleRate,
-            encoderInfo.channelCount as 1 | 2,
-            encoderInfo.vbrQuality!,
-          ),
-        )
-      }
-    case 'flac':
-      throw new Error('Unimplemented')
   }
 }

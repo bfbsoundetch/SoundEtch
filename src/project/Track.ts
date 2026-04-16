@@ -56,7 +56,7 @@ export class Track extends DatabasePersisted implements Analyzable {
       const clipView = this.clipViews[i]
       if (clipView.startPosition <= newClipView.startPosition) {
         if (clipView.startPosition + clipView.length > newClipView.startPosition) {
-          console.error('this 1 ' + i)
+          console.error('this 1 ' + i) //todo this happened
           return false
         }
       } else {

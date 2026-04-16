@@ -3,20 +3,19 @@ import { Track } from '../project/Track'
 import { WorkerController } from '../audiocontext/WorkerController'
 import { ClipViewSubset } from '../playback/AudioFileReader'
 import { ProjectManager } from '../project/ProjectManager'
-import {
-  EncoderInfo,
-} from '../encoders/EncoderType'
-import { RenderingArgument } from './RenderingJob'
+import { EncoderInfo } from '../encoders/EncoderType'
+import { RenderingArgument, RenderingEncodingInitMessage, RenderingWorkerStartMessage } from './RenderingWorkerProtocol'
+import { SelectedRegion } from 'playback/Player'
 
 export class Renderer {
   private static readingWorkerController: WorkerController | null = null
   private static renderingWorker: Worker | null = null
   private static cancelRenderingCallback: (() => void) | null = null
 
-  static async exportProject(encoderInfo: EncoderInfo) {
+  static async exportProject(encoderInfo: EncoderInfo, selectedRegion: SelectedRegion | null) {
     const project = await ProjectManager.getActiveProject()
-    const trackLength = project.getTracks().reduce((maxLength, track) => Math.max(maxLength, track.length), 0)
-    const exportInfo = encoderInfo.encoder === 'wav' ? { ...encoderInfo, sampleCount: trackLength } : encoderInfo
+    const projectLength = selectedRegion ? selectedRegion.endSample - selectedRegion.startSample : project.getTracks().reduce((maxLength, track) => Math.max(maxLength, track.length), 0)
+    const exportInfo = encoderInfo.encoder === 'wav' ? { ...encoderInfo, sampleCount: projectLength } : encoderInfo
     try {
       const file = await showSaveFilePicker({
         startIn: 'downloads',
@@ -24,19 +23,20 @@ export class Renderer {
       } as any)
 
       ;(window as any).processingModalController?.show('Exporting project...', () => Renderer.cancelRender())
-      await Renderer.renderNew(file, 1, project, exportInfo, 0, ...project.getTracks())
+      await Renderer.render(file, 1, project, exportInfo, selectedRegion?.startSample ?? 0, projectLength, ...project.getTracks())
       ;(window as any).processingModalController?.hide()
     } catch {
       ;(window as any).processingModalController?.hide()
     }
   }
 
-  static async renderNew(
+  static async render(
     file: FileSystemFileHandle,
     outputChannelCount: number,
     project: Project,
     encoderInfo: EncoderInfo,
     startPosition: number,
+    projectLength: number,
     ...tracks: Array<Track>
   ) {
     const argument: RenderingArgument = {
@@ -45,6 +45,7 @@ export class Renderer {
       sampleRate: project.sampleRate,
       channelCount: outputChannelCount,
       startPosition: startPosition,
+      length: projectLength,
       encoderInfo,
       trackSubsets: tracks.map((track) => {
         return {
@@ -69,38 +70,64 @@ export class Renderer {
       }),
     }
 
-    const worker = new Worker('./assets/renderingWorker.js', { type: 'module' })
-    Renderer.renderingWorker = worker
+    const renderingWorker = new Worker('./assets/renderingWorker.js', { type: 'module' })
+    const encodingWorker = new Worker(new URL('./RenderingEncodingWorker.ts', import.meta.url), { type: 'module' })
+    const encodingChannel = new MessageChannel()
+    Renderer.renderingWorker = renderingWorker
 
     await new Promise<void>((resolve, reject) => {
-      Renderer.cancelRenderingCallback = () => {
-        worker.terminate()
+      const cleanup = () => {
         Renderer.cancelRenderingCallback = null
         Renderer.renderingWorker = null
+        renderingWorker.terminate()
+        encodingWorker.terminate()
+      }
+
+      Renderer.cancelRenderingCallback = () => {
+        cleanup()
         reject(new Error('Render canceled'))
       }
-      worker.onmessage = (e) => {
+
+      const rejectWithCleanup = (error: unknown) => {
+        cleanup()
+        reject(error)
+      }
+
+      encodingWorker.onmessage = (e) => {
+        if (e.data.error) {
+          rejectWithCleanup(new Error(String(e.data.error)))
+          return
+        }
+        if (e.data.done) {
+          cleanup()
+          resolve()
+        }
         const progress = e.data.progress
         if (typeof progress === 'number') {
           ;(window as any).processingModalController?.setProgress(progress)
         }
-        if (e.data.done) {
-          Renderer.cancelRenderingCallback = null
-          Renderer.renderingWorker = null
-          resolve()
-        }
-      }
-      worker.onerror = (error) => {
-        Renderer.cancelRenderingCallback = null
-        Renderer.renderingWorker = null
-        reject(error)
       }
 
-      worker.postMessage(argument)
-    }).finally(() => {
-      worker.terminate()
-      Renderer.cancelRenderingCallback = null
-      Renderer.renderingWorker = null
+      renderingWorker.onerror = (error) => rejectWithCleanup(error)
+      encodingWorker.onerror = (error) => rejectWithCleanup(error)
+      renderingWorker.onmessageerror = (error) => rejectWithCleanup(error)
+      encodingWorker.onmessageerror = (error) => rejectWithCleanup(error)
+
+      const encodingInitMessage: RenderingEncodingInitMessage = {
+        type: 'init',
+        file,
+        encoderInfo,
+        channelCount: outputChannelCount,
+        encodingPort: encodingChannel.port1,
+        length: projectLength
+      }
+      encodingWorker.postMessage(encodingInitMessage, [encodingChannel.port1])
+
+      const renderingStartMessage: RenderingWorkerStartMessage = {
+        argument,
+        encodingPort: encodingChannel.port2,
+      }
+      renderingWorker.postMessage(renderingStartMessage, [encodingChannel.port2])
     })
   }
 

@@ -1,61 +1,33 @@
 import { ClipViewSubset } from '../playback/AudioFileReader'
 import { RawDataAudioContext } from '@descript/web-audio-js'
-import { Effect } from '../effects/Effects'
 import { FileSystemUtils } from '../filesystem/FileSystemUtils'
 import { FileSystemSyncAccessHandle } from '../filesystem/FileSystemSyncAccessHandle'
-import { EncoderInfo, encoderInforWritableStreamFactory } from '../encoders/EncoderType'
+import { RenderingWorkerStartMessage } from './RenderingWorkerProtocol'
 
-console.error('created!!!!!')
-
-export type TrackSubset = {
-  name: string
-  length: number
-  channelCount: number
-  clipViews: Array<ClipViewSubset>
-  effects: Array<Effect>
-  gain: number
-  pan: number
-}
-
-export type RenderingArgument = {
-  file: FileSystemFileHandle
-  encoderInfo: EncoderInfo
-  projectId: number
-  sampleRate: number
-  channelCount: number
-  startPosition: number
-  trackSubsets: Array<TrackSubset>
-}
+const BLOCK_SIZE = 1024
+const RENDER_CHUNK_SAMPLE_CAPACITY = 1024 * 1024
 
 self.onmessage = async (e) => {
-  console.error('started!!!')
-  const argument = e.data as RenderingArgument
+  const { argument, encodingPort } = e.data as RenderingWorkerStartMessage
 
-  const length = argument.trackSubsets.reduce((m, t) => Math.max(m, t.length), 0)
-
-  const blockSize = 1024
+  const length = argument.length
 
   const audioContext = new RawDataAudioContext({
     sampleRate: argument.sampleRate,
-    blockSize: blockSize,
+    blockSize: BLOCK_SIZE,
     numberOfChannels: 2,
   })
   audioContext.resume()
 
-  const encoderWriter = await encoderInforWritableStreamFactory(
-    await argument.file.createWritable(), 
-    argument.encoderInfo
-  )
-
   const processors = new Array<ReadingOfflineProcessor>()
 
   argument.trackSubsets.forEach((track) => {
-    const readingProcessorNode = audioContext.createScriptProcessor(blockSize, 0, track.channelCount)
+    const readingProcessorNode = audioContext.createScriptProcessor(BLOCK_SIZE, 0, track.channelCount)
     const processor = new ReadingOfflineProcessor(
       argument.projectId,
       track.clipViews,
       track.channelCount,
-      blockSize,
+      BLOCK_SIZE,
       argument.startPosition,
     )
     processors.push(processor)
@@ -78,66 +50,60 @@ self.onmessage = async (e) => {
     }
   })
 
-  const inputBuffer = encoderWriter.getInputBuffer()
-
-  const isPlanar = argument.channelCount == 1 || encoderWriter.inputSampleFormat == 'planar'
-
-  const output = new Array(argument.channelCount)
-  const channelLength = inputBuffer.length / argument.channelCount
-
-  if (isPlanar) {
-    for (let i = 0; i < argument.channelCount; ++i) {
-      output[i] = inputBuffer.subarray(channelLength * i, channelLength * (i + 1))
-    }
-
-    for (let i = 0; i < length; i += blockSize) {
-      await Promise.all(processors.map((p) => p.maybeFillBuffer()))
-      audioContext.process(output, i % channelLength)
-      if (i > 0 && i % channelLength == 0) {
-        await encoderWriter.writeChunk(inputBuffer.length)
-        postMessage({progress: i / length})
-      }
-    }
-  } else {
-    const inputBuffer = encoderWriter.getInputBuffer()
-    for (let i = 0; i < argument.channelCount; ++i) {
-      output[i] = new Float32Array(blockSize)
-    }
-
-    for (let i = 0; i < length; i += blockSize) {
-      await Promise.all(processors.map((p) => p.maybeFillBuffer()))
-      audioContext.process(output)
-      const offset = i % inputBuffer.length
-      if (i > 0 && offset == 0) {
-        await encoderWriter.writeChunk(inputBuffer.length)
-        postMessage({progress: i / length})
-      }
-      for (let j = 0; j < blockSize; ++j) {
-        for (let channel = 0; channel < argument.channelCount; ++channel) {
-          inputBuffer[offset + j * argument.channelCount + channel] = output[channel][j]
-        }
-      }
-    }
+  const output = new Array<Float32Array>(argument.channelCount)
+  for (let i = 0; i < argument.channelCount; ++i) {
+    output[i] = new Float32Array(BLOCK_SIZE)
   }
-  await encoderWriter.writeChunk((length * argument.channelCount) % inputBuffer.length)
-  console.error('done')
-  await encoderWriter.finish()
-  postMessage({ done: true, progress: 1 })
+
+  let pendingChunk = new Float32Array(RENDER_CHUNK_SAMPLE_CAPACITY)
+  let pendingLength = 0
+
+  const flushPendingChunk = () => {
+    if (pendingLength === 0) {
+      return
+    }
+
+    const audio = pendingChunk.slice(0, pendingLength)
+    encodingPort.postMessage({ type: 'audio', audio: audio.buffer }, [audio.buffer])
+    pendingChunk = new Float32Array(RENDER_CHUNK_SAMPLE_CAPACITY)
+    pendingLength = 0
+  }
+
+  for (let i = 0; i < length; i += BLOCK_SIZE) {
+    await Promise.all(processors.map((p) => p.maybeFillBuffer()))
+    audioContext.process(output)
+
+    const frameCount = Math.min(BLOCK_SIZE, length - i)
+    const samplesToWrite = frameCount * argument.channelCount
+    if (pendingLength + samplesToWrite > pendingChunk.length) {
+      flushPendingChunk()
+    }
+
+    for (let frame = 0; frame < frameCount; ++frame) {
+      for (let channel = 0; channel < argument.channelCount; ++channel) {
+        pendingChunk[pendingLength++] = output[channel]![frame]!
+      }
+    }
+
+  }
+
+  flushPendingChunk()
+  encodingPort.postMessage({ type: 'stop' })
 }
 
 class ReadingOfflineProcessor {
-  private clipViewIndex = 0
+  private readingClipViewIndex = 0
+  private writingClipViewIndex = 0
   private clipView: ClipViewSubset
 
-  private buffer = new Float32Array(3000)
+  private buffer = new Float32Array(1024 * 1024)
   private bufferReadPosition = 0
   private bufferWritePosition = 0
   private clipViewFile: FileSystemSyncAccessHandle | null = null
   private clipFileOffset = -1
 
-  private clipViewRead = 0
-  private clipViewWritten = 0
-  private position
+  private writePosition
+  private readPosition
 
   private readonly outputBuffers: Array<Float32Array>
 
@@ -146,32 +112,39 @@ class ReadingOfflineProcessor {
     private readonly clipViews: Array<ClipViewSubset>,
     private readonly channelCount: number,
     private readonly blockSize: number,
-    startPosition: number,
+    private readonly startPosition: number,
   ) {
     this.clipView = this.clipViews[0]
-    this.position = startPosition
+    this.readPosition = this.writePosition = startPosition
     this.outputBuffers = new Array<Float32Array>(channelCount)
     for (let i = 0; i < channelCount; ++i) {
       this.outputBuffers[i] = new Float32Array(blockSize)
     }
-    while (this.position >= this.clipView.startPosition + this.clipView.length) {
-      console.error(`${this.position} ${this.clipView.startPosition} ${this.clipView.length}`)
-      this.clipView = this.clipViews[++this.clipViewIndex]
+    while (this.readPosition >= this.clipView.startPosition + this.clipView.length) {
+      this.clipView = this.clipViews[++this.readingClipViewIndex]
     }
   }
 
   process(audioProcessingEvent: AudioProcessingEvent) {
     const output = audioProcessingEvent.outputBuffer
     let emitted = 0
-    while (emitted < output.length && this.clipView) {
-      if (this.position < this.clipView.startPosition) {
-        emitted += this.clipView.startPosition - this.position
+    let clipView = this.clipViews[this.readingClipViewIndex]
+    while (emitted < output.length && clipView) {
+      if (this.readPosition < clipView.startPosition) {
+        const silenceSamples = Math.min(output.length, clipView.startPosition - this.readPosition)
+        this.readPosition += silenceSamples
+        for (let i = 0; i < silenceSamples; ++i) {
+          for (let channel = 0; channel < this.channelCount; ++channel) {
+            this.outputBuffers[channel][emitted + i] = 0
+          }
+        }
+        emitted += silenceSamples
       }
 
       let toEmit: number
-      if (emitted + this.clipView.length - this.clipViewRead < output.length) {
-        toEmit = this.clipView.length - this.clipViewRead
-        this.clipView = this.clipViews[++this.clipViewIndex]
+      if (clipView.startPosition + clipView.length - this.readPosition < output.length) {
+        toEmit = clipView.startPosition + clipView.length - this.readPosition
+        clipView = this.clipViews[++this.readingClipViewIndex]
       } else {
         toEmit = output.length - emitted
       }
@@ -184,52 +157,51 @@ class ReadingOfflineProcessor {
       }
 
       this.bufferReadPosition += toEmit * this.channelCount
-      this.clipViewRead += toEmit
       emitted += toEmit
+      this.readPosition += toEmit
     }
 
     for (let channel = 0; channel < this.channelCount; ++channel) {
       output.copyToChannel(this.outputBuffers[channel] as any, channel)
     }
-
-    this.position += output.length
   }
 
   async maybeFillBuffer() {
-    if (this.bufferWritePosition - this.bufferReadPosition > this.blockSize * this.channelCount || !this.clipView) {
+    if (this.bufferWritePosition - this.bufferReadPosition > this.blockSize * this.channelCount || this.writingClipViewIndex >= this.clipViews.length) {
       return
     }
-    ;(this.buffer.copyWithin(0, this.bufferReadPosition, this.bufferWritePosition),
-      (this.bufferWritePosition -= this.bufferReadPosition))
+    this.buffer.copyWithin(0, this.bufferReadPosition, this.bufferWritePosition)
+    this.bufferWritePosition -= this.bufferReadPosition
     this.bufferReadPosition = 0
-
-    let currentClipViewIndex = this.clipViewIndex
-    while (currentClipViewIndex < this.clipViews.length) {
+    
+    let clipView = this.clipViews[this.writingClipViewIndex]
+    while (this.bufferWritePosition < this.buffer.length && this.writingClipViewIndex < this.clipViews.length) {
       if (!this.clipViewFile) {
+        this.writePosition = Math.max(this.startPosition, clipView.startPosition)
         this.clipFileOffset =
-          this.clipViews[currentClipViewIndex].offset * Float32Array.BYTES_PER_ELEMENT * this.clipView.clip.channelCount
+          clipView.offset * Float32Array.BYTES_PER_ELEMENT * this.channelCount
+        this.clipFileOffset += Math.max(0, this.writePosition - clipView.startPosition) * Float32Array.BYTES_PER_ELEMENT * this.clipView.clip.channelCount
         const file = await FileSystemUtils.getFileHandle(
           `${this.projectId}`,
-          `${this.clipViews[currentClipViewIndex].clip.id}`,
+          `${clipView.clip.id}`,
         )
         this.clipViewFile = (await (file as any).createSyncAccessHandle()) as FileSystemSyncAccessHandle
-        this.clipViewWritten = 0
       }
       const loaded = this.clipViewFile.read(
         new DataView(this.buffer.buffer, this.bufferWritePosition * Float32Array.BYTES_PER_ELEMENT),
         {
-          at: this.clipFileOffset + this.clipViewWritten,
+          at: this.clipFileOffset + (this.writePosition - clipView.startPosition) * Float32Array.BYTES_PER_ELEMENT * this.channelCount,
         },
       )
-      this.clipViewWritten += loaded
+      this.writePosition += loaded / Float32Array.BYTES_PER_ELEMENT / this.channelCount
       this.bufferWritePosition += loaded / Float32Array.BYTES_PER_ELEMENT
-      if (this.bufferWritePosition == this.buffer.length) {
-        break
+
+      if (this.writePosition >= clipView.length + clipView.startPosition) {
+        this.bufferWritePosition -= (this.writePosition - (clipView.length + clipView.startPosition)) * this.channelCount
+        this.clipViewFile.close()
+        this.clipViewFile = null
+        clipView = this.clipViews[++this.writingClipViewIndex]
       }
-      this.clipViewWritten = 0
-      this.clipViewFile.close()
-      this.clipViewFile = null
-      currentClipViewIndex++
     }
   }
 }

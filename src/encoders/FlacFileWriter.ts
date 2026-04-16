@@ -27,7 +27,6 @@ export class FlacFileWriter {
     private readonly privateTmpFile: FileSystemFileHandle,
     private readonly privateTmpFileSync: FileSystemSyncAccessHandle,
   ) {
-    console.error(privateTmpFileSync)
     const inputBufferPointer = module._get_input_buffer_pointer(flacEncoderInfo.channelCount, this.inputBufferSize)
     const start = inputBufferPointer / Float32Array.BYTES_PER_ELEMENT
     this.inputBuffer = module.HEAPF32.subarray(start, start + flacEncoderInfo.channelCount * this.inputBufferSize)
