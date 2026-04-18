@@ -38,7 +38,7 @@ export class HeaderController {
       this.firstHeaderButton.getElementsByTagName('span')[0].innerText = 'Recording'
     }
     this.firstHeaderButton.getElementsByTagName('span')[0].style.visibility = 'invisible'
-    this.firstHeaderButton.className = 'project-button animated-brightness'
+    this.firstHeaderButton.className = 'project-button tooltipped animated-brightness'
     this.firstHeaderButton.onclick = () => {}
     this.firstHeaderButton.style.background = 'rgba(0,0,0,.2)'
     ;(this.secondHeaderButton.getElementsByClassName('pause')[0] as SVGUseElement).style.opacity = '1'
@@ -62,7 +62,7 @@ export class HeaderController {
       ;(this.firstHeaderButton.getElementsByClassName('record')[0] as SVGUseElement).style.opacity = '1'
       this.firstHeaderButton.getElementsByTagName('span')[0].innerText = 'Resume Recording'
     }
-    this.firstHeaderButton.className = 'project-button clickable'
+    this.firstHeaderButton.className = 'project-button tooltipped clickable'
     this.firstHeaderButton.onclick = AudioControl.unpause
     ;(this.secondHeaderButton.getElementsByClassName('pause')[0] as SVGUseElement).style.opacity = '1'
     ;(this.secondHeaderButton.getElementsByClassName('play')[0] as SVGUseElement).style.opacity = '0'
@@ -79,7 +79,7 @@ export class HeaderController {
     ;(this.firstHeaderButton.getElementsByClassName('play')[0] as SVGUseElement).style.opacity = '0'
     ;(this.firstHeaderButton.getElementsByClassName('record')[0] as SVGUseElement).style.opacity = '1'
     this.firstHeaderButton.getElementsByTagName('span')[0].innerText = 'Record'
-    this.firstHeaderButton.classList = 'project-button clickable'
+    this.firstHeaderButton.classList = 'project-button tooltipped clickable'
     this.firstHeaderButton.onclick = Recorder.startRecordingActiveAudioInputs
     this.firstHeaderButton.style.background = 'none'
     ;(this.secondHeaderButton.getElementsByClassName('pause')[0] as SVGUseElement).style.opacity = '0'

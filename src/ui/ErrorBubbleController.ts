@@ -12,7 +12,7 @@ export class ErrorBubbleController {
   private timeout: number | null = null
   private readonly logger: Logger
 
-  constructor(label: string, private readonly parentDiv: HTMLDivElement) {
+  constructor(label: string, private readonly parentDiv: HTMLElement) {
     this.errorSpan = document.createElement('span')
     this.errorSpan.className = 'error-span'
     this.errorSpan.style.opacity = '0'

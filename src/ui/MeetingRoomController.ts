@@ -11,16 +11,15 @@ import { Logger } from '../global/Logger'
 enum VideoLayout {
   SPOTLIGHT = 'spotlight',
   SOLO = 'solo',
-  GRID = 'grid'
+  GRID = 'grid',
 }
 
 class VideoContainer {
-
   private peakMeter: PeakMeterController | null = null
   isActive = false
 
   constructor(
-    readonly divElement: HTMLDivElement, 
+    readonly divElement: HTMLDivElement,
     readonly vidElement: HTMLVideoElement,
     meetingRoomController: MeetingRoomController,
     readonly audioElement: HTMLDivElement | null = null,
@@ -56,13 +55,18 @@ class VideoContainer {
 export class MeetingRoomController {
   private videoLayout = VideoLayout.GRID
   private usernameForm = document.getElementById('username-form') as HTMLFormElement
-  private currentState: State = { members: [], roomName: null, screenShare: null, error: null }
+  private enterMeetingButton = document.getElementById('enter-meeting-room-button') as HTMLButtonElement
+
+  private currentState: State = { members: [], roomId: null, screenShare: null, error: null }
   private remoteMediaClient: RemoteMediaClient2 | null = null
 
-  private readonly usernameErrorBubble = new ErrorBubbleController('MeetingUsername', this.usernameForm.parentElement as HTMLDivElement)
-  private readonly createMeetingErrorBubble = new ErrorBubbleController(
-    'CreateMeetingButton',
-    document.getElementById('create-meeting-button') as HTMLDivElement,
+  private readonly usernameErrorBubble = new ErrorBubbleController(
+    'MeetingUsername',
+    this.usernameForm.parentElement as HTMLDivElement,
+  )
+  private readonly enterMeetingErrorBubble = new ErrorBubbleController(
+    'EnterMeetingButton',
+    this.enterMeetingButton,
   )
   private readonly notificationsController = new NotificationsController()
   private readonly micButtonController: MediaStreamButtonController
@@ -113,7 +117,7 @@ export class MeetingRoomController {
     this.setUiForDisconnectedState()
     this.applyVideoLayout()
     this.selfVideoContainer.isActive = true
-    this.guestContainers.forEach(c => c.isActive = false)
+    this.guestContainers.forEach((c) => (c.isActive = false))
 
     LocalMediaStreams.registerAVDeviceListener((added, track) => {
       if (track.kind == 'video') {
@@ -147,7 +151,7 @@ export class MeetingRoomController {
 
   async createMeeting(): Promise<boolean> {
     if (this.remoteMediaClient) {
-      this.createMeetingErrorBubble.showError('You are already connected.')
+      this.enterMeetingErrorBubble.showError('You are already connected.')
       return false
     }
     const username = this.usernameForm.value
@@ -156,13 +160,14 @@ export class MeetingRoomController {
       return false
     }
     this.remoteMediaClient = new RemoteMediaClient2(username)
-    this.remoteMediaClient.addStateListener(state => this.stateListener(this, state))
+    this.remoteMediaClient.addStateListener((state) => this.stateListener(this, state))
     this.setUiForConnectedState()
     return true
   }
 
   async joinMeeting(): Promise<boolean> {
     if (this.remoteMediaClient) {
+      this.enterMeetingErrorBubble.showError('You are already connected.')
       return false
     }
 
@@ -179,7 +184,7 @@ export class MeetingRoomController {
 
       this.logger.log('About to join ' + meetingId)
       this.remoteMediaClient = new RemoteMediaClient2(username, meetingId)
-      this.remoteMediaClient.addStateListener(state => this.stateListener(this, state))
+      this.remoteMediaClient.addStateListener((state) => this.stateListener(this, state))
       this.setUiForConnectedState()
     }
     return false
@@ -207,11 +212,25 @@ export class MeetingRoomController {
     this.applyVideoLayout()
   }
 
+  async copyMeetingLink() {
+    const meetingLink = this.getMeetingLink()
+    if (!meetingLink) {
+      this.notificationsController.showError('Meeting link is not available yet.')
+      return
+    }
+    try {
+      await navigator.clipboard.writeText(meetingLink)
+      this.notificationsController.showShortDurationMessage('Meeting link copied.')
+    } catch (_) {
+      this.notificationsController.showError('Unable to copy the meeting link.')
+    }
+  }
+
   applyVideoLayout() {
     switch (this.videoLayout) {
       case 'spotlight':
         this.firstContainer.divElement.classList = 'vid-div meeting-spotlit'
-        const containers = [...this.containers().filter(c => c.isActive)]
+        const containers = [...this.containers().filter((c) => c.isActive)]
         let i = 0
         for (const container of containers) {
           if (container != this.firstContainer) {
@@ -238,7 +257,7 @@ export class MeetingRoomController {
         break
       case 'grid':
         const guestCount = this.currentState.members.length
-        switch(guestCount) {
+        switch (guestCount) {
           case 0:
             this.selfVideoContainer.divElement.classList = 'vid-div meeting-solo'
             this.selfVideoContainer.divElement.style.top = ''
@@ -312,7 +331,7 @@ export class MeetingRoomController {
       this.setUiForDisconnectedState()
       return
     }
-    
+
     if (state.screenShare) {
       if (state.screenShare == 'self') {
         this.screenVideoContainer.vidElement.srcObject = LocalMediaStreams.localScreenMediaStream
@@ -331,9 +350,10 @@ export class MeetingRoomController {
     for (let i = 0; i < this.guestContainers.length; ++i) {
       if (state.members.length > i) {
         this.guestContainers[i].vidElement.srcObject = state.members[i].mediaStream
-        this.guestContainers[i].startPeakMeter(AudioInputs.remoteStreams.get(
-          { username: state.members[i].username, isScreenShare: false}
-        )!)
+        this.guestContainers[i].vidElement.poster = this.getSvgPosterForUser(state.members[i].username, false)
+        // this.guestContainers[i].startPeakMeter(
+        //   AudioInputs.remoteStreams.get({ username: state.members[i].username, isScreenShare: false })!,
+        // )
         this.guestContainers[i].isActive = true
       } else {
         this.guestContainers[i].vidElement.srcObject = null
@@ -343,6 +363,7 @@ export class MeetingRoomController {
     }
     meetingRoomController.applyVideoLayout()
     this.currentState = { ...state }
+    this.updateMeetingLinkUi()
   }
 
   private setUiForDisconnectedState() {
@@ -361,6 +382,17 @@ export class MeetingRoomController {
     this.closeLayoutMenu()
     this.spotlightElement(this.selfVideoContainer)
     this.applyVideoLayout()
+    this.currentState = { members: [], roomId: null, screenShare: null, error: null }
+    this.updateMeetingLinkUi()
+
+    const meetingParam = new URL(window.location.toString()).searchParams.get('meeting')
+    if (meetingParam) {
+      this.enterMeetingButton.onclick = () => this.joinMeeting()
+      this.enterMeetingButton.innerText = 'Join Meeting'
+    } else {
+      this.enterMeetingButton.onclick = () => this.createMeeting()
+      this.enterMeetingButton.innerText = 'Create Meeting'
+    }
   }
 
   private setUiForConnectedState() {
@@ -378,14 +410,41 @@ export class MeetingRoomController {
     this.videoLayout = VideoLayout.GRID
     this.closeLayoutMenu()
     this.applyVideoLayout()
+    this.updateMeetingLinkUi()
   }
 
   private updateLayoutSelectionUi() {
     for (const layout of Object.values(VideoLayout)) {
       const selected = layout == this.videoLayout
       document.getElementById(`meeting-layout-check-${layout}`)!.classList.toggle('selected', selected)
-      document.getElementById(`meeting-layout-option-${layout}`)!.setAttribute('aria-checked', selected ? 'true' : 'false')
+      document
+        .getElementById(`meeting-layout-option-${layout}`)!
+        .setAttribute('aria-checked', selected ? 'true' : 'false')
     }
+  }
+
+  private updateMeetingLinkUi() {
+    const linkBox = document.getElementById('meeting-link-box') as HTMLDivElement
+    const linkElement = document.getElementById('meeting-link') as HTMLButtonElement
+    const meetingLink = this.getMeetingLink()
+
+    if (!this.currentState.roomId || !meetingLink || !this.remoteMediaClient) {
+      linkBox.style.display = 'none'
+      linkElement.innerText = ''
+      return
+    }
+
+    linkBox.style.display = 'flex'
+    linkElement.innerText = meetingLink
+  }
+
+  private getMeetingLink() {
+    if (!this.currentState.roomId) {
+      return null
+    }
+    const url = new URL(window.location.href)
+    url.searchParams.set('meeting', this.currentState.roomId)
+    return url.toString()
   }
 
   private getSvgPosterForUser(username: string, isSelf: boolean) {

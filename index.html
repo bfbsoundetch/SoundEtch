@@ -1,747 +1,952 @@
 <!doctype html>
 <html>
-
-<head>
-  <link rel="stylesheet" href="index.css" />
-  <link rel="icon" type="image/svg+xml"
-    href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 500 500'%3E%3Cstyle%3E svg %7B --c: rgb(0, 0, 0); --f: %2300000030; %7D @media (prefers-color-scheme: dark) %7B svg %7B --c: rgb(255,255,255); --f: %23FFFFFF30; %7D %7D %3C/style%3E%3Cpath style='fill: var(--f); stroke-width: 25px; stroke: var(--c);' d='M -5 125 A 225 225 0 0 1 100 250 A 225 225 0 0 1 540 250 A 225 225 0 0 1 100 250 A 225 225 0 0 1 -5 375'%3E%3C/path%3E%3Ctext style='fill: var(--c); font-family: Georgia; font-size: 60px; font-weight: 700; letter-spacing: 2px; white-space: pre;' x='390' y='260'%3ESE%3C/text%3E%3C/svg%3E" />
-</head>
-<title>SoundEtch</title>
-<script type="module" src="./src/WebEntrypoint.js"></script>
-<script type="module" src="./src/Global.ts"></script>
-<script>
-  // window.addEventListener('beforeunload', (event) => {
-  //     event.returnValue = 'Are you sure you want to quit?'
-  //     return true
-  // })
-  function toggleMenuOpenedState() {
-    const openButtonDisplay = document.getElementById('main-menu-open-button').style.display
-    document.getElementById('main-menu-open-button').style.display =
-      document.getElementById('main-menu-close-button').style.display
-    document.getElementById('main-menu-close-button').style.display = openButtonDisplay
-  }
-  function audioFileLocalHandler() {
-    const inputForm = document.getElementById('audio-file-local')
-    if (inputForm.files.length == 1) {
-      Recorder.createFromFile(inputForm.files[0])
-    } else {
-      console.error('test failed ;(')
+  <head>
+    <link rel="stylesheet" href="index.css" />
+    <link
+      rel="icon"
+      type="image/svg+xml"
+      href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 500 500'%3E%3Cstyle%3E svg %7B --c: rgb(0, 0, 0); --f: %2300000030; %7D @media (prefers-color-scheme: dark) %7B svg %7B --c: rgb(255,255,255); --f: %23FFFFFF30; %7D %7D %3C/style%3E%3Cpath style='fill: var(--f); stroke-width: 25px; stroke: var(--c);' d='M -5 125 A 225 225 0 0 1 100 250 A 225 225 0 0 1 540 250 A 225 225 0 0 1 100 250 A 225 225 0 0 1 -5 375'%3E%3C/path%3E%3Ctext style='fill: var(--c); font-family: Georgia; font-size: 60px; font-weight: 700; letter-spacing: 2px; white-space: pre;' x='390' y='260'%3ESE%3C/text%3E%3C/svg%3E"
+    />
+  </head>
+  <title>SoundEtch</title>
+  <script type="module" src="./src/WebEntrypoint.js"></script>
+  <script type="module" src="./src/Global.ts"></script>
+  <script>
+    // window.addEventListener('beforeunload', (event) => {
+    //     event.returnValue = 'Are you sure you want to quit?'
+    //     return true
+    // })
+    function toggleMenuOpenedState() {
+      const openButtonDisplay = document.getElementById('main-menu-open-button').style.display
+      document.getElementById('main-menu-open-button').style.display =
+        document.getElementById('main-menu-close-button').style.display
+      document.getElementById('main-menu-close-button').style.display = openButtonDisplay
     }
-  }
-  function audioFileRemoteHandler() {
-    const inputForm = document.getElementById('audio-file-url')
-    if (!URL.canParse(inputForm.value)) {
-      return
-    }
-    Recorder.createFromUrl(inputForm.value)
-  }
-  function setAddClipSource(sourceType) {
-    const localSection = document.getElementById('add-clip-local-section')
-    const remoteSection = document.getElementById('add-clip-remote-section')
-    if (sourceType === 'local') {
-      localSection.style.display = 'block'
-      remoteSection.style.display = 'none'
-    } else {
-      localSection.style.display = 'none'
-      remoteSection.style.display = 'flex'
-    }
-  }
-
-  function showDialog(dialogElement) {
-    const menuDropdown = document.getElementById('menu-dropdown')
-    if (menuDropdown.matches(':popover-open')) {
-      menuDropdown.hidePopover()
-    }
-    if (dialogElement.id == 'meeting-room' && !window.meetingRoomController) {
-      window.meetingRoomController = new window.MeetingRoomController()
-    }
-    dialogElement.showModal()
-  }
-
-  document.addEventListener('DOMContentLoaded', () => {
-    window.trackListController = new window.TrackListController()
-    window.audioInputsController = new window.AudioInputsController()
-    window.keyPressController = new window.KeyPressController()
-    window.headerController = new window.HeaderController()
-    window.exportProjectController = new window.ExportProjectController()
-    window.logsModalController = new window.LogsModalController()
-    window.processingModalController = new window.ProcessingModalController()
-    window.clipManagerController = new window.ClipManagerController()
-    if (window.location.search) {
-      const meetingParam = new URL(window.location).searchParams.get('meeting')
-      if (meetingParam) {
-        showDialog(document.getElementById('meeting-room-button'))
+    function audioFileLocalHandler() {
+      const inputForm = document.getElementById('audio-file-local')
+      if (inputForm.files.length == 1) {
+        Recorder.createFromFile(inputForm.files[0])
+      } else {
+        console.error('test failed ;(')
       }
     }
-    const menuDropdown = document.getElementById('menu-dropdown')
+    function audioFileRemoteHandler() {
+      const inputForm = document.getElementById('audio-file-url')
+      if (!URL.canParse(inputForm.value)) {
+        return
+      }
+      Recorder.createFromUrl(inputForm.value)
+    }
+    function setAddClipSource(sourceType) {
+      const localSection = document.getElementById('add-clip-local-section')
+      const remoteSection = document.getElementById('add-clip-remote-section')
+      if (sourceType === 'local') {
+        localSection.style.display = 'block'
+        remoteSection.style.display = 'none'
+      } else {
+        localSection.style.display = 'none'
+        remoteSection.style.display = 'flex'
+      }
+    }
 
-    menuDropdown.addEventListener('toggle', () => {
-      toggleMenuOpenedState()
-    })
+    function showDialog(dialogElement) {
+      const menuDropdown = document.getElementById('menu-dropdown')
+      if (menuDropdown.matches(':popover-open')) {
+        menuDropdown.hidePopover()
+      }
+      if (dialogElement.id == 'meeting-room' && !window.meetingRoomController) {
+        window.meetingRoomController = new window.MeetingRoomController()
+      }
+      dialogElement.showModal()
+    }
 
-    document.querySelectorAll('dialog.overlay').forEach((dialogElement) => {
-      dialogElement.addEventListener('click', (event) => {
-        if (event.target === dialogElement && !dialogElement.classList.contains('no-backdrop-close')) {
-          dialogElement.close()
+    document.addEventListener('DOMContentLoaded', () => {
+      window.trackListController = new window.TrackListController()
+      window.audioInputsController = new window.AudioInputsController()
+      window.keyPressController = new window.KeyPressController()
+      window.headerController = new window.HeaderController()
+      window.exportProjectController = new window.ExportProjectController()
+      window.logsModalController = new window.LogsModalController()
+      window.processingModalController = new window.ProcessingModalController()
+      window.clipManagerController = new window.ClipManagerController()
+      if (window.location.search) {
+        const meetingParam = new URL(window.location).searchParams.get('meeting')
+        if (meetingParam) {
+          showDialog(document.getElementById('meeting-room'))
         }
+      }
+      const menuDropdown = document.getElementById('menu-dropdown')
+
+      menuDropdown.addEventListener('toggle', () => {
+        toggleMenuOpenedState()
+      })
+
+      document.querySelectorAll('dialog.overlay').forEach((dialogElement) => {
+        dialogElement.addEventListener('click', (event) => {
+          if (event.target === dialogElement && !dialogElement.classList.contains('no-backdrop-close')) {
+            dialogElement.close()
+          }
+        })
       })
     })
-  })
-  function closeOverlay() {
-    document.querySelectorAll('.overlay').forEach((overlay) => {
-      overlay.close()
-    })
-  }
-  //For my testing. Open with Audacity: File > Import > Raw Data
-  async function downloadClip(id) {
-    const activeProject = ProjectManager.getActiveProject()
-    const rootDir = await navigator.storage.getDirectory()
-    const dirHandle = await rootDir.getDirectoryHandle(activeProject.title)
-    const fileHandle = await dirHandle.getFileHandle(`${id}`)
-    const outputFile = await showSaveFilePicker()
-    const writer = await outputFile.createWritable()
-    await writer.write(await fileHandle.getFile())
-    await writer.close()
-  }
+    function closeOverlay() {
+      document.querySelectorAll('.overlay').forEach((overlay) => {
+        overlay.close()
+      })
+    }
+    //For my testing. Open with Audacity: File > Import > Raw Data
+    async function downloadClip(id) {
+      const activeProject = ProjectManager.getActiveProject()
+      const rootDir = await navigator.storage.getDirectory()
+      const dirHandle = await rootDir.getDirectoryHandle(activeProject.title)
+      const fileHandle = await dirHandle.getFileHandle(`${id}`)
+      const outputFile = await showSaveFilePicker()
+      const writer = await outputFile.createWritable()
+      await writer.write(await fileHandle.getFile())
+      await writer.close()
+    }
 
-  function setUpKeyListener() {
-    const keysDown = {}
-    document.onkeydown = (e) => {
-      keysDown[e.key] = true
-      if (keysDown['Control'] && keysDown['`']) {
-        const chatLogElement = document.getElementById('log')
-        if (chatLogElement) {
-          const newDisplayState = chatLogElement?.style.display == 'none' ? 'block' : 'none'
-          chatLogElement.style.display = newDisplayState
+    function setUpKeyListener() {
+      const keysDown = {}
+      document.onkeydown = (e) => {
+        keysDown[e.key] = true
+        if (keysDown['Control'] && keysDown['`']) {
+          const chatLogElement = document.getElementById('log')
+          if (chatLogElement) {
+            const newDisplayState = chatLogElement?.style.display == 'none' ? 'block' : 'none'
+            chatLogElement.style.display = newDisplayState
+          }
         }
       }
+      document.onkeyup = (e) => {
+        delete keysDown[e.key]
+      }
     }
-    document.onkeyup = (e) => {
-      delete keysDown[e.key]
-    }
-  }
-</script>
+  </script>
 
-<body>
-  <div class="topdiv">
-    <div class="header-container">
-      <button class="menu-button clickable" id="menu-button" popovertarget="menu-dropdown">
-        <svg id="main-menu-open-button" viewBox="0 0 500 500">
-          <use xlink:href="#menu-hamburger" />
-        </svg>
-        <svg style="display: none" id="main-menu-close-button" viewBox="0 0 500 500">
-          <use xlink:href="#menu-close" />
-        </svg>
-      </button>
-      <div popover="auto" id="menu-dropdown">
-        <div class="menu-item clickable">Edit</div>
-        <button class="menu-item clickable">Settings</button>
-        <button class="menu-item clickable" onclick="showDialog(document.getElementById('export-project-modal'))">
-          Export
+  <body>
+    <div class="topdiv">
+      <div class="header-container">
+        <button class="menu-button clickable" id="menu-button" popovertarget="menu-dropdown">
+          <svg id="main-menu-open-button" viewBox="0 0 500 500">
+            <use xlink:href="#menu-hamburger" />
+          </svg>
+          <svg style="display: none" id="main-menu-close-button" viewBox="0 0 500 500">
+            <use xlink:href="#menu-close" />
+          </svg>
         </button>
-        <button id="open-clip-manager-modal-button" class="menu-item clickable">Manage Clips</button>
-        <button id="open-logs-modal-button" class="menu-item clickable">Logs</button>
-        <button class="menu-item clickable" onclick="showDialog(document.getElementById('about-modal'))">About</button>
-      </div>
-      <div id="title">
-        <svg style="height: 100%" viewBox="0 0 600 100">
-          <use xlink:href="#logo" />
-        </svg>
-      </div>
-      <div id="project-header">
-        <button id="first-header-button" class="project-button clickable">
-          <svg class="header-button record" viewBox="0 0 500 500">
-            <use xlink:href="#record" />
-          </svg>
-          <svg class="header-button play" viewBox="0 0 500 500" style="opacity: 0">
-            <use xlink:href="#play" />
-          </svg>
-          <span>Record</span>
-        </button>
-        <button id="second-header-button" class="project-button clickable">
-          <svg class="header-button play" viewBox="0 0 500 500">
-            <use xlink:href="#play" />
-          </svg>
-          <svg class="header-button pause" viewBox="0 0 500 500" style="opacity: 0">
-            <use xlink:href="#pause" />
-          </svg>
-          <span>Play</span>
-        </button>
-        <button id="third-header-button" class="project-button clickable">
-          <svg class="header-button plus" viewBox="0 0 500 500">
-            <use xlink:href="#audio-file" />
-          </svg>
-          <svg class="header-button stop" viewBox="0 0 500 500" style="opacity: 0">
-            <use xlink:href="#stop" />
-          </svg>
-          <span>Add Clip...</span>
-        </button>
-        <div></div>
-        <button id="mic-button" style="border-left:solid;" class="project-button clickable">
-          <svg class="header-button" viewBox="0 0 500 500">
-            <use xlink:href="#microphone" />
-          </svg>
-          <span>Microphone</span>
-        </button>
-        <button id="capture-tab-button" class="project-button clickable">
-          <svg class="header-button" viewBox="0 0 500 500">
-            <use xlink:href="#browser-tab" />
-          </svg>
-          <span>Screen / Tab</span>
-        </button>
-        <button id="meeting-room-button" class="project-button clickable"
-          onclick="showDialog(document.getElementById('meeting-room'))">
-          <svg class="header-button" viewBox="0 0 500 500">
-            <use xlink:href="#meeting" />
-          </svg>
-          <span>Guests...</span>
-        </button>
-      </div>
-    </div>
-    <div id="timeline-info-area">
-      <div id="audio-input-buttons"></div>
-      <div id="input-info-list"></div>
-      <div id="track-info-list"></div>
-    </div>
-    <div id="timeline-area">
-      <div id="timeline">
-        <svg id="timeline-svg" style="height: 100%; width: 100%; user-select: none"
-          xmlns="http://www.w3.org/2000/svg"></svg>
-      </div>
-      <div id="input-list"></div>
-      <div id="track-list"></div>
-      <svg id="position-marker" style="position: absolute; width: calc(100% - 14rem); right: 0; pointer-events: none"
-        xmlns="http://www.w3.org/2000/svg">
-        <line id="position-line" x1="150" y1="30" x2="150" y2="600" stroke-width="2" visibility="hidden"></line>
-        <text id="pointer-position-text" stroke="none" x="0" y="15" dominant-baseline="middle" text-anchor="middle"
-          style="font-family: 'Courier New', Courier, monospace"></text>
-      </svg>
-    </div>
-  </div>
-  <dialog id="add-clip-modal" class="overlay">
-    <div id="add-clip-modal-content" class="overlay-content add-clip-modal-content" onclick="event.stopPropagation()">
-      <div class="overlay-close-button clickable" onclick="closeOverlay()">
-        <svg class="meeting-icon" viewBox="0 0 500 500">
-          <use xlink:href="#menu-close" />
-        </svg>
-      </div>
-      <h1>Add Clip</h1>
-      <div class="add-clip-source-toggle">
-        <label class="add-clip-source-option">
-          <input type="radio" name="add-clip-source" checked onchange="setAddClipSource('local')" />
-          Local file
-        </label>
-        <label class="add-clip-source-option">
-          <input type="radio" name="add-clip-source" onchange="setAddClipSource('remote')" />
-          Remote URL
-        </label>
-      </div>
-      <div id="add-clip-local-section">
-        <label class="menu-item clickable add-clip-option" for="audio-file-local">Choose local file...</label>
-        <input type="file" id="audio-file-local" accept="audio/*" hidden onchange="audioFileLocalHandler()" />
-      </div>
-      <div id="add-clip-remote-section" class="add-clip-url-option" style="display: none">
-        <label for="audio-file-url">From URL</label>
-        <input type="text" id="audio-file-url" placeholder="https://example.com/audio-file.wav" />
-        <button class="menu-item clickable add-clip-option" onclick="audioFileRemoteHandler()">Load remote file</button>
-      </div>
-    </div>
-  </dialog>
-  <dialog id="about-modal" class="overlay">
-    <div id="about-modal-content" class="overlay-content" onclick="event.stopPropagation()">
-      <div class="overlay-close-button clickable" onclick="closeOverlay()">
-        <svg class="meeting-icon" viewBox="0 0 500 500">
-          <use xlink:href="#menu-close" />
-        </svg>
-      </div>
-      <h1>About SoundEtch</h1>
-      <p>
-        SoundEtch is a browser-based audio recorder and editor built for quickly capturing ideas, interviews,
-        and collaborative sessions without installing a desktop app.
-      </p>
-      <p>
-        You can record from microphones, tab/screen audio, or imported files, then trim, layer, and export in
-        multiple formats.
-      </p>
-      <p>
-        Thanks for trying this preview. Feedback and rough edges are both welcome while the app keeps evolving.
-      </p>
-    </div>
-  </dialog>
-  <dialog id="meeting-room" class="overlay">
-    <div id="meeting-room-content" onclick="event.stopPropagation()">
-      <div class="overlay-close-button clickable" onclick="closeOverlay()">
-        <svg class="meeting-icon" viewBox="0 0 500 500">
-          <use xlink:href="#menu-close" />
-        </svg>
-      </div>
-      <div id="vids" class="meeting-solo">
-        <div id="self-meeting" class="vid-div">
-          <video id="self-vid" style="display:inline-block;"></video>
-          <div id="self-meeting-peak" class="meeting-peak-meter-div"></div>
+        <div popover="auto" id="menu-dropdown">
+          <div class="menu-item clickable">Edit</div>
+          <button class="menu-item clickable">Settings</button>
+          <button class="menu-item clickable" onclick="showDialog(document.getElementById('export-project-modal'))">
+            Export
+          </button>
+          <button id="open-clip-manager-modal-button" class="menu-item clickable">Manage Clips</button>
+          <button id="open-logs-modal-button" class="menu-item clickable">Logs</button>
+          <button class="menu-item clickable" onclick="showDialog(document.getElementById('about-modal'))">
+            About
+          </button>
         </div>
-        <div id="screen-share-meeting" class="vid-div">
-          <video id="screen-share-vid" style="display:inline-block;"></video>
+        <div id="title">
+          <svg style="height: 100%" viewBox="0 0 600 100">
+            <use xlink:href="#logo" />
+          </svg>
         </div>
-        <div id="guest-one-meeting" class="vid-div">
-          <video id="guest-one-vid" style="display:inline-block;"></video>
-          <div id="guest-one-meeting-peak" class="meeting-peak-meter-div"></div>
-        </div>
-        <div id="guest-two-meeting" class="vid-div">
-          <video id="guest-two-vid" style="display:inline-block;"></video>
-          <div id="guest-two-meeting-peak" class="meeting-peak-meter-div"></div>
-        </div>
-        <div id="guest-three-meeting" class="vid-div">
-          <video id="guest-three-vid" style="display:inline-block;"></video>
-          <div id="guest-three-peak" class="meeting-peak-meter-div"></div>
-        </div>
-      </div>
-      <div id="meeting-setup">
-        <div id="meeting-device-setup-controls">
-          <div id="meeting-mic-button" class="meeting-button clickable" style="user-select: none; flex: 1"
-            onclick="LocalMediaStreams.startAudioDevice()">
-            <svg class="meeting-icon" viewBox="0 0 500 500">
+        <div id="project-header">
+          <button id="first-header-button" class="project-button tooltipped clickable">
+            <svg class="header-button record" viewBox="0 0 500 500">
+              <use xlink:href="#record" />
+            </svg>
+            <svg class="header-button play" viewBox="0 0 500 500" style="opacity: 0">
+              <use xlink:href="#play" />
+            </svg>
+            <span>Record</span>
+          </button>
+          <button id="second-header-button" class="project-button tooltipped clickable">
+            <svg class="header-button play" viewBox="0 0 500 500">
+              <use xlink:href="#play" />
+            </svg>
+            <svg class="header-button pause" viewBox="0 0 500 500" style="opacity: 0">
+              <use xlink:href="#pause" />
+            </svg>
+            <span>Play</span>
+          </button>
+          <button id="third-header-button" class="project-button tooltipped clickable">
+            <svg class="header-button plus" viewBox="0 0 500 500">
+              <use xlink:href="#audio-file" />
+            </svg>
+            <svg class="header-button stop" viewBox="0 0 500 500" style="opacity: 0">
+              <use xlink:href="#stop" />
+            </svg>
+            <span>Add Clip...</span>
+          </button>
+          <div></div>
+          <button id="mic-button" style="border-left: solid" class="project-button tooltipped clickable">
+            <svg class="header-button" viewBox="0 0 500 500">
               <use xlink:href="#microphone" />
             </svg>
             <span>Microphone</span>
-          </div>
-          <div id="meeting-camera-button" class="meeting-button clickable" style="user-select: none; flex: 1"
-            onclick="LocalMediaStreams.startVideoDevice()">
-            <svg class="meeting-icon" viewBox="0 0 500 500">
-              <use xlink:href="#camera" />
+          </button>
+          <button id="capture-tab-button" class="project-button tooltipped clickable">
+            <svg class="header-button" viewBox="0 0 500 500">
+              <use xlink:href="#browser-tab" />
             </svg>
-            <span>Camera</span>
+            <span>Screen / Tab</span>
+          </button>
+          <button
+            id="meeting-room-button"
+            class="project-button tooltipped clickable"
+            onclick="showDialog(document.getElementById('meeting-room'))"
+          >
+            <svg class="header-button" viewBox="0 0 500 500">
+              <use xlink:href="#meeting" />
+            </svg>
+            <span>Guests...</span>
+          </button>
+        </div>
+      </div>
+      <div id="timeline-info-area">
+        <div id="audio-input-buttons"></div>
+        <div id="input-info-list"></div>
+        <div id="track-info-list"></div>
+      </div>
+      <div id="timeline-area">
+        <div id="timeline">
+          <svg
+            id="timeline-svg"
+            style="height: 100%; width: 100%; user-select: none"
+            xmlns="http://www.w3.org/2000/svg"
+          ></svg>
+        </div>
+        <div id="input-list"></div>
+        <div id="track-list"></div>
+        <svg
+          id="position-marker"
+          style="position: absolute; width: calc(100% - 14rem); right: 0; pointer-events: none"
+          xmlns="http://www.w3.org/2000/svg"
+        >
+          <line id="position-line" x1="150" y1="30" x2="150" y2="600" stroke-width="2" visibility="hidden"></line>
+          <text
+            id="pointer-position-text"
+            stroke="none"
+            x="0"
+            y="15"
+            dominant-baseline="middle"
+            text-anchor="middle"
+            style="font-family: 'Courier New', Courier, monospace"
+          ></text>
+        </svg>
+      </div>
+    </div>
+    <dialog id="add-clip-modal" class="overlay">
+      <div id="add-clip-modal-content" class="overlay-content add-clip-modal-content" onclick="event.stopPropagation()">
+        <div class="overlay-close-button clickable" onclick="closeOverlay()">
+          <svg class="meeting-icon" viewBox="0 0 500 500">
+            <use xlink:href="#menu-close" />
+          </svg>
+        </div>
+        <h1>Add Clip</h1>
+        <div class="add-clip-source-toggle">
+          <label class="add-clip-source-option">
+            <input type="radio" name="add-clip-source" checked onchange="setAddClipSource('local')" />
+            Local file
+          </label>
+          <label class="add-clip-source-option">
+            <input type="radio" name="add-clip-source" onchange="setAddClipSource('remote')" />
+            Remote URL
+          </label>
+        </div>
+        <div id="add-clip-local-section">
+          <label class="menu-item clickable add-clip-option" for="audio-file-local">Choose local file...</label>
+          <input type="file" id="audio-file-local" accept="audio/*" hidden onchange="audioFileLocalHandler()" />
+        </div>
+        <div id="add-clip-remote-section" class="add-clip-url-option" style="display: none">
+          <label for="audio-file-url">From URL</label>
+          <input type="text" id="audio-file-url" placeholder="https://example.com/audio-file.wav" />
+          <button class="menu-item clickable add-clip-option" onclick="audioFileRemoteHandler()">
+            Load remote file
+          </button>
+        </div>
+      </div>
+    </dialog>
+    <dialog id="about-modal" class="overlay">
+      <div id="about-modal-content" class="overlay-content" onclick="event.stopPropagation()">
+        <div class="overlay-close-button clickable" onclick="closeOverlay()">
+          <svg class="meeting-icon" viewBox="0 0 500 500">
+            <use xlink:href="#menu-close" />
+          </svg>
+        </div>
+        <h1>About SoundEtch</h1>
+        <p>
+          SoundEtch is a browser-based audio recorder and editor built for quickly capturing ideas, interviews, and
+          collaborative sessions without installing a desktop app.
+        </p>
+        <p>
+          You can record from microphones, tab/screen audio, or imported files, then trim, layer, and export in multiple
+          formats.
+        </p>
+        <p>Thanks for trying this preview. Feedback and rough edges are both welcome while the app keeps evolving.</p>
+      </div>
+    </dialog>
+    <dialog id="meeting-room" class="overlay">
+      <div id="meeting-room-content" onclick="event.stopPropagation()">
+        <div class="overlay-close-button clickable" onclick="closeOverlay()">
+          <svg class="meeting-icon" viewBox="0 0 500 500">
+            <use xlink:href="#menu-close" />
+          </svg>
+        </div>
+        <div id="vids" class="meeting-solo">
+          <div id="self-meeting" class="vid-div">
+            <video id="self-vid" style="display: inline-block"></video>
+            <div id="self-meeting-peak" class="meeting-peak-meter-div"></div>
+          </div>
+          <div id="screen-share-meeting" class="vid-div">
+            <video id="screen-share-vid" style="display: inline-block"></video>
+          </div>
+          <div id="guest-one-meeting" class="vid-div">
+            <video id="guest-one-vid" style="display: inline-block"></video>
+            <div id="guest-one-meeting-peak" class="meeting-peak-meter-div"></div>
+          </div>
+          <div id="guest-two-meeting" class="vid-div">
+            <video id="guest-two-vid" style="display: inline-block"></video>
+            <div id="guest-two-meeting-peak" class="meeting-peak-meter-div"></div>
+          </div>
+          <div id="guest-three-meeting" class="vid-div">
+            <video id="guest-three-vid" style="display: inline-block"></video>
+            <div id="guest-three-peak" class="meeting-peak-meter-div"></div>
           </div>
         </div>
-        <div id="meeting-room-setup" style="user-select: none; padding: 0.25rem">
-          <div style="grid-area: username-form; position: relative">
-            <input type="text" name="Username" id="username-form" autocomplete="off" required minlength="4" maxlength="32"
-              size="16" title="Username" placeholder="Enter Your Name"
-              style="font-size: x-large; box-sizing: border-box; width: 100%; height: 100%; text-align: center"
-              oninput="this.value = this.value.replace(/[^a-zA-Z0-9 \-_]/g, '')" />
+        <div id="meeting-setup">
+          <div id="meeting-device-setup-controls">
+            <div
+              id="meeting-mic-button"
+              class="meeting-button tooltipped clickable"
+              onclick="LocalMediaStreams.startAudioDevice()"
+            >
+              <svg class="meeting-icon" viewBox="0 0 500 500">
+                <use xlink:href="#microphone" />
+              </svg>
+              <span>Microphone</span>
+            </div>
+            <div
+              id="meeting-camera-button"
+              class="meeting-button tooltipped clickable"
+              onclick="LocalMediaStreams.startVideoDevice()"
+            >
+              <svg class="meeting-icon" viewBox="0 0 500 500">
+                <use xlink:href="#camera" />
+              </svg>
+              <span>Camera</span>
+            </div>
           </div>
-          <div id="create-meeting-button" class="meeting-button clickable" style="
+          <div id="meeting-room-setup" style="user-select: none; padding: 0.25rem">
+            <div style="grid-area: username-form; position: relative">
+              <input
+                type="text"
+                name="Username"
+                id="username-form"
+                autocomplete="off"
+                required
+                minlength="4"
+                maxlength="32"
+                size="16"
+                title="Username"
+                placeholder="Enter Your Name"
+                style="font-size: x-large; box-sizing: border-box; width: 100%; height: 100%; text-align: center"
+                oninput="this.value = this.value.replace(/[^a-zA-Z0-9 \-_]/g, '')"
+              />
+            </div>
+            <button
+              id="enter-meeting-room-button"
+              class="meeting-button tooltipped clickable"
+              style="
                 user-select: none;
                 grid-area: create-button;
                 display: grid;
                 align-items: center;
                 justify-content: center;
                 position: relative;
-              " onclick="meetingRoomController.createMeeting()">
-            Create Meeting
-          </div>
-        </div>
-      </div>
-      <div id="meeting-controls">
-        <div id="meeting-disconnect-button" class="meeting-button clickable"
-          style="user-select: none; flex: 1; color: rgba(255, 100, 100)" onclick="meetingRoomController.disconnect()">
-          Disconnect
-        </div>
-        <div id="meeting-layout-selector" style="position: relative; flex: 1">
-          <button id="switch-meeting-layout-button" type="button" class="meeting-button clickable" style="user-select: none; height: 100%"
-            aria-expanded="false" aria-controls="meeting-layout-menu" onclick="meetingRoomController.toggleLayoutMenu()">
-            Select Layout
-          </button>
-          <div id="meeting-layout-menu" class="meeting-layout-menu" role="menu" aria-label="Select meeting layout">
-            <button id="meeting-layout-option-grid" type="button" class="meeting-layout-option clickable" role="menuitemradio" aria-checked="false"
-              onclick="meetingRoomController.selectVideoLayout('grid')">
-              <span id="meeting-layout-check-grid" class="meeting-layout-check">&#10003;<!--checkmark--></span>
-              <span>grid</span>
-            </button>
-            <button id="meeting-layout-option-spotlight" type="button" class="meeting-layout-option clickable" role="menuitemradio" aria-checked="false"
-              onclick="meetingRoomController.selectVideoLayout('spotlight')">
-              <span id="meeting-layout-check-spotlight" class="meeting-layout-check">&#10003;</span>
-              <span>spotlight</span>
-            </button>
-            <button id="meeting-layout-option-solo" type="button" class="meeting-layout-option clickable" role="menuitemradio" aria-checked="false"
-              onclick="meetingRoomController.selectVideoLayout('solo')">
-              <span id="meeting-layout-check-solo" class="meeting-layout-check">&#10003;</span>
-              <span>solo</span>
+              "
+              onclick="meetingRoomController.createMeeting()"
+            >
+              Create Meeting
             </button>
           </div>
         </div>
-        <div id="meeting-screen-share-button" class="meeting-button clickable" style="user-select: none; flex: 1"
-          onclick="LocalMediaStreams.startCapturingTab()">
-          <svg class="meeting-icon" viewBox="0 0 500 500">
-            <use xlink:href="#screen-share" />
-          </svg>
-          <span>Share Screen</span>
-        </div>
-      </div>
-    </div>
-  </dialog>
-  <dialog id="logs-modal" class="overlay">
-    <div class="overlay-close-button clickable" onclick="closeOverlay()">
-      <svg class="meeting-icon" viewBox="0 0 500 500">
-        <use xlink:href="#menu-close" />
-      </svg>
-    </div>
-    <div id="logs-modal-content" class="overlay-content">
-      <div id="logs-modal-toolbar">
-        <button id="logs-modal-refresh-button" class="menu-item clickable logs-modal-button">Refresh</button>
-        <button id="logs-modal-download-button" class="menu-item clickable logs-modal-button">Download .txt</button>
-      </div>
-      <pre id="logs-modal-content-text"></pre>
-    </div>
-  </dialog>
-  <dialog id="clip-manager-modal" class="overlay">
-    <div class="overlay-close-button clickable" onclick="closeOverlay()">
-      <svg class="meeting-icon" viewBox="0 0 500 500">
-        <use xlink:href="#menu-close" />
-      </svg>
-    </div>
-    <div id="clip-manager-modal-content" class="overlay-content" onclick="event.stopPropagation()">
-      <h1>Manage Clips</h1>
-      <div id="clip-manager-list"></div>
-    </div>
-  </dialog>
-  <dialog id="export-project-modal" class="overlay">
-    <div class="overlay-close-button clickable" onclick="closeOverlay()">
-      <svg class="meeting-icon" viewBox="0 0 500 500">
-        <use xlink:href="#menu-close" />
-      </svg>
-    </div>
-    <div class="overlay-content">
-      <h1>Audio Export Settings</h1>
-
-      <div class="form-group">
-        <label for="format" style="">Export Format</label>
-        <select id="format" onchange="exportProjectController.handleFormatSwitch(this.value)">
-          <option value="wav">WAV - Uncompressed Audio</option>
-          <option value="flac">FLAC - Lossless Compression</option>
-          <option value="mp3" selected>MP3 - Lossy Compression</option>
-          <option value="opus">Opus - Modern Lossy Codec</option>
-        </select>
-      </div>
-
-      <div id="wav-options-container" class="export-options-container">
-        <div class="export-option-row">
-          <label for="wav-sample-format">Sample Format</label>
-          <select id="wav-sample-format">
-            <option value="int16">16-bit Integer</option>
-            <option value="int24">24-bit Integer</option>
-            <option value="float32">32-bit Float</option>
-            <option value="int8">8-bit Integer</option>
-          </select>
-        </div>
-
-        <div class="export-option-row">
-          <label for="wav-sample-rate">Sample Rate</label>
-          <select id="wav-sample-rate">
-            <option value="8000">8000 Hz</option>
-            <option value="11025">11025 Hz</option>
-            <option value="12000">12000 Hz</option>
-            <option value="16000">16000 Hz</option>
-            <option value="22050">22050 Hz</option>
-            <option value="24000">24000 Hz</option>
-            <option value="32000">32000 Hz</option>
-            <option value="44100">44100 Hz</option>
-            <option value="48000" selected>48000 Hz</option>
-            <option value="96000">96000 Hz</option>
-          </select>
-        </div>
-      </div>
-
-      <div id="flac-options-container" class="export-options-container">
-        <div class="export-option-row">
-          <label for="flac-bit-depth">Bit Depth</label>
-          <select id="flac-bit-depth">
-            <option value="8">8-bit</option>
-            <option value="16" selected>16-bit</option>
-            <option value="24">24-bit</option>
-          </select>
-        </div>
-
-        <div class="export-option-row">
-          <label for="flac-sample-rate">Sample Rate (Hz)</label>
-          <input type="range" id="flac-sample-rate" value="48000" min="8000" max="655350" step="1" />
-          <div class="info-text">FLAC supports up to 655.35 kHz</div>
-        </div>
-
-        <div class="export-option-row">
-          <label for="flac-compression">Compression Level</label>
-          <input type="number" id="flac-compression" value="5" min="0" max="8" step="1" />
-          <div class="info-text">Higher compression = smaller file, slower encoding</div>
-        </div>
-      </div>
-      <div id="mp3-options-container" class="export-options-container">
-        <div class="export-option-row">
-          <div class="radio-group">
-            <label>Bitrate Mode</label>
-            <div class="radio-option">
-              <input type="radio" id="mp3-mode-cbr" name="mp3-mode" value="cbr" checked />
-              <label for="mp3-mode-cbr">CBR</label>
-              <input type="radio" id="mp3-mode-vbr" name="mp3-mode" value="vbr" />
-              <label for="mp3-mode-vbr">VBR</label>
+        <div id="meeting-controls">
+          <div
+            id="meeting-disconnect-button"
+            class="meeting-button tooltipped clickable"
+            style="color: rgba(255, 100, 100)"
+            onclick="meetingRoomController.disconnect()"
+          >
+            Disconnect
+          </div>
+          <div id="meeting-layout-selector" class="meeting-button clickable">
+            <button
+              id="switch-meeting-layout-button"
+              type="button"
+              style="user-select: none; height: 100%; width: 100%"
+              aria-expanded="false"
+              aria-controls="meeting-layout-menu"
+              onclick="meetingRoomController.toggleLayoutMenu()"
+            >
+              Settings
+            </button>
+            <div id="meeting-layout-menu" class="meeting-layout-menu" role="menu" aria-label="Meeting settings">
+              <div id="meeting-link-box" class="meeting-settings-box" style="display: none">
+                <div class="meeting-settings-heading">Meeting Invite Link</div>
+                <button
+                  id="meeting-link"
+                  type="button"
+                  class="meeting-link clickable"
+                  onclick="meetingRoomController.copyMeetingLink()"
+                ></button>
+              </div>
+              <div class="meeting-settings-heading">Select Layout</div>
+              <button
+                id="meeting-layout-option-grid"
+                type="button"
+                class="meeting-layout-option clickable"
+                role="menuitemradio"
+                aria-checked="false"
+                onclick="meetingRoomController.selectVideoLayout('grid')"
+              >
+                <span id="meeting-layout-check-grid" class="meeting-layout-check">&#10003;<!--checkmark--></span>
+                <span>grid</span>
+              </button>
+              <button
+                id="meeting-layout-option-spotlight"
+                type="button"
+                class="meeting-layout-option clickable"
+                role="menuitemradio"
+                aria-checked="false"
+                onclick="meetingRoomController.selectVideoLayout('spotlight')"
+              >
+                <span id="meeting-layout-check-spotlight" class="meeting-layout-check">&#10003;</span>
+                <span>spotlight</span>
+              </button>
+              <button
+                id="meeting-layout-option-solo"
+                type="button"
+                class="meeting-layout-option clickable"
+                role="menuitemradio"
+                aria-checked="false"
+                onclick="meetingRoomController.selectVideoLayout('solo')"
+              >
+                <span id="meeting-layout-check-solo" class="meeting-layout-check">&#10003;</span>
+                <span>solo</span>
+              </button>
             </div>
           </div>
+          <div
+            id="meeting-screen-share-button"
+            class="meeting-button tooltipped clickable"
+            onclick="LocalMediaStreams.startCapturingTab()"
+          >
+            <svg class="meeting-icon" viewBox="0 0 500 500">
+              <use xlink:href="#screen-share" />
+            </svg>
+            <span>Share Screen</span>
+          </div>
         </div>
+      </div>
+    </dialog>
+    <dialog id="logs-modal" class="overlay">
+      <div class="overlay-close-button clickable" onclick="closeOverlay()">
+        <svg class="meeting-icon" viewBox="0 0 500 500">
+          <use xlink:href="#menu-close" />
+        </svg>
+      </div>
+      <div id="logs-modal-content" class="overlay-content">
+        <div id="logs-modal-toolbar">
+          <button id="logs-modal-refresh-button" class="menu-item clickable logs-modal-button">Refresh</button>
+          <button id="logs-modal-download-button" class="menu-item clickable logs-modal-button">Download .txt</button>
+        </div>
+        <pre id="logs-modal-content-text"></pre>
+      </div>
+    </dialog>
+    <dialog id="clip-manager-modal" class="overlay">
+      <div class="overlay-close-button clickable" onclick="closeOverlay()">
+        <svg class="meeting-icon" viewBox="0 0 500 500">
+          <use xlink:href="#menu-close" />
+        </svg>
+      </div>
+      <div id="clip-manager-modal-content" class="overlay-content" onclick="event.stopPropagation()">
+        <h1>Manage Clips</h1>
+        <div id="clip-manager-list"></div>
+      </div>
+    </dialog>
+    <dialog id="export-project-modal" class="overlay">
+      <div class="overlay-close-button clickable" onclick="closeOverlay()">
+        <svg class="meeting-icon" viewBox="0 0 500 500">
+          <use xlink:href="#menu-close" />
+        </svg>
+      </div>
+      <div class="overlay-content">
+        <h1>Audio Export Settings</h1>
 
-        <div id="mp3-cbr-options" class="export-option-row" style="display:block;">
-          <label for="mp3-cbr-bitrate">Bitrate</label>
-          <select id="mp3-cbr-bitrate" style="margin-top:.5rem;">
-            <option value="8">8 kbps</option>
-            <option value="16">16 kbps</option>
-            <option value="24">24 kbps</option>
-            <option value="32">32 kbps</option>
-            <option value="40">40 kbps</option>
-            <option value="48">48 kbps</option>
-            <option value="64">64 kbps</option>
-            <option value="80">80 kbps</option>
-            <option value="96">96 kbps</option>
-            <option value="112">112 kbps</option>
-            <option value="128">128 kbps</option>
-            <option value="160">160 kbps</option>
-            <option value="192">192 kbps</option>
-            <option value="224">224 kbps</option>
-            <option value="256">256 kbps</option>
-            <option value="320" selected>320 kbps</option>
+        <div class="form-group">
+          <label for="format" style="">Export Format</label>
+          <select id="format" onchange="exportProjectController.handleFormatSwitch(this.value)">
+            <option value="wav">WAV - Uncompressed Audio</option>
+            <option value="flac">FLAC - Lossless Compression</option>
+            <option value="mp3" selected>MP3 - Lossy Compression</option>
+            <option value="opus">Opus - Modern Lossy Codec</option>
           </select>
         </div>
 
-        <div id="mp3-vbr-options" class="export-option-row" style="display:block;" hidden>
-          <label for="vbr-quality-slider">Quality (0 for best sound, 9 for smallest file)</label>
-          <input type="range" id="vbr-quality-slider" style="margin-top:.5rem;" value="2" min="0" max="9" step="1" />
-          <div style="position:relative;">
-            <output id="vbr-quality-output" class="slider-value" style="top: 50%;">2</output>
+        <div id="wav-options-container" class="export-options-container">
+          <div class="export-option-row">
+            <label for="wav-sample-format">Sample Format</label>
+            <select id="wav-sample-format">
+              <option value="int16">16-bit Integer</option>
+              <option value="int24">24-bit Integer</option>
+              <option value="float32">32-bit Float</option>
+              <option value="int8">8-bit Integer</option>
+            </select>
+          </div>
+
+          <div class="export-option-row">
+            <label for="wav-sample-rate">Sample Rate</label>
+            <select id="wav-sample-rate">
+              <option value="8000">8000 Hz</option>
+              <option value="11025">11025 Hz</option>
+              <option value="12000">12000 Hz</option>
+              <option value="16000">16000 Hz</option>
+              <option value="22050">22050 Hz</option>
+              <option value="24000">24000 Hz</option>
+              <option value="32000">32000 Hz</option>
+              <option value="44100">44100 Hz</option>
+              <option value="48000" selected>48000 Hz</option>
+              <option value="96000">96000 Hz</option>
+            </select>
           </div>
         </div>
 
-        <div class="export-option-row">
-          <label for="mp3-sample-rate">Sample Rate</label>
-          <select id="mp3-sample-rate">
-            <option value="8000">8000 Hz</option>
-            <option value="11025">11025 Hz</option>
-            <option value="12000">12000 Hz</option>
-            <option value="16000">16000 Hz</option>
-            <option value="22050">22050 Hz</option>
-            <option value="24000">24000 Hz</option>
-            <option value="32000">32000 Hz</option>
-            <option value="44100" selected>44100 Hz</option>
-            <option value="48000">48000 Hz</option>
-          </select>
+        <div id="flac-options-container" class="export-options-container">
+          <div class="export-option-row">
+            <label for="flac-bit-depth">Bit Depth</label>
+            <select id="flac-bit-depth">
+              <option value="8">8-bit</option>
+              <option value="16" selected>16-bit</option>
+              <option value="24">24-bit</option>
+            </select>
+          </div>
+
+          <div class="export-option-row">
+            <label for="flac-sample-rate">Sample Rate (Hz)</label>
+            <input type="range" id="flac-sample-rate" value="48000" min="8000" max="655350" step="1" />
+            <div class="info-text">FLAC supports up to 655.35 kHz</div>
+          </div>
+
+          <div class="export-option-row">
+            <label for="flac-compression">Compression Level</label>
+            <input type="number" id="flac-compression" value="5" min="0" max="8" step="1" />
+            <div class="info-text">Higher compression = smaller file, slower encoding</div>
+          </div>
         </div>
+        <div id="mp3-options-container" class="export-options-container">
+          <div class="export-option-row">
+            <div class="radio-group">
+              <label>Bitrate Mode</label>
+              <div class="radio-option">
+                <input type="radio" id="mp3-mode-cbr" name="mp3-mode" value="cbr" checked />
+                <label for="mp3-mode-cbr">CBR</label>
+                <input type="radio" id="mp3-mode-vbr" name="mp3-mode" value="vbr" />
+                <label for="mp3-mode-vbr">VBR</label>
+              </div>
+            </div>
+          </div>
+
+          <div id="mp3-cbr-options" class="export-option-row" style="display: block">
+            <label for="mp3-cbr-bitrate">Bitrate</label>
+            <select id="mp3-cbr-bitrate" style="margin-top: 0.5rem">
+              <option value="8">8 kbps</option>
+              <option value="16">16 kbps</option>
+              <option value="24">24 kbps</option>
+              <option value="32">32 kbps</option>
+              <option value="40">40 kbps</option>
+              <option value="48">48 kbps</option>
+              <option value="64">64 kbps</option>
+              <option value="80">80 kbps</option>
+              <option value="96">96 kbps</option>
+              <option value="112">112 kbps</option>
+              <option value="128">128 kbps</option>
+              <option value="160">160 kbps</option>
+              <option value="192">192 kbps</option>
+              <option value="224">224 kbps</option>
+              <option value="256">256 kbps</option>
+              <option value="320" selected>320 kbps</option>
+            </select>
+          </div>
+
+          <div id="mp3-vbr-options" class="export-option-row" style="display: block" hidden>
+            <label for="vbr-quality-slider">Quality (0 for best sound, 9 for smallest file)</label>
+            <input type="range" id="vbr-quality-slider" style="margin-top: 0.5rem" value="2" min="0" max="9" step="1" />
+            <div style="position: relative">
+              <output id="vbr-quality-output" class="slider-value" style="top: 50%">2</output>
+            </div>
+          </div>
+
+          <div class="export-option-row">
+            <label for="mp3-sample-rate">Sample Rate</label>
+            <select id="mp3-sample-rate">
+              <option value="8000">8000 Hz</option>
+              <option value="11025">11025 Hz</option>
+              <option value="12000">12000 Hz</option>
+              <option value="16000">16000 Hz</option>
+              <option value="22050">22050 Hz</option>
+              <option value="24000">24000 Hz</option>
+              <option value="32000">32000 Hz</option>
+              <option value="44100" selected>44100 Hz</option>
+              <option value="48000">48000 Hz</option>
+            </select>
+          </div>
+        </div>
+        <div id="opus-options-container" class="export-options-container">
+          <div class="export-option-row">
+            <label for="opus-application">Application</label>
+            <select id="opus-application">
+              <option value="2049" selected>Audio - General Music</option>
+              <option value="2048">VoIP - Voice Communication</option>
+              <option value="2051">Restricted Low Delay</option>
+            </select>
+          </div>
+
+          <div class="export-option-row">
+            <label for="opus-bitrate">Bitrate (bps)</label>
+            <input type="range" id="opus-bitrate" value="128000" min="500" max="512000" step="1000" />
+            <div class="info-text">Recommended: 64000-128000 for music</div>
+          </div>
+
+          <div class="export-option-row">
+            <label for="opus-bitrate-mode">Bitrate Mode</label>
+            <select id="opus-bitrate-mode">
+              <option value="0" selected>Variable (VBR)</option>
+              <option value="1">Constant (CBR)</option>
+              <option value="2">Constrained VBR</option>
+            </select>
+          </div>
+
+          <div class="export-option-row">
+            <label for="opus-complexity">Complexity</label>
+            <input type="range" id="opus-complexity" value="5" min="0" max="10" step="1" />
+            <div class="info-text">Higher = better quality, slower encoding</div>
+          </div>
+
+          <div class="export-option-row">
+            <label for="opus-bandwidth">Bandwidth</label>
+            <select id="opus-bandwidth">
+              <option value="0" selected>Auto</option>
+              <option value="1101">Narrowband (4 kHz)</option>
+              <option value="1102">Mediumband (6 kHz)</option>
+              <option value="1103">Wideband (8 kHz)</option>
+              <option value="1104">Super Wideband (12 kHz)</option>
+              <option value="1105">Fullband (20 kHz)</option>
+            </select>
+          </div>
+
+          <div class="export-option-row">
+            <label for="opus-frame-size">Frame Size (ms)</label>
+            <select id="opus-frame-size">
+              <option value="2.5">2.5 ms</option>
+              <option value="5">5 ms</option>
+              <option value="10">10 ms</option>
+              <option value="20" selected>20 ms</option>
+              <option value="40">40 ms</option>
+              <option value="60">60 ms</option>
+            </select>
+          </div>
+        </div>
+
+        <button
+          class="menu-item clickable export-project-button"
+          onclick="window.exportProjectController.exportProject()"
+        >
+          Export Audio
+        </button>
       </div>
-      <div id="opus-options-container" class="export-options-container">
-        <div class="export-option-row">
-          <label for="opus-application">Application</label>
-          <select id="opus-application">
-            <option value="2049" selected>Audio - General Music</option>
-            <option value="2048">VoIP - Voice Communication</option>
-            <option value="2051">Restricted Low Delay</option>
-          </select>
+    </dialog>
+    <dialog id="processing-modal" class="overlay no-backdrop-close">
+      <div id="processing-modal-content" class="overlay-content" onclick="event.stopPropagation()">
+        <h1 id="processing-modal-title">Processing...</h1>
+        <div id="processing-progress-row">
+          <progress id="processing-progress-bar" max="100" value="0"></progress>
+          <span id="processing-progress-percent">0%</span>
         </div>
-
-        <div class="export-option-row">
-          <label for="opus-bitrate">Bitrate (bps)</label>
-          <input type="range" id="opus-bitrate" value="128000" min="500" max="512000" step="1000" />
-          <div class="info-text">Recommended: 64000-128000 for music</div>
-        </div>
-
-        <div class="export-option-row">
-          <label for="opus-bitrate-mode">Bitrate Mode</label>
-          <select id="opus-bitrate-mode">
-            <option value="0" selected>Variable (VBR)</option>
-            <option value="1">Constant (CBR)</option>
-            <option value="2">Constrained VBR</option>
-          </select>
-        </div>
-
-        <div class="export-option-row">
-          <label for="opus-complexity">Complexity</label>
-          <input type="range" id="opus-complexity" value="5" min="0" max="10" step="1" />
-          <div class="info-text">Higher = better quality, slower encoding</div>
-        </div>
-
-        <div class="export-option-row">
-          <label for="opus-bandwidth">Bandwidth</label>
-          <select id="opus-bandwidth">
-            <option value="0" selected>Auto</option>
-            <option value="1101">Narrowband (4 kHz)</option>
-            <option value="1102">Mediumband (6 kHz)</option>
-            <option value="1103">Wideband (8 kHz)</option>
-            <option value="1104">Super Wideband (12 kHz)</option>
-            <option value="1105">Fullband (20 kHz)</option>
-          </select>
-        </div>
-
-        <div class="export-option-row">
-          <label for="opus-frame-size">Frame Size (ms)</label>
-          <select id="opus-frame-size">
-            <option value="2.5">2.5 ms</option>
-            <option value="5">5 ms</option>
-            <option value="10">10 ms</option>
-            <option value="20" selected>20 ms</option>
-            <option value="40">40 ms</option>
-            <option value="60">60 ms</option>
-          </select>
-        </div>
+        <div id="processing-elapsed-time">00:00:00</div>
+        <div id="processing-remaining-time"></div>
+        <button id="processing-cancel-button" class="menu-item clickable">Cancel</button>
       </div>
-
-      <button class="menu-item clickable export-project-button" onclick="window.exportProjectController.exportProject()">
-        Export Audio
-      </button>
-    </div>
-  </dialog>
-  <dialog id="processing-modal" class="overlay no-backdrop-close">
-    <div id="processing-modal-content" class="overlay-content" onclick="event.stopPropagation()">
-      <h1 id="processing-modal-title">Processing...</h1>
-      <div id="processing-progress-row">
-        <progress id="processing-progress-bar" max="100" value="0"></progress>
-        <span id="processing-progress-percent">0%</span>
-      </div>
-      <div id="processing-elapsed-time">00:00:00</div>
-      <div id="processing-remaining-time"></div>
-      <button id="processing-cancel-button" class="menu-item clickable">Cancel</button>
-    </div>
-  </dialog>
-  <div id="notification-parent"></div>
-</body>
-<svg xmlns="http://www.w3.org/2000/svg" style="height: 0; position: absolute; width: 0">
-  <defs>
-    <pattern id="hatch" width="5" height="3" patternUnits="userSpaceOnUse" patternTransform="rotate(30 50 50)">
-      <line stroke-width="2px" y2="5" />
-    </pattern>
-    <g id="menu-hamburger" viewBox="0 0 500 500">
-      <line style="stroke: currentColor; stroke-width: 50" x1="50" y1="250" x2="450" y2="250" />
-      <line style="stroke: currentColor; stroke-width: 50" x1="50" y1="100" x2="450" y2="100" />
-      <line style="stroke: currentColor; stroke-width: 50" x1="50" y1="400" x2="450" y2="400" />
-    </g>
-    <g id="menu-close" viewBox="0 0 500 500">
-      <line style="stroke: currentColor; stroke-width: 50" x1="100" y1="400" x2="400" y2="100" />
-      <line style="stroke: currentColor; stroke-width: 50" x1="100" y1="100" x2="400" y2="400" />
-    </g>
-    <g id="stop" viewBox="0 0 500 500">
-      <polygon style="fill: rgba(0, 0, 0, 0.3); stroke-width: 30" points="50 450 50 50 450 50 450 450" />
-    </g>
-    <g id="pause" viewBox="0 0 500 500">
-      <polygon style="fill: currentColor" points="100 450 100 50 200 50 200 450" />
-      <polygon style="fill: currentColor" points="300 450 300 50 400 50 400 450" />
-    </g>
-    <g id="sine-wave" viewBox="0 0 500 500">
-      <path style="fill: none; stroke: currentColor; stroke-width: 30px; stroke-linecap: round"
-        d="M 10 250 C 200 -300 300 800 490 250"></path>
-    </g>
-    <g id="record" viewBox="0 0 500 500">
-      <ellipse style="fill: hsla(0, 100%, 35%, 0.3); stroke-width: 30; stroke: var(--record-button-red)" cx="250"
-        cy="250" rx="200" ry="200" />
-    </g>
-    <g id="play" viewBox="0 0 500 500">
-      <polygon style="fill: hsla(147, 74%, 35%, 0.3); stroke-width: 30; stroke: var(--play-button-green)"
-        points="50 450 50 50 450 250" />
-    </g>
-    <g id="microphone" viewBox="0 0 500 500">
-      <line style="fill: currentColor; stroke: currentColor; stroke-width: 50px" x1="250" y1="425" x2="250" y2="345" />
-      <rect x="150" y="-450" width="200" height="25" rx="2" ry="2"
-        style="stroke: currentColor; fill: currentColor; stroke-width: 10px" transform="matrix(1, 0, 0, -1, 0, 0)" />
-      <path style="stroke: currentColor; fill: none; stroke-width: 30px" d="M 160 250 A 90 90 0 0 0 340 250"></path>
-      <rect x="225" y="75" width="50" height="180" rx="2" ry="2" style="
+    </dialog>
+    <div id="notification-parent" popover="manual"></div>
+  </body>
+  <svg xmlns="http://www.w3.org/2000/svg" style="height: 0; position: absolute; width: 0">
+    <defs>
+      <pattern id="hatch" width="5" height="3" patternUnits="userSpaceOnUse" patternTransform="rotate(30 50 50)">
+        <line stroke-width="2px" y2="5" />
+      </pattern>
+      <g id="menu-hamburger" viewBox="0 0 500 500">
+        <line style="stroke: currentColor; stroke-width: 50" x1="50" y1="250" x2="450" y2="250" />
+        <line style="stroke: currentColor; stroke-width: 50" x1="50" y1="100" x2="450" y2="100" />
+        <line style="stroke: currentColor; stroke-width: 50" x1="50" y1="400" x2="450" y2="400" />
+      </g>
+      <g id="menu-close" viewBox="0 0 500 500">
+        <line style="stroke: currentColor; stroke-width: 50" x1="100" y1="400" x2="400" y2="100" />
+        <line style="stroke: currentColor; stroke-width: 50" x1="100" y1="100" x2="400" y2="400" />
+      </g>
+      <g id="stop" viewBox="0 0 500 500">
+        <polygon style="fill: rgba(0, 0, 0, 0.3); stroke-width: 30" points="50 450 50 50 450 50 450 450" />
+      </g>
+      <g id="pause" viewBox="0 0 500 500">
+        <polygon style="fill: currentColor" points="100 450 100 50 200 50 200 450" />
+        <polygon style="fill: currentColor" points="300 450 300 50 400 50 400 450" />
+      </g>
+      <g id="sine-wave" viewBox="0 0 500 500">
+        <path
+          style="fill: none; stroke: currentColor; stroke-width: 30px; stroke-linecap: round"
+          d="M 10 250 C 200 -300 300 800 490 250"
+        ></path>
+      </g>
+      <g id="record" viewBox="0 0 500 500">
+        <ellipse
+          style="fill: hsla(0, 100%, 35%, 0.3); stroke-width: 30; stroke: var(--record-button-red)"
+          cx="250"
+          cy="250"
+          rx="200"
+          ry="200"
+        />
+      </g>
+      <g id="play" viewBox="0 0 500 500">
+        <polygon
+          style="fill: hsla(147, 74%, 35%, 0.3); stroke-width: 30; stroke: var(--play-button-green)"
+          points="50 450 50 50 450 250"
+        />
+      </g>
+      <g id="microphone" viewBox="0 0 500 500">
+        <line
+          style="fill: currentColor; stroke: currentColor; stroke-width: 50px"
+          x1="250"
+          y1="425"
+          x2="250"
+          y2="345"
+        />
+        <rect
+          x="150"
+          y="-450"
+          width="200"
+          height="25"
+          rx="2"
+          ry="2"
+          style="stroke: currentColor; fill: currentColor; stroke-width: 10px"
+          transform="matrix(1, 0, 0, -1, 0, 0)"
+        />
+        <path style="stroke: currentColor; fill: none; stroke-width: 30px" d="M 160 250 A 90 90 0 0 0 340 250"></path>
+        <rect
+          x="225"
+          y="75"
+          width="50"
+          height="180"
+          rx="2"
+          ry="2"
+          style="
             stroke-linecap: round;
             paint-order: stroke markers;
             stroke: currentColor;
             stroke-width: 50px;
             fill: currentColor;
-          " />
-    </g>
-    <g id="meeting" viewBox="0 0 500 500">
-      <line style="stroke: currentColor; stroke-width: 10px" x1="250" y1="0" x2="250" y2="500"></line>
-      <line style="stroke: currentColor; stroke-width: 10px" x1="0" y1="250" x2="500" y2="250"></line>
-      <ellipse style="fill: currentColor; stroke: currentColor; stroke-width: 10px" cx="125" cy="100" rx="55" ry="60">
-      </ellipse>
-      <ellipse style="fill: currentColor; stroke: currentColor; stroke-width: 10px" cx="375" cy="100" rx="55" ry="60">
-      </ellipse>
-      <path style="fill: currentColor; stroke: currentColor; stroke-width: 10px" d="M 10 230 C 15 150 235 150 240 230">
-      </path>
-      <path style="fill: currentColor; stroke: currentColor; stroke-width: 10px"
-        d="M 260 230 C 265 150 485 150 490 230"></path>
-      <ellipse style="fill: currentColor; stroke: currentColor; stroke-width: 10px" cx="125" cy="350" rx="55" ry="60">
-      </ellipse>
-      <path style="fill: currentColor; stroke: currentColor; stroke-width: 10px" d="M 10 490 C 15 400 235 400 240 490">
-      </path>
-    </g>
-    <g id="browser-tab" viewBox="0 0 500 500">
-      <path style="fill: rgba(0, 0, 0, 0); stroke: currentColor; stroke-linejoin: round; stroke-width: 28px"
-        d="M 0 450 L 60 450 A 60 60 0 0 0 120 390 L 120 110 A 60 60 0 0 1 180 50 L 500 50"></path>
-      <polygon style="fill: currentColor; stroke: currentColor" points="200 230 200 270 270 320 270 180"></polygon>
-      <path style="fill: none; stroke: currentColor; stroke-width: 28px" d="M 315 200 A 75 75 0 0 1 315 300"></path>
-      <path style="fill: none; stroke: currentColor; stroke-width: 28px" d="M 365 170 A 120 120 0 0 1 365 330"></path>
-      <line style="stroke: currentColor; stroke-width: 20px" x1="0" y1="70" x2="130" y2="70"></line>
-    </g>
-    <g id="audio-file" viewBox="0 0 500 500">
-      <polygon style="stroke: currentColor; fill: none; stroke-width: 30" points="60 120 60 470 440 470 440 10 170 10">
-      </polygon>
-      <polyline style="stroke: currentColor; fill: none; stroke-width: 30" points="60 120 170 120 170 10"></polyline>
-      <polygon style="fill: currentColor; stroke: currentColor" points="135 230 135 270 205 320 205 180"></polygon>
-      <path style="fill: none; stroke: currentColor; stroke-width: 28px" d="M 250 200 A 75 75 0 0 1 250 300"></path>
-      <path style="fill: none; stroke: currentColor; stroke-width: 28px" d="M 300 170 A 120 120 0 0 1 300 330"></path>
-    </g>
-    <g id="camera" viewBox="0 0 500 500">
-      <rect x="35" y="130" width="300" height="235" rx="2" ry="2"
-        style="stroke: currentColor; stroke-miterlimit: 1; stroke-width: 20px" />
-      <polygon style="stroke: currentColor; stroke-miterlimit: 1; stroke-width: 20px"
-        points="300 245 465 165 465 335" />
-    </g>
-    <g id="screen-share" viewBox="0 0 500 500">
-      <rect x="18" y="112" width="465" height="270" rx="2" ry="2"
-        style="stroke: currentColor; fill: none; stroke-width: 35px" />
-      <path d="M 275 630 H 360 L 360 590 L 440 650 L 360 710 L 360 670 H 275 V 630 Z"
-        bx:shape="arrow 275 590 160 120 40 75 0 1@4ade829c" style="stroke: currentColor; stroke-width: 14px"
-        transform="matrix(0.000848, -1, 1, 0.000848, -400, 600)" />
-    </g>
-    <g id="slash" viewBox="0 0 500 500">
-      <line style="stroke: rgba(255, 0, 0, 0.6); stroke-width: 60" x1="50" y1="450" x2="450" y2="50"></line>
-    </g>
-    <g id="trash" viewBox="0 0 500 500">
-      <rect x="70" y="100" width="360" height="60" rx="4" ry="4"
-        style="stroke: currentColor; fill: none; stroke-width: 25px" />
-      <polyline style="stroke: currentColor; fill: none; stroke-linejoin: round; stroke-width: 25px"
-        points="170 100 170 50 330 50 330 100" />
-      <polyline style="stroke: currentColor; fill: none; stroke-linejoin: round; stroke-width: 25px"
-        points="100 170 130 450 370 450 400 170" />
-      <line style="fill: none; stroke: currentColor; stroke-linecap: round; stroke-width: 25px" x1="190" y1="220"
-        x2="190" y2="380" />
-      <line style="fill: none; stroke: currentColor; stroke-linecap: round; stroke-width: 25px" x1="250" y1="220"
-        x2="250" y2="380" />
-      <line style="fill: none; stroke: currentColor; stroke-linecap: round; stroke-width: 25px" x1="310" y1="220"
-        x2="310" y2="380" />
-    </g>
-    <g id="pencil" viewBox="0 0 500 500">
-      <rect x="225" y="75" width="50" height="360"
-        style="transform-box: fill-box; transform-origin: 50% 50%; stroke: currentColor; fill: none"
-        transform="rotate(45)"></rect>
-      <rect x="225" y="40" width="50" height="35"
-        style="stroke-width: 1; transform-box: fill-box; transform-origin: 50% 50%; stroke: currentColor; fill: none"
-        transform="matrix(0.707107, 0.707107, -0.707107, 0.707107, 140, 57.5)"></rect>
-      <path style="transform-box: fill-box; transform-origin: 50% 50%; stroke: currentColor; fill: none"
-        d="M 124.599 373.058 L 99.599 438.058 L 74.599 373.058"
-        transform="matrix(0.707107, 0.707107, -0.707107, 0.707107, -0.000002, 0)"></path>
-      <line style="stroke-width: 3px; stroke: currentColor; fill: none" x1="81.138" y1="424.09" x2="77.431"
-        y2="428.149"></line>
-    </g>
-    <g id="scissors" viewBox="0 0 500 500">
-      <circle cx="100" cy="175" r="40" style="fill: none; stroke: currentColor; stroke-width: 35px"></circle>
-      <path d="M 135 305 L 435 125" style="stroke: currentColor; stroke-width: 33px"></path>
-      <path d="M 135 195 L 435 375" style="stroke: currentColor; stroke-width: 35px"></path>
-      <circle cx="100" cy="325" r="40" style="fill: none; stroke: currentColor; stroke-width: 35px"></circle>
-    </g>
-    <g id="plus" viewBox="0 0 500 500">
-      <path d="M 0 250 L 500 250" style="stroke: currentColor; stroke-width: 30"></path>
-      <path d="M 250 0 L 250 500" style="stroke: currentColor; stroke-width: 30"></path>
-    </g>
-    <g id="loading" viewBox="0 0 500 500">
-      <path style="fill: none; stroke: rgb(0, 0, 0); stroke-width: 50px;" d="M 250 0 A 250 250 0 1 1 0 250">
-        <animateTransform
-          attributeName="transform"
-          attributeType="XML"
-          type="rotate"
-          from="0 250 250"
-          to="360 250 250"
-          dur="3s"
-          repeatCount="indefinite" />
-      </path>
-    </g>
-    <g id="logo" viewBox="0 0 600 100">
-      <text style="
+          "
+        />
+      </g>
+      <g id="meeting" viewBox="0 0 500 500">
+        <line style="stroke: currentColor; stroke-width: 10px" x1="250" y1="0" x2="250" y2="500"></line>
+        <line style="stroke: currentColor; stroke-width: 10px" x1="0" y1="250" x2="500" y2="250"></line>
+        <ellipse
+          style="fill: currentColor; stroke: currentColor; stroke-width: 10px"
+          cx="125"
+          cy="100"
+          rx="55"
+          ry="60"
+        ></ellipse>
+        <ellipse
+          style="fill: currentColor; stroke: currentColor; stroke-width: 10px"
+          cx="375"
+          cy="100"
+          rx="55"
+          ry="60"
+        ></ellipse>
+        <path
+          style="fill: currentColor; stroke: currentColor; stroke-width: 10px"
+          d="M 10 230 C 15 150 235 150 240 230"
+        ></path>
+        <path
+          style="fill: currentColor; stroke: currentColor; stroke-width: 10px"
+          d="M 260 230 C 265 150 485 150 490 230"
+        ></path>
+        <ellipse
+          style="fill: currentColor; stroke: currentColor; stroke-width: 10px"
+          cx="125"
+          cy="350"
+          rx="55"
+          ry="60"
+        ></ellipse>
+        <path
+          style="fill: currentColor; stroke: currentColor; stroke-width: 10px"
+          d="M 10 490 C 15 400 235 400 240 490"
+        ></path>
+      </g>
+      <g id="browser-tab" viewBox="0 0 500 500">
+        <path
+          style="fill: rgba(0, 0, 0, 0); stroke: currentColor; stroke-linejoin: round; stroke-width: 28px"
+          d="M 0 450 L 60 450 A 60 60 0 0 0 120 390 L 120 110 A 60 60 0 0 1 180 50 L 500 50"
+        ></path>
+        <polygon style="fill: currentColor; stroke: currentColor" points="200 230 200 270 270 320 270 180"></polygon>
+        <path style="fill: none; stroke: currentColor; stroke-width: 28px" d="M 315 200 A 75 75 0 0 1 315 300"></path>
+        <path style="fill: none; stroke: currentColor; stroke-width: 28px" d="M 365 170 A 120 120 0 0 1 365 330"></path>
+        <line style="stroke: currentColor; stroke-width: 20px" x1="0" y1="70" x2="130" y2="70"></line>
+      </g>
+      <g id="audio-file" viewBox="0 0 500 500">
+        <polygon
+          style="stroke: currentColor; fill: none; stroke-width: 30"
+          points="60 120 60 470 440 470 440 10 170 10"
+        ></polygon>
+        <polyline style="stroke: currentColor; fill: none; stroke-width: 30" points="60 120 170 120 170 10"></polyline>
+        <polygon style="fill: currentColor; stroke: currentColor" points="135 230 135 270 205 320 205 180"></polygon>
+        <path style="fill: none; stroke: currentColor; stroke-width: 28px" d="M 250 200 A 75 75 0 0 1 250 300"></path>
+        <path style="fill: none; stroke: currentColor; stroke-width: 28px" d="M 300 170 A 120 120 0 0 1 300 330"></path>
+      </g>
+      <g id="camera" viewBox="0 0 500 500">
+        <rect
+          x="35"
+          y="130"
+          width="300"
+          height="235"
+          rx="2"
+          ry="2"
+          style="stroke: currentColor; stroke-miterlimit: 1; stroke-width: 20px"
+        />
+        <polygon
+          style="stroke: currentColor; stroke-miterlimit: 1; stroke-width: 20px"
+          points="300 245 465 165 465 335"
+        />
+      </g>
+      <g id="screen-share" viewBox="0 0 500 500">
+        <rect
+          x="18"
+          y="112"
+          width="465"
+          height="270"
+          rx="2"
+          ry="2"
+          style="stroke: currentColor; fill: none; stroke-width: 35px"
+        />
+        <path
+          d="M 275 630 H 360 L 360 590 L 440 650 L 360 710 L 360 670 H 275 V 630 Z"
+          bx:shape="arrow 275 590 160 120 40 75 0 1@4ade829c"
+          style="stroke: currentColor; stroke-width: 14px"
+          transform="matrix(0.000848, -1, 1, 0.000848, -400, 600)"
+        />
+      </g>
+      <g id="slash" viewBox="0 0 500 500">
+        <line style="stroke: rgba(255, 0, 0, 0.6); stroke-width: 60" x1="50" y1="450" x2="450" y2="50"></line>
+      </g>
+      <g id="trash" viewBox="0 0 500 500">
+        <rect
+          x="70"
+          y="100"
+          width="360"
+          height="60"
+          rx="4"
+          ry="4"
+          style="stroke: currentColor; fill: none; stroke-width: 25px"
+        />
+        <polyline
+          style="stroke: currentColor; fill: none; stroke-linejoin: round; stroke-width: 25px"
+          points="170 100 170 50 330 50 330 100"
+        />
+        <polyline
+          style="stroke: currentColor; fill: none; stroke-linejoin: round; stroke-width: 25px"
+          points="100 170 130 450 370 450 400 170"
+        />
+        <line
+          style="fill: none; stroke: currentColor; stroke-linecap: round; stroke-width: 25px"
+          x1="190"
+          y1="220"
+          x2="190"
+          y2="380"
+        />
+        <line
+          style="fill: none; stroke: currentColor; stroke-linecap: round; stroke-width: 25px"
+          x1="250"
+          y1="220"
+          x2="250"
+          y2="380"
+        />
+        <line
+          style="fill: none; stroke: currentColor; stroke-linecap: round; stroke-width: 25px"
+          x1="310"
+          y1="220"
+          x2="310"
+          y2="380"
+        />
+      </g>
+      <g id="pencil" viewBox="0 0 500 500">
+        <rect
+          x="225"
+          y="75"
+          width="50"
+          height="360"
+          style="transform-box: fill-box; transform-origin: 50% 50%; stroke: currentColor; fill: none"
+          transform="rotate(45)"
+        ></rect>
+        <rect
+          x="225"
+          y="40"
+          width="50"
+          height="35"
+          style="stroke-width: 1; transform-box: fill-box; transform-origin: 50% 50%; stroke: currentColor; fill: none"
+          transform="matrix(0.707107, 0.707107, -0.707107, 0.707107, 140, 57.5)"
+        ></rect>
+        <path
+          style="transform-box: fill-box; transform-origin: 50% 50%; stroke: currentColor; fill: none"
+          d="M 124.599 373.058 L 99.599 438.058 L 74.599 373.058"
+          transform="matrix(0.707107, 0.707107, -0.707107, 0.707107, -0.000002, 0)"
+        ></path>
+        <line
+          style="stroke-width: 3px; stroke: currentColor; fill: none"
+          x1="81.138"
+          y1="424.09"
+          x2="77.431"
+          y2="428.149"
+        ></line>
+      </g>
+      <g id="scissors" viewBox="0 0 500 500">
+        <circle cx="100" cy="175" r="40" style="fill: none; stroke: currentColor; stroke-width: 35px"></circle>
+        <path d="M 135 305 L 435 125" style="stroke: currentColor; stroke-width: 33px"></path>
+        <path d="M 135 195 L 435 375" style="stroke: currentColor; stroke-width: 35px"></path>
+        <circle cx="100" cy="325" r="40" style="fill: none; stroke: currentColor; stroke-width: 35px"></circle>
+      </g>
+      <g id="plus" viewBox="0 0 500 500">
+        <path d="M 0 250 L 500 250" style="stroke: currentColor; stroke-width: 30"></path>
+        <path d="M 250 0 L 250 500" style="stroke: currentColor; stroke-width: 30"></path>
+      </g>
+      <g id="loading" viewBox="0 0 500 500">
+        <path style="fill: none; stroke: rgb(0, 0, 0); stroke-width: 50px" d="M 250 0 A 250 250 0 1 1 0 250">
+          <animateTransform
+            attributeName="transform"
+            attributeType="XML"
+            type="rotate"
+            from="0 250 250"
+            to="360 250 250"
+            dur="3s"
+            repeatCount="indefinite"
+          />
+        </path>
+      </g>
+      <g id="logo" viewBox="0 0 600 100">
+        <text
+          style="
             fill: white;
             font-family: Georgia;
             font-size: 90;
@@ -752,13 +957,15 @@
             letter-spacing: 5.6px;
             paint-order: stroke;
             stroke: black;
-            stroke-width:7;
+            stroke-width: 7;
             white-space: pre;
-          " x="300" y="60">
-        SoundEtch
-      </text>
-    </g>
-  </defs>
-</svg>
-
+          "
+          x="300"
+          y="60"
+        >
+          SoundEtch
+        </text>
+      </g>
+    </defs>
+  </svg>
 </html>

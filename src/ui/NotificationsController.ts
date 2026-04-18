@@ -75,16 +75,21 @@ export class Notification {
 
 export class NotificationsController {
   private size = 4
+  private readonly parent = document.getElementById('notification-parent') as HTMLDivElement
   private readonly htmlElements = new Array(this.size).fill(null).map((_) => {
     const element = document.createElement('div')
     element.style.opacity = '0'
-    document.getElementById('notification-parent')!.appendChild(element)
+    this.parent.appendChild(element)
     return element
   })
   private readonly notifications = new Array<Notification>(this.size)
   private readonly logger = new Logger('notification')
 
-  constructor() {}
+  constructor() {
+    if (!this.parent.matches(':popover-open')) {
+      this.parent.showPopover()
+    }
+  }
 
   showError(message: string): Notification {
     this.logger.error(message)
@@ -108,8 +113,12 @@ export class NotificationsController {
         this.notifications[i].updateElement(this.htmlElements[i])
       }
     }
+    
     const notif = new Notification(this.htmlElements[0], message, level)
     this.notifications[0] = notif
+    // put the notifications above any modals
+    this.parent.parentElement!.appendChild(this.parent)
+    this.parent.showPopover()
     return notif
   }
 }

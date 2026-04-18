@@ -56,7 +56,7 @@ button:focus {
   opacity: 0;
   white-space: nowrap;
   padding: 0.25rem;
-  transform: translate(-50%,0);
+  transform: translate(-50%, 0);
   left: 50%;
   z-index: 999;
   transition: opacity 0.1s ease;
@@ -245,11 +245,11 @@ dialog.overlay[open] {
   place-items: center;
   background: var(--bg-color);
   height: 3rem;
+  flex: 1;
+  user-select: none;
 }
 
-.project-button span,
-.audio-input-button span,
-.meeting-button span {
+.tooltipped span {
   position: absolute;
   background-color: var(--color);
   color: var(--bg-color);
@@ -261,13 +261,12 @@ dialog.overlay[open] {
   pointer-events: none;
 }
 
-.project-button span,
-.audio-input-button span {
+.project-button.tooltipped span {
   bottom: -2rem;
 }
 
-.meeting-button span {
-    top: -2rem;
+.meeting-button.tooltipped span {
+  top: -2rem;
 }
 
 #project-header {
@@ -291,9 +290,7 @@ dialog.overlay[open] {
   pointer-events: none;
 }
 
-.project-button:hover span,
-.audio-input-button:hover span,
-.meeting-button:hover span {
+.tooltipped:hover span {
   visibility: visible;
   opacity: 1;
 }
@@ -444,7 +441,7 @@ svg {
 
 video {
   flex: 1;
-  object-fit: cover; 
+  object-fit: cover;
 }
 
 #screen-share-vid {
@@ -559,6 +556,7 @@ video {
   position: absolute;
   bottom: calc(100% + 0.35rem);
   width: 100%;
+  min-width: 17rem;
   display: none;
   flex-direction: column;
   border: 1px solid var(--color);
@@ -583,6 +581,56 @@ video {
 }
 
 .meeting-layout-option:hover {
+  background: var(--alt-background);
+}
+
+.meeting-settings-box {
+  display: flex;
+  flex-direction: column;
+  gap: 0.35rem;
+  padding: 0.65rem;
+  border-bottom: 1px solid var(--color);
+}
+
+.meeting-settings-heading {
+  padding: 0.5rem 0.65rem 0.25rem;
+  font-size: 1rem;
+  font-weight: bold;
+  letter-spacing: 0.04em;
+  text-transform: uppercase;
+  opacity: 0.8;
+}
+
+.meeting-room-id {
+  font-size: 0.85rem;
+  opacity: 0.9;
+}
+
+.meeting-link {
+  display: block;
+  padding: 0.45rem 0.55rem;
+  border: 1px solid var(--color);
+  background: rgba(255, 255, 255, 0.04);
+  color: inherit;
+  font-size: 0.85rem;
+  text-align: left;
+  overflow-wrap: anywhere;
+}
+
+.meeting-link:hover {
+  background: var(--alt-background);
+}
+
+.meeting-settings-copy-button {
+  padding: 0.45rem 0.55rem;
+  border: 1px solid var(--color);
+  background: transparent;
+  color: inherit;
+  font-size: 0.9rem;
+  text-align: left;
+}
+
+.meeting-settings-copy-button:hover {
   background: var(--alt-background);
 }
 
@@ -617,15 +665,6 @@ video {
   display: flex;
   flex-direction: column;
   grid-area: info;
-}
-
-.audio-input-button {
-  display: grid;
-  place-items: center;
-  flex: 1;
-  margin: 0.25rem;
-  padding: 0.25rem;
-  position: relative;
 }
 
 #audio-input-buttons {
@@ -753,38 +792,45 @@ video {
 }
 
 #notification-parent {
-  position: absolute;
-  top: 1rem;
-  margin-left: auto;
-  margin-right: auto;
+  position: fixed;
+  inset: 1rem 0 auto;
+  margin: 0 auto;
   left: 0;
   right: 0;
-  top: 0;
   text-align: center;
-  width: 80%;
-  height: 100%;
+  width: min(80%, 48rem);
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.5rem;
   font-size: x-large;
   pointer-events: none;
-  z-index: 9999999;
+  border: none;
+  padding: 0;
+  background: transparent;
 }
 
 .notification-info {
   width: 100%;
   height: 3rem;
-  margin: 0.5rem;
+  box-sizing: border-box;
   align-items: center;
   display: flex;
   justify-content: space-between;
   gap: 0.75rem;
+  color: var(--color);
   pointer-events: auto;
   transition: opacity 35ms 0ms ease-in;
+  background: color-mix(in srgb, var(--alt-background) 92%, white 8%);
+  border: 1px solid color-mix(in srgb, var(--color) 30%, transparent);
+  box-shadow: 0 0.5rem 1.5rem rgba(0, 0, 0, 0.18);
 }
 
 .notification-error {
   width: 100%;
   height: 3rem;
   background: rgba(220, 50, 50, 0.95);
-  margin: 0.5rem;
+  box-sizing: border-box;
   align-items: center;
   color: white;
   display: flex;
@@ -792,6 +838,7 @@ video {
   gap: 0.75rem;
   pointer-events: auto;
   transition: opacity 35ms 0ms ease-in;
+  box-shadow: 0 0.5rem 1.5rem rgba(0, 0, 0, 0.22);
 }
 
 .notification-message {
@@ -1039,7 +1086,7 @@ video {
   gap: 1rem;
   min-width: min(92vw, 30rem);
   padding: 1rem;
-  justify-content: center; 
+  justify-content: center;
   align-items: center;
 }
 
@@ -1067,7 +1114,6 @@ video {
 #processing-cancel-button {
   width: auto;
 }
-
 
 .blink {
   animation: blink-animation 1.5s steps(3, start) infinite;
