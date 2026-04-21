@@ -51,9 +51,9 @@ export class Recorder {
           channelCount: audioInput.channelCount,
         },
       })
+      await audioInput.connect(recordingWorkletNode)
       audioWorkletNodes.push(recordingWorkletNode)
       workerController.worker.addEventListener('message', clipView.clip.summary.getWorkerMessageListener())
-      audioInput.connect(recordingWorkletNode)
     }
     await audioContext.audioWorklet.addModule(
       new URL('../audiocontext/ReportingAudioWorkletProcessor.js', import.meta.url),

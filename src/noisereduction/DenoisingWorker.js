@@ -31,7 +31,7 @@ function readFromQueue() {
 }
 
 async function handleMessage(e) {
-  console.log('handling: ' + e.data.type)
+  console.log('denoiser handling: ' + e.data.type)
   switch (e.data.type) {
     case 'init': {
       const bytes = await Promise.all([
@@ -42,7 +42,6 @@ async function handleMessage(e) {
 
       wasm_bindgen.__wbg_set_wasm(wasm) // from df.js
       const uint8Array = new Uint8Array(bytes[1])
-      console.error(uint8Array.length)
       df_model = wasm_bindgen.df_create(uint8Array, 100.0)
 
       frame_length = wasm_bindgen.df_get_frame_length(df_model)
@@ -58,6 +57,7 @@ async function handleMessage(e) {
         outputPointer / Float32Array.BYTES_PER_ELEMENT,
         outputPointer / Float32Array.BYTES_PER_ELEMENT + frame_length,
       )
+      self.interval = setInterval(() => {}, 0)
       postMessage({ type: 'initialized' })
       break
     }

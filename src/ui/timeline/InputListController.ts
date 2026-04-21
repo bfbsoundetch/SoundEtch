@@ -57,13 +57,16 @@ class AudioInputController {
   readonly inputDiv = document.createElement('div')
   readonly inputInfoDiv = document.createElement('div')
 
-  readonly peakMeter: PeakMeterController
+  // readonly peakMeter: PeakMeterController
 
   constructor(id: string, audioInput: AudioInput, type: AudioInputType) {
     this.inputDiv.classList = 'tracklist-item'
 
     this.inputInfoDiv.classList = 'tracklist-item input-info'
     this.inputInfoDiv.id = id
+
+    this.inputDiv.style.height = `${7 * audioInput.channelCount + 1.5}rem`
+    this.inputInfoDiv.style.height = `${7 * audioInput.channelCount + 1.5}rem`
 
     const inputName = document.createElement('div')
     inputName.style.margin = '.25rem'
@@ -115,7 +118,7 @@ class AudioInputController {
     this.inputInfoDiv.appendChild(muteButton)
     this.inputInfoDiv.appendChild(peakMeterDiv)
 
-    this.peakMeter = new PeakMeterController(peakMeterDiv, audioInput, true)
-    this.peakMeter.draw(this.peakMeter)
+    // this.peakMeter = new PeakMeterController(peakMeterDiv, audioInput, true)
+    // this.peakMeter.draw(this.peakMeter)
   }
 }

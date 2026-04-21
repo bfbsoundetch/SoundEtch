@@ -1,4 +1,4 @@
-import { Member, RemoteMediaClient2, State } from '../remote/RemoteMediaClient2'
+import { RemoteMediaClient2, State } from '../remote/RemoteMediaClient2'
 import { MediaStreamButtonController } from './MediaStreamButtonController'
 import { PeakMeterController } from './PeakMeterController'
 import { Direction, ErrorBubbleController } from './ErrorBubbleController'
@@ -64,10 +64,7 @@ export class MeetingRoomController {
     'MeetingUsername',
     this.usernameForm.parentElement as HTMLDivElement,
   )
-  private readonly enterMeetingErrorBubble = new ErrorBubbleController(
-    'EnterMeetingButton',
-    this.enterMeetingButton,
-  )
+  private readonly enterMeetingErrorBubble = new ErrorBubbleController('EnterMeetingButton', this.enterMeetingButton)
   private readonly notificationsController = new NotificationsController()
   private readonly micButtonController: MediaStreamButtonController
   private readonly videoButtonController: MediaStreamButtonController
@@ -160,7 +157,7 @@ export class MeetingRoomController {
       return false
     }
     this.remoteMediaClient = new RemoteMediaClient2(username)
-    this.remoteMediaClient.addStateListener((state) => this.stateListener(this, state))
+    this.remoteMediaClient.addStateListener((state) => this.stateListener(state))
     this.setUiForConnectedState()
     return true
   }
@@ -184,8 +181,9 @@ export class MeetingRoomController {
 
       this.logger.log('About to join ' + meetingId)
       this.remoteMediaClient = new RemoteMediaClient2(username, meetingId)
-      this.remoteMediaClient.addStateListener((state) => this.stateListener(this, state))
+      this.remoteMediaClient.addStateListener((state) => this.stateListener(state))
       this.setUiForConnectedState()
+      return true
     }
     return false
   }
@@ -262,16 +260,22 @@ export class MeetingRoomController {
             this.selfVideoContainer.divElement.classList = 'vid-div meeting-solo'
             this.selfVideoContainer.divElement.style.top = ''
             this.selfVideoContainer.divElement.style.left = ''
+            for (const container of this.guestContainers) {
+              container.divElement.classList = 'vid-div meeting-hidden'
+            }
             break
           case 1:
-            for (const container of this.containers()) {
+            for (const container of [this.selfVideoContainer, this.guestContainers[0]]) {
               container.divElement.classList = 'vid-div meeting-grid-half'
-              container.divElement.style.left = ''
+              container.divElement.style.top = ''
               if (container != this.firstContainer) {
-                container.divElement.style.top = '50%'
+                container.divElement.style.left = '50%'
               } else {
-                container.divElement.style.top = ''
+                container.divElement.style.left = ''
               }
+            }
+            for (const container of [this.guestContainers[1], this.guestContainers[2]]) {
+              container.divElement.classList = 'vid-div meeting-hidden'
             }
             break
           case 2:
@@ -321,13 +325,11 @@ export class MeetingRoomController {
     }
   }
 
-  private async stateListener(meetingRoomController: MeetingRoomController, state: State) {
+  private async stateListener(state: State) {
     console.error(`new state ${JSON.stringify(state)}`)
-    if (this.currentState == state) {
-      return
-    }
     if (state.error) {
       this.notificationsController.showError(state.error)
+      this.remoteMediaClient = null
       this.setUiForDisconnectedState()
       return
     }
@@ -339,7 +341,7 @@ export class MeetingRoomController {
         this.screenVideoContainer.vidElement.srcObject = state.screenShare.mediaStream
       }
       if (!this.screenVideoContainer.isActive) {
-        meetingRoomController.videoLayout = VideoLayout.SPOTLIGHT
+        this.videoLayout = VideoLayout.SPOTLIGHT
         this.spotlightElement(this.screenVideoContainer)
       }
       this.screenVideoContainer.isActive = true
@@ -357,12 +359,18 @@ export class MeetingRoomController {
         this.guestContainers[i].isActive = true
       } else {
         this.guestContainers[i].vidElement.srcObject = null
+        this.guestContainers[i].vidElement.poster = ''
         this.guestContainers[i].stopPeakMeter()
         this.guestContainers[i].isActive = false
       }
     }
-    meetingRoomController.applyVideoLayout()
-    this.currentState = { ...state }
+
+    if (!this.firstContainer.isActive) {
+      this.firstContainer = this.screenVideoContainer.isActive ? this.screenVideoContainer : this.selfVideoContainer
+    }
+
+    this.currentState = { ...state, members: [...state.members] }
+    this.applyVideoLayout()
     this.updateMeetingLinkUi()
   }
 
@@ -377,10 +385,19 @@ export class MeetingRoomController {
     meetingControlsDiv?.appendChild(cameraButton)
     meetingControlsDiv!.style.display = 'flex'
     document.getElementById('meeting-room-setup')!.style.display = 'grid'
-    document.getElementById('vids')!.style.height = '60%'
+    document.getElementById('vids')!.style.width = '70vw'
+    document.getElementById('vids')!.style.height = '70vh'
     this.videoLayout = VideoLayout.SOLO
     this.closeLayoutMenu()
-    this.spotlightElement(this.selfVideoContainer)
+    this.firstContainer = this.selfVideoContainer
+    this.selfVideoContainer.isActive = true
+    this.screenVideoContainer.vidElement.srcObject = null
+    this.screenVideoContainer.isActive = false
+    for (const guestContainer of this.guestContainers) {
+      guestContainer.vidElement.srcObject = null
+      guestContainer.stopPeakMeter()
+      guestContainer.isActive = false
+    }
     this.applyVideoLayout()
     this.currentState = { members: [], roomId: null, screenShare: null, error: null }
     this.updateMeetingLinkUi()
@@ -406,6 +423,7 @@ export class MeetingRoomController {
     meetingControlsDiv?.appendChild(cameraButton)
     document.getElementById('meeting-device-setup-controls')!.style.display = 'none'
     document.getElementById('meeting-room-setup')!.style.display = 'none'
+    document.getElementById('vids')!.style.width = '100%'
     document.getElementById('vids')!.style.height = '100%'
     this.videoLayout = VideoLayout.GRID
     this.closeLayoutMenu()

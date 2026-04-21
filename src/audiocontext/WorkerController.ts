@@ -15,7 +15,7 @@ export class WorkerController {
       type: 'module',
     })
     this.worker.addEventListener('message', async (event) => {
-      this.logger.debug('worker sent ' + JSON.stringify(event.data))
+      this.logger.debug('worker sent ' + Object.keys(event.data))
       switch (event.data.type) {
         case 'finished':
           this.audioWorkletNodes.forEach((node) =>

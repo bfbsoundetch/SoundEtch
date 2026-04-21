@@ -13,7 +13,7 @@ export class MediaStreamButtonController {
     if (isScreenShare) {
       mainElement.onclick = LocalMediaStreams.startCapturingTab
       LocalMediaStreams.registerScreenListener((added, track) => {
-        this.toggleSlashIcon(added)
+        this.toggleSlashIcon(!added)
         if (added) {
           mainElement.onclick = LocalMediaStreams.endScreenShare
         } else {
@@ -30,7 +30,7 @@ export class MediaStreamButtonController {
         if (track.kind != this.mediaType) {
           return
         }
-        this.toggleSlashIcon(added)
+        this.toggleSlashIcon(!added)
         if (this.mediaType == 'audio') {
           if (added) {
             mainElement.onclick = LocalMediaStreams.endAudioDeviceStream
@@ -46,6 +46,7 @@ export class MediaStreamButtonController {
         }
       })
     }
+    this.toggleSlashIcon(true)
   }
 
   private toggleSlashIcon(add: boolean) {

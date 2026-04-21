@@ -34,7 +34,7 @@ class RingBufferBackedAudioWorkletProcessor extends AudioWorkletProcessor {
     if (this._audio_reader.availableRead() >= 128) {
       this._audio_reader.dequeue(output[0])
       this.underrunCount = 0
-    } else if (++this.underrunCount > 32) {
+    } else if (++this.underrunCount > 128) {
       throw new Error('Noise cancellation buffer underran too many times in a row.')
     }
 
