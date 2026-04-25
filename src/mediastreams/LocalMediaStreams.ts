@@ -15,8 +15,18 @@ export class LocalMediaStreams {
       throw Error('Device recording not supported by the browser.')
     }
     const mediaStream = await navigator.mediaDevices.getUserMedia({
-      audio: true,
+      audio: {
+        autoGainControl: true,
+        noiseSuppression: false,
+        voiceIsolation: true,
+        echoCancellation: true,
+      } as MediaTrackConstraints // VS Code doesn't recognize voiceIsolation
     })
+    console.debug(
+      'Got mic with capabilities:', JSON.stringify(mediaStream.getAudioTracks()[0].getCapabilities()),
+      'and constraints:', JSON.stringify(mediaStream.getAudioTracks()[0].getConstraints()),
+      ' and settings:', JSON.stringify(mediaStream.getAudioTracks()[0].getSettings()),
+    )
     mediaStream.getAudioTracks().forEach((track) => {
       track.onended = (_) => {
         LocalMediaStreams.localAVDeviceMediaStream.removeTrack(track)

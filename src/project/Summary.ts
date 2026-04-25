@@ -50,7 +50,8 @@ export class Summary {
         // This makes sure they don't overlap. It seems to be how Audacity
         // does it. Note that, while zooming, you can see where `skip`
         // becomes a new multiple of SAMPLE_PER_SUMMARY (same as Audacity).
-        for (let j = 1; j < skip / Summary.SAMPLES_PER_SUMMARY; ++j) {
+        const maxIndex = skip / Summary.SAMPLES_PER_SUMMARY
+        for (let j = 1; j < maxIndex; ++j) {
           chunkPosition += 2 * this.channelCount
           if (chunkPosition >= this.summaryValues[chunkIndex].length) {
             ++chunkIndex
@@ -102,10 +103,11 @@ export class Summary {
   }
 
   private summarizeDataInternal(numberIterable: Iterable<number>, length: number) {
-    let chunkIndex = this.getChunkIndex(this.samplesRepresented[0])
-    let chunkPosition = this.getChunkPosition(this.samplesRepresented[0])
+    let samplesRepresented = this.samplesRepresented[0]
+    let chunkIndex = this.getChunkIndex(samplesRepresented)
+    let chunkPosition = this.getChunkPosition(samplesRepresented)
     let channel = 0
-    if (this.samplesRepresented[0] == 0) {
+    if (samplesRepresented == 0) {
       this.addNewChunk()
     }
     for (const nextValue of numberIterable) {
@@ -126,11 +128,11 @@ export class Summary {
       )
       channel = (channel + 1) % this.channelCount
       if (channel == 0) {
-        ++this.samplesRepresented[0]
+        ++samplesRepresented
       }
       if (
-        this.samplesRepresented[0] % Summary.SAMPLES_PER_SUMMARY == 0 &&
-        this.samplesRepresented[0] > 0 &&
+        samplesRepresented % Summary.SAMPLES_PER_SUMMARY == 0 &&
+        samplesRepresented > 0 &&
         channel == 0
       ) {
         this.writeValueToDisk(chunkPosition, chunkIndex)
@@ -147,6 +149,7 @@ export class Summary {
       }
     }
     this.syncFileHandle?.flush()
+    this.samplesRepresented[0] = samplesRepresented
   }
 
   private writeValueToDisk(chunkPosition: number, chunkIndex: number) {

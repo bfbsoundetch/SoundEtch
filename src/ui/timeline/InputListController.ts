@@ -9,6 +9,23 @@ export class InputListController {
   readonly inputControllers = new Map<string, AudioInputController>()
 
   constructor() {
+    AudioControl.addAudioControlListener(state => {
+      switch (state) {
+        case AudioState.PLAYING:
+        case AudioState.RECORDING:
+        case AudioState.PLAYING_PAUSED:
+        case AudioState.RECORDING_PAUSED:
+          this.inputInfoListElement.style.display = 'none'
+          this.inputListElement.style.display = 'none'
+          break
+        case AudioState.MONITORING:
+        case AudioState.MONITORING_PAUSED:
+        case AudioState.STOPPED:
+          this.inputInfoListElement.style.display = ''
+          this.inputListElement.style.display = ''
+          break
+      }
+    })
     AudioInputs.addListener(async () => {
       if (AudioControl.isTimelineActive()) {
         return
@@ -57,7 +74,7 @@ class AudioInputController {
   readonly inputDiv = document.createElement('div')
   readonly inputInfoDiv = document.createElement('div')
 
-  // readonly peakMeter: PeakMeterController
+  readonly peakMeter: PeakMeterController
 
   constructor(id: string, audioInput: AudioInput, type: AudioInputType) {
     this.inputDiv.classList = 'tracklist-item'
@@ -118,7 +135,7 @@ class AudioInputController {
     this.inputInfoDiv.appendChild(muteButton)
     this.inputInfoDiv.appendChild(peakMeterDiv)
 
-    // this.peakMeter = new PeakMeterController(peakMeterDiv, audioInput, true)
-    // this.peakMeter.draw(this.peakMeter)
+    this.peakMeter = new PeakMeterController(peakMeterDiv, audioInput, true)
+    this.peakMeter.draw(this.peakMeter)
   }
 }

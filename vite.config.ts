@@ -6,6 +6,9 @@ import { nodePolyfills } from 'vite-plugin-node-polyfills'
 // https://vitejs.dev/config/
 export default defineConfig({
   base: '/soundetch',
+  define: {
+    global: {}, // Or global: 'window'
+  },
   resolve: {
     alias: {
       assert: '/src/global/EmptyNodeAssert.ts',

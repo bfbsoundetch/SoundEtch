@@ -29,8 +29,8 @@ export class Project extends DatabasePersisted {
     return this.clips
   }
 
-  addTrack(track: Track) {
-    this.tracks.push(track)
+  addTrack(track: Track, index: number = this.tracks.length) {
+    this.tracks.splice(index, 0, track)
   }
 
   addClip(clip: Clip) {

@@ -84,15 +84,16 @@ export class ProjectManager {
     this.projectListeners.forEach((listener) => listener(project))
   }
 
+  static async addTrackToProject(track: Track, index: number) {
+    const project = await ProjectManager.getActiveProject()
+    project.addTrack(track, index)
+    await DatabasePersister.save(project)
+    ProjectManager.projectListeners.forEach((listener) => listener(project))
+  }
+
   static async saveTrack(track: Track) {
     await DatabasePersister.save(track)
-    const project = await ProjectManager.getActiveProject()
     ProjectManager.trackListeners.get((track as any).id)?.forEach((listener) => listener(track))
-    if (!project.getTracks().includes(track)) {
-      project.addTrack(track)
-      await DatabasePersister.save(project)
-      ProjectManager.projectListeners.forEach((listener) => listener(project))
-    }
   }
 
   static async saveClip(clip: Clip) {
@@ -105,6 +106,7 @@ export class ProjectManager {
     length: number,
     startPosition: number,
     source: 'Recording' | 'File',
+    index: number | null = null,
   ): Promise<Track> {
     const activeProject = await this.getActiveProject()
     const clipName = `${source}: ${name} ${activeProject.getClips().length}`
@@ -117,6 +119,7 @@ export class ProjectManager {
     track.addClipView(clipView)
 
     await ProjectManager.saveTrack(track)
+    await ProjectManager.addTrackToProject(track, index ?? activeProject.getTracks().length)
     return track
   }
 

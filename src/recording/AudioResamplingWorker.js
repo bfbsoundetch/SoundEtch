@@ -1,4 +1,5 @@
-import SoxrResampler, { SoxrDatatype, SoxrQuality } from 'wasm-audio-resampler'
+import SoxrResampler from 'wasm-audio-resampler/app/soxr_resampler.js'
+import { SoxrDatatype, SoxrQuality } from 'wasm-audio-resampler/app/utils.js'
 import soxrWasmUrl from 'wasm-audio-resampler/app/soxr_wasm.wasm?url'
 
 self.onmessage = async (e) => {

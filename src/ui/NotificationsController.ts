@@ -39,6 +39,7 @@ export class Notification {
 
   remove() {
     this.element.style.opacity = '0'
+    this.element.style.pointerEvents = 'none'
     clearTimeout(this.timeout)
     this.finished = true
   }
@@ -55,6 +56,7 @@ export class Notification {
 
   private renderElement() {
     this.element.style.opacity = '1'
+    this.element.style.pointerEvents = 'all'
     this.element.className = this.level == Level.ERROR ? 'notification-error' : 'notification-info'
     this.element.innerHTML = ''
 
@@ -74,6 +76,13 @@ export class Notification {
 }
 
 export class NotificationsController {
+
+  private static instance: NotificationsController | null = null
+
+  private static getInstance() {
+    return this.instance ?? (this.instance = new NotificationsController())
+  }
+
   private size = 4
   private readonly parent = document.getElementById('notification-parent') as HTMLDivElement
   private readonly htmlElements = new Array(this.size).fill(null).map((_) => {
@@ -83,27 +92,32 @@ export class NotificationsController {
     return element
   })
   private readonly notifications = new Array<Notification>(this.size)
-  private readonly logger = new Logger('notification')
+  private static readonly logger = new Logger('notification')
 
-  constructor() {
+  private constructor() {
     if (!this.parent.matches(':popover-open')) {
       this.parent.showPopover()
     }
   }
 
-  showError(message: string): Notification {
-    this.logger.error(message)
-    return this.showInternal(message, Level.ERROR)
+  static showError(e: Error): Notification {
+    this.logger.error(e)
+    return this.getInstance().showInternal(e.message, Level.ERROR)
   }
 
-  showLongDurationMessage(message: string): Notification {
-    this.logger.log(message)
-    return this.showInternal(message, Level.LONG)
+  static showErrorMessage(message: string): Notification {
+    this.logger.errorMessage(message)
+    return this.getInstance().showInternal(message, Level.ERROR)
   }
 
-  showShortDurationMessage(message: string): Notification {
+  static showLongDurationMessage(message: string): Notification {
     this.logger.log(message)
-    return this.showInternal(message, Level.SHORT)
+    return this.getInstance().showInternal(message, Level.LONG)
+  }
+
+  static showShortDurationMessage(message: string): Notification {
+    this.logger.log(message)
+    return this.getInstance().showInternal(message, Level.SHORT)
   }
 
   private showInternal(message: string, level: Level): Notification {

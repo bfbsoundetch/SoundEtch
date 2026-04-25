@@ -1,3 +1,4 @@
+import { AudioControl, AudioState } from '../audiocontext/AudioControl'
 import { LocalMediaStreams } from '../mediastreams/LocalMediaStreams'
 import { AudioInput } from './AudioInput'
 import { MediaStreamInput as MediaStreamInput } from './MediaStreamInput'
@@ -15,7 +16,7 @@ export class AudioInputs {
         return
       }
       if (added) {
-        AudioInputs.localAVDevice = new MediaStreamInput('local-mic', track, true)
+        AudioInputs.localAVDevice = new MediaStreamInput('local-mic', track, false)
       } else {
         AudioInputs.localAVDevice = null
       }
@@ -31,6 +32,20 @@ export class AudioInputs {
         AudioInputs.localScreenShare = null
       }
       AudioInputs.notifyListeners()
+    })
+    AudioControl.addAudioControlListener(async state => {
+      switch (state) {
+        case AudioState.STOPPED:
+          const inputs = this.gatherActiveAudioInputs()
+          if (inputs.length > 0) {
+            const newContext = await AudioControl.getOrCreateAudioContext(AudioState.MONITORING)
+            newContext.resume()
+            for (const input of inputs) {
+              input.init(newContext)
+            }
+          }
+          break
+      }
     })
   }
 

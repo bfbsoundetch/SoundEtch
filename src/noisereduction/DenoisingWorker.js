@@ -74,7 +74,9 @@ async function handleMessage(e) {
       break
     }
     case 'resume': {
-      interval = setInterval(readFromQueue, 0)
+      audio_reader = new AudioReader(new RingBuffer(e.data.rawSab, Float32Array))
+      audio_writer = new AudioWriter(new RingBuffer(e.data.denoisedSab, Float32Array))
+      self.interval = setInterval(readFromQueue, 0)
       break
     }
   }

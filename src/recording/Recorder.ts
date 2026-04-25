@@ -9,6 +9,7 @@ import { JobType } from '../audiocontext/ControllableWorkerJob'
 import { AudioControl, AudioState } from '../audiocontext/AudioControl'
 import { cloneWithGetters } from '../global/ObjectUtils'
 import { AudioImporter } from './AudioImporter'
+import { NotificationsController } from '../ui/NotificationsController'
 
 export class Recorder {
   private static writingWorkerController: WorkerController | null = null
@@ -34,6 +35,7 @@ export class Recorder {
         0,
         AudioControl.startPosition,
         'Recording',
+        inputs.length,
       )
       const clipView = track.clipViews[0]!
       const ringBufferArray = RingBuffer.getStorageForCapacity(64 * 1024, Float32Array)
@@ -150,9 +152,7 @@ export class Recorder {
   }
 
   private static showImportCanceledNotification() {
-    const windowWithNotifications = window as any
-    windowWithNotifications.notificationsController ??= new windowWithNotifications.NotificationsController()
-    windowWithNotifications.notificationsController.showShortDurationMessage('Audio import canceled.')
+    NotificationsController.showShortDurationMessage('Audio import canceled.')
   }
 }
 

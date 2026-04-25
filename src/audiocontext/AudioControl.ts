@@ -6,6 +6,7 @@ export enum AudioState {
   MONITORING = 'monitoring',
   PLAYING_PAUSED = 'playingPaused',
   RECORDING_PAUSED = 'recordingPaused',
+  MONITORING_PAUSED = 'monitoringPaused',
   STOPPED = 'stopped',
 }
 
@@ -17,6 +18,10 @@ export function isPausedState(state: AudioState) {
   return state == AudioState.PLAYING_PAUSED || state == AudioState.RECORDING_PAUSED
 }
 
+export function isRecordingState(state: AudioState) {
+  return state == AudioState.RECORDING || state == AudioState.RECORDING_PAUSED
+}
+
 export function isActiveTimelineState(state: AudioState) {
   return state == AudioState.PLAYING || state == AudioState.RECORDING
 }
@@ -25,6 +30,10 @@ export class AudioControl {
   static audioControlListeners = new Array<AudioControlListener>()
   static audioContext: EnhancedAudioContext | null = null
   static startPosition = 0
+  static contextListener = (_: any) => {
+    const state = this.getState()
+    this.audioControlListeners.forEach((l) => l(state))
+  }
 
   static addAudioControlListener(listener: AudioControlListener) {
     this.audioControlListeners.push(listener)
@@ -54,9 +63,14 @@ export class AudioControl {
         return AudioControl.audioContext.mode
       case 'suspended':
       case 'interrupted':
-        return AudioControl.audioContext.mode == AudioState.PLAYING
-          ? AudioState.PLAYING_PAUSED
-          : AudioState.RECORDING_PAUSED
+        switch (AudioControl.audioContext.mode) {
+          case AudioState.PLAYING:
+            return AudioState.PLAYING_PAUSED
+          case AudioState.RECORDING:
+            return AudioState.RECORDING_PAUSED
+          case AudioState.MONITORING:
+            return AudioState.MONITORING_PAUSED
+        }
     }
   }
 
@@ -84,13 +98,11 @@ export class AudioControl {
     position = AudioControl.startPosition,
     loopEnd: number = 0,
   ): Promise<EnhancedAudioContext> {
+    AudioControl.audioContext?.removeEventListener('statechange', this.contextListener)
     await AudioControl.closeAndRemoveAudioContext()
     AudioControl.audioContext = await EnhancedAudioContext.create(mode, position, loopEnd)
     await AudioControl.audioContext.suspend()
-    AudioControl.audioContext.addEventListener('statechange', (_) => {
-      const state = this.getState()
-      this.audioControlListeners.forEach((l) => l(state))
-    })
+    AudioControl.audioContext.addEventListener('statechange', this.contextListener)
     return AudioControl.audioContext!
   }
 

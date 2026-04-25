@@ -8,9 +8,6 @@ import { MediaStreamButtonController } from './MediaStreamButtonController'
 export class AudioInputsController {
   private static LOCAL_DEVICE_ELEMENT_ID = 'mic-audio-source'
   private static LOCAL_SCREEN_SHARE_ELEMENT_ID = 'tab-audio-source'
-  private static GENERATORS_ELEMENT_ID = 'generator-audio-sources'
-  private static REMOTE_SOURCES_ELEMENT_ID = 'meeting-room-audio-sources'
-  private static CLIPS_ELEMENT_ID = 'clip-audio-sources'
 
   private readonly peakMeters = new Map<string, PeakMeterController>()
 

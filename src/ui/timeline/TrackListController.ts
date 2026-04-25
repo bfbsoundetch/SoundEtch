@@ -76,6 +76,12 @@ export class TrackListController {
     new ContextMenuItem('Effect...', () => {}),
   )
 
+  private readonly timelineUnselectionContextMenu = new ContextMenuController(
+    'timeline-unselection-contextmenu',
+    this.pointerStateManager,
+    new ContextMenuItem('Paste', (activeTrackIndex, startSample) => this.paste(activeTrackIndex, startSample)),
+  )
+
   private readonly cursorPoint = new DOMPoint()
   mouseEventToSvgCoord(event: MouseEvent): DOMPoint {
     this.cursorPoint.x = event.clientX
@@ -154,7 +160,7 @@ export class TrackListController {
       switch (state) {
         case AudioState.PLAYING:
         case AudioState.RECORDING:
-          this.translateToFollowPosition(this)
+          this.translateToFollowPosition(0, this)
           break
       }
     })
@@ -186,6 +192,10 @@ export class TrackListController {
         const trackListInfo = new TrackListInfo(track, trackInfoDiv)
 
         const waveformDiv = document.createElement('div')
+        waveformDiv.addEventListener('contextmenu', (mouseEvent) => {
+          mouseEvent.preventDefault()
+          this.timelineUnselectionContextMenu.draw(mouseEvent.clientX, mouseEvent.clientY)
+        })
         waveformDiv.style.height = `${7 * track.getChannelCount() + 1.5}rem`
         waveformDiv.id = `waveform-track-${track.id}`
 
@@ -320,9 +330,11 @@ export class TrackListController {
       return
     }
     const newClipboard: typeof Clipboard.copiedClipViews = []
-    const savePromises = []
+    const lowSample = Math.min(this.selection!.startSample, this.selection!.endSample)
+    const highSample = Math.max(this.selection!.startSample, this.selection!.endSample)
     this.selection.waveforms.forEach((waveform) => {
-      newClipboard.push(waveform.track.slice(this.selection!.startSample, this.selection!.endSample, del))
+      newClipboard.push(waveform.track.slice(lowSample, highSample, del))
+      waveform.drawAudioData()
     })
     Clipboard.copiedClipViews = newClipboard
     Clipboard.copyStartPosition = this.selection?.startSample ?? null
@@ -384,11 +396,12 @@ export class TrackListController {
     this.positionMarkerController.draw()
   }
 
-  private translateToFollowPosition(controller: TrackListController) {
+  private translateToFollowPosition(timestamp: number, controller: TrackListController) {
     if (AudioControl.getState() != AudioState.PLAYING && AudioControl.getState() != AudioState.RECORDING) {
       this.draw()
       return
     }
+    requestAnimationFrame((timestamp) => controller.translateToFollowPosition(timestamp, controller))
     const windowMinSamples = controller.translationUnits * this.timelineController.samplesPerUnit
     const windowMaxSamples = windowMinSamples + this.width * this.timelineController.samplesPerUnit
     const position = AudioControl.audioContext!.getPosition()
@@ -399,10 +412,8 @@ export class TrackListController {
       this.translationUnits = Math.floor(position / this.timelineController.samplesPerUnit - this.width * 0.8)
     }
     this.timelineController.draw()
-    this.waveforms.forEach((waveform) => waveform.draw())
+    this.waveforms.forEach((waveform) => waveform.drawAudioData())
     this.drawSelection()
     this.positionMarkerController.draw(position)
-
-    requestAnimationFrame(() => controller.translateToFollowPosition(controller))
   }
 }

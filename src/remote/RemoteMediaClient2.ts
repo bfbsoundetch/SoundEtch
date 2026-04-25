@@ -397,7 +397,7 @@ export class RemoteMediaClient2 {
     dataConnection.addListener('data', (data) => this.handleDataMessage(dataConnection, data))
     dataConnection.addListener('error', (e) => {
       this.handleClosedDataConnection(dataConnection)
-      this.logger.error(e.message)
+      this.logger.errorMessage(e.message)
     })
 
     if (dataConnection.open) {
@@ -444,7 +444,7 @@ export class RemoteMediaClient2 {
       this.notifyStateListeners()
     })
     mediaConnection.addListener('error', (error) => {
-      this.logger.error('Lost connection to "' + mediaConnection.peer + '" due to: ' + error.message)
+      this.logger.errorMessage('Lost connection to "' + mediaConnection.peer + '" due to: ' + error.message)
       const isScreenShare = this.isScreenShareConnection(mediaConnection)
       AudioInputs.removeRemoteAudioSource(mediaConnection.peer, isScreenShare)
       if (isScreenShare) {

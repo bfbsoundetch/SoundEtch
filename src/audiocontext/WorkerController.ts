@@ -1,5 +1,6 @@
 import { JobType } from './ControllableWorkerJob'
 import { Logger } from '../global/Logger'
+import { AudioControl } from './AudioControl'
 
 export class WorkerController {
   private audioWorkletNodes = new Array<AudioWorkletNode>()
@@ -15,20 +16,16 @@ export class WorkerController {
       type: 'module',
     })
     this.worker.addEventListener('message', async (event) => {
-      this.logger.debug('worker sent ' + Object.keys(event.data))
+      this.logger.debug('worker sent {' + Object.keys(event.data).map(k => `${k}: ${JSON.stringify(event.data[k]).substring(0, 100)}`).join('\n') + '}')
       switch (event.data.type) {
         case 'finished':
-          this.audioWorkletNodes.forEach((node) =>
-            node.port.postMessage({
-              type: 'finished',
-            }),
-          )
+          this.finish()
           break
         case 'ready':
           {
             const audioContext = this.audioWorkletNodes[0]?.context
             if ((audioContext as any)?.startRendering) {
-              this.logger.error('really rendering')
+              this.logger.errorMessage('really rendering')
               ;(audioContext as any)?.startRendering?.()
             } else {
               await (audioContext as any)?.resume?.()
@@ -51,15 +48,22 @@ export class WorkerController {
 
   setAudioWorkletNode(audioWorkletNodes: Array<AudioWorkletNode>) {
     this.audioWorkletNodes = audioWorkletNodes
-    audioWorkletNodes.forEach((node) =>
-      node.port.addEventListener('message', (e) => {
+    let finishedNodes = 0
+    const context = audioWorkletNodes[0]!.context as AudioContext
+    audioWorkletNodes.forEach((node) => {
+        node.port.onmessage = (e) => {
+          if (e.data.type == 'finished') {
+            if (++finishedNodes == audioWorkletNodes.length) {
+              context.close()
+            }
+          }
+        }
         node.addEventListener('processorerror', (e) => {
-          this.logger.error(e.error?.toString?.() ?? String(e.error))
+          this.logger.errorMessage(e.error?.toString?.() ?? String(e.error))
           ;(audioContext as any)?.close?.() ?? (audioContext as any)?.suspend()
         })
-      }),
+      }
     )
-    const context = audioWorkletNodes[0]!.context
     context.addEventListener('statechange', () => {
       this.logger.debug('Audio context state is now ' + context.state)
       switch (context.state) {
@@ -78,11 +82,11 @@ export class WorkerController {
 
   finish() {
     this.logger.debug('Worker is finished.')
-    this.audioWorkletNodes.forEach((node) =>
+    this.audioWorkletNodes.forEach((node) => {
       node.port.postMessage({
         type: 'finished',
-      }),
-    )
+      })
+    })
     this.audioWorkletNodes = []
   }
 

@@ -54,6 +54,7 @@ export class Waveform extends TrackListItemController {
       this.selection.rect.addEventListener('contextmenu', (event) => {
         event.preventDefault()
         this.trackListController.timelineSelectionContextMenu.draw(event.clientX, event.clientY)
+        event.stopPropagation()
       })
 
       this.selection.leftExpand.style.cursor = 'col-resize'
@@ -120,14 +121,6 @@ export class Waveform extends TrackListItemController {
     div.addEventListener('dblclick', (event) => {
       trackListController.selectTrack(this)
     })
-    AudioControl.addAudioControlListener((state) => {
-      switch (state) {
-        case AudioState.RECORDING:
-          const topSvgElement = this.getTopSvgElement()
-          this.drawAudioDataForCanvasXRange(this, topSvgElement, 0, this.width)
-          break
-      }
-    })
     this.topSvgElement = this.getTopSvgElement()
     this.topSvgElement.addEventListener('mouseenter', (mouseEvent) => {
       this.trackListController.pointerStateManager.setPointedOverTrack(this)
@@ -172,6 +165,10 @@ export class Waveform extends TrackListItemController {
 
     this.drawAudioDataForCanvasXRange(this, topSvgElement, 0, this.width)
     this.drawAxes()
+  }
+
+  drawAudioData() {
+    this.drawAudioDataForCanvasXRange(this, this.getTopSvgElement(), 0, this.width)
   }
 
   resize() {
@@ -253,10 +250,6 @@ export class Waveform extends TrackListItemController {
       }
 
       sample = currentClipView.getEndPosition()
-    }
-
-    if (AudioControl.getState() == AudioState.RECORDING) {
-      requestAnimationFrame(() => waveform.drawAudioDataForCanvasXRange(waveform, topSvgElement, start, end))
     }
   }
 

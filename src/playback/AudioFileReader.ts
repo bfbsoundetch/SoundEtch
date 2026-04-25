@@ -142,7 +142,7 @@ export class AudioFileReader {
     try {
       await this.runBufferFillingLoopInternal(id.toString())
     } catch (e: any) {
-      this.logger.error(e)
+      this.logger.errorMessage(e)
       postMessage({ error: e, type: 'error' })
     } finally {
       this.resumeResolver?.('')

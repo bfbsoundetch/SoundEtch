@@ -65,7 +65,6 @@ export class MeetingRoomController {
     this.usernameForm.parentElement as HTMLDivElement,
   )
   private readonly enterMeetingErrorBubble = new ErrorBubbleController('EnterMeetingButton', this.enterMeetingButton)
-  private readonly notificationsController = new NotificationsController()
   private readonly micButtonController: MediaStreamButtonController
   private readonly videoButtonController: MediaStreamButtonController
   private readonly logger = new Logger('MeetingRoomController')
@@ -213,14 +212,14 @@ export class MeetingRoomController {
   async copyMeetingLink() {
     const meetingLink = this.getMeetingLink()
     if (!meetingLink) {
-      this.notificationsController.showError('Meeting link is not available yet.')
+      NotificationsController.showErrorMessage('Meeting link is not available yet.')
       return
     }
     try {
       await navigator.clipboard.writeText(meetingLink)
-      this.notificationsController.showShortDurationMessage('Meeting link copied.')
+      NotificationsController.showShortDurationMessage('Meeting link copied.')
     } catch (_) {
-      this.notificationsController.showError('Unable to copy the meeting link.')
+      NotificationsController.showErrorMessage('Unable to copy the meeting link.')
     }
   }
 
@@ -328,7 +327,7 @@ export class MeetingRoomController {
   private async stateListener(state: State) {
     console.error(`new state ${JSON.stringify(state)}`)
     if (state.error) {
-      this.notificationsController.showError(state.error)
+      NotificationsController.showErrorMessage(state.error)
       this.remoteMediaClient = null
       this.setUiForDisconnectedState()
       return

@@ -24,7 +24,13 @@ export class Logger {
     this.logAtLevel(text, Level.INFO)
   }
 
-  error(text: string, tag: string | null = null) {
+  error(e: Error, tag: string | null = null) {
+    const item = new LogItem(new Date(), this.tag, e.message, Level.ERROR)
+    console.error(e)
+    Logger.callback(item)
+  }
+
+  errorMessage(text: string, tag: string | null = null) {
     this.logAtLevel(text, Level.ERROR)
   }
 

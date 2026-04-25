@@ -156,7 +156,7 @@ export class RemoteMediaClient {
       }
     }
     newPeerConnection.onicecandidateerror = (event: RTCPeerConnectionIceErrorEvent) => {
-      this.logger.error(event.errorCode + ' ' + event.errorText)
+      this.logger.errorMessage(event.errorCode + ' ' + event.errorText)
     }
     newPeerConnection.onnegotiationneeded = () => this.negotiateRtc(newPeerConnection, username)
     const peer = new Peer(this, newPeerConnection, username, this.chatLog, (_: Peer) => {
@@ -309,7 +309,7 @@ export class RemoteMediaClient {
           this.getAndMaybeAddPeerConnection(message.fromUser)!.rtcPeerConnection.addIceCandidate(message.candidate)
           break
         case 'serverReportedError':
-          this.logger.error(message.error)
+          this.logger.errorMessage(message.error)
           if (this.serverWebSocket) {
             this.serverWebSocket.then((s) => {
               s.close()
@@ -355,7 +355,7 @@ export class RemoteMediaClient {
     if (!this.host && peerConnection.signalingState != 'stable') {
       // Set the local and remove descriptions for rollback; don't proceed
       // until both return.
-      this.logger.error('Peer connection was not stable ' + peerConnection.signalingState)
+      this.logger.errorMessage('Peer connection was not stable ' + peerConnection.signalingState)
       await Promise.all([
         peerConnection.setLocalDescription({ type: 'rollback' }),
         peerConnection.setRemoteDescription(sessionDescription),
@@ -453,7 +453,7 @@ export class RemoteMediaClient {
 
   sendToAllPeers(peerMessage: PeerMessage) {
     this.peers.forEach((peer) => {
-      this.logger.error(`sending to ${peer.username}: ${JSON.stringify(peerMessage)}`)
+      this.logger.errorMessage(`sending to ${peer.username}: ${JSON.stringify(peerMessage)}`)
       if (peer.username != peerMessage.fromUser) {
         peer.sendMessage(peerMessage)
       }
@@ -524,7 +524,7 @@ class Peer {
     this.logger = new Logger(`Peer_${this.username}`)
     rtcPeerConnection.ondatachannel = (channelEvent) => {
       channelEvent.channel.onmessage = (event) => {
-        this.logger.error(`receive ${event.data}`)
+        this.logger.errorMessage(`receive ${event.data}`)
         const peerMessage: PeerMessage = JSON.parse(event.data)
         this.handlePeerMessage(peerMessage)
       }

@@ -1,5 +1,5 @@
 import { NoiseReducer } from '../noisereduction/NoiseReducer'
-import { Analyzer } from '../analyzers/Analyzer'
+import { SimpleAnalyzer } from '../analyzers/SimpleAnalyzer'
 import { AudioInput } from './AudioInput'
 
 export class MediaStreamInput implements AudioInput {
@@ -7,7 +7,7 @@ export class MediaStreamInput implements AudioInput {
   readonly channelCount: number
   private sourceNode: MediaStreamAudioSourceNode | null = null
   private noiseReducer: NoiseReducer | null = null
-  private analyzer: Analyzer
+  private analyzer: SimpleAnalyzer
   isReducingNoise = false
 
   constructor(
@@ -20,7 +20,7 @@ export class MediaStreamInput implements AudioInput {
     }
     this.channelCount = mediaStreamTrack.getSettings().channelCount ?? 1
     this.name = mediaStreamTrack.label
-    this.analyzer = new Analyzer()
+    this.analyzer = new SimpleAnalyzer()
   }
 
   getLevel(): number {
@@ -36,7 +36,7 @@ export class MediaStreamInput implements AudioInput {
   async init(context: AudioContext) {
     if (this.sourceNode?.context != context) {
       this.sourceNode = context.createMediaStreamSource(new MediaStream([this.mediaStreamTrack]))
-      this.sourceNode.channelCount = this.channelCount // used by peak meter library
+      this.sourceNode.channelCount = this.channelCount
       if (this.supportsNoiseReduction) {
         const noiseReducerResult = await this.getNoiseReducer().reduceNoiseFrom(this.sourceNode)
         if (noiseReducerResult) {
@@ -68,7 +68,7 @@ export class MediaStreamInput implements AudioInput {
     if (!this.sourceNode) {
       return
     }
-    this.getNoiseReducer().reduceNoiseFrom(this.sourceNode)
+    await this.getNoiseReducer().reduceNoiseFrom(this.sourceNode)
     this.analyzer.attachAnalyzer(this.getNoiseReducer().noiseReducerNode!)
     this.isReducingNoise = true
   }

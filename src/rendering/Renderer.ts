@@ -16,18 +16,12 @@ export class Renderer {
     const project = await ProjectManager.getActiveProject()
     const projectLength = selectedRegion ? selectedRegion.endSample - selectedRegion.startSample : project.getTracks().reduce((maxLength, track) => Math.max(maxLength, track.length), 0)
     const exportInfo = encoderInfo.encoder === 'wav' ? { ...encoderInfo, sampleCount: projectLength } : encoderInfo
-    try {
-      const file = await showSaveFilePicker({
-        startIn: 'downloads',
-        suggestedName: `${project.title}.${exportInfo.encoder}`,
-      } as any)
+    const file = await showSaveFilePicker({
+      startIn: 'downloads',
+      suggestedName: `${project.title}.${exportInfo.encoder}`,
+    } as any)
 
-      ;(window as any).processingModalController?.show('Exporting project...', () => Renderer.cancelRender())
-      await Renderer.render(file, 1, project, exportInfo, selectedRegion?.startSample ?? 0, projectLength, ...project.getTracks())
-      ;(window as any).processingModalController?.hide()
-    } catch {
-      ;(window as any).processingModalController?.hide()
-    }
+    return Renderer.render(file, 1, project, exportInfo, selectedRegion?.startSample ?? 0, projectLength, ...project.getTracks())
   }
 
   static async render(

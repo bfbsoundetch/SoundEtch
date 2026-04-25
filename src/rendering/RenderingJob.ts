@@ -84,7 +84,6 @@ self.onmessage = async (e) => {
         pendingChunk[pendingLength++] = output[channel]![frame]!
       }
     }
-
   }
 
   flushPendingChunk()
@@ -180,7 +179,6 @@ class ReadingOfflineProcessor {
         this.writePosition = Math.max(this.startPosition, clipView.startPosition)
         this.clipFileOffset =
           clipView.offset * Float32Array.BYTES_PER_ELEMENT * this.channelCount
-        this.clipFileOffset += Math.max(0, this.writePosition - clipView.startPosition) * Float32Array.BYTES_PER_ELEMENT * this.clipView.clip.channelCount
         const file = await FileSystemUtils.getFileHandle(
           `${this.projectId}`,
           `${clipView.clip.id}`,

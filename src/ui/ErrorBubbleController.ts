@@ -21,7 +21,7 @@ export class ErrorBubbleController {
   }
 
   showError(message: string, timeoutMs: number = 0, direction: Direction = Direction.UP) {
-    this.logger.error(message)
+    this.logger.errorMessage(message)
     const errorSpan = this.errorSpan
     if (this.timeout) {
       clearTimeout(this.timeout)

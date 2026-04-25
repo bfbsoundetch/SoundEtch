@@ -56,6 +56,7 @@ export class Track extends DatabasePersisted implements Analyzable {
       const clipView = this.clipViews[i]
       if (clipView.startPosition <= newClipView.startPosition) {
         if (clipView.startPosition + clipView.length > newClipView.startPosition) {
+          console.error(clipView.startPosition, clipView.length, newClipView.startPosition, newClipView.length)
           console.error('this 1 ' + i) //todo this happened
           return false
         }
@@ -128,6 +129,9 @@ export class Track extends DatabasePersisted implements Analyzable {
     let endIndex = this.findClipViewIndexAfterPosition(end)
     let endClipView = null
     if (endIndex < this.clipViews.length) {
+      if (this.clipViews[endIndex].startPosition > end) {
+        --endIndex
+      }
       endClipView = this.clipViews[endIndex]
     }
 
@@ -172,12 +176,16 @@ export class Track extends DatabasePersisted implements Analyzable {
       ? this.clipViews.splice(startIndex, endIndex - startIndex + 1, ...newClipViews)
       : this.clipViews.slice(startIndex, endIndex + 1)
 
+    console.error(slice.length, startIndex, endIndex)
     if (sliceStart != null) {
       slice[0] = sliceStart
     }
+    console.error(slice.length)
     if (sliceEnd != null) {
       slice[slice.length - 1] = sliceEnd
     }
+    console.error(slice.length)
+    console.error(slice.length)
     return slice
   }
 

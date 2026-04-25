@@ -42,7 +42,7 @@ export class AudioFileWriter {
         await new Promise((resolver) => setTimeout(resolver, 10))
       }
     } catch (e: any) {
-      this.logger.error('error ' + e)
+      this.logger.errorMessage('error ' + e)
       postMessage({ error: e })
     } finally {
       this.fileSyncHandle.close()
@@ -73,7 +73,7 @@ export class AudioFileWriter {
     } else if (this.pausePromise) {
       await this.pausePromise
     } else {
-      this.logger.log('Underrun detected while importing an audio file.')
+      this.logger.log('Underrun detected while recording.')
     }
     return true
   }

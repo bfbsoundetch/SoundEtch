@@ -13,6 +13,7 @@ import {
   WavSampleFormat,
 } from '../encoders/EncoderType'
 import { TrackListController } from './timeline/TrackListController'
+import { NotificationsController } from './NotificationsController'
 
 export class ExportProjectController {
   private readonly formatContainerMap = new Map<Format, HTMLDivElement>()
@@ -80,7 +81,14 @@ export class ExportProjectController {
     const encoderInfo = this.createEncoderInfo()
     ;(document.getElementById('export-project-modal') as HTMLDialogElement).close()
     const selectedRegion = ((window as any).trackListController as TrackListController).selectedRegion
-    await Renderer.exportProject(encoderInfo, selectedRegion)
+    ;(window as any).processingModalController?.show('Exporting project...', () => Renderer.cancelRender())
+    try {
+      await Renderer.exportProject(encoderInfo, selectedRegion)
+    } catch (e) {
+      NotificationsController.showError(e as Error)
+    } finally {
+      ;(window as any).processingModalController?.hide()
+    }
   }
 
   private createEncoderInfo(): EncoderInfo {
