@@ -7,6 +7,8 @@ import { AudioInputs } from '../audioinputs/AudioInputs'
 import { AudioInput } from '../audioinputs/AudioInput'
 import { LocalMediaStreams } from '../mediastreams/LocalMediaStreams'
 import { Logger } from '../global/Logger'
+import { AudioControl, AudioState } from '../audiocontext/AudioControl'
+import { Recorder } from '../recording/Recorder'
 
 enum VideoLayout {
   SPOTLIGHT = 'spotlight',
@@ -56,6 +58,7 @@ export class MeetingRoomController {
   private videoLayout = VideoLayout.GRID
   private usernameForm = document.getElementById('username-form') as HTMLFormElement
   private enterMeetingButton = document.getElementById('enter-meeting-room-button') as HTMLButtonElement
+  private meetingRecordButton = document.getElementById('meeting-record-button') as HTMLButtonElement
 
   private currentState: State = { members: [], roomId: null, screenShare: null, error: null }
   private remoteMediaClient: RemoteMediaClient3 | null = null
@@ -110,6 +113,7 @@ export class MeetingRoomController {
     this.micButtonController = new MediaStreamButtonController(micButton, 'audio', false)
     const vidButton = document.getElementById('meeting-camera-button')!
     this.videoButtonController = new MediaStreamButtonController(vidButton, 'video', false)
+    AudioControl.addAudioControlListener((state) => this.updateMeetingRecordButton(state))
     this.setUiForDisconnectedState()
     this.applyVideoLayout()
     this.selfVideoContainer.isActive = true
@@ -453,6 +457,57 @@ export class MeetingRoomController {
 
     linkBox.style.display = 'flex'
     linkElement.innerText = meetingLink
+  }
+
+  private updateMeetingRecordButton(state: AudioState) {
+    const playIcon = this.meetingRecordButton.getElementsByClassName('play')[0] as SVGUseElement
+    const recordIcon = this.meetingRecordButton.getElementsByClassName('record')[0] as SVGUseElement
+    const label = this.meetingRecordButton.getElementsByTagName('span')[0]
+
+    switch (state) {
+      case AudioState.PLAYING:
+        playIcon.style.opacity = '1'
+        recordIcon.style.opacity = '0'
+        label.innerText = 'Playing'
+        this.meetingRecordButton.className = 'meeting-button tooltipped animated-brightness'
+        this.meetingRecordButton.onclick = () => {}
+        this.meetingRecordButton.style.background = ''
+        break
+      case AudioState.RECORDING:
+        playIcon.style.opacity = '0'
+        recordIcon.style.opacity = '1'
+        label.innerText = 'Recording'
+        this.meetingRecordButton.className = 'meeting-button tooltipped animated-brightness'
+        this.meetingRecordButton.onclick = () => {}
+        this.meetingRecordButton.style.background = ''
+        break
+      case AudioState.PLAYING_PAUSED:
+        playIcon.style.opacity = '1'
+        recordIcon.style.opacity = '0'
+        label.innerText = 'Resume Playing'
+        this.meetingRecordButton.className = 'meeting-button tooltipped clickable'
+        this.meetingRecordButton.onclick = AudioControl.unpause
+        this.meetingRecordButton.style.background = ''
+        break
+      case AudioState.RECORDING_PAUSED:
+        playIcon.style.opacity = '0'
+        recordIcon.style.opacity = '1'
+        label.innerText = 'Resume Recording'
+        this.meetingRecordButton.className = 'meeting-button tooltipped clickable'
+        this.meetingRecordButton.onclick = AudioControl.unpause
+        this.meetingRecordButton.style.background = ''
+        break
+      case AudioState.MONITORING:
+      case AudioState.MONITORING_PAUSED:
+      case AudioState.STOPPED:
+        playIcon.style.opacity = '0'
+        recordIcon.style.opacity = '1'
+        label.innerText = 'Record'
+        this.meetingRecordButton.className = 'meeting-button tooltipped clickable'
+        this.meetingRecordButton.onclick = Recorder.startRecordingActiveAudioInputs
+        this.meetingRecordButton.style.background = ''
+        break
+    }
   }
 
   private getMeetingLink() {
