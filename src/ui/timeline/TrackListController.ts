@@ -339,7 +339,10 @@ export class TrackListController {
     Clipboard.copiedClipViews = newClipboard
     Clipboard.copyStartPosition = this.selection?.startSample ?? null
     if (del) {
-      await Promise.all(this.selection.waveforms.entries().map((w) => ProjectManager.saveTrack(w[0].track)))
+      await Promise.all(this.selection.waveforms.entries().map((w) => {
+        
+        return ProjectManager.saveTrack(w[0].track)
+      }))
     }
   }
 

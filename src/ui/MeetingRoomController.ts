@@ -1,4 +1,4 @@
-import { RemoteMediaClient2, State } from '../remote/RemoteMediaClient2'
+import { RemoteMediaClient3, State } from '../remote/RemoteMediaClient3'
 import { MediaStreamButtonController } from './MediaStreamButtonController'
 import { PeakMeterController } from './PeakMeterController'
 import { Direction, ErrorBubbleController } from './ErrorBubbleController'
@@ -58,7 +58,7 @@ export class MeetingRoomController {
   private enterMeetingButton = document.getElementById('enter-meeting-room-button') as HTMLButtonElement
 
   private currentState: State = { members: [], roomId: null, screenShare: null, error: null }
-  private remoteMediaClient: RemoteMediaClient2 | null = null
+  private remoteMediaClient: RemoteMediaClient3 | null = null
 
   private readonly usernameErrorBubble = new ErrorBubbleController(
     'MeetingUsername',
@@ -155,7 +155,7 @@ export class MeetingRoomController {
       this.usernameErrorBubble.showError('Please enter your name', 2000)
       return false
     }
-    this.remoteMediaClient = new RemoteMediaClient2(username)
+    this.remoteMediaClient = new RemoteMediaClient3(username)
     this.remoteMediaClient.addStateListener((state) => this.stateListener(state))
     this.setUiForConnectedState()
     return true
@@ -179,7 +179,7 @@ export class MeetingRoomController {
       }
 
       this.logger.log('About to join ' + meetingId)
-      this.remoteMediaClient = new RemoteMediaClient2(username, meetingId)
+      this.remoteMediaClient = new RemoteMediaClient3(username, meetingId)
       this.remoteMediaClient.addStateListener((state) => this.stateListener(state))
       this.setUiForConnectedState()
       return true
