@@ -1,12 +1,13 @@
 import { Player } from '../playback/Player'
 import { AudioControl, AudioState } from '../audiocontext/AudioControl'
-import { Recorder } from '../recording/Recorder'
 import { TrackListController } from './timeline/TrackListController'
+import { RecordButtonController } from './RecordButtonController'
 
 export class HeaderController {
-  private firstHeaderButton = document.getElementById('first-header-button') as HTMLFormElement
-  private secondHeaderButton = document.getElementById('second-header-button') as HTMLFormElement
-  private thirdHeaderButton = document.getElementById('third-header-button') as HTMLFormElement
+  private firstHeaderButton = document.getElementById('first-header-button') as HTMLButtonElement
+  private secondHeaderButton = document.getElementById('second-header-button') as HTMLButtonElement
+  private thirdHeaderButton = document.getElementById('third-header-button') as HTMLButtonElement
+  private readonly recordButtonController = new RecordButtonController(this.firstHeaderButton, 'project-button')
 
   constructor() {
     AudioControl.addAudioControlListener((state) => {
@@ -28,6 +29,7 @@ export class HeaderController {
   }
 
   private handleSwitchToActiveState() {
+    this.recordButtonController.cancelCountdown()
     if (AudioControl.getState() == AudioState.PLAYING) {
       ;(this.firstHeaderButton.getElementsByClassName('play')[0] as SVGUseElement).style.opacity = '1'
       ;(this.firstHeaderButton.getElementsByClassName('record')[0] as SVGUseElement).style.opacity = '0'
@@ -38,6 +40,7 @@ export class HeaderController {
       this.firstHeaderButton.getElementsByTagName('span')[0].innerText = 'Recording'
     }
     this.firstHeaderButton.getElementsByTagName('span')[0].style.visibility = 'invisible'
+    this.firstHeaderButton.disabled = false
     this.firstHeaderButton.className = 'project-button tooltipped animated-brightness'
     this.firstHeaderButton.onclick = () => {}
     this.firstHeaderButton.style.background = 'rgba(0,0,0,.2)'
@@ -53,6 +56,7 @@ export class HeaderController {
   }
 
   private handleSwitchToPausedState() {
+    this.recordButtonController.cancelCountdown()
     if (AudioControl.getState() == AudioState.PLAYING_PAUSED) {
       ;(this.firstHeaderButton.getElementsByClassName('play')[0] as SVGUseElement).style.opacity = '1'
       ;(this.firstHeaderButton.getElementsByClassName('record')[0] as SVGUseElement).style.opacity = '0'
@@ -62,6 +66,7 @@ export class HeaderController {
       ;(this.firstHeaderButton.getElementsByClassName('record')[0] as SVGUseElement).style.opacity = '1'
       this.firstHeaderButton.getElementsByTagName('span')[0].innerText = 'Resume Recording'
     }
+    this.firstHeaderButton.disabled = false
     this.firstHeaderButton.className = 'project-button tooltipped clickable'
     this.firstHeaderButton.onclick = AudioControl.unpause
     ;(this.secondHeaderButton.getElementsByClassName('pause')[0] as SVGUseElement).style.opacity = '1'
@@ -79,8 +84,7 @@ export class HeaderController {
     ;(this.firstHeaderButton.getElementsByClassName('play')[0] as SVGUseElement).style.opacity = '0'
     ;(this.firstHeaderButton.getElementsByClassName('record')[0] as SVGUseElement).style.opacity = '1'
     this.firstHeaderButton.getElementsByTagName('span')[0].innerText = 'Record'
-    this.firstHeaderButton.classList = 'project-button tooltipped clickable'
-    this.firstHeaderButton.onclick = Recorder.startRecordingActiveAudioInputs
+    this.recordButtonController.configureStoppedState()
     this.firstHeaderButton.style.background = 'none'
     ;(this.secondHeaderButton.getElementsByClassName('pause')[0] as SVGUseElement).style.opacity = '0'
     ;(this.secondHeaderButton.getElementsByClassName('play')[0] as SVGUseElement).style.opacity = '1'

@@ -19,7 +19,7 @@ export class Recorder {
     if (!activeProject) {
       throw new Error('No active project.')
     }
-    Recorder.startRecording2(AudioInputs.gatherActiveAudioInputs())
+    return Recorder.startRecording2(AudioInputs.gatherActiveAudioInputs())
   }
 
   static async startRecording2(audioInputs: Array<AudioInput>) {

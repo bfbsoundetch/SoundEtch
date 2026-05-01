@@ -91,13 +91,13 @@ export class LocalMediaStreams {
         sampleSize: 32,
       },
     })
+    mediaStream.getTracks().forEach(track => LocalMediaStreams.localScreenMediaStream.addTrack(track))
     // The video stream needs to stay open the entire time it's capturing audio.
     mediaStream.getTracks().forEach((track) => {
       track.onended = (_) => {
         LocalMediaStreams.localScreenMediaStream.removeTrack(track)
         LocalMediaStreams.updateScreenListeners(false, track)
       }
-      LocalMediaStreams.localScreenMediaStream.addTrack(track)
       LocalMediaStreams.updateScreenListeners(true, track)
     })
     return mediaStream
@@ -147,8 +147,6 @@ export class LocalMediaStreams {
   }
 
   private static updateScreenListeners(added: boolean, track: MediaStreamTrack) {
-    console.error('start')
     LocalMediaStreams.screenChangeListeners.forEach((listener) => listener(added, track))
-    console.error('end')
   }
 }

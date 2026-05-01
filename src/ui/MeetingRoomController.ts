@@ -8,7 +8,7 @@ import { AudioInput } from '../audioinputs/AudioInput'
 import { LocalMediaStreams } from '../mediastreams/LocalMediaStreams'
 import { Logger } from '../global/Logger'
 import { AudioControl, AudioState } from '../audiocontext/AudioControl'
-import { Recorder } from '../recording/Recorder'
+import { RecordButtonController } from './RecordButtonController'
 
 enum VideoLayout {
   SPOTLIGHT = 'spotlight',
@@ -59,6 +59,7 @@ export class MeetingRoomController {
   private usernameForm = document.getElementById('username-form') as HTMLFormElement
   private enterMeetingButton = document.getElementById('enter-meeting-room-button') as HTMLButtonElement
   private meetingRecordButton = document.getElementById('meeting-record-button') as HTMLButtonElement
+  private readonly recordButtonController = new RecordButtonController(this.meetingRecordButton, 'meeting-button')
 
   private currentState: State = { members: [], roomId: null, screenShare: null, error: null }
   private remoteMediaClient: RemoteMediaClient3 | null = null
@@ -340,8 +341,10 @@ export class MeetingRoomController {
     if (state.screenShare) {
       if (state.screenShare == 'self') {
         this.screenVideoContainer.vidElement.srcObject = LocalMediaStreams.localScreenMediaStream
+        this.screenVideoContainer.vidElement.muted = true
       } else {
         this.screenVideoContainer.vidElement.srcObject = state.screenShare.mediaStream
+        this.screenVideoContainer.vidElement.muted = false
       }
       if (!this.screenVideoContainer.isActive) {
         this.videoLayout = VideoLayout.SPOTLIGHT
@@ -354,7 +357,9 @@ export class MeetingRoomController {
     }
     for (let i = 0; i < this.guestContainers.length; ++i) {
       if (state.members.length > i) {
-        this.guestContainers[i].vidElement.srcObject = state.members[i].mediaStream
+        if (this.guestContainers[i].vidElement.srcObject != state.members[i].mediaStream) {
+          this.guestContainers[i].vidElement.srcObject = state.members[i].mediaStream
+        }
         this.guestContainers[i].vidElement.poster = this.getSvgPosterForUser(state.members[i].username, false)
         // this.guestContainers[i].startPeakMeter(
         //   AudioInputs.remoteStreams.get({ username: state.members[i].username, isScreenShare: false })!,
@@ -466,33 +471,41 @@ export class MeetingRoomController {
 
     switch (state) {
       case AudioState.PLAYING:
+        this.recordButtonController.cancelCountdown()
         playIcon.style.opacity = '1'
         recordIcon.style.opacity = '0'
         label.innerText = 'Playing'
+        this.meetingRecordButton.disabled = false
         this.meetingRecordButton.className = 'meeting-button tooltipped animated-brightness'
         this.meetingRecordButton.onclick = () => {}
         this.meetingRecordButton.style.background = ''
         break
       case AudioState.RECORDING:
+        this.recordButtonController.cancelCountdown()
         playIcon.style.opacity = '0'
         recordIcon.style.opacity = '1'
         label.innerText = 'Recording'
+        this.meetingRecordButton.disabled = false
         this.meetingRecordButton.className = 'meeting-button tooltipped animated-brightness'
         this.meetingRecordButton.onclick = () => {}
         this.meetingRecordButton.style.background = ''
         break
       case AudioState.PLAYING_PAUSED:
+        this.recordButtonController.cancelCountdown()
         playIcon.style.opacity = '1'
         recordIcon.style.opacity = '0'
         label.innerText = 'Resume Playing'
+        this.meetingRecordButton.disabled = false
         this.meetingRecordButton.className = 'meeting-button tooltipped clickable'
         this.meetingRecordButton.onclick = AudioControl.unpause
         this.meetingRecordButton.style.background = ''
         break
       case AudioState.RECORDING_PAUSED:
+        this.recordButtonController.cancelCountdown()
         playIcon.style.opacity = '0'
         recordIcon.style.opacity = '1'
         label.innerText = 'Resume Recording'
+        this.meetingRecordButton.disabled = false
         this.meetingRecordButton.className = 'meeting-button tooltipped clickable'
         this.meetingRecordButton.onclick = AudioControl.unpause
         this.meetingRecordButton.style.background = ''
@@ -503,9 +516,7 @@ export class MeetingRoomController {
         playIcon.style.opacity = '0'
         recordIcon.style.opacity = '1'
         label.innerText = 'Record'
-        this.meetingRecordButton.className = 'meeting-button tooltipped clickable'
-        this.meetingRecordButton.onclick = Recorder.startRecordingActiveAudioInputs
-        this.meetingRecordButton.style.background = ''
+        this.recordButtonController.configureStoppedState()
         break
     }
   }

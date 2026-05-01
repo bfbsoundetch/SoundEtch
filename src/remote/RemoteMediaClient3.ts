@@ -9,6 +9,10 @@ type PeerMessage =
       username: string
     }
   | {
+      type: 'screenShareStream'
+      streamId: string
+    }
+  | {
       type: 'otherPeer'
       peer: string
     }
@@ -49,6 +53,7 @@ export class RemoteMediaClient3 {
   private readonly peer: Peer
   private readonly mediaRtcPeerConnections = new Map<string, RTCPeerConnection>()
   private readonly pendingIceCandidates = new Map<string, Array<RTCIceCandidateInit>>()
+  private readonly remoteScreenShareStreamIds = new Map<string, string>()
   private readonly state: State = { members: new Array<Member>(), roomId: null, screenShare: null, error: null }
   private readonly stateListeners = new Array<StateListener>()
   private readonly initializedDataConnections = new Set<string>()
@@ -63,7 +68,7 @@ export class RemoteMediaClient3 {
       if (added) {
         this.mediaRtcPeerConnections.forEach((value, key) => {
           console.error('add track to ', key)
-          value.addTrack(track, this.getLocalMediaStreamForTrack(track))
+          value.addTrack(track, LocalMediaStreams.localAVDeviceMediaStream)
         })
       } else {
         this.mediaRtcPeerConnections.forEach((value, key) => {
@@ -84,8 +89,11 @@ export class RemoteMediaClient3 {
         } else {
           this.state.screenShare = 'self'
           this.mediaRtcPeerConnections.forEach((value, key) => {
-            console.error('add track to ', key)
-            value.addTrack(track, this.getLocalMediaStreamForTrack(track))
+            LocalMediaStreams.localScreenMediaStream.getTracks().forEach(
+              t => {
+                value.addTrack(t, LocalMediaStreams.localScreenMediaStream)
+              }
+            )
           })
         }
       } else if (
@@ -216,6 +224,7 @@ export class RemoteMediaClient3 {
 
   private removePeerState(peerId: string) {
     this.deleteMember(peerId)
+    this.remoteScreenShareStreamIds.delete(peerId)
     if (this.state.screenShare != 'self' && this.state.screenShare?.peerId == peerId) {
       this.state.screenShare = null
     }
@@ -230,6 +239,10 @@ export class RemoteMediaClient3 {
 
     this.openedDataConnections.add(dataConnection.connectionId)
     dataConnection.send({ type: 'self', username: this.username })
+    dataConnection.send({
+      type: 'screenShareStream',
+      streamId: LocalMediaStreams.localScreenMediaStream.id,
+    })
     this.getAndMaybeAddPeerConnection(dataConnection.peer)
   }
 
@@ -314,6 +327,9 @@ export class RemoteMediaClient3 {
         this.shareKnownPeers(self)
         this.notifyStateListeners()
         break
+      case 'screenShareStream':
+        this.remoteScreenShareStreamIds.set(self.peer, peerMessage.streamId)
+        break
       case 'otherPeer':
         if (peerMessage.peer != this.peer.id && !this.getOpenDataConnection(peerMessage.peer)) {
           this.join(peerMessage.peer)
@@ -394,12 +410,6 @@ export class RemoteMediaClient3 {
     this.pendingIceCandidates.delete(remoteId)
   }
 
-  private getLocalMediaStreamForTrack(track: MediaStreamTrack): MediaStream {
-    return LocalMediaStreams.localScreenMediaStream.getTracks().includes(track)
-      ? LocalMediaStreams.localScreenMediaStream
-      : LocalMediaStreams.localAVDeviceMediaStream
-  }
-
   getAndMaybeAddPeerConnection(remoteId: string): RTCPeerConnection {
     const existing = this.mediaRtcPeerConnections.get(remoteId)
     if (existing) {
@@ -418,23 +428,29 @@ export class RemoteMediaClient3 {
       this.getDataConnection(remoteId).send(iceCandidateMessage)
     }
     newPeerConnection.ontrack = async (trackEvent) => {
-      const isScreenShare = !!trackEvent.track.getCapabilities().displaySurface
-      console.error(',', newPeerConnection.iceConnectionState, newPeerConnection.iceGatheringState)
+      const screenShareStreamId = this.remoteScreenShareStreamIds.get(remoteId)
+      const screenShareStream = trackEvent.streams.find((stream) => stream.id === screenShareStreamId) ?? null
+      const isScreenShare = screenShareStream != null
       const member = this.ensureMember(remoteId)
       let removed = false
       const removeTrack = () => {
         if (removed) {
           return
         }
-        removed = true
 
         if (isScreenShare) {
-          if (this.state.screenShare != 'self' && this.state.screenShare?.peerId == remoteId) {
+          if (
+            trackEvent.track.kind === 'video' &&
+            this.state.screenShare != 'self' &&
+            this.state.screenShare?.peerId == remoteId
+          ) {
             this.state.screenShare = null
           }
         } else {
           member.mediaStream.removeTrack(trackEvent.track)
         }
+
+        removed = true
 
         if (trackEvent.track.kind === 'audio') {
           AudioInputs.removeRemoteAudioSource(remoteId, isScreenShare)
@@ -442,10 +458,12 @@ export class RemoteMediaClient3 {
         this.notifyStateListeners()
       }
 
-      this.logger.log('ontrack ' + isScreenShare + ' ' + JSON.stringify(member))
-      if (isScreenShare) {
-        this.state.screenShare = member
-      } else {
+      if (isScreenShare && trackEvent.track.kind === 'video') {
+        this.state.screenShare = {
+          ...member,
+          mediaStream: screenShareStream!,
+        }
+      } else if (!isScreenShare) {
         member.mediaStream.addTrack(trackEvent.track)
       }
 
@@ -494,10 +512,10 @@ export class RemoteMediaClient3 {
     newPeerConnection.onnegotiationneeded = () => this.negotiateRtc(newPeerConnection, remoteId)
     this.mediaRtcPeerConnections.set(remoteId, newPeerConnection)
     LocalMediaStreams.localAVDeviceMediaStream.getTracks().forEach(track => {
-      console.error('av', JSON.stringify(newPeerConnection.addTrack(track, this.getLocalMediaStreamForTrack(track))))
+      newPeerConnection.addTrack(track, LocalMediaStreams.localAVDeviceMediaStream)
     })
     LocalMediaStreams.localScreenMediaStream.getTracks().forEach(track => {
-      console.error('ss', JSON.stringify(newPeerConnection.addTrack(track, this.getLocalMediaStreamForTrack(track))))
+      newPeerConnection.addTrack(track, LocalMediaStreams.localScreenMediaStream)
     })
     return newPeerConnection
   }

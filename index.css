@@ -181,6 +181,68 @@ dialog.overlay[open] {
   background-color: var(--clickable-active);
 }
 
+.project-button:disabled,
+.meeting-button:disabled {
+  opacity: 1;
+}
+
+.project-button:disabled::after,
+.meeting-button:disabled::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  background-color: var(--clickable-inactive);
+  pointer-events: none;
+}
+
+.project-button:disabled .header-button,
+.meeting-button:disabled .header-button {
+  opacity: 0.5;
+}
+
+.record-button-countdown {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  place-items: center;
+  font-size: 2rem;
+  font-weight: bold;
+  pointer-events: none;
+}
+
+.record-button-counting-down .header-button {
+  opacity: 0 !important;
+}
+
+.record-button-counting-down > span {
+  display: none;
+}
+
+.record-button-unavailable > span {
+  width: 12rem;
+  max-width: min(12rem, calc(100vw - 2rem));
+  white-space: normal;
+  line-height: 1.2;
+  text-align: center;
+}
+
+.project-button.record-button-unavailable > span {
+  text-wrap: wrap;
+  transform: translateY(0.5rem);
+}
+
+.meeting-button.record-button-unavailable > span {
+  text-wrap: wrap;
+}
+
+.project-button.tooltipped.record-button-unavailable > span {
+  bottom: -2rem;
+}
+
+.meeting-button.tooltipped.record-button-unavailable > span {
+  top: -1.5rem;
+}
+
 .mute-button {
   grid-area: mute;
   border: 1px solid var(--color);
