@@ -7,10 +7,7 @@ type PeerMessage =
   | {
       type: 'self'
       username: string
-    }
-  | {
-      type: 'screenShareStream'
-      streamId: string
+      screenShareStreamId: string
     }
   | {
       type: 'otherPeer'
@@ -238,11 +235,12 @@ export class RemoteMediaClient3 {
     }
 
     this.openedDataConnections.add(dataConnection.connectionId)
-    dataConnection.send({ type: 'self', username: this.username })
-    dataConnection.send({
-      type: 'screenShareStream',
-      streamId: LocalMediaStreams.localScreenMediaStream.id,
+    dataConnection.send({ 
+      type: 'self', 
+      username: this.username, 
+      screenShareStreamId: LocalMediaStreams.localScreenMediaStream.id 
     })
+
     this.getAndMaybeAddPeerConnection(dataConnection.peer)
   }
 
@@ -324,11 +322,9 @@ export class RemoteMediaClient3 {
     switch (peerMessage.type) {
       case 'self':
         this.ensureMember(self.peer, peerMessage.username)
+        this.remoteScreenShareStreamIds.set(self.peer, peerMessage.screenShareStreamId)
         this.shareKnownPeers(self)
         this.notifyStateListeners()
-        break
-      case 'screenShareStream':
-        this.remoteScreenShareStreamIds.set(self.peer, peerMessage.streamId)
         break
       case 'otherPeer':
         if (peerMessage.peer != this.peer.id && !this.getOpenDataConnection(peerMessage.peer)) {
