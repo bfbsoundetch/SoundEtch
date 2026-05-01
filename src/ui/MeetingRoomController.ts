@@ -143,8 +143,12 @@ export class MeetingRoomController {
     }
     document.addEventListener('click', (event) => {
       const layoutSelector = document.getElementById('meeting-layout-selector')
+      const linkSelector = document.getElementById('meeting-link-selector')
       if (!layoutSelector?.contains(event.target as Node)) {
         this.closeLayoutMenu()
+      }
+      if (!linkSelector?.contains(event.target as Node)) {
+        this.closeLinkMenu()
       }
     })
     this.updateLayoutSelectionUi()
@@ -198,14 +202,29 @@ export class MeetingRoomController {
 
   toggleLayoutMenu() {
     const layoutMenu = document.getElementById('meeting-layout-menu')!
-    layoutMenu.classList.toggle('open')
-    const layoutButton = document.getElementById('switch-meeting-layout-button')!
-    layoutButton.setAttribute('aria-expanded', layoutMenu.classList.contains('open') ? 'true' : 'false')
+    const shouldOpen = !layoutMenu.classList.contains('open')
+    this.closeLinkMenu()
+    layoutMenu.classList.toggle('open', shouldOpen)
+    const layoutButton = document.getElementById('meeting-settings-button')!
+    layoutButton.setAttribute('aria-expanded', shouldOpen ? 'true' : 'false')
   }
 
   closeLayoutMenu() {
     document.getElementById('meeting-layout-menu')!.classList.remove('open')
-    document.getElementById('switch-meeting-layout-button')!.setAttribute('aria-expanded', 'false')
+    document.getElementById('meeting-settings-button')!.setAttribute('aria-expanded', 'false')
+  }
+
+  toggleLinkMenu() {
+    const linkMenu = document.getElementById('meeting-link-menu')!
+    const shouldOpen = !linkMenu.classList.contains('open')
+    this.closeLayoutMenu()
+    linkMenu.classList.toggle('open', shouldOpen)
+    document.getElementById('open-meeting-link-button')!.setAttribute('aria-expanded', shouldOpen ? 'true' : 'false')
+  }
+
+  closeLinkMenu() {
+    document.getElementById('meeting-link-menu')!.classList.remove('open')
+    document.getElementById('open-meeting-link-button')!.setAttribute('aria-expanded', 'false')
   }
 
   selectVideoLayout(layout: VideoLayout) {
@@ -397,6 +416,7 @@ export class MeetingRoomController {
     document.getElementById('vids')!.style.height = '70vh'
     this.videoLayout = VideoLayout.SOLO
     this.closeLayoutMenu()
+    this.closeLinkMenu()
     this.firstContainer = this.selfVideoContainer
     this.selfVideoContainer.isActive = true
     this.screenVideoContainer.vidElement.srcObject = null
@@ -423,18 +443,20 @@ export class MeetingRoomController {
   private setUiForConnectedState() {
     const meetingControlsDiv = document.getElementById('meeting-controls')
     document.getElementById('meeting-controls')!.style.display = 'flex'
+    const meetingLinkElement = document.getElementById('meeting-link-selector')!
     const micButton = document.getElementById('meeting-mic-button')!
     micButton!.remove()
-    meetingControlsDiv?.appendChild(micButton)
+    meetingControlsDiv!.insertBefore(micButton, meetingLinkElement)
     const cameraButton = document.getElementById('meeting-camera-button')!
     cameraButton!.remove()
-    meetingControlsDiv?.appendChild(cameraButton)
+    meetingControlsDiv!.insertBefore(cameraButton, meetingLinkElement)
     document.getElementById('meeting-device-setup-controls')!.style.display = 'none'
     document.getElementById('meeting-room-setup')!.style.display = 'none'
     document.getElementById('vids')!.style.width = '100%'
     document.getElementById('vids')!.style.height = '100%'
     this.videoLayout = VideoLayout.GRID
     this.closeLayoutMenu()
+    this.closeLinkMenu()
     this.applyVideoLayout()
     this.updateMeetingLinkUi()
   }
@@ -450,18 +472,24 @@ export class MeetingRoomController {
   }
 
   private updateMeetingLinkUi() {
+    const linkSelector = document.getElementById('meeting-link-selector') as HTMLDivElement
     const linkBox = document.getElementById('meeting-link-box') as HTMLDivElement
     const linkElement = document.getElementById('meeting-link') as HTMLButtonElement
     const meetingLink = this.getMeetingLink()
 
-    if (!this.currentState.roomId || !meetingLink || !this.remoteMediaClient) {
+    if (!this.remoteMediaClient) {
+      linkSelector.style.display = 'none'
       linkBox.style.display = 'none'
       linkElement.innerText = ''
+      linkElement.disabled = true
+      this.closeLinkMenu()
       return
     }
 
+    linkSelector.style.display = ''
     linkBox.style.display = 'flex'
-    linkElement.innerText = meetingLink
+    linkElement.disabled = !this.currentState.roomId || !meetingLink
+    linkElement.innerText = meetingLink ?? 'Meeting link is not available yet.'
   }
 
   private updateMeetingRecordButton(state: AudioState) {

@@ -616,10 +616,17 @@ video {
   opacity: 1;
 }
 
-.meeting-layout-menu {
+.meeting-control-menu-anchor {
+  flex: 0 0 4rem;
+}
+
+#meeting-layout-selector {
+  flex: 0 0 4rem;
+}
+
+.meeting-controls-menu {
   position: absolute;
   bottom: calc(100% + 0.35rem);
-  width: 100%;
   min-width: 17rem;
   display: none;
   flex-direction: column;
@@ -628,8 +635,40 @@ video {
   z-index: 3;
 }
 
-.meeting-layout-menu.open {
+.meeting-controls-menu.open {
   display: flex;
+}
+
+#meeting-layout-menu {
+  width: 100%;
+}
+
+#meeting-link-menu {
+  left: 50%;
+  width: min(24rem, 80vw);
+  transform: translateX(-50%);
+}
+
+.meeting-control-icon-button {
+  display: grid;
+  place-items: center;
+  width: 100%;
+  height: 100%;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  padding: 0;
+}
+
+.meeting-control-icon-button.tooltipped span {
+  top: -2rem;
+}
+
+.meeting-control-icon-button .meeting-icon {
+  height: 1.35rem;
+  position: static;
+  top: auto;
+  transform: none;
 }
 
 .meeting-layout-option {
@@ -683,6 +722,15 @@ video {
 
 .meeting-link:hover {
   background: var(--alt-background);
+}
+
+.meeting-link:disabled {
+  opacity: 0.7;
+  cursor: default;
+}
+
+.meeting-link:disabled:hover {
+  background: rgba(255, 255, 255, 0.04);
 }
 
 .meeting-settings-copy-button {

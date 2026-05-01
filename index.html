@@ -391,19 +391,31 @@
             </svg>
             <span>Record</span>
           </button>
-          <div id="meeting-layout-selector" class="meeting-button clickable">
+          <div
+            id="meeting-screen-share-button"
+            class="meeting-button tooltipped clickable"
+            onclick="LocalMediaStreams.startCapturingTab()"
+          >
+            <svg class="meeting-icon" viewBox="0 0 500 500">
+              <use xlink:href="#screen-share" />
+            </svg>
+            <span>Share Screen</span>
+          </div>
+          <div id="meeting-link-selector" class="meeting-button meeting-control-menu-anchor">
             <button
-              id="switch-meeting-layout-button"
+              id="open-meeting-link-button"
               type="button"
-              style="user-select: none; height: 100%; width: 100%"
+              class="meeting-control-icon-button tooltipped clickable"
               aria-expanded="false"
-              aria-controls="meeting-layout-menu"
-              onclick="meetingRoomController.toggleLayoutMenu()"
+              aria-controls="meeting-link-menu"
+              onclick="meetingRoomController.toggleLinkMenu()"
             >
-              Settings
+              <svg class="meeting-icon" viewBox="0 0 24 24">
+                <use xlink:href="#link-icon" />
+              </svg>
             </button>
-            <div id="meeting-layout-menu" class="meeting-layout-menu" role="menu" aria-label="Meeting settings">
-              <div id="meeting-link-box" class="meeting-settings-box" style="display: none">
+            <div id="meeting-link-menu" class="meeting-controls-menu" role="menu" aria-label="Meeting invite link">
+              <div id="meeting-link-box" class="meeting-settings-box">
                 <div class="meeting-settings-heading">Meeting Invite Link</div>
                 <button
                   id="meeting-link"
@@ -412,6 +424,22 @@
                   onclick="meetingRoomController.copyMeetingLink()"
                 ></button>
               </div>
+            </div>
+          </div>
+          <div id="meeting-layout-selector" class="meeting-button clickable">
+            <button
+              id="meeting-settings-button"
+              type="button"
+              class="meeting-control-icon-button tooltipped clickable"
+              aria-expanded="false"
+              aria-controls="meeting-layout-menu"
+              onclick="meetingRoomController.toggleLayoutMenu()"
+            >
+              <svg class="meeting-icon" viewBox="0 0 500 500">
+                <use xlink:href="#three-dots" />
+              </svg>
+            </button>
+            <div id="meeting-layout-menu" class="meeting-controls-menu" role="menu" aria-label="Meeting settings">
               <div class="meeting-settings-heading">Select Layout</div>
               <button
                 id="meeting-layout-option-grid"
@@ -447,16 +475,6 @@
                 <span>solo</span>
               </button>
             </div>
-          </div>
-          <div
-            id="meeting-screen-share-button"
-            class="meeting-button tooltipped clickable"
-            onclick="LocalMediaStreams.startCapturingTab()"
-          >
-            <svg class="meeting-icon" viewBox="0 0 500 500">
-              <use xlink:href="#screen-share" />
-            </svg>
-            <span>Share Screen</span>
           </div>
         </div>
       </div>
@@ -979,6 +997,10 @@
         >
           SoundEtch
         </text>
+      </g>
+      <g id="link-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+        <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>
+        <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
       </g>
     </defs>
   </svg>
