@@ -208,6 +208,7 @@ dialog.overlay[open] {
   font-size: 2rem;
   font-weight: bold;
   pointer-events: none;
+  font-family: serif;
 }
 
 .record-button-counting-down .header-button {
@@ -240,7 +241,7 @@ dialog.overlay[open] {
 }
 
 .meeting-button.tooltipped.record-button-unavailable > span {
-  top: -1.5rem;
+  top: -4em;
 }
 
 .mute-button {

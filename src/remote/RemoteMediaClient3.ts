@@ -2,6 +2,7 @@ import { Logger } from '../global/Logger'
 import { LocalMediaStreams } from '../mediastreams/LocalMediaStreams'
 import { AudioInputs } from '../audioinputs/AudioInputs'
 import { Peer, DataConnection, MediaConnection, ConnectionType } from 'peerjs'
+import { PeerNetworkDelayEstimator, TimestampMessage } from './PeerNetworkDelayEstimator'
 
 type PeerMessage =
   | {
@@ -29,6 +30,7 @@ type PeerMessage =
       type: 'rtcSessionDescription'
       desc: RTCSessionDescription
     }
+  | TimestampMessage
 
 export interface Member {
   peerId: string
@@ -46,11 +48,38 @@ export interface State {
 
 export type StateListener = (state: State) => void
 
+class RemotePeerState {
+  private pendingIceCandidates = new Array<RTCIceCandidateInit>()
+  rtcPeerConnection: RTCPeerConnection | null = null
+  remoteScreenShareStreamId: string | null = null
+  readonly delayEstimator = new PeerNetworkDelayEstimator()
+
+  withRtcPeerConnection(callback: (peerConnection: RTCPeerConnection) => void) {
+    if (this.rtcPeerConnection) {
+      callback(this.rtcPeerConnection)
+    }
+  }
+
+  async addOrQueueIceCandidate(candidate: RTCIceCandidateInit, rtcPeerConnection: RTCPeerConnection) {
+    if (!rtcPeerConnection.remoteDescription) {
+      this.pendingIceCandidates.push(candidate)
+      return
+    }
+
+    await rtcPeerConnection.addIceCandidate(candidate)
+  }
+
+  async flushPendingIceCandidates(rtcPeerConnection: RTCPeerConnection) {
+    for (const candidate of this.pendingIceCandidates) {
+      await rtcPeerConnection.addIceCandidate(candidate)
+    }
+    this.pendingIceCandidates = []
+  }
+}
+
 export class RemoteMediaClient3 {
   private readonly peer: Peer
-  private readonly mediaRtcPeerConnections = new Map<string, RTCPeerConnection>()
-  private readonly pendingIceCandidates = new Map<string, Array<RTCIceCandidateInit>>()
-  private readonly remoteScreenShareStreamIds = new Map<string, string>()
+  private readonly remotePeerStates = new Map<string, RemotePeerState>()
   private readonly state: State = { members: new Array<Member>(), roomId: null, screenShare: null, error: null }
   private readonly stateListeners = new Array<StateListener>()
   private readonly initializedDataConnections = new Set<string>()
@@ -63,16 +92,20 @@ export class RemoteMediaClient3 {
   ) {
     LocalMediaStreams.registerAVDeviceListener((added, track) => {
       if (added) {
-        this.mediaRtcPeerConnections.forEach((value, key) => {
-          console.error('add track to ', key)
-          value.addTrack(track, LocalMediaStreams.localAVDeviceMediaStream)
+        this.remotePeerStates.forEach((remotePeerState, key) => {
+          remotePeerState.withRtcPeerConnection((value) => {
+            console.error('add track to ', key)
+            value.addTrack(track, LocalMediaStreams.localAVDeviceMediaStream)
+          })
         })
       } else {
-        this.mediaRtcPeerConnections.forEach((value, key) => {
-          value.getSenders().forEach(sender => {
-            if (sender.track == track) {
-              value.removeTrack(sender)
-            }
+        this.remotePeerStates.forEach((remotePeerState) => {
+          remotePeerState.withRtcPeerConnection((value) => {
+            value.getSenders().forEach(sender => {
+              if (sender.track == track) {
+                value.removeTrack(sender)
+              }
+            })
           })
         })
       }
@@ -85,12 +118,14 @@ export class RemoteMediaClient3 {
           LocalMediaStreams.endScreenShare()
         } else {
           this.state.screenShare = 'self'
-          this.mediaRtcPeerConnections.forEach((value, key) => {
-            LocalMediaStreams.localScreenMediaStream.getTracks().forEach(
-              t => {
-                value.addTrack(t, LocalMediaStreams.localScreenMediaStream)
-              }
-            )
+          this.remotePeerStates.forEach((remotePeerState) => {
+            remotePeerState.withRtcPeerConnection((value) => {
+              LocalMediaStreams.localScreenMediaStream.getTracks().forEach(
+                t => {
+                  value.addTrack(t, LocalMediaStreams.localScreenMediaStream)
+                }
+              )
+            })
           })
         }
       } else if (
@@ -98,11 +133,13 @@ export class RemoteMediaClient3 {
         this.state.screenShare == 'self'
       ) {
         this.state.screenShare = null
-        this.mediaRtcPeerConnections.forEach((value, key) => {
-          value.getSenders().forEach(sender => {
-            if (sender.track == track) {
-              value.removeTrack(sender)
-            }
+        this.remotePeerStates.forEach((remotePeerState) => {
+          remotePeerState.withRtcPeerConnection((value) => {
+            value.getSenders().forEach(sender => {
+              if (sender.track == track) {
+                value.removeTrack(sender)
+              }
+            })
           })
         })
       }
@@ -219,9 +256,20 @@ export class RemoteMediaClient3 {
     return newMember
   }
 
+  private getOrCreateRemotePeerState(peerId: string): RemotePeerState {
+    const existing = this.remotePeerStates.get(peerId)
+    if (existing) {
+      return existing
+    }
+
+    const remotePeerState = new RemotePeerState()
+    this.remotePeerStates.set(peerId, remotePeerState)
+    return remotePeerState
+  }
+
   private removePeerState(peerId: string) {
     this.deleteMember(peerId)
-    this.remoteScreenShareStreamIds.delete(peerId)
+    this.remotePeerStates.delete(peerId)
     if (this.state.screenShare != 'self' && this.state.screenShare?.peerId == peerId) {
       this.state.screenShare = null
     }
@@ -322,7 +370,7 @@ export class RemoteMediaClient3 {
     switch (peerMessage.type) {
       case 'self':
         this.ensureMember(self.peer, peerMessage.username)
-        this.remoteScreenShareStreamIds.set(self.peer, peerMessage.screenShareStreamId)
+        this.getOrCreateRemotePeerState(self.peer).remoteScreenShareStreamId = peerMessage.screenShareStreamId
         this.shareKnownPeers(self)
         this.notifyStateListeners()
         break
@@ -346,11 +394,15 @@ export class RemoteMediaClient3 {
             break
           case 'answer':
             await this.getAndMaybeAddPeerConnection(self.peer).setRemoteDescription(peerMessage.desc)
-            await this.flushPendingIceCandidates(self.peer)
+            await this.getOrCreateRemotePeerState(self.peer).flushPendingIceCandidates(
+              this.getAndMaybeAddPeerConnection(self.peer)
+            )
             break
         }
         break
       case 'chat':
+        break
+      case 'timestamp':
         break
       default:
         this.logger.errorMessage('unrecognized message ' + JSON.stringify(peerMessage))
@@ -383,31 +435,12 @@ export class RemoteMediaClient3 {
 
   private async addOrQueueIceCandidate(remoteId: string, candidate: RTCIceCandidateInit) {
     const rtcPeerConnection = this.getAndMaybeAddPeerConnection(remoteId)
-    if (!rtcPeerConnection.remoteDescription) {
-      const pendingIceCandidates = this.pendingIceCandidates.get(remoteId) ?? []
-      pendingIceCandidates.push(candidate)
-      this.pendingIceCandidates.set(remoteId, pendingIceCandidates)
-      return
-    }
-
-    await rtcPeerConnection.addIceCandidate(candidate)
-  }
-
-  private async flushPendingIceCandidates(remoteId: string) {
-    const pendingIceCandidates = this.pendingIceCandidates.get(remoteId)
-    if (!pendingIceCandidates?.length) {
-      return
-    }
-
-    const rtcPeerConnection = this.getAndMaybeAddPeerConnection(remoteId)
-    for (const candidate of pendingIceCandidates) {
-      await rtcPeerConnection.addIceCandidate(candidate)
-    }
-    this.pendingIceCandidates.delete(remoteId)
+    await this.getOrCreateRemotePeerState(remoteId).addOrQueueIceCandidate(candidate, rtcPeerConnection)
   }
 
   getAndMaybeAddPeerConnection(remoteId: string): RTCPeerConnection {
-    const existing = this.mediaRtcPeerConnections.get(remoteId)
+    const remotePeerState = this.getOrCreateRemotePeerState(remoteId)
+    const existing = remotePeerState.rtcPeerConnection
     if (existing) {
       return existing
     }
@@ -424,7 +457,7 @@ export class RemoteMediaClient3 {
       this.getDataConnection(remoteId).send(iceCandidateMessage)
     }
     newPeerConnection.ontrack = async (trackEvent) => {
-      const screenShareStreamId = this.remoteScreenShareStreamIds.get(remoteId)
+      const screenShareStreamId = remotePeerState.remoteScreenShareStreamId
       const screenShareStream = trackEvent.streams.find((stream) => stream.id === screenShareStreamId) ?? null
       const isScreenShare = screenShareStream != null
       const member = this.ensureMember(remoteId)
@@ -484,7 +517,7 @@ export class RemoteMediaClient3 {
         case 'closed':
         case 'failed':
         case 'disconnected':
-          this.mediaRtcPeerConnections.delete(remoteId)
+          remotePeerState.rtcPeerConnection = null
           this.getAndMaybeAddPeerConnection(remoteId)
           break
       }
@@ -496,7 +529,7 @@ export class RemoteMediaClient3 {
       this.logger.log('New signaling state' + newPeerConnection.signalingState)
       switch (newPeerConnection.signalingState) {
         case 'closed':
-          this.mediaRtcPeerConnections.delete(remoteId)
+          remotePeerState.rtcPeerConnection = null
           this.getAndMaybeAddPeerConnection(remoteId)
           break
       }
@@ -506,7 +539,7 @@ export class RemoteMediaClient3 {
       console.error(newPeerConnection.iceConnectionState, newPeerConnection.iceGatheringState)
     }
     newPeerConnection.onnegotiationneeded = () => this.negotiateRtc(newPeerConnection, remoteId)
-    this.mediaRtcPeerConnections.set(remoteId, newPeerConnection)
+    remotePeerState.rtcPeerConnection = newPeerConnection
     LocalMediaStreams.localAVDeviceMediaStream.getTracks().forEach(track => {
       newPeerConnection.addTrack(track, LocalMediaStreams.localAVDeviceMediaStream)
     })
@@ -542,7 +575,7 @@ export class RemoteMediaClient3 {
     }
 
     await rtcPeerConnection.setRemoteDescription(sessionDescription)
-    await this.flushPendingIceCandidates(remoteId)
+    await this.getOrCreateRemotePeerState(remoteId).flushPendingIceCandidates(rtcPeerConnection)
     await rtcPeerConnection.setLocalDescription(await rtcPeerConnection.createAnswer())
     const answer = {
       type: 'rtcSessionDescription',

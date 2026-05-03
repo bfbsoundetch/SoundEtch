@@ -34,17 +34,16 @@ export class AudioInputs {
       AudioInputs.notifyListeners()
     })
     AudioControl.addAudioControlListener(async state => {
-      switch (state) {
-        case AudioState.STOPPED:
-          const inputs = this.gatherActiveAudioInputs()
-          if (inputs.length > 0) {
-            const newContext = await AudioControl.getOrCreateAudioContext(AudioState.MONITORING)
-            newContext.resume()
-            for (const input of inputs) {
-              input.init(newContext)
-            }
-          }
-          break
+      const inputs = this.gatherActiveAudioInputs()
+      if (inputs.length == 0) {
+        return
+      }
+      const context = await AudioControl.getOrCreateAudioContext()
+      if (state == AudioState.MONITORING_PAUSED) {
+        context.resume()
+      }
+      for (const input of inputs) {
+        input.init(context)
       }
     })
   }

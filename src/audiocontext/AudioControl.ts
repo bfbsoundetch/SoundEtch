@@ -30,7 +30,7 @@ export class AudioControl {
   static audioControlListeners = new Array<AudioControlListener>()
   static audioContext: EnhancedAudioContext | null = null
   static startPosition = 0
-  static contextListener = (_: any) => {
+  private static contextListener = (_: any) => {
     const state = this.getState()
     this.audioControlListeners.forEach((l) => l(state))
   }

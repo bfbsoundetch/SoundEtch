@@ -39,7 +39,9 @@ export class RecordButtonController {
       : 'Nothing to record. Enable a mic or screen share.'
     this.button.disabled = !hasAvailableAudioInputs
     this.button.className = `${this.baseClassName} tooltipped${hasAvailableAudioInputs ? ' clickable' : ' record-button-unavailable'}`
-    this.button.onclick = hasAvailableAudioInputs ? () => void this.startCountdown() : null
+    this.button.onclick = hasAvailableAudioInputs ? 
+      (this.hasRemoteAudioInputs() ? () => void this.startCountdown() : Recorder.startRecordingActiveAudioInputs) : 
+      null
     this.button.style.background = ''
     this.hideCountdown()
   }
@@ -105,6 +107,10 @@ export class RecordButtonController {
 
   private hasAvailableAudioInputs() {
     return AudioInputs.gatherActiveAudioInputs().length > 0
+  }
+
+  private hasRemoteAudioInputs() {
+    return AudioInputs.remoteStreams.size > 0
   }
 
   private hideCountdown() {
