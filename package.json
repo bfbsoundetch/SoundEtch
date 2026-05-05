@@ -9,6 +9,7 @@
     "wasm-audio-resampler": "^2.0.0",
     "web-demuxer": "^4.0.0",
     "websocket": "^1.0.35",
+    "weq8": "^0.2.2",
     "ws": "^8.18.0",
     "yarn": "^1.22.22"
   },

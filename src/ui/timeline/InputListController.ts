@@ -86,8 +86,9 @@ class AudioInputController {
     this.inputInfoDiv.style.height = `${7 * audioInput.channelCount + 1.5}rem`
 
     const inputName = document.createElement('div')
-    inputName.style.margin = '.25rem'
-    inputName.style.height = '3em'
+    inputName.style.padding = '.25rem'
+    inputName.style.boxSizing = 'border-box'
+    inputName.style.maxHeight = '3em'
     inputName.style.overflow = 'hidden'
     inputName.style.wordBreak = 'break-all'
     inputName.style.gridArea = 'name'
@@ -114,12 +115,14 @@ class AudioInputController {
 
     const muteButton = document.createElement('button')
     muteButton.className = 'clickable mute-button'
+    muteButton.style.gridArea = 'mute'
+    muteButton.style.justifySelf = 'start'
     muteButton.innerText = 'mute'
     const muteOnClick = () => {
       audioInput.mute()
       muteButton.innerText = 'unmute'
       muteButton.onclick = () => {
-        audioInput.mute()
+        audioInput.unmute()
         muteButton.innerText = 'mute'
         muteButton.onclick = muteOnClick
       }

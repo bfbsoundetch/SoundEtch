@@ -809,9 +809,16 @@ video {
   user-select: none;
   display: grid;
   grid-template-areas:
-    'name name'
-    'mute silence'
-    'meter meter';
+    'name'
+    'mute'
+    'meter'
+    '.';
+  grid-template-columns: minmax(0, 1fr);
+  grid-template-rows: 2.5em auto auto 1fr;
+  align-content: start;
+  row-gap: 0.25rem;
+  box-sizing: border-box;
+  padding: 0.25rem;
 }
 
 #track-list {
@@ -822,6 +829,7 @@ video {
   width: 100%;
   border-top: solid;
   flex: 1;
+  box-sizing: border-box;
 }
 
 .tracklist-item:last-child {
@@ -834,10 +842,21 @@ video {
     'title title peak'
     'delete effects peak'
     'gain gain peak'
-    'pan pan peak';
-  grid-template-rows: auto 1fr 1fr 1fr;
-  grid-template-columns: 2rem auto 1rem;
+    'pan pan peak'
+    '. . peak';
+  grid-template-rows: auto auto auto auto 1fr;
+  grid-template-columns: 2rem minmax(0, 1fr) 1rem;
+  align-content: start;
+  row-gap: 0.25rem;
+  column-gap: 0.25rem;
+  box-sizing: border-box;
+  padding: 0.25rem;
   vertical-align: top;
+}
+
+.track-info > *,
+.input-info > * {
+  min-width: 0;
 }
 
 .track-peak-meter {

@@ -9,9 +9,10 @@ export class TrackListTrack {
     this.trackInfoDiv.classList = 'track-info tracklist-item'
 
     const trackTitle = document.createElement('div')
-    trackTitle.style.margin = '.25rem'
+    trackTitle.style.padding = '.25rem'
     trackTitle.style.textWrap = 'pretty'
-    trackTitle.style.width = 'calc(100%-.5rem)'
+    trackTitle.style.width = '100%'
+    trackTitle.style.boxSizing = 'border-box'
     trackTitle.style.maxHeight = '3em'
     trackTitle.style.overflow = 'hidden'
     trackTitle.style.wordBreak = 'break-all'
@@ -27,9 +28,10 @@ export class TrackListTrack {
     deleteTrackButton.className = 'clickable'
     deleteTrackButton.style.height = '1.5rem'
     deleteTrackButton.style.width = '1.5rem'
-    deleteTrackButton.style.margin = '.25rem'
     deleteTrackButton.style.flex = '0 0 1'
     deleteTrackButton.style.gridArea = 'delete'
+    deleteTrackButton.style.alignSelf = 'center'
+    deleteTrackButton.style.justifySelf = 'center'
     const deleteTrackIcon = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
     deleteTrackIcon.setAttribute('viewBox', '0 0 500 500')
     const trashIcon = document.createElementNS('http://www.w3.org/2000/svg', 'use')
@@ -38,18 +40,35 @@ export class TrackListTrack {
     deleteTrackButton.appendChild(deleteTrackIcon)
     this.trackInfoDiv.appendChild(deleteTrackButton)
 
+    const effectsDropdown = document.createElement('select')
+    effectsDropdown.disabled = true
+    effectsDropdown.title = 'Effect selection is not wired up yet'
+    effectsDropdown.style.gridArea = 'effects'
+    effectsDropdown.style.width = '100%'
+    effectsDropdown.style.boxSizing = 'border-box'
+    effectsDropdown.style.font = 'inherit'
+    effectsDropdown.style.minWidth = '0'
+    effectsDropdown.style.alignSelf = 'center'
+    const effectPlaceholder = document.createElement('option')
+    effectPlaceholder.innerText = 'Effect'
+    effectPlaceholder.value = ''
+    effectsDropdown.appendChild(effectPlaceholder)
+    this.trackInfoDiv.appendChild(effectsDropdown)
+
     const gainSliderParent = document.createElement('div')
     gainSliderParent.style.width = '100%'
     gainSliderParent.style.display = 'grid'
     gainSliderParent.style.gridArea = 'gain'
-    this.trackInfoDiv.appendChild(gainSliderParent)
     gainSliderParent.style.position = 'relative'
+    gainSliderParent.style.padding = '0 .25rem'
+    gainSliderParent.style.boxSizing = 'border-box'
+    this.trackInfoDiv.appendChild(gainSliderParent)
 
     const gainSlider = document.createElement('input')
     gainSlider.type = 'range'
     gainSlider.min = '-36'
     gainSlider.max = '36'
-    gainSlider.style.width = '90%'
+    gainSlider.style.width = '100%'
     gainSlider.style.margin = 'auto'
     gainSlider.style.accentColor = 'var(--color)'
     const initialGainNumber = 20 * Math.log10(track.getGain())
@@ -75,14 +94,16 @@ export class TrackListTrack {
     panSliderParent.style.width = '100%'
     panSliderParent.style.display = 'grid'
     panSliderParent.style.gridArea = 'pan'
-    this.trackInfoDiv.appendChild(panSliderParent)
     panSliderParent.style.position = 'relative'
+    panSliderParent.style.padding = '0 .25rem'
+    panSliderParent.style.boxSizing = 'border-box'
+    this.trackInfoDiv.appendChild(panSliderParent)
 
     const panSlider = document.createElement('input')
     panSlider.type = 'range'
     panSlider.min = '-10'
     panSlider.max = '10'
-    panSlider.style.width = '90%'
+    panSlider.style.width = '100%'
     panSlider.style.margin = 'auto'
     panSlider.style.accentColor = 'var(--color)'
     const initialPanValue = track.getPan() * 10
@@ -124,25 +145,6 @@ export class TrackListTrack {
     peakMeterDiv.style.height = '100%'
     peakMeterDiv.style.width = '100%'
     this.trackInfoDiv.appendChild(peakMeterDiv)
-
-    // const effectsDropdown = document.createElement('select')
-    // track.effectParams.forEach((value, key) => {
-    //   const effectElement = document.createElement('select')
-    //   effectElement.innerHTML = key
-    //   effectElement.value = key
-    //   effectsDropdown.appendChild(effectElement)
-    // })
-    // const newEffectElement = document.createElement('option')
-    // newEffectElement.innerText = 'Add New...'
-    // newEffectElement.value = '__new__'
-
-    // newEffectElement.addEventListener('change', (event) => {
-    //   if (effectsDropdown.value == newEffectElement.value) {
-    //     // TODO
-    //   }
-    // })
-
-    // effectsDropdown.appendChild(newEffectElement)
 
     deleteTrackButton.onclick = () => ProjectManager.deleteTrack(track)
   }

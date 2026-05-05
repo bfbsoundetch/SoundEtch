@@ -7,5 +7,6 @@ export interface AudioInput extends Analyzable {
   connect(destination: AudioNode): Promise<void>
   stop(): void
   mute(): void
+  unmute(): void
   channelCount: number
 }
