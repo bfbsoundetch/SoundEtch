@@ -18,7 +18,12 @@ export class TimelineController extends TrackListItemController {
     new TickMarkBucket(60 * 60_000, 4),
   ]
 
+  private rootFontSize = parseFloat(getComputedStyle(document.documentElement).fontSize)
   readonly svg = document.getElementById('timeline-svg') as unknown as SVGSVGElement
+  private readonly majorTicks = document.getElementById('timeline-major-ticks') as unknown as SVGPathElement
+  private readonly minorTicks = document.getElementById('timeline-minor-ticks') as unknown as SVGPathElement
+  private readonly tickLabels = new Array<SVGTextElement>()
+
   private selection: {
     lines: SVGPathElement
     leftExpand: SVGLineElement
@@ -29,14 +34,28 @@ export class TimelineController extends TrackListItemController {
   private width = this.svg.parentElement!.clientWidth
   private height = this.svg.parentElement!.clientHeight
 
+  private readonly mainLine = document.createElementNS('http://www.w3.org/2000/svg', 'line')
+
+
   constructor(trackListController: TrackListController) {
     super(trackListController)
+
+    this.mainLine.style.strokeWidth = '2'
+    this.mainLine.style.stroke = 'currentColor'
+    this.mainLine.style.fill = 'none'
+    this.mainLine.setAttribute('x1', '0')
+    this.mainLine.setAttribute('y1', `${this.height / 1.5}`)
+    this.mainLine.setAttribute('x2', `${this.width}`)
+    this.mainLine.setAttribute('y2', `${this.height / 1.5}`)
+
+    this.svg.appendChild(this.mainLine)
   }
 
   resize() {
     this.width = this.svg.parentElement!.clientWidth
     this.height = this.svg.parentElement!.clientHeight
     this.svg.parentElement!.setAttribute('viewBox', `0 0 ${this.width} ${this.height}`)
+    this.rootFontSize = parseFloat(getComputedStyle(document.documentElement).fontSize)
   }
 
   getWidth() {
@@ -48,76 +67,55 @@ export class TimelineController extends TrackListItemController {
   }
 
   draw() {
-    if (this.selection) {
-      this.svg.replaceChildren(
-        this.selection.lines,
-        this.selection.leftExpand,
-        this.selection.rightExpand,
-        this.selection.leftLabel,
-        this.selection.rightLabel,
-      )
-    } else {
-      this.svg.replaceChildren()
-    }
-
-    const mainLine = document.createElementNS('http://www.w3.org/2000/svg', 'line')
-    mainLine.style.strokeWidth = '2'
-    mainLine.style.stroke = 'currentColor'
-    mainLine.style.fill = 'none'
-    mainLine.setAttribute('x1', '0')
-    mainLine.setAttribute('y1', `${this.height / 1.5}`)
-    mainLine.setAttribute('x2', `${this.width}`)
-    mainLine.setAttribute('y2', `${this.height / 1.5}`)
-
-    this.svg.appendChild(mainLine)
-
     if (!this.msPerUnit) {
       return
     }
     const bucket = this.getTickMarkBucket()
     const increment = bucket.majorIntervalMs / this.msPerUnit
-    const offset = -this.translation % (bucket.majorIntervalMs / this.msPerUnit)
-    let tickMarkTime = this.getTickMarkForPosition(this.translation * this.msPerUnit, bucket)
 
-    for (var i = 0; i < this.width - offset; i += increment) {
-      const tickText = document.createElementNS('http://www.w3.org/2000/svg', 'text')
-      tickText.setAttribute('x', `${offset + i}`)
-      tickText.setAttribute('y', `${this.height / 2}`)
-      tickText.setAttribute('font-family', "'Courier New', Courier, monospace")
-      tickText.setAttribute('font-size', '17px')
-      tickText.setAttribute('dominant-baseline', 'middle')
-      tickText.setAttribute('text-anchor', 'middle')
-      tickText.style.stroke = 'none'
-      tickText.innerHTML = TimeUtils.toString(tickMarkTime, true)
-      tickMarkTime += bucket.majorIntervalMs
-      this.svg.appendChild(tickText)
+    const timelineOffset = 14 * this.rootFontSize // width of 'info' column
+    const offset = (timelineOffset - this.translation) % increment
+    const timelineOffsetTicks = Math.ceil(offset / increment)
+    const tickMarkTime = this.getTickMarkForPosition(this.translation * this.msPerUnit, bucket)
 
-      const tick = document.createElementNS('http://www.w3.org/2000/svg', 'line')
-      tick.style.strokeWidth = '4'
-      tick.style.stroke = 'currentColor'
-      tick.style.fill = 'none'
-      tick.setAttribute('x1', `${offset + i}`)
-      tick.setAttribute('y1', `${this.height / 1.5}`)
-      tick.setAttribute('x2', `${offset + i}`)
-      tick.setAttribute('y2', `${this.height}`)
+    const majorTickPathParts = new Array<string>()
+    const minorTickPathParts = new Array<string>()
 
-      this.svg.appendChild(tick)
+    let textIndex = 0
+    for (var i = -timelineOffsetTicks; i < (this.width - offset) / increment; ++i) {
+      let tickText: SVGTextElement
+      textIndex = i + timelineOffsetTicks
+      if (textIndex < this.tickLabels.length) {
+        tickText = this.tickLabels[textIndex]
+      } else {
+        tickText = document.createElementNS('http://www.w3.org/2000/svg', 'text')
+        tickText.setAttribute('y', `${this.height / 2}`)
+        tickText.setAttribute('font-family', "'Courier New', Courier, monospace")
+        tickText.setAttribute('font-size', '17px')
+        tickText.setAttribute('dominant-baseline', 'middle')
+        tickText.setAttribute('text-anchor', 'middle')
+        tickText.style.stroke = 'none'
+        this.svg.appendChild(tickText)
+        this.tickLabels.push(tickText)
+      }
+      const x = offset + i * increment
+      tickText.setAttribute('x', `${x}`)
+      tickText.style.visibility = 'visible'
+      tickText.innerHTML = TimeUtils.toString(tickMarkTime + i * bucket.majorIntervalMs, true)
+
+      majorTickPathParts.push(`M ${x} ${this.height / 1.5} L ${x} ${this.height}`)
 
       for (var j = 1; j < bucket.ticksPerMajorInterval; ++j) {
-        const pos = offset + i + (j * increment) / bucket.ticksPerMajorInterval
-
-        const tick = document.createElementNS('http://www.w3.org/2000/svg', 'line')
-        tick.style.strokeWidth = '2'
-        tick.style.stroke = 'currentColor'
-        tick.style.fill = 'none'
-        tick.setAttribute('x1', `${pos}`)
-        tick.setAttribute('y1', `${this.height / 1.5}`)
-        tick.setAttribute('x2', `${pos}`)
-        tick.setAttribute('y2', `${this.height / 1.25}`)
-
-        this.svg.appendChild(tick)
+        const pos = x + (j * increment) / bucket.ticksPerMajorInterval
+        minorTickPathParts.push(`M ${pos} ${this.height / 1.5} L ${pos} ${this.height / 1.25}`)
       }
     }
+
+    while (++textIndex < this.tickLabels.length && this.tickLabels[textIndex].style.visibility == 'visible') {
+      this.tickLabels[textIndex].style.visibility = 'hidden'
+    }
+    this.majorTicks.setAttribute('d', majorTickPathParts.join(' '))
+    this.minorTicks.setAttribute('d', minorTickPathParts.join(' '))
   }
 
   drawSelection(lowSample: number, highSample: number) {
@@ -184,8 +182,8 @@ export class TimelineController extends TrackListItemController {
         this.selection.rightLabel,
       )
     }
-    const startX = this.getXValueForSample(lowSample)
-    const endX = this.getXValueForSample(highSample)
+    const startX = this.getXValueForSample(lowSample) + 14 * this.rootFontSize
+    const endX = this.getXValueForSample(highSample) + 14 * this.rootFontSize
     this.selection.lines.setAttribute(
       'd',
       `M ${startX} 30 L ${startX} ${this.height} M ${endX} 30 L ${endX} ${this.height}`,

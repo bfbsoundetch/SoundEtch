@@ -17,12 +17,13 @@ export class PositionMarkerController extends TrackListItemController {
     const height = document.body.clientHeight - this.positionMarkerSvg.getBoundingClientRect().y
     this.positionMarkerSvg.setAttribute('height', `${height}`)
     this.positionLineSvg.setAttribute('y2', `${height}`)
-    this.positionMarkerSvg.setAttribute('viewBox', `0 0 ${this.trackListController.width} ${height}`)
+    this.positionMarkerSvg.setAttribute('viewBox', `0 0 ${this.positionLineSvg.parentElement!.clientWidth} ${height}`)
   }
 
   hidePositionMarker() {
-    this.positionLineSvg.style.visibility = 'hidden'
-    this.positionTimeText.style.visibility = 'hidden'
+    this.positionLineSvg.x1.baseVal.value = -100
+    this.positionLineSvg.x2.baseVal.value = -100
+    this.positionTimeText.setAttribute('x', '-100')
   }
 
   draw(positionOverride: number | null = null) {

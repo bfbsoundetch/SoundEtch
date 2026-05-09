@@ -171,12 +171,12 @@ export class TrackListController {
       const waveformDivs = new Array<Node>()
 
       const timelineDiv = document.getElementById('timeline')!
-
+      this.inputListController.inputListElement.addEventListener('wheel', this.scrollListener, {
+        passive: false,
+      })
       timelineDiv.addEventListener('wheel', this.scrollListener, {
         passive: false,
       })
-
-      const rootFontSize = parseFloat(getComputedStyle(document.documentElement).fontSize)
 
       for (let i = 0; i < project.getTracks().length; ++i) {
         const track = project.getTracks()[i]

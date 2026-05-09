@@ -15,7 +15,7 @@ export class PointerStateManager extends TrackListItemController {
 
   constructor(trackListController: TrackListController) {
     super(trackListController)
-    const element = document.getElementById('timeline-area')!
+    const element = document.getElementById('input-track-lists')!
     AudioControl.addAudioControlListener((state) => {
       switch (state) {
         case AudioState.PLAYING:

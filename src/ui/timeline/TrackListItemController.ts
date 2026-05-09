@@ -17,6 +17,10 @@ export abstract class TrackListItemController {
     return this.trackListController.sampleScale
   }
 
+  get sampleRate() {
+    return this.trackListController.sampleRate
+  }
+
   getSampleForXValue(x: number) {
     return Math.round((x + this.translation) * this.samplesPerUnit)
   }
