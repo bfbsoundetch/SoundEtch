@@ -14,7 +14,7 @@ test('vbr test', async () => {
 
   const encoderInfo = {
     encoder: 'mp3',
-    sampleRate: 48000,
+    sampleRate: 44100,
     channelCount: 1,
     vbrQuality: 9,
   }
@@ -32,7 +32,7 @@ test('cbr test', async () => {
   const fileHandle = await (await FileSystemUtils.getFileHandle('.', 'cbrTest.mp3')).createSyncAccessHandle()
   const encoderInfo = {
     encoder: 'mp3',
-    sampleRate: 48000,
+    sampleRate: 44100,
     channelCount: 1,
     bitrate: 64000,
   }
@@ -51,7 +51,7 @@ test('stereo test', async () => {
 
   const encoderInfo = {
     encoder: 'mp3',
-    sampleRate: 48000,
+    sampleRate: 44100,
     channelCount: 2,
     vbrQuality: 9,
   }

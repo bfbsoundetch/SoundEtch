@@ -14,19 +14,20 @@ self.onmessage = async (e) => {
   let inputLength = 0
   let queue = Promise.resolve()
 
-  let writtenLength = 0
+  let writtenFrames = 0
   const writeBufferedInput = async () => {
     if (inputLength === 0) {
       return
     }
-    await encoderWriter.writeChunk(inputLength)
-    writtenLength += inputLength / channelCount
-    postMessage({ progress: writtenLength / length })
+    const chunkFrameCount = inputLength / channelCount
+    await encoderWriter.writeChunk(chunkFrameCount)
+    writtenFrames += chunkFrameCount
+    postMessage({ progress: writtenFrames / length })
     inputLength = 0
   }
 
-  const appendInterleavedAudio = async (audioBuffer: ArrayBuffer) => {
-    const audio = new Float32Array(audioBuffer)
+  const appendInterleavedAudio = async (audioBuffer: ArrayBuffer, length: number) => {
+    const audio = new Float32Array(audioBuffer, 0, length)
     let offset = 0
 
     while (offset < audio.length) {
@@ -66,7 +67,7 @@ self.onmessage = async (e) => {
     queue = queue
       .then(async () => {
         if (message.type === 'audio') {
-          await appendInterleavedAudio(message.audio)
+          await appendInterleavedAudio(message.buffer, message.length)
           return
         }
 

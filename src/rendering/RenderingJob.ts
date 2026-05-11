@@ -15,7 +15,7 @@ self.onmessage = async (e) => {
   const audioContext = new RawDataAudioContext({
     sampleRate: argument.sampleRate,
     blockSize: BLOCK_SIZE,
-    numberOfChannels: 2,
+    numberOfChannels: argument.channelCount,
   })
   audioContext.resume()
 
@@ -63,8 +63,11 @@ self.onmessage = async (e) => {
       return
     }
 
-    const audio = pendingChunk.slice(0, pendingLength)
-    encodingPort.postMessage({ type: 'audio', audio: audio.buffer }, [audio.buffer])
+    encodingPort.postMessage({ 
+      type: 'audio', 
+      buffer: pendingChunk.buffer, 
+      length: pendingLength
+    }, [pendingChunk.buffer])
     pendingChunk = new Float32Array(RENDER_CHUNK_SAMPLE_CAPACITY)
     pendingLength = 0
   }
@@ -81,7 +84,7 @@ self.onmessage = async (e) => {
 
     for (let frame = 0; frame < frameCount; ++frame) {
       for (let channel = 0; channel < argument.channelCount; ++channel) {
-        pendingChunk[pendingLength++] = output[channel]![frame]!
+        pendingChunk[pendingLength++] = output[channel][frame]
       }
     }
   }

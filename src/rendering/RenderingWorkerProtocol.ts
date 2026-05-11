@@ -19,7 +19,8 @@ export type RenderingEncodingInitMessage = {
 export type RenderingEncodingPortMessage =
   | {
       type: 'audio'
-      audio: ArrayBuffer
+      buffer: ArrayBuffer
+      length: number
     }
   | {
       type: 'stop'

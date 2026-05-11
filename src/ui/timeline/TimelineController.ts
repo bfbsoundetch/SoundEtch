@@ -90,10 +90,10 @@ export class TimelineController extends TrackListItemController {
       } else {
         tickText = document.createElementNS('http://www.w3.org/2000/svg', 'text')
         tickText.setAttribute('y', `${this.height / 2}`)
-        tickText.setAttribute('font-family', "'Courier New', Courier, monospace")
-        tickText.setAttribute('font-size', '17px')
-        tickText.setAttribute('dominant-baseline', 'middle')
-        tickText.setAttribute('text-anchor', 'middle')
+        tickText.style.fontFamily = "'Courier New', Courier, monospace"
+        tickText.style.fontSize = '17px'
+        tickText.style.dominantBaseline = 'middle'
+        tickText.style.textAnchor = 'middle'
         tickText.style.stroke = 'none'
         this.svg.appendChild(tickText)
         this.tickLabels.push(tickText)

@@ -19,10 +19,12 @@ export class ExportProjectController {
   private readonly formatContainerMap = new Map<Format, HTMLDivElement>()
   private readonly mp3ModeContainerMap = new Map<Mp3Mode, HTMLDivElement>()
   private readonly formatSelect: HTMLSelectElement
+  private readonly channelCountSelect: HTMLSelectElement
   private readonly mp3ModeInputs: HTMLInputElement[]
 
   constructor() {
     this.formatSelect = document.getElementById('format') as HTMLSelectElement
+    this.channelCountSelect = document.getElementById('channel-count') as HTMLSelectElement
     this.mp3ModeInputs = Array.from(document.querySelectorAll('input[name="mp3-mode"]')) as HTMLInputElement[]
 
     this.formatContainerMap.set(Format.WAV, document.getElementById('wav-options-container') as HTMLDivElement)
@@ -92,7 +94,7 @@ export class ExportProjectController {
   }
 
   private createEncoderInfo(): EncoderInfo {
-    const channelCount = 1
+    const channelCount = Number(this.channelCountSelect.value)
     switch (this.formatSelect.value as Format) {
       case Format.WAV:
         return {

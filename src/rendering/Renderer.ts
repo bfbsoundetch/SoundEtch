@@ -21,7 +21,7 @@ export class Renderer {
       suggestedName: `${project.title}.${exportInfo.encoder}`,
     } as any)
 
-    return Renderer.render(file, 1, project, exportInfo, selectedRegion?.startSample ?? 0, projectLength, ...project.getTracks())
+    return Renderer.render(file, exportInfo.channelCount, project, exportInfo, selectedRegion?.startSample ?? 0, projectLength, ...project.getTracks())
   }
 
   static async render(

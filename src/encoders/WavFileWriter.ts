@@ -4,6 +4,7 @@ export class WavFileWriter {
   static readonly INPUT_BUFFER_SIZE = 1024 * 1024
 
   private readonly inputBuffer = new Float32Array(WavFileWriter.INPUT_BUFFER_SIZE)
+  private readonly channelCount
 
   constructor(
     private readonly fileWritable: FileSystemWritableFileStream,
@@ -17,6 +18,7 @@ export class WavFileWriter {
         wavEncoderInfo.channelCount,
       ),
     )
+    this.channelCount = wavEncoderInfo.channelCount
   }
 
   readonly inputSampleFormat = 'interleaved'
@@ -27,33 +29,34 @@ export class WavFileWriter {
 
   async writeChunk(length: number) {
     let outputBuffer: ArrayBufferView
+    const totalLength = length * this.channelCount
     switch (this.wavEncoderInfo.sampleFormat) {
       case 'float32':
-        outputBuffer = this.inputBuffer.subarray(0, length)
+        outputBuffer = this.inputBuffer.subarray(0, totalLength)
         break
       case 'int24':
         const outputBuffer24 = new Uint8Array(this.inputBuffer.buffer)
-        for (let i = 0; i < length; ++i) {
+        for (let i = 0; i < totalLength; ++i) {
           const value = this.inputBuffer[i] * ((1 << 23) - 1)
           outputBuffer24[3 * i] = value & 0xff
           outputBuffer24[3 * i + 1] = (value >> 8) & 0xff
           outputBuffer24[3 * i + 2] = (value >> 16) & 0xff
         }
-        outputBuffer = outputBuffer24.subarray(0, length * 3)
+        outputBuffer = outputBuffer24.subarray(0, totalLength * 3)
         break
       case 'int16':
         const outputBuffer16 = new Int16Array(this.inputBuffer.buffer)
-        for (let i = 0; i < length; ++i) {
+        for (let i = 0; i < totalLength; ++i) {
           outputBuffer16[i] = this.inputBuffer[i] * ((1 << 15) - 1)
         }
-        outputBuffer = outputBuffer16.subarray(0, length)
+        outputBuffer = outputBuffer16.subarray(0, totalLength)
         break
       case 'int8':
         const outputBuffer8 = new Uint8Array(this.inputBuffer.buffer)
-        for (let i = 0; i < length; ++i) {
+        for (let i = 0; i < totalLength; ++i) {
           outputBuffer8[i] = this.inputBuffer[i] * ((1 << 7) - 1) + (1 << 7)
         }
-        outputBuffer = outputBuffer8.subarray(0, length)
+        outputBuffer = outputBuffer8.subarray(0, totalLength)
         break
     }
     await this.fileWritable.write(outputBuffer as ArrayBufferView<ArrayBuffer>)
