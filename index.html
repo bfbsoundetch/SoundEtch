@@ -528,11 +528,15 @@
         </div>
 
         <div class="form-group">
-          <label for="channel-count">Channels</label>
-          <select id="channel-count">
-            <option value="1" selected>Mono</option>
-            <option value="2">Stereo</option>
-          </select>
+          <div class="radio-group">
+            <label>Channels</label>
+            <div class="radio-option">
+              <input type="radio" id="channel-count-mono" name="channel-count" value="1" checked />
+              <label for="channel-count-mono">Mono</label>
+              <input type="radio" id="channel-count-stereo" name="channel-count" value="2" />
+              <label for="channel-count-stereo">Stereo</label>
+            </div>
+          </div>
         </div>
 
         <div id="wav-options-container" class="export-options-container">

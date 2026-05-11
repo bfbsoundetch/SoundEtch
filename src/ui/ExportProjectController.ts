@@ -14,17 +14,18 @@ import {
 } from '../encoders/EncoderType'
 import { TrackListController } from './timeline/TrackListController'
 import { NotificationsController } from './NotificationsController'
+import { ProjectManager } from '../project/ProjectManager'
 
 export class ExportProjectController {
   private readonly formatContainerMap = new Map<Format, HTMLDivElement>()
   private readonly mp3ModeContainerMap = new Map<Mp3Mode, HTMLDivElement>()
   private readonly formatSelect: HTMLSelectElement
-  private readonly channelCountSelect: HTMLSelectElement
+  private readonly channelCountInputs: HTMLInputElement[]
   private readonly mp3ModeInputs: HTMLInputElement[]
 
   constructor() {
     this.formatSelect = document.getElementById('format') as HTMLSelectElement
-    this.channelCountSelect = document.getElementById('channel-count') as HTMLSelectElement
+    this.channelCountInputs = Array.from(document.querySelectorAll('input[name="channel-count"]')) as HTMLInputElement[]
     this.mp3ModeInputs = Array.from(document.querySelectorAll('input[name="mp3-mode"]')) as HTMLInputElement[]
 
     this.formatContainerMap.set(Format.WAV, document.getElementById('wav-options-container') as HTMLDivElement)
@@ -60,6 +61,12 @@ export class ExportProjectController {
 
     this.handleFormatSwitch(this.formatSelect.value as Format)
     this.handleMp3ModeSwitch(this.getSelectedMp3Mode())
+    void ProjectManager.addProjectListener((project) => {
+      const channelCount = project.getTracks().some((track) => track.getChannelCount() === 2) ? '2' : '1'
+      this.channelCountInputs.forEach((input) => {
+        input.checked = input.value === channelCount
+      })
+    })
   }
 
   handleFormatSwitch(newFormat: Format) {
@@ -79,6 +86,10 @@ export class ExportProjectController {
     return (selectedInput?.value as Mp3Mode | undefined) ?? Mp3Mode.CBR
   }
 
+  private getSelectedChannelCount(): number {
+    return Number(this.channelCountInputs.find((input) => input.checked)?.value ?? 1)
+  }
+
   async exportProject() {
     const encoderInfo = this.createEncoderInfo()
     ;(document.getElementById('export-project-modal') as HTMLDialogElement).close()
@@ -94,7 +105,7 @@ export class ExportProjectController {
   }
 
   private createEncoderInfo(): EncoderInfo {
-    const channelCount = Number(this.channelCountSelect.value)
+    const channelCount = this.getSelectedChannelCount()
     switch (this.formatSelect.value as Format) {
       case Format.WAV:
         return {
