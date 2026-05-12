@@ -539,169 +539,182 @@
           </div>
         </div>
 
-        <div id="wav-options-container" class="export-options-container">
-          <div class="export-option-row">
-            <label for="wav-sample-format">Sample Format</label>
-            <select id="wav-sample-format">
-              <option value="int16">16-bit Integer</option>
-              <option value="int24">24-bit Integer</option>
-              <option value="float32">32-bit Float</option>
-              <option value="int8">8-bit Integer</option>
-            </select>
+        <details class="export-advanced-section">
+          <summary>Advanced</summary>
+
+          <div id="wav-options-container" class="export-options-container">
+            <div class="export-option-row">
+              <label for="wav-sample-format">Sample Format</label>
+              <select id="wav-sample-format">
+                <option value="int16">16-bit Integer</option>
+                <option value="int24">24-bit Integer</option>
+                <option value="float32">32-bit Float</option>
+                <option value="int8">8-bit Integer</option>
+              </select>
+            </div>
+
+            <div class="export-option-row">
+              <label for="wav-sample-rate">Sample Rate</label>
+              <select id="wav-sample-rate">
+                <option value="8000">8000 Hz</option>
+                <option value="11025">11025 Hz</option>
+                <option value="12000">12000 Hz</option>
+                <option value="16000">16000 Hz</option>
+                <option value="22050">22050 Hz</option>
+                <option value="24000">24000 Hz</option>
+                <option value="32000">32000 Hz</option>
+                <option value="44100">44100 Hz</option>
+                <option value="48000" selected>48000 Hz</option>
+                <option value="96000">96000 Hz</option>
+              </select>
+            </div>
           </div>
 
-          <div class="export-option-row">
-            <label for="wav-sample-rate">Sample Rate</label>
-            <select id="wav-sample-rate">
-              <option value="8000">8000 Hz</option>
-              <option value="11025">11025 Hz</option>
-              <option value="12000">12000 Hz</option>
-              <option value="16000">16000 Hz</option>
-              <option value="22050">22050 Hz</option>
-              <option value="24000">24000 Hz</option>
-              <option value="32000">32000 Hz</option>
-              <option value="44100">44100 Hz</option>
-              <option value="48000" selected>48000 Hz</option>
-              <option value="96000">96000 Hz</option>
-            </select>
-          </div>
-        </div>
+          <div id="flac-options-container" class="export-options-container">
+            <div class="export-option-row">
+              <label for="flac-bit-depth">Bit Depth</label>
+              <select id="flac-bit-depth">
+                <option value="8">8-bit</option>
+                <option value="16" selected>16-bit</option>
+                <option value="24">24-bit</option>
+              </select>
+            </div>
 
-        <div id="flac-options-container" class="export-options-container">
-          <div class="export-option-row">
-            <label for="flac-bit-depth">Bit Depth</label>
-            <select id="flac-bit-depth">
-              <option value="8">8-bit</option>
-              <option value="16" selected>16-bit</option>
-              <option value="24">24-bit</option>
-            </select>
-          </div>
+            <div class="export-option-row">
+              <label for="flac-sample-rate">Sample Rate</label>
+              <input type="range" id="flac-sample-rate" value="48000" min="8000" max="655350" step="1" data-output-suffix=" Hz" />
+              <div class="slider-output-container">
+                <output class="slider-value">48000 Hz</output>
+              </div>
+              <div class="info-text">FLAC supports up to 655.35 kHz</div>
+            </div>
 
-          <div class="export-option-row">
-            <label for="flac-sample-rate">Sample Rate (Hz)</label>
-            <input type="range" id="flac-sample-rate" value="48000" min="8000" max="655350" step="1" />
-            <div class="info-text">FLAC supports up to 655.35 kHz</div>
-          </div>
-
-          <div class="export-option-row">
-            <label for="flac-compression">Compression Level</label>
-            <input type="number" id="flac-compression" value="5" min="0" max="8" step="1" />
-            <div class="info-text">Higher compression = smaller file, slower encoding</div>
-          </div>
-        </div>
-        <div id="mp3-options-container" class="export-options-container">
-          <div class="export-option-row">
-            <div class="radio-group">
-              <label>Bitrate Mode</label>
-              <div class="radio-option">
-                <input type="radio" id="mp3-mode-cbr" name="mp3-mode" value="cbr" checked />
-                <label for="mp3-mode-cbr">CBR</label>
-                <input type="radio" id="mp3-mode-vbr" name="mp3-mode" value="vbr" />
-                <label for="mp3-mode-vbr">VBR</label>
+            <div class="export-option-row">
+              <label for="flac-compression">Compression Level (0 for fastest, 8 for smallest file)</label>
+              <input type="range" id="flac-compression" value="5" min="0" max="8" step="1" />
+              <div class="slider-output-container">
+                <output class="slider-value">5</output>
               </div>
             </div>
           </div>
+          <div id="mp3-options-container" class="export-options-container">
+            <div class="export-option-row">
+              <div class="radio-group">
+                <label>Bitrate Mode</label>
+                <div class="radio-option">
+                  <input type="radio" id="mp3-mode-cbr" name="mp3-mode" value="cbr" checked />
+                  <label for="mp3-mode-cbr">CBR</label>
+                  <input type="radio" id="mp3-mode-vbr" name="mp3-mode" value="vbr" />
+                  <label for="mp3-mode-vbr">VBR</label>
+                </div>
+              </div>
+            </div>
 
-          <div id="mp3-cbr-options" class="export-option-row" style="display: block">
-            <label for="mp3-cbr-bitrate">Bitrate</label>
-            <select id="mp3-cbr-bitrate" style="margin-top: 0.5rem">
-              <option value="8">8 kbps</option>
-              <option value="16">16 kbps</option>
-              <option value="24">24 kbps</option>
-              <option value="32">32 kbps</option>
-              <option value="40">40 kbps</option>
-              <option value="48">48 kbps</option>
-              <option value="64">64 kbps</option>
-              <option value="80">80 kbps</option>
-              <option value="96">96 kbps</option>
-              <option value="112">112 kbps</option>
-              <option value="128">128 kbps</option>
-              <option value="160">160 kbps</option>
-              <option value="192">192 kbps</option>
-              <option value="224">224 kbps</option>
-              <option value="256">256 kbps</option>
-              <option value="320" selected>320 kbps</option>
-            </select>
-          </div>
+            <div id="mp3-cbr-options" class="export-option-row" style="display: block">
+              <label for="mp3-cbr-bitrate">Bitrate</label>
+              <select id="mp3-cbr-bitrate" style="margin-top: 0.5rem">
+                <option value="8">8 kbps</option>
+                <option value="16">16 kbps</option>
+                <option value="24">24 kbps</option>
+                <option value="32">32 kbps</option>
+                <option value="40">40 kbps</option>
+                <option value="48">48 kbps</option>
+                <option value="64">64 kbps</option>
+                <option value="80">80 kbps</option>
+                <option value="96">96 kbps</option>
+                <option value="112">112 kbps</option>
+                <option value="128">128 kbps</option>
+                <option value="160">160 kbps</option>
+                <option value="192">192 kbps</option>
+                <option value="224">224 kbps</option>
+                <option value="256">256 kbps</option>
+                <option value="320" selected>320 kbps</option>
+              </select>
+            </div>
 
-          <div id="mp3-vbr-options" class="export-option-row" style="display: block" hidden>
-            <label for="vbr-quality-slider">Quality (0 for best sound, 9 for smallest file)</label>
-            <input type="range" id="vbr-quality-slider" style="margin-top: 0.5rem" value="2" min="0" max="9" step="1" />
-            <div style="position: relative">
-              <output id="vbr-quality-output" class="slider-value" style="top: 50%">2</output>
+            <div id="mp3-vbr-options" class="export-option-row" style="display: block" hidden>
+              <label for="vbr-quality-slider">Quality (0 for best sound, 9 for smallest file)</label>
+              <input type="range" id="vbr-quality-slider" style="margin-top: 0.5rem" value="2" min="0" max="9" step="1" />
+              <div class="slider-output-container">
+                <output class="slider-value">2</output>
+              </div>
+            </div>
+
+            <div class="export-option-row">
+              <label for="mp3-sample-rate">Sample Rate</label>
+              <select id="mp3-sample-rate">
+                <option value="8000">8000 Hz</option>
+                <option value="11025">11025 Hz</option>
+                <option value="12000">12000 Hz</option>
+                <option value="16000">16000 Hz</option>
+                <option value="22050">22050 Hz</option>
+                <option value="24000">24000 Hz</option>
+                <option value="32000">32000 Hz</option>
+                <option value="44100" selected>44100 Hz</option>
+                <option value="48000">48000 Hz</option>
+              </select>
             </div>
           </div>
+          <div id="opus-options-container" class="export-options-container">
+            <div class="export-option-row">
+              <label for="opus-application">Application</label>
+              <select id="opus-application">
+                <option value="2049" selected>Audio - General Music</option>
+                <option value="2048">VoIP - Voice Communication</option>
+                <option value="2051">Restricted Low Delay</option>
+              </select>
+            </div>
 
-          <div class="export-option-row">
-            <label for="mp3-sample-rate">Sample Rate</label>
-            <select id="mp3-sample-rate">
-              <option value="8000">8000 Hz</option>
-              <option value="11025">11025 Hz</option>
-              <option value="12000">12000 Hz</option>
-              <option value="16000">16000 Hz</option>
-              <option value="22050">22050 Hz</option>
-              <option value="24000">24000 Hz</option>
-              <option value="32000">32000 Hz</option>
-              <option value="44100" selected>44100 Hz</option>
-              <option value="48000">48000 Hz</option>
-            </select>
-          </div>
-        </div>
-        <div id="opus-options-container" class="export-options-container">
-          <div class="export-option-row">
-            <label for="opus-application">Application</label>
-            <select id="opus-application">
-              <option value="2049" selected>Audio - General Music</option>
-              <option value="2048">VoIP - Voice Communication</option>
-              <option value="2051">Restricted Low Delay</option>
-            </select>
-          </div>
+            <div class="export-option-row">
+              <label for="opus-bitrate">Bitrate</label>
+              <input type="range" id="opus-bitrate" value="128000" min="500" max="512000" step="1000" data-output-suffix=" bps" />
+              <div class="slider-output-container">
+                <output class="slider-value">128000 bps</output>
+              </div>
+            </div>
 
-          <div class="export-option-row">
-            <label for="opus-bitrate">Bitrate (bps)</label>
-            <input type="range" id="opus-bitrate" value="128000" min="500" max="512000" step="1000" />
-            <div class="info-text">Recommended: 64000-128000 for music</div>
-          </div>
+            <div class="export-option-row">
+              <label for="opus-bitrate-mode">Bitrate Mode</label>
+              <select id="opus-bitrate-mode">
+                <option value="0" selected>Variable (VBR)</option>
+                <option value="1">Constant (CBR)</option>
+                <option value="2">Constrained VBR</option>
+              </select>
+            </div>
 
-          <div class="export-option-row">
-            <label for="opus-bitrate-mode">Bitrate Mode</label>
-            <select id="opus-bitrate-mode">
-              <option value="0" selected>Variable (VBR)</option>
-              <option value="1">Constant (CBR)</option>
-              <option value="2">Constrained VBR</option>
-            </select>
-          </div>
+            <div class="export-option-row">
+              <label for="opus-complexity">Complexity (0 for fastest, 10 for best quality)</label>
+              <input type="range" id="opus-complexity" value="5" min="0" max="10" step="1" />
+              <div class="slider-output-container">
+                <output class="slider-value">5</output>
+              </div>
+            </div>
 
-          <div class="export-option-row">
-            <label for="opus-complexity">Complexity</label>
-            <input type="range" id="opus-complexity" value="5" min="0" max="10" step="1" />
-            <div class="info-text">Higher = better quality, slower encoding</div>
-          </div>
+            <div class="export-option-row">
+              <label for="opus-bandwidth">Bandwidth</label>
+              <select id="opus-bandwidth">
+                <option value="0" selected>Auto</option>
+                <option value="1101">Narrowband (4 kHz)</option>
+                <option value="1102">Mediumband (6 kHz)</option>
+                <option value="1103">Wideband (8 kHz)</option>
+                <option value="1104">Super Wideband (12 kHz)</option>
+                <option value="1105">Fullband (20 kHz)</option>
+              </select>
+            </div>
 
-          <div class="export-option-row">
-            <label for="opus-bandwidth">Bandwidth</label>
-            <select id="opus-bandwidth">
-              <option value="0" selected>Auto</option>
-              <option value="1101">Narrowband (4 kHz)</option>
-              <option value="1102">Mediumband (6 kHz)</option>
-              <option value="1103">Wideband (8 kHz)</option>
-              <option value="1104">Super Wideband (12 kHz)</option>
-              <option value="1105">Fullband (20 kHz)</option>
-            </select>
+            <div class="export-option-row">
+              <label for="opus-frame-size">Frame Size (ms)</label>
+              <select id="opus-frame-size">
+                <option value="2.5">2.5 ms</option>
+                <option value="5">5 ms</option>
+                <option value="10">10 ms</option>
+                <option value="20" selected>20 ms</option>
+                <option value="40">40 ms</option>
+                <option value="60">60 ms</option>
+              </select>
+            </div>
           </div>
-
-          <div class="export-option-row">
-            <label for="opus-frame-size">Frame Size (ms)</label>
-            <select id="opus-frame-size">
-              <option value="2.5">2.5 ms</option>
-              <option value="5">5 ms</option>
-              <option value="10">10 ms</option>
-              <option value="20" selected>20 ms</option>
-              <option value="40">40 ms</option>
-              <option value="60">60 ms</option>
-            </select>
-          </div>
-        </div>
+        </details>
 
         <button
           class="menu-item clickable export-project-button"

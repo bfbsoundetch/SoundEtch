@@ -42,22 +42,7 @@ export class ExportProjectController {
       })
     })
 
-    const vbrSlider = document.getElementById('vbr-quality-slider') as HTMLInputElement
-    const vbrOutput = document.getElementById('vbr-quality-output') as HTMLOutputElement
-    const percentage = vbrSlider.valueAsNumber / 0.09
-    vbrOutput.style.left = `calc(${percentage}% + (${9 - percentage * 0.15}px))`
-    vbrSlider.oninput = () => {
-      const percentage = vbrSlider.valueAsNumber / 0.09
-      // adjust for handle width
-      vbrOutput.style.left = `calc(${percentage}% + (${9 - percentage * 0.15}px))`
-      vbrOutput.value = vbrSlider.value
-    }
-    vbrSlider.addEventListener('mouseenter', () => {
-      vbrOutput.style.opacity = '1'
-    })
-    vbrSlider.addEventListener('mouseleave', () => {
-      vbrOutput.style.opacity = '0'
-    })
+    this.initializeSliderOutputs()
 
     this.handleFormatSwitch(this.formatSelect.value as Format)
     this.handleMp3ModeSwitch(this.getSelectedMp3Mode())
@@ -88,6 +73,32 @@ export class ExportProjectController {
 
   private getSelectedChannelCount(): number {
     return Number(this.channelCountInputs.find((input) => input.checked)?.value ?? 1)
+  }
+
+  private initializeSliderOutputs() {
+    document.querySelectorAll<HTMLInputElement>('#export-project-modal input[type="range"]').forEach((slider) => {
+      const output = slider.nextElementSibling?.querySelector('output')
+      if (!(output instanceof HTMLOutputElement)) {
+        return
+      }
+
+      const updateOutput = () => {
+        const min = Number(slider.min)
+        const max = Number(slider.max)
+        const percentage = ((slider.valueAsNumber - min) / (max - min)) * 100
+        output.style.left = `calc(${percentage}% + (${9 - percentage * 0.18}px))`
+        output.value = `${slider.value}${slider.dataset.outputSuffix ?? ''}`
+      }
+
+      updateOutput()
+      slider.addEventListener('input', updateOutput)
+      slider.addEventListener('mouseenter', () => {
+        output.style.opacity = '1'
+      })
+      slider.addEventListener('mouseleave', () => {
+        output.style.opacity = '0'
+      })
+    })
   }
 
   async exportProject() {
