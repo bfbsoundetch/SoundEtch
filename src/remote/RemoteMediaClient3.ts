@@ -4,7 +4,7 @@ import { AudioInputs } from '../audioinputs/AudioInputs'
 import { Peer, DataConnection, MediaConnection, ConnectionType } from 'peerjs'
 import { PeerNetworkDelayEstimator, TimestampMessage } from './PeerNetworkDelayEstimator'
 
-type PeerMessage =
+export type PeerMessage =
   | {
       type: 'self'
       username: string
@@ -52,7 +52,7 @@ class RemotePeerState {
   private pendingIceCandidates = new Array<RTCIceCandidateInit>()
   rtcPeerConnection: RTCPeerConnection | null = null
   remoteScreenShareStreamId: string | null = null
-  readonly delayEstimator = new PeerNetworkDelayEstimator()
+  peerNeworkDelayEstimator: PeerNetworkDelayEstimator | null = null
 
   withRtcPeerConnection(callback: (peerConnection: RTCPeerConnection) => void) {
     if (this.rtcPeerConnection) {
@@ -290,6 +290,10 @@ export class RemoteMediaClient3 {
     })
 
     this.getAndMaybeAddPeerConnection(dataConnection.peer)
+    const peerNeworkDelayEstimator = new PeerNetworkDelayEstimator(dataConnection)
+    this.getOrCreateRemotePeerState(dataConnection.peer).peerNeworkDelayEstimator = 
+      peerNeworkDelayEstimator
+    peerNeworkDelayEstimator.getNewEstimate().then(e => console.error(`your delay time is: ${e}`))
   }
 
   private handleClosedDataConnection(dataConnection: DataConnection) {
