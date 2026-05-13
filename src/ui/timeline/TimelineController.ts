@@ -54,6 +54,7 @@ export class TimelineController extends TrackListItemController {
   resize() {
     this.width = this.svg.parentElement!.clientWidth
     this.height = this.svg.parentElement!.clientHeight
+    this.mainLine.setAttribute('x2', `${this.width}`)
     this.svg.parentElement!.setAttribute('viewBox', `0 0 ${this.width} ${this.height}`)
     this.rootFontSize = parseFloat(getComputedStyle(document.documentElement).fontSize)
   }

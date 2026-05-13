@@ -11,6 +11,12 @@ export class PositionMarkerController extends TrackListItemController {
   constructor(trackListController: TrackListController) {
     super(trackListController)
     this.resize()
+    this.positionLineSvg.addEventListener('mousemove', (event) => {
+      event.preventDefault()
+    })
+    this.positionLineSvg.addEventListener('wheel', (event) => {
+      event.preventDefault()
+    })
   }
 
   resize() {
