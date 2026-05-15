@@ -246,7 +246,6 @@ export class PointerStateManager extends TrackListItemController {
         }
         break
     }
-    console.error('nustate', newState)
     this.state = newState
     return true
   }

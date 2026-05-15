@@ -8,7 +8,6 @@ import { ContextMenuController, ContextMenuItem } from '../ContextMenuController
 import { PointerStateManager } from '../PointerStateManager'
 import { ClipView, cloneClipViewWithNewStartPosition } from '../../project/ClipView'
 import { Clipboard } from '../Clipboard'
-import { PeakMeterController } from 'ui/PeakMeterController'
 import { TrackListTrack as TrackListInfo } from './TrackListTrack'
 import { InputListController } from './InputListController'
 import { SelectedRegion } from '../../playback/Player'
@@ -358,11 +357,11 @@ export class TrackListController {
   }
 
   async paste(trackIndex: number, startingSample: number) {
-    if (!Clipboard.copiedClipViews) {
+    if (!Clipboard.copiedClipViews || Clipboard.copyStartPosition == null) {
       return
     }
     console.error(Clipboard.copiedClipViews.map(l => l.length))
-    const startPositionDelta = startingSample - Clipboard.copyStartPosition!
+    const startPositionDelta = startingSample - Clipboard.copyStartPosition
     const tracks = (await ProjectManager.getActiveProject()).getTracks()
     const undoCommands: AddClipViewCommand[] = []
     let i = 0
@@ -415,6 +414,29 @@ export class TrackListController {
     }
     const usesModifier = event.metaKey || event.ctrlKey
     if (!usesModifier) {
+      return
+    }
+    if (!event.shiftKey && event.code == 'KeyC') {
+      if (!this.selection) {
+        return
+      }
+      event.preventDefault()
+      void this.sliceSelection(false)
+      return
+    }
+    if (!event.shiftKey && event.code == 'KeyV') {
+      if (!Clipboard.copiedClipViews || Clipboard.copyStartPosition == null) {
+        return
+      }
+      event.preventDefault()
+      if (!this.canEdit()) {
+        return
+      }
+      const trackIndex =
+        this.pointerStateManager.getActiveTrack()?.index ??
+        this.waveforms.find((waveform) => this.selection?.waveforms.has(waveform))?.index ??
+        0
+      void this.paste(trackIndex, AudioControl.startPosition)
       return
     }
     if (event.code == 'KeyZ') {
