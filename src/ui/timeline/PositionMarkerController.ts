@@ -55,7 +55,8 @@ export class PositionMarkerController extends TrackListItemController {
     this.positionLineSvg.addEventListener('mousedown', (event) => {
       if (event.buttons == 1 && event.button == 0) {
         this.trackListController.pointerStateManager.startMovingMark()
-        event.stopPropagation()
+        console.error('', )
+        event.preventDefault()
       }
     })
 

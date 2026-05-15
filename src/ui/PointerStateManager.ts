@@ -15,7 +15,8 @@ export class PointerStateManager extends TrackListItemController {
 
   constructor(trackListController: TrackListController) {
     super(trackListController)
-    const element = document.getElementById('input-track-lists')!
+    const listsElement = document.getElementById('input-track-lists')!
+    const timelineElement = document.getElementById('timeline')!
     AudioControl.addAudioControlListener((state) => {
       switch (state) {
         case AudioState.PLAYING:
@@ -31,7 +32,7 @@ export class PointerStateManager extends TrackListItemController {
       }
     })
 
-    element.addEventListener('mousemove', async (mouseEvent) => {
+    const mouseMoveListener = async (mouseEvent: MouseEvent) => {
       switch (this.state) {
         case State.DEFAULT:
           break
@@ -68,8 +69,8 @@ export class PointerStateManager extends TrackListItemController {
         case State.READ_ONLY:
           break
       }
-    })
-    element.addEventListener('mousedown', async (mouseEvent) => {
+    }
+    const mouseDownListener = async (mouseEvent: MouseEvent) => {
       this.mouseDownPoint = { x: mouseEvent.clientX, y: mouseEvent.clientY }
       switch (this.state) {
         case State.DEFAULT:
@@ -106,8 +107,8 @@ export class PointerStateManager extends TrackListItemController {
         case State.READ_ONLY:
           break
       }
-    })
-    element.addEventListener('mouseup', async (mouseEvent) => {
+    }
+    const mouseUpListener = async (mouseEvent: MouseEvent) => {
       switch (this.state) {
         case State.DEFAULT:
           break
@@ -144,7 +145,15 @@ export class PointerStateManager extends TrackListItemController {
         case State.READ_ONLY:
           break
       }
-    })
+    }
+
+    listsElement.addEventListener('mousedown', mouseDownListener)
+    listsElement.addEventListener('mouseup', mouseUpListener)
+    listsElement.addEventListener('mousemove', mouseMoveListener)
+
+    timelineElement.addEventListener('mousedown', mouseDownListener)
+    timelineElement.addEventListener('mouseup', mouseUpListener)
+    timelineElement.addEventListener('mousemove', mouseMoveListener)
   }
 
   startResizingSelection(leftExpand: boolean) {
@@ -236,6 +245,7 @@ export class PointerStateManager extends TrackListItemController {
         }
         break
     }
+    console.error('nustate', newState)
     this.state = newState
     return true
   }

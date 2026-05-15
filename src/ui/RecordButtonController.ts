@@ -1,6 +1,7 @@
 import { AudioInputs } from '../audioinputs/AudioInputs'
 import { AudioControl, AudioState } from '../audiocontext/AudioControl'
 import { Recorder } from '../recording/Recorder'
+import type { RecordingActivity } from '../remote/RemoteMediaClient3'
 
 export class RecordButtonController {
   private static readonly COUNTDOWN_VALUES = ['3', '2', '1']
@@ -12,6 +13,7 @@ export class RecordButtonController {
   constructor(
     private readonly button: HTMLButtonElement,
     private readonly baseClassName: 'project-button' | 'meeting-button',
+    private readonly recordingActivityListener: ((recordingActivity: RecordingActivity) => void) | null = null,
   ) {
     this.countdownElement.className = 'record-button-countdown'
     this.button.appendChild(this.countdownElement)
@@ -50,8 +52,10 @@ export class RecordButtonController {
     if (!this.isCountingDown) {
       return
     }
+    const countdownId = this.countdownToken
     this.countdownToken += 1
     this.isCountingDown = false
+    this.recordingActivityListener?.({ state: 'idle', countdownId: countdownId })
     this.hideCountdown()
     if (this.isStoppedState(AudioControl.getState())) {
       this.configureStoppedState()
@@ -69,6 +73,11 @@ export class RecordButtonController {
     this.button.disabled = false
     this.button.className = `${this.baseClassName} record-button-counting-down`
     this.button.onclick = null
+    this.recordingActivityListener?.({
+      state: 'countdown',
+      countdownId: countdownToken,
+      durationMs: RecordButtonController.COUNTDOWN_VALUES.length * 1000,
+    })
 
     for (const countdownValue of RecordButtonController.COUNTDOWN_VALUES) {
       if (!this.shouldContinueCountdown(countdownToken)) {
@@ -87,6 +96,9 @@ export class RecordButtonController {
 
     try {
       await Recorder.startRecordingActiveAudioInputs()
+    } catch (error) {
+      this.recordingActivityListener?.({ state: 'idle', countdownId: countdownToken })
+      throw error
     } finally {
       if (this.isStoppedState(AudioControl.getState())) {
         this.configureStoppedState()

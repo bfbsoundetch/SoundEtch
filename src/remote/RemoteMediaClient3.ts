@@ -9,6 +9,7 @@ export type PeerMessage =
       type: 'self'
       username: string
       screenShareStreamId: string
+      recordingActivity?: RecordingActivity
     }
   | {
       type: 'otherPeer'
@@ -30,13 +31,33 @@ export type PeerMessage =
       type: 'rtcSessionDescription'
       desc: RTCSessionDescription
     }
+  | {
+      type: 'recordingActivity'
+      activity: RecordingActivity
+    }
   | TimestampMessage
+
+export type RecordingActivity =
+  | {
+      state: 'idle'
+      countdownId: number | null
+    }
+  | {
+      state: 'countdown'
+      countdownId: number
+      durationMs: number
+    }
+  | {
+      state: 'recording'
+      countdownId: number | null
+    }
 
 export interface Member {
   peerId: string
   username: string
   mediaStream: MediaStream
   error: string | null
+  recordingActivity: RecordingActivity
 }
 
 export interface State {
@@ -85,6 +106,8 @@ export class RemoteMediaClient3 {
   private readonly initializedDataConnections = new Set<string>()
   private readonly openedDataConnections = new Set<string>()
   private readonly logger = new Logger('RemoteMediaClient')
+  private currentRecordingActivity: RecordingActivity = { state: 'idle', countdownId: null }
+  private currentCountdownStartedAtMs: number | null = null
 
   constructor(
     private readonly username: string,
@@ -208,6 +231,12 @@ export class RemoteMediaClient3 {
     this.peer.destroy()
   }
 
+  setRecordingActivity(recordingActivity: RecordingActivity) {
+    this.currentRecordingActivity = recordingActivity
+    this.currentCountdownStartedAtMs = recordingActivity.state === 'countdown' ? performance.now() : null
+    this.sendRecordingActivity(this.getCurrentRecordingActivityForMessage())
+  }
+
   addStateListener(listener: StateListener) {
     this.stateListeners.push(listener)
     listener(this.state)
@@ -251,6 +280,7 @@ export class RemoteMediaClient3 {
       username: username,
       mediaStream: new MediaStream(),
       error: null,
+      recordingActivity: { state: 'idle', countdownId: null } as RecordingActivity,
     }
     this.state.members.push(newMember)
     return newMember
@@ -286,7 +316,8 @@ export class RemoteMediaClient3 {
     dataConnection.send({ 
       type: 'self', 
       username: this.username, 
-      screenShareStreamId: LocalMediaStreams.localScreenMediaStream.id 
+      screenShareStreamId: LocalMediaStreams.localScreenMediaStream.id,
+      recordingActivity: this.getCurrentRecordingActivityForMessage(),
     })
 
     this.getAndMaybeAddPeerConnection(dataConnection.peer)
@@ -316,6 +347,49 @@ export class RemoteMediaClient3 {
       if (peerId != dataConnection.peer && this.getOpenDataConnection(peerId)) {
         dataConnection.send({ type: 'otherPeer', peer: peerId })
       }
+    }
+  }
+
+  private sendRecordingActivity(recordingActivity: RecordingActivity) {
+    for (const peerId of this.connections.keys()) {
+      this.getOpenDataConnection(peerId)?.send({ type: 'recordingActivity', activity: recordingActivity })
+    }
+  }
+
+  private getCurrentRecordingActivityForMessage(): RecordingActivity {
+    if (this.currentRecordingActivity.state != 'countdown') {
+      return this.currentRecordingActivity
+    }
+
+    const elapsedMs = this.currentCountdownStartedAtMs == null ? 0 : performance.now() - this.currentCountdownStartedAtMs
+    return {
+      ...this.currentRecordingActivity,
+      durationMs: Math.max(0, this.currentRecordingActivity.durationMs - elapsedMs),
+    }
+  }
+
+  private async getRemoteRecordingActivity(peerId: string, recordingActivity: RecordingActivity) {
+    if (recordingActivity.state != 'countdown') {
+      return recordingActivity
+    }
+
+    const delayEstimate =
+      (await this.getOrCreateRemotePeerState(peerId).peerNeworkDelayEstimator?.getExistingEstimate()) ?? 999999
+    const delayEstimateIsUsable = delayEstimate >= 0 && delayEstimate != 999999
+    return {
+      ...recordingActivity,
+      durationMs: Math.max(0, recordingActivity.durationMs - (delayEstimateIsUsable ? delayEstimate : 0)),
+    }
+  }
+
+  private async setRemoteRecordingActivity(
+    peerId: string,
+    recordingActivity: RecordingActivity,
+    notifyListeners: boolean = true,
+  ) {
+    this.ensureMember(peerId).recordingActivity = await this.getRemoteRecordingActivity(peerId, recordingActivity)
+    if (notifyListeners) {
+      this.notifyStateListeners()
     }
   }
 
@@ -375,6 +449,9 @@ export class RemoteMediaClient3 {
       case 'self':
         this.ensureMember(self.peer, peerMessage.username)
         this.getOrCreateRemotePeerState(self.peer).remoteScreenShareStreamId = peerMessage.screenShareStreamId
+        if (peerMessage.recordingActivity) {
+          await this.setRemoteRecordingActivity(self.peer, peerMessage.recordingActivity, false)
+        }
         this.shareKnownPeers(self)
         this.notifyStateListeners()
         break
@@ -403,6 +480,9 @@ export class RemoteMediaClient3 {
             )
             break
         }
+        break
+      case 'recordingActivity':
+        await this.setRemoteRecordingActivity(self.peer, peerMessage.activity)
         break
       case 'chat':
         break

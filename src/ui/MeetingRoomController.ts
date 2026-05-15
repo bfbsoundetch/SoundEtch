@@ -1,4 +1,4 @@
-import { RemoteMediaClient3, State } from '../remote/RemoteMediaClient3'
+import { RemoteMediaClient3, type RecordingActivity, type State } from '../remote/RemoteMediaClient3'
 import { MediaStreamButtonController } from './MediaStreamButtonController'
 import { PeakMeterController } from './PeakMeterController'
 import { Direction, ErrorBubbleController } from './ErrorBubbleController'
@@ -18,6 +18,10 @@ enum VideoLayout {
 
 class VideoContainer {
   private peakMeter: PeakMeterController | null = null
+  private readonly recordingActivityElement = document.createElement('div')
+  private recordingActivityToken = 0
+  private recordingActivityTimeout: number | null = null
+  private recordingActivityKey: string | null = null
   isActive = false
 
   constructor(
@@ -30,6 +34,9 @@ class VideoContainer {
       this.vidElement.play()
     }
     this.divElement.onclick = () => meetingRoomController.spotlightElement(this)
+    this.recordingActivityElement.className = 'meeting-recording-activity'
+    this.recordingActivityElement.style.display = 'none'
+    this.divElement.appendChild(this.recordingActivityElement)
   }
 
   startPeakMeter(audioInput: AudioInput) {
@@ -52,6 +59,79 @@ class VideoContainer {
     this.peakMeter = null
     this.audioElement!.style.display = 'none'
   }
+
+  setRecordingActivity(username: string, recordingActivity: RecordingActivity) {
+    const recordingActivityKey = this.getRecordingActivityKey(username, recordingActivity)
+    if (this.recordingActivityKey == recordingActivityKey) {
+      return
+    }
+
+    this.recordingActivityKey = recordingActivityKey
+    this.clearRecordingActivityTimeout()
+    const recordingActivityToken = ++this.recordingActivityToken
+
+    switch (recordingActivity.state) {
+      case 'idle':
+        this.hideRecordingActivity()
+        break
+      case 'countdown':
+        this.drawRecordingCountdown(username, performance.now() + recordingActivity.durationMs, recordingActivityToken)
+        break
+      case 'recording':
+        this.showRecordingActivity(`${username} is recording`)
+        break
+    }
+  }
+
+  clearRecordingActivity() {
+    this.recordingActivityKey = null
+    this.clearRecordingActivityTimeout()
+    ++this.recordingActivityToken
+    this.hideRecordingActivity()
+  }
+
+  private drawRecordingCountdown(username: string, countdownEndsAtMs: number, recordingActivityToken: number) {
+    if (recordingActivityToken != this.recordingActivityToken) {
+      return
+    }
+
+    const remainingMs = countdownEndsAtMs - performance.now()
+    if (remainingMs <= 0) {
+      this.showRecordingActivity(`${username} is recording`)
+      return
+    }
+
+    const remainingSeconds = Math.ceil(remainingMs / 1000)
+    this.showRecordingActivity(`${username} is recording in ${remainingSeconds}`)
+    this.recordingActivityTimeout = window.setTimeout(
+      () => this.drawRecordingCountdown(username, countdownEndsAtMs, recordingActivityToken),
+      Math.max(1, remainingMs - (remainingSeconds - 1) * 1000),
+    )
+  }
+
+  private showRecordingActivity(message: string) {
+    this.recordingActivityElement.innerText = message
+    this.recordingActivityElement.style.display = 'block'
+  }
+
+  private hideRecordingActivity() {
+    this.recordingActivityElement.innerText = ''
+    this.recordingActivityElement.style.display = 'none'
+  }
+
+  private clearRecordingActivityTimeout() {
+    if (this.recordingActivityTimeout == null) {
+      return
+    }
+    window.clearTimeout(this.recordingActivityTimeout)
+    this.recordingActivityTimeout = null
+  }
+
+  private getRecordingActivityKey(username: string, recordingActivity: RecordingActivity) {
+    return `${username}:${recordingActivity.state}:${recordingActivity.countdownId ?? ''}:${
+      recordingActivity.state == 'countdown' ? recordingActivity.durationMs : ''
+    }`
+  }
 }
 
 export class MeetingRoomController {
@@ -59,7 +139,12 @@ export class MeetingRoomController {
   private usernameForm = document.getElementById('username-form') as HTMLFormElement
   private enterMeetingButton = document.getElementById('enter-meeting-room-button') as HTMLButtonElement
   private meetingRecordButton = document.getElementById('meeting-record-button') as HTMLButtonElement
-  private readonly recordButtonController = new RecordButtonController(this.meetingRecordButton, 'meeting-button')
+  private localRecordingActivity: RecordingActivity = { state: 'idle', countdownId: null }
+  private readonly recordButtonController = new RecordButtonController(
+    this.meetingRecordButton,
+    'meeting-button',
+    (recordingActivity) => this.setLocalRecordingActivity(recordingActivity),
+  )
 
   private currentState: State = { members: [], roomId: null, screenShare: null, error: null }
   private remoteMediaClient: RemoteMediaClient3 | null = null
@@ -165,6 +250,7 @@ export class MeetingRoomController {
       return false
     }
     this.remoteMediaClient = new RemoteMediaClient3(username)
+    this.remoteMediaClient.setRecordingActivity(this.localRecordingActivity)
     this.remoteMediaClient.addStateListener((state) => this.stateListener(state))
     this.setUiForConnectedState()
     return true
@@ -189,6 +275,7 @@ export class MeetingRoomController {
 
       this.logger.log('About to join ' + meetingId)
       this.remoteMediaClient = new RemoteMediaClient3(username, meetingId)
+      this.remoteMediaClient.setRecordingActivity(this.localRecordingActivity)
       this.remoteMediaClient.addStateListener((state) => this.stateListener(state))
       this.setUiForConnectedState()
       return true
@@ -380,6 +467,7 @@ export class MeetingRoomController {
           this.guestContainers[i].vidElement.srcObject = state.members[i].mediaStream
         }
         this.guestContainers[i].vidElement.poster = this.getSvgPosterForUser(state.members[i].username, false)
+        this.guestContainers[i].setRecordingActivity(state.members[i].username, state.members[i].recordingActivity)
         // this.guestContainers[i].startPeakMeter(
         //   AudioInputs.remoteStreams.get({ username: state.members[i].username, isScreenShare: false })!,
         // )
@@ -388,6 +476,7 @@ export class MeetingRoomController {
         this.guestContainers[i].vidElement.srcObject = null
         this.guestContainers[i].vidElement.poster = ''
         this.guestContainers[i].stopPeakMeter()
+        this.guestContainers[i].clearRecordingActivity()
         this.guestContainers[i].isActive = false
       }
     }
@@ -424,6 +513,7 @@ export class MeetingRoomController {
     for (const guestContainer of this.guestContainers) {
       guestContainer.vidElement.srcObject = null
       guestContainer.stopPeakMeter()
+      guestContainer.clearRecordingActivity()
       guestContainer.isActive = false
     }
     this.applyVideoLayout()
@@ -492,7 +582,43 @@ export class MeetingRoomController {
     linkElement.innerText = meetingLink ?? 'Meeting link is not available yet.'
   }
 
+  private setLocalRecordingActivity(recordingActivity: RecordingActivity) {
+    if (this.recordingActivitiesAreEqual(this.localRecordingActivity, recordingActivity)) {
+      return
+    }
+
+    this.localRecordingActivity = recordingActivity
+    this.remoteMediaClient?.setRecordingActivity(recordingActivity)
+  }
+
+  private setLocalRecordingActivityFromAudioState(state: AudioState) {
+    switch (state) {
+      case AudioState.RECORDING:
+      case AudioState.RECORDING_PAUSED:
+        this.setLocalRecordingActivity({
+          state: 'recording',
+          countdownId:
+            this.localRecordingActivity.state == 'countdown' || this.localRecordingActivity.state == 'recording'
+              ? this.localRecordingActivity.countdownId
+              : null,
+        })
+        break
+      default:
+        this.setLocalRecordingActivity({ state: 'idle', countdownId: null })
+        break
+    }
+  }
+
+  private recordingActivitiesAreEqual(left: RecordingActivity, right: RecordingActivity) {
+    if (left.state != right.state || left.countdownId != right.countdownId) {
+      return false
+    }
+    return left.state != 'countdown' || right.state != 'countdown' || left.durationMs == right.durationMs
+  }
+
   private updateMeetingRecordButton(state: AudioState) {
+    this.setLocalRecordingActivityFromAudioState(state)
+
     const playIcon = this.meetingRecordButton.getElementsByClassName('play')[0] as SVGUseElement
     const recordIcon = this.meetingRecordButton.getElementsByClassName('record')[0] as SVGUseElement
     const label = this.meetingRecordButton.getElementsByTagName('span')[0]

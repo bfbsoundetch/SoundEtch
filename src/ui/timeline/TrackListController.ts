@@ -258,7 +258,10 @@ export class TrackListController {
 
   updateSelection(xCoord: number, waveform: Waveform | null, dragged: boolean) {
     xCoord = Math.max(xCoord, 0)
-    const hasSelectionAlready = !!this.selection
+    if (!!this.selection) {
+      AudioControl.startPosition = 0
+      this.positionMarkerController.draw()
+    }
     if (!dragged || !waveform) {
       this.selection = {
         startSample: this.selection?.startSample ?? xCoord,
@@ -278,10 +281,6 @@ export class TrackListController {
       startSample: this.selection?.startSample ?? xCoord,
       endSample: xCoord,
       waveforms: this.selection?.waveforms ?? new Set<Waveform>(),
-    }
-    if (hasSelectionAlready) {
-      AudioControl.startPosition = 0
-      this.positionMarkerController.draw()
     }
     let firstWaveform: Waveform | null = null
     for (const w of this.waveforms) {
@@ -340,7 +339,6 @@ export class TrackListController {
     Clipboard.copyStartPosition = this.selection?.startSample ?? null
     if (del) {
       await Promise.all(this.selection.waveforms.entries().map((w) => {
-        
         return ProjectManager.saveTrack(w[0].track)
       }))
     }

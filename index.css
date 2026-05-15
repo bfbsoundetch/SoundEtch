@@ -530,6 +530,22 @@ video {
   transition: all 0.25s ease-in-out;
 }
 
+.meeting-recording-activity {
+  position: absolute;
+  top: 0.75rem;
+  left: 0.75rem;
+  z-index: 2;
+  max-width: calc(100% - 1.5rem);
+  box-sizing: border-box;
+  padding: 0.35rem 0.55rem;
+  border: 1px solid rgba(255, 255, 255, 0.75);
+  background: rgba(0, 0, 0, 0.68);
+  color: white;
+  font-size: 0.9rem;
+  line-height: 1.2;
+  pointer-events: none;
+}
+
 #meeting-setup {
   position: absolute;
   width: 100%;
