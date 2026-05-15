@@ -12,6 +12,13 @@ import { PeakMeterController } from 'ui/PeakMeterController'
 import { TrackListTrack as TrackListInfo } from './TrackListTrack'
 import { InputListController } from './InputListController'
 import { SelectedRegion } from '../../playback/Player'
+import { editorHistory } from '../undo/EditorHistory'
+import {
+  AddClipViewCommand,
+  BatchCommand,
+  MoveClipViewBetweenTracksCommand,
+  SetTrackClipViewsCommand,
+} from '../undo/UndoableActions'
 
 interface Selection {
   startSample: number
@@ -59,6 +66,7 @@ export class TrackListController {
   readonly timelineController = new TimelineController(this)
   readonly inputListController = new InputListController()
   readonly positionMarkerController = new PositionMarkerController(this)
+  readonly history = editorHistory
   readonly pointerStateManager = new PointerStateManager(this)
 
   private selection: Selection | null = null
@@ -143,6 +151,9 @@ export class TrackListController {
   }
 
   constructor() {
+    this.history.addChangeListener(() => this.draw())
+    KeyPressController.addKeyDownListener((event) => this.handleKeyDown(event))
+
     new ResizeObserver(async (_) => {
       this.timelineController.resize()
       this.waveforms.forEach((w) => w.resize())
@@ -189,7 +200,7 @@ export class TrackListController {
 
         const trackInfoDiv = document.createElement('div')
         trackInfoDiv.style.height = `${7 * track.getChannelCount() + 1.5}rem`
-        const trackListInfo = new TrackListInfo(track, trackInfoDiv)
+        const trackListInfo = new TrackListInfo(track, trackInfoDiv, this.history)
 
         const waveformDiv = document.createElement('div')
         waveformDiv.addEventListener('contextmenu', (mouseEvent) => {
@@ -318,10 +329,7 @@ export class TrackListController {
       clipViewController.reset()
       return
     }
-    newTrack.addClipView(clipView)
-    oldWaveform.removeClipView(clipViewController.clipViewIndex)
-    await Promise.all([ProjectManager.saveTrack(oldWaveform.track), ProjectManager.saveTrack(newTrack)])
-    this.draw()
+    await this.history.execute(new MoveClipViewBetweenTracksCommand(oldWaveform.track, newTrack, oldClipView, clipView))
   }
 
   async sliceSelection(del: boolean) {
@@ -329,53 +337,57 @@ export class TrackListController {
       return
     }
     const newClipboard: typeof Clipboard.copiedClipViews = []
+    const undoCommands: SetTrackClipViewsCommand[] = []
     const lowSample = Math.min(this.selection!.startSample, this.selection!.endSample)
     const highSample = Math.max(this.selection!.startSample, this.selection!.endSample)
     this.selection.waveforms.forEach((waveform) => {
+      const oldClipViews = waveform.track.clipViews.slice()
       newClipboard.push(waveform.track.slice(lowSample, highSample, del))
-      waveform.drawAudioData()
+      if (del && !this.clipViewArraysEqual(oldClipViews, waveform.track.clipViews)) {
+        undoCommands.push(new SetTrackClipViewsCommand(waveform.track, oldClipViews, waveform.track.clipViews.slice()))
+      } else {
+        waveform.drawAudioData()
+      }
     })
     Clipboard.copiedClipViews = newClipboard
-    Clipboard.copyStartPosition = this.selection?.startSample ?? null
-    if (del) {
-      await Promise.all(this.selection.waveforms.entries().map((w) => {
-        return ProjectManager.saveTrack(w[0].track)
-      }))
+    console.error(Clipboard.copiedClipViews.map(l => l.length))
+    Clipboard.copyStartPosition = lowSample
+    if (del && undoCommands.length > 0) {
+      await this.history.recordApplied(new BatchCommand(undoCommands))
     }
   }
 
   async paste(trackIndex: number, startingSample: number) {
-    console.error(startingSample / this.sampleRate + ' ' + Clipboard.copyStartPosition! / this.sampleRate)
+    if (!Clipboard.copiedClipViews) {
+      return
+    }
+    console.error(Clipboard.copiedClipViews.map(l => l.length))
     const startPositionDelta = startingSample - Clipboard.copyStartPosition!
     const tracks = (await ProjectManager.getActiveProject()).getTracks()
-    const newClipViewsList: typeof Clipboard.copiedClipViews = []
+    const undoCommands: AddClipViewCommand[] = []
     let i = 0
-    console.error(Clipboard.copiedClipViews)
-    for await (const clipViews of Clipboard.copiedClipViews!) {
+    console.error('1', startPositionDelta)
+    for (const clipViews of Clipboard.copiedClipViews) {
       const track = tracks[trackIndex + i++]
-      const newClipViews: Array<ClipView> = []
-      clipViews.forEach((clipView) => {
+      if (!track) {
+        continue
+      }
+      console.error('2')
+      let tmp = 0
+      for (const clipView of clipViews) {
         const newClipView = cloneClipViewWithNewStartPosition(clipView, startPositionDelta)
-        console.error(newClipView.startPosition / this.sampleRate)
         if (!track.canAddClipView(newClipView)) {
-          console.error('no, not true!!!')
+          console.error('oh no ;(', ++tmp)
           return
         }
-        newClipViews.push(newClipView)
-      })
-      newClipViewsList.push(newClipViews)
-    }
-    i = 0
-    const savePromises = []
-    for (const clipViews of newClipViewsList) {
-      const track = tracks[trackIndex + i++]
-      for (const clipView of clipViews) {
-        track.addClipView(clipView)
+        ++tmp
+        undoCommands.push(new AddClipViewCommand(newClipView, track))
       }
-      savePromises.push(ProjectManager.saveTrack(track))
     }
-    this.draw()
-    await Promise.all(savePromises)
+    console.error('3', undoCommands.length)
+    if (undoCommands.length > 0) {
+      await this.history.execute(new BatchCommand(undoCommands))
+    }
   }
 
   private drawSelection() {
@@ -395,6 +407,56 @@ export class TrackListController {
     this.waveforms.forEach((waveform) => waveform.draw())
     this.drawSelection()
     this.positionMarkerController.draw()
+  }
+
+  private handleKeyDown(event: KeyboardEvent) {
+    if (event.defaultPrevented || this.shouldIgnoreKeyboardShortcut(event.target)) {
+      return
+    }
+    const usesModifier = event.metaKey || event.ctrlKey
+    if (!usesModifier) {
+      return
+    }
+    if (event.code == 'KeyZ') {
+      event.preventDefault()
+      if (!this.canEdit()) {
+        return
+      }
+      if (event.shiftKey) {
+        void this.history.redo()
+      } else {
+        void this.history.undo()
+      }
+      return
+    }
+    if (event.ctrlKey && event.code == 'KeyY') {
+      event.preventDefault()
+      if (!this.canEdit()) {
+        return
+      }
+      void this.history.redo()
+    }
+  }
+
+  private canEdit() {
+    return AudioControl.getState() == AudioState.STOPPED || AudioControl.getState() == AudioState.MONITORING
+  }
+
+  private shouldIgnoreKeyboardShortcut(target: EventTarget | null) {
+    if (!(target instanceof HTMLElement)) {
+      return false
+    }
+    if (target.isContentEditable || target.tagName == 'TEXTAREA') {
+      return true
+    }
+    if (target instanceof HTMLInputElement) {
+      return !['button', 'checkbox', 'radio', 'range', 'reset', 'submit'].includes(target.type)
+    }
+    return false
+  }
+
+  private clipViewArraysEqual(a: ClipView[], b: ClipView[]) {
+    return a.length == b.length && a.every((clipView, index) => clipView == b[index])
   }
 
   private translateToFollowPosition(timestamp: number, controller: TrackListController) {

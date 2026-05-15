@@ -1,5 +1,5 @@
 export interface Undoable {
-  perform(): Promise<any>
-  undo(): Promise<any>
-  save(): Promise<any>
+  perform(): Promise<void>
+  undo(): Promise<void>
+  save(): Promise<void>
 }

@@ -37,15 +37,16 @@ export class PointerStateManager extends TrackListItemController {
         case State.DEFAULT:
           break
         case State.MARKING:
-          if (
-            mouseEvent.buttons == 1 &&
-            mouseEvent.button == 0
-          ) {
+          if (mouseEvent.buttons == 1 && mouseEvent.button == 0) {
             this.markPointerDown(mouseEvent)
           }
           break
         case State.SELECTING:
-          if (mouseEvent.buttons == 1 && mouseEvent.button == 0 && Math.abs(mouseEvent.clientX - this.mouseDownPoint!.x) >= 2) {
+          if (
+            mouseEvent.buttons == 1 &&
+            mouseEvent.button == 0 &&
+            Math.abs(mouseEvent.clientX - this.mouseDownPoint!.x) >= 2
+          ) {
             trackListController.updateSelection(
               this.getSampleForXValue(this.mouseEventToSvgCoord(mouseEvent).x),
               this.activeWaveform,
@@ -137,7 +138,7 @@ export class PointerStateManager extends TrackListItemController {
           break
         case State.RESIZING_CLIPVIEW: {
           const shift = mouseEvent.clientX - this.mouseDownPoint!.x
-          this.activeClipViewController!.finishClipViewResize(shift)
+          await this.activeClipViewController!.finishClipViewResize(shift)
           this.changeState(State.DEFAULT)
           break
         }

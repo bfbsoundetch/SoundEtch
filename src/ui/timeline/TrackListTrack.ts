@@ -1,10 +1,13 @@
 import { ProjectManager } from '../../project/ProjectManager'
 import { Track } from '../../project/Track'
+import { EditorHistory } from '../undo/EditorHistory'
+import { SetTrackPropertyCommand, TrackProperty } from '../undo/UndoableActions'
 
 export class TrackListTrack {
   constructor(
     track: Track,
     private readonly trackInfoDiv: HTMLDivElement,
+    private readonly history: EditorHistory,
   ) {
     this.trackInfoDiv.classList = 'track-info tracklist-item'
 
@@ -19,8 +22,12 @@ export class TrackListTrack {
     trackTitle.style.gridArea = 'title'
     trackTitle.innerText = track.name
 
-    trackTitle.addEventListener('dblclick', () => this.makeEditable(trackTitle, track))
-    trackTitle.addEventListener('blur', () => this.saveChanges(trackTitle, track))
+    let titleEditStart = track.name
+    trackTitle.addEventListener('dblclick', () => {
+      titleEditStart = track.name
+      this.makeEditable(trackTitle)
+    })
+    trackTitle.addEventListener('blur', () => this.saveChanges(trackTitle, track, titleEditStart))
 
     this.trackInfoDiv.appendChild(trackTitle)
 
@@ -75,12 +82,29 @@ export class TrackListTrack {
     gainSlider.value = `${initialGainNumber}`
     const gainOutput = document.createElement('output')
     gainOutput.classList = 'slider-value'
-    gainOutput.value = `gain: ${initialGainNumber > 0 ? '+' : ''}${initialGainNumber} dB`
+    this.updateGainOutput(gainOutput, initialGainNumber)
     gainSlider.oninput = () => {
       const gainNumber = Number(gainSlider.value)
       track.setGain(10 ** (gainNumber / 20))
-      gainOutput.value = `gain: ${gainNumber > 0 ? '+' : ''}${gainNumber} dB`
+      this.updateGainOutput(gainOutput, gainNumber)
     }
+    let gainEditStart = track.getGain()
+    const startGainEdit = () => {
+      gainEditStart = track.getGain()
+    }
+    const commitGainEdit = async () => {
+      const newGain = track.getGain()
+      if (newGain == gainEditStart) {
+        return
+      }
+      await this.history.recordApplied(new SetTrackPropertyCommand(track, TrackProperty.GAIN, gainEditStart, newGain))
+      gainEditStart = newGain
+    }
+    gainSlider.addEventListener('pointerdown', startGainEdit)
+    gainSlider.addEventListener('focus', startGainEdit)
+    gainSlider.addEventListener('change', () => {
+      void commitGainEdit()
+    })
     gainSlider.addEventListener('mouseenter', () => {
       gainOutput.style.opacity = '1'
     })
@@ -106,31 +130,36 @@ export class TrackListTrack {
     panSlider.style.width = '100%'
     panSlider.style.margin = 'auto'
     panSlider.style.accentColor = 'var(--color)'
-    const initialPanValue = track.getPan() * 10
-    panSlider.value = `${initialPanValue}`
+    const initialPanValue = track.getPan()
+    panSlider.value = `${initialPanValue * 10}`
     panSlider.style.background =
       'repeating-linear-gradient(to right, #000, #000 10%, #000 10%, #000 11%, #000 11%, #000 20%)'
     const panOutput = document.createElement('output')
     panOutput.classList = 'slider-value'
-    if (initialPanValue == 0) {
-      panOutput.value = `pan: centered`
-    } else if (initialPanValue < 0) {
-      panOutput.value = `pan: ${-initialPanValue * 100}% left`
-    } else {
-      panOutput.value = `pan: ${initialPanValue * 100}% right`
-    }
+    this.updatePanOutput(panOutput, initialPanValue)
 
     panSlider.oninput = () => {
       const value = Number(panSlider.value) / 10
       track.setPan(value)
-      if (value == 0) {
-        panOutput.value = `pan: centered`
-      } else if (value < 0) {
-        panOutput.value = `pan: ${-value * 100}% left`
-      } else {
-        panOutput.value = `pan: ${value * 100}% right`
-      }
+      this.updatePanOutput(panOutput, value)
     }
+    let panEditStart = track.getPan()
+    const startPanEdit = () => {
+      panEditStart = track.getPan()
+    }
+    const commitPanEdit = async () => {
+      const newPan = track.getPan()
+      if (newPan == panEditStart) {
+        return
+      }
+      await this.history.recordApplied(new SetTrackPropertyCommand(track, TrackProperty.PAN, panEditStart, newPan))
+      panEditStart = newPan
+    }
+    panSlider.addEventListener('pointerdown', startPanEdit)
+    panSlider.addEventListener('focus', startPanEdit)
+    panSlider.addEventListener('change', () => {
+      void commitPanEdit()
+    })
     panSlider.addEventListener('mouseenter', () => {
       panOutput.style.opacity = '1'
     })
@@ -146,10 +175,25 @@ export class TrackListTrack {
     peakMeterDiv.style.width = '100%'
     this.trackInfoDiv.appendChild(peakMeterDiv)
 
-    deleteTrackButton.onclick = () => ProjectManager.deleteTrack(track)
+    void ProjectManager.addTrackListener(track, () => {
+      if (!trackTitle.isContentEditable) {
+        trackTitle.innerText = track.name
+      }
+      const gainNumber = 20 * Math.log10(track.getGain())
+      gainSlider.value = `${gainNumber}`
+      this.updateGainOutput(gainOutput, gainNumber)
+      const panValue = track.getPan()
+      panSlider.value = `${panValue * 10}`
+      this.updatePanOutput(panOutput, panValue)
+    })
+
+    deleteTrackButton.onclick = () => {
+      this.history.clear()
+      void ProjectManager.deleteTrack(track)
+    }
   }
 
-  private makeEditable(div: HTMLDivElement, track: Track) {
+  private makeEditable(div: HTMLDivElement) {
     div.contentEditable = 'true'
     div.style.maxHeight = '100%'
     div.style.height = '100%'
@@ -157,17 +201,20 @@ export class TrackListTrack {
     div.focus()
 
     // Save on Enter or blur
-    div.addEventListener('keydown', function (e) {
+    div.onkeydown = (e) => {
       if (e.key === 'Enter') {
         e.preventDefault()
-        this.blur()
+        div.blur()
       }
-    })
+    }
   }
 
-  private saveChanges(div: HTMLDivElement, track: Track) {
+  private async saveChanges(div: HTMLDivElement, track: Track, oldName: string) {
+    if (!div.isContentEditable) {
+      return
+    }
     div.contentEditable = 'false'
-    track.name = div.innerText
+    const newName = div.innerText
     div.style.maxHeight = '3em'
     div.style.height = ''
     div.style.overflow = 'hidden'
@@ -175,6 +222,22 @@ export class TrackListTrack {
       top: 0,
     })
 
-    ProjectManager.saveTrack(track)
+    if (newName != oldName) {
+      await this.history.execute(new SetTrackPropertyCommand(track, TrackProperty.TITLE, oldName, newName))
+    }
+  }
+
+  private updateGainOutput(output: HTMLOutputElement, gainNumber: number) {
+    output.value = `gain: ${gainNumber > 0 ? '+' : ''}${gainNumber} dB`
+  }
+
+  private updatePanOutput(output: HTMLOutputElement, value: number) {
+    if (value == 0) {
+      output.value = 'pan: centered'
+    } else if (value < 0) {
+      output.value = `pan: ${-value * 100}% left`
+    } else {
+      output.value = `pan: ${value * 100}% right`
+    }
   }
 }

@@ -1,29 +1,54 @@
 import { Undoable } from './Undoable'
 
 export class BackStack {
-  position = 0
-  readonly stack = new Array<Undoable>()
+  private position = 0
+  private readonly stack = new Array<Undoable>()
 
-  async pushAndExecute(undoable: Undoable) {
+  get canUndo() {
+    return this.position > 0
+  }
+
+  get canRedo() {
+    return this.position < this.stack.length
+  }
+
+  async execute(undoable: Undoable): Promise<void> {
+    await undoable.perform()
+    await undoable.save()
     this.stack.splice(this.position)
     this.stack.push(undoable)
     ++this.position
-    await undoable.perform()
-    await undoable.save()
   }
 
-  async undo() {
-    await this.stack[this.position].undo()
-    await this.stack[this.position].save()
+  async recordApplied(undoable: Undoable): Promise<void> {
+    await undoable.save()
+    this.stack.splice(this.position)
+    this.stack.push(undoable)
+    ++this.position
+  }
+
+  async undo(): Promise<void> {
+    if (!this.canUndo) {
+      return
+    }
+    const undoable = this.stack[this.position - 1]
+    await undoable.undo()
+    await undoable.save()
     --this.position
   }
 
-  async redo() {
-    if (this.position >= this.stack.length) {
+  async redo(): Promise<void> {
+    if (!this.canRedo) {
       return
     }
-    await this.stack[this.position].perform()
-    await this.stack[this.position].save()
+    const undoable = this.stack[this.position]
+    await undoable.perform()
+    await undoable.save()
     ++this.position
+  }
+
+  clear() {
+    this.stack.splice(0)
+    this.position = 0
   }
 }

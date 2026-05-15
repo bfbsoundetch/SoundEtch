@@ -4,8 +4,8 @@ import { AudioControl, AudioState } from '../../audiocontext/AudioControl'
 import { TrackListItemController } from './TrackListItemController'
 import { TrackListController } from './TrackListController'
 import { ContextMenuController, ContextMenuItem } from '../../ui/ContextMenuController'
-import { ProjectManager } from '../../project/ProjectManager'
 import { SummaryGenerator } from '../../project/SummaryGenerator'
+import { ReplaceClipViewCommand, SetTrackClipViewsCommand, clipViewsEqual } from '../undo/UndoableActions'
 
 /** Handles displaying a track's waveform. */
 export class Waveform extends TrackListItemController {
@@ -196,25 +196,9 @@ export class Waveform extends TrackListItemController {
     this.channelSeparatorPathElement.setAttribute('d', channelSeparatorPath)
   }
 
-  async removeClipView(clipViewIndex: number) {
-    const clipView = this.track.clipViews[clipViewIndex]
-    this.track.removeClipView(clipViewIndex)
-    this.removeClipViewController(this.clipViewControllerMap.get(clipView)!)
-  }
-
-  async replaceClipView(clipViewIndex: number, newClipView: ClipView) {
-    const clipView = this.track.clipViews[clipViewIndex]
-    const old = this.clipViewControllerMap.get(clipView)
-    this.clipViewControllerMap.delete(clipView)
-    const replacePromise = this.track.replaceClipView(clipViewIndex, newClipView)
-    old?.remove()
-    this.draw()
-    await replacePromise
-  }
-
   removeClipViewController(controller: ClipViewController) {
     controller.remove()
-    this.clipViewControllerMap.delete(this.track.clipViews[controller.clipViewIndex])
+    this.clipViewControllerMap.delete(controller.clipView)
   }
 
   private async drawAudioDataForCanvasXRange(
@@ -223,6 +207,13 @@ export class Waveform extends TrackListItemController {
     start: number,
     end: number,
   ) {
+    for (const [clipView, clipViewController] of this.clipViewControllerMap) {
+      if (!this.track.clipViews.includes(clipView)) {
+        clipViewController.remove()
+        this.clipViewControllerMap.delete(clipView)
+      }
+    }
+
     const startSample = waveform.getSampleForXValue(start)
     let sample = waveform.getSampleForXValue(start)
     const endSample = waveform.getSampleForXValue(end)
@@ -243,6 +234,8 @@ export class Waveform extends TrackListItemController {
             this.color,
           )
           this.clipViewControllerMap.set(currentClipView, clipViewController)
+        } else {
+          clipViewController.clipViewIndex = clipViewIndex
         }
         clipViewController.draw(startSample, endSample)
       } else if (clipViewController) {
@@ -296,7 +289,7 @@ export class ClipViewController extends TrackListItemController {
     readonly trackListController: TrackListController,
     readonly clipView: ClipView,
     readonly waveform: Waveform,
-    readonly clipViewIndex: number,
+    public clipViewIndex: number,
     color: string,
   ) {
     super(trackListController)
@@ -393,8 +386,17 @@ export class ClipViewController extends TrackListItemController {
 
   async moveThisClipView(shift: number) {
     const newClipView = cloneClipViewWithNewStartPosition(this.clipView, shift)
-    await this.waveform.replaceClipView(this.clipViewIndex, newClipView)
-    this.waveform.draw()
+    const clipViewIndex = this.waveform.track.clipViews.indexOf(this.clipView)
+    if (
+      clipViewsEqual(this.clipView, newClipView) ||
+      !this.waveform.track.canReplaceClipView(clipViewIndex, newClipView)
+    ) {
+      this.reset()
+      return
+    }
+    await this.trackListController.history.execute(
+      new ReplaceClipViewCommand(this.waveform.track, this.clipView, newClipView),
+    )
   }
 
   private startClipViewMove(self: ClipViewController, startMouseEvent: MouseEvent) {
@@ -403,10 +405,27 @@ export class ClipViewController extends TrackListItemController {
   }
 
   private async splitThisClipView(position: number) {
-    this.waveform.track.split(this.clipViewIndex, position)
-    this.waveform.removeClipViewController(this)
-    this.waveform.draw()
-    ProjectManager.saveTrack(this.waveform.track)
+    const clipView = this.waveform.track.clipViews[this.clipViewIndex]
+    if (!clipView) {
+      return
+    }
+    if (position <= clipView.startPosition || position >= clipView.getEndPosition()) {
+      return
+    }
+    const firstLength = position - clipView.startPosition
+    const firstNewClipView = new ClipView(clipView.clip, clipView.offset, clipView.startPosition, firstLength)
+    const secondNewClipView = new ClipView(
+      clipView.clip,
+      clipView.offset + firstLength,
+      position,
+      clipView.length - firstLength,
+    )
+    const oldClipViews = this.waveform.track.clipViews.slice()
+    const newClipViews = oldClipViews.slice()
+    newClipViews.splice(this.clipViewIndex, 1, firstNewClipView, secondNewClipView)
+    await this.trackListController.history.execute(
+      new SetTrackClipViewsCommand(this.waveform.track, oldClipViews, newClipViews),
+    )
   }
 
   drawBoundingBox(startSample: number, endSample: number) {
@@ -602,7 +621,17 @@ export class ClipViewController extends TrackListItemController {
     }
     this.fullClipGrayFilter!.width.baseVal.value = 0
     this.resizeInfo = null
-    await this.waveform.replaceClipView(this.clipViewIndex, newClipView)
+    const clipViewIndex = this.waveform.track.clipViews.indexOf(this.clipView)
+    if (
+      clipViewsEqual(this.clipView, newClipView) ||
+      !this.waveform.track.canReplaceClipView(clipViewIndex, newClipView)
+    ) {
+      this.reset()
+      return
+    }
+    await this.trackListController.history.execute(
+      new ReplaceClipViewCommand(this.waveform.track, this.clipView, newClipView),
+    )
   }
 
   private readonly leftHandleMouseDownListener = (_: MouseEvent) => {

@@ -2,7 +2,6 @@ import { ClipView } from './ClipView'
 import { DatabasePersisted } from '../persistence/DatabasePersisted'
 import { Restorable } from '../persistence/Restoration'
 import { Analyzable } from '../analyzers/Analyzable'
-import { ProjectManager } from './ProjectManager'
 import { Effect } from 'effects/Effect'
 import { WamParameterInfoMap } from '@webaudiomodules/api'
 
@@ -38,14 +37,33 @@ export class Track extends DatabasePersisted implements Analyzable {
     this.clipViews.splice(clipViewIndex, 1)
   }
 
-  async replaceClipView(clipViewIndex: number, newClipView: ClipView) {
+  replaceClipView(clipViewIndex: number, newClipView: ClipView): boolean {
+    if (clipViewIndex < 0 || clipViewIndex >= this.clipViews.length) {
+      return false
+    }
     const old = this.clipViews.splice(clipViewIndex, 1)[0]
+    if (!old) {
+      return false
+    }
     if (!this.canAddClipView(newClipView)) {
       this.clipViews.splice(clipViewIndex, 0, old)
-      return
+      return false
     }
     this.addClipView(newClipView)
-    await ProjectManager.saveTrack(this)
+    return true
+  }
+
+  canReplaceClipView(clipViewIndex: number, newClipView: ClipView): boolean {
+    if (clipViewIndex < 0 || clipViewIndex >= this.clipViews.length) {
+      return false
+    }
+    const old = this.clipViews.splice(clipViewIndex, 1)[0]
+    if (!old) {
+      return false
+    }
+    const canReplace = this.canAddClipView(newClipView)
+    this.clipViews.splice(clipViewIndex, 0, old)
+    return canReplace
   }
 
   canAddClipView(newClipView: ClipView): boolean {

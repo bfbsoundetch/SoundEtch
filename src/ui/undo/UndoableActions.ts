@@ -1,156 +1,215 @@
 import { ClipView } from '../../project/ClipView'
-import { Undoable } from './Undoable'
-import { Track } from '../../project/Track'
 import { ProjectManager } from '../../project/ProjectManager'
+import { Track } from '../../project/Track'
+import { Undoable } from './Undoable'
 
 export type UndoableAction =
-  | ChangeClipView
-  | AddClipView
-  | RemoveClipView
-  | AddTrack
-  | RemoveTrack
-  | ChangeTrackProperty
+  | AddClipViewCommand
+  | RemoveClipViewCommand
+  | ReplaceClipViewCommand
+  | MoveClipViewBetweenTracksCommand
+  | SetTrackClipViewsCommand
+  | SetTrackPropertyCommand
+  | BatchCommand
 
-export class ChangeClipView implements Undoable {
-  private readonly removeClipView: RemoveClipView
-  private readonly addClipView: AddClipView
+export class BatchCommand implements Undoable {
+  constructor(private readonly actions: Undoable[]) {}
 
-  constructor(oldClipView: ClipView, newClipView: ClipView, oldTrack: Track, newTrack: Track) {
-    this.removeClipView = new RemoveClipView(oldClipView, oldTrack)
-    this.addClipView = new AddClipView(newClipView, newTrack)
+  async perform() {
+    for (const action of this.actions) {
+      await action.perform()
+    }
   }
 
-  async perform(): Promise<any> {
-    await this.removeClipView.perform()
-    await this.addClipView.perform()
+  async undo() {
+    for (let i = this.actions.length - 1; i >= 0; --i) {
+      await this.actions[i].undo()
+    }
   }
-  async undo(): Promise<any> {
-    await this.addClipView.undo()
-    await this.removeClipView.undo()
+
+  async save() {
+    for (const action of this.actions) {
+      await action.save()
+    }
   }
-  async save(): Promise<any> {
-    await Promise.all([this.addClipView.save(), this.removeClipView.save()])
-  }
-  toString(): string {
-    return `Change clip view`
+
+  toString() {
+    return 'Batch edit'
   }
 }
 
-export class AddClipView implements Undoable {
+export class AddClipViewCommand implements Undoable {
   constructor(
     private readonly clipView: ClipView,
     private readonly track: Track,
   ) {}
 
-  async perform(): Promise<any> {
+  async perform() {
     this.track.addClipView(this.clipView)
   }
-  async undo(): Promise<any> {
-    const index = this.track.clipViews.indexOf(this.clipView)
-    this.track.removeClipView(index)
+
+  async undo() {
+    removeClipViewByReference(this.track, this.clipView)
   }
-  async save(): Promise<any> {
+
+  async save() {
     await ProjectManager.saveTrack(this.track)
   }
-  toString(): string {
-    return `Add clip view`
+
+  toString() {
+    return 'Add clip view'
   }
 }
-export class RemoveClipView implements Undoable {
-  private readonly addClipView: AddClipView
 
-  constructor(clipView: ClipView, track: Track) {
-    this.addClipView = new AddClipView(clipView, track)
+export class RemoveClipViewCommand implements Undoable {
+  constructor(
+    private readonly clipView: ClipView,
+    private readonly track: Track,
+  ) {}
+
+  async perform() {
+    removeClipViewByReference(this.track, this.clipView)
   }
 
-  perform(): Promise<any> {
-    return this.addClipView.undo()
+  async undo() {
+    this.track.addClipView(this.clipView)
   }
-  undo(): Promise<any> {
-    return this.addClipView.perform()
+
+  async save() {
+    await ProjectManager.saveTrack(this.track)
   }
-  async save(): Promise<any> {
-    return this.addClipView.save()
-  }
-  toString(): string {
-    return `Remove clip view`
+
+  toString() {
+    return 'Remove clip view'
   }
 }
-export class AddTrack implements Undoable {
-  constructor(private readonly track: Track) {}
 
-  async perform(): Promise<any> {
-    ;(await ProjectManager.getActiveProject()).addTrack(this.track)
+export class ReplaceClipViewCommand implements Undoable {
+  constructor(
+    private readonly track: Track,
+    private readonly oldClipView: ClipView,
+    private readonly newClipView: ClipView,
+  ) {}
+
+  async perform() {
+    this.replace(this.oldClipView, this.newClipView)
   }
-  async undo(): Promise<any> {
-    ;(await ProjectManager.getActiveProject()).deleteTrack(this.track)
+
+  async undo() {
+    this.replace(this.newClipView, this.oldClipView)
   }
-  async save(): Promise<any> {
-    await ProjectManager.saveProject()
+
+  async save() {
+    await ProjectManager.saveTrack(this.track)
   }
-  toString(): string {
-    return `Add track`
+
+  toString() {
+    return 'Replace clip view'
+  }
+
+  private replace(oldClipView: ClipView, newClipView: ClipView) {
+    const oldClipViewIndex = this.track.clipViews.indexOf(oldClipView)
+    if (oldClipViewIndex < 0 || !this.track.replaceClipView(oldClipViewIndex, newClipView)) {
+      throw new Error('Could not replace clip view')
+    }
   }
 }
-export class RemoveTrack implements Undoable {
-  private readonly addTrackAction: AddTrack
 
-  constructor(track: Track) {
-    this.addTrackAction = new AddTrack(track)
+export class MoveClipViewBetweenTracksCommand implements Undoable {
+  constructor(
+    private readonly oldTrack: Track,
+    private readonly newTrack: Track,
+    private readonly oldClipView: ClipView,
+    private readonly newClipView: ClipView,
+  ) {}
+
+  async perform() {
+    this.move(this.oldTrack, this.newTrack, this.oldClipView, this.newClipView)
   }
 
-  perform(): Promise<any> {
-    return this.addTrackAction.undo()
+  async undo() {
+    this.move(this.newTrack, this.oldTrack, this.newClipView, this.oldClipView)
   }
-  undo(): Promise<any> {
-    return this.addTrackAction.perform()
+
+  async save() {
+    await saveTracks(this.oldTrack, this.newTrack)
   }
-  async save(): Promise<any> {
-    await this.addTrackAction.save()
+
+  toString() {
+    return 'Move clip view between tracks'
   }
-  toString(): string {
-    return `Remove track`
+
+  private move(fromTrack: Track, toTrack: Track, fromClipView: ClipView, toClipView: ClipView) {
+    removeClipViewByReference(fromTrack, fromClipView)
+    try {
+      toTrack.addClipView(toClipView)
+    } catch (error) {
+      fromTrack.addClipView(fromClipView)
+      throw error
+    }
   }
 }
-export class ChangeTrackProperty implements Undoable {
+
+export class SetTrackClipViewsCommand implements Undoable {
+  constructor(
+    private readonly track: Track,
+    private readonly oldClipViews: ClipView[],
+    private readonly newClipViews: ClipView[],
+  ) {}
+
+  async perform() {
+    setTrackClipViews(this.track, this.newClipViews)
+  }
+
+  async undo() {
+    setTrackClipViews(this.track, this.oldClipViews)
+  }
+
+  async save() {
+    await ProjectManager.saveTrack(this.track)
+  }
+
+  toString() {
+    return 'Set track clip views'
+  }
+}
+
+export class SetTrackPropertyCommand implements Undoable {
   constructor(
     private readonly track: Track,
     private readonly property: TrackProperty,
-    private readonly oldVal: any,
-    private readonly newVal: any,
+    private readonly oldVal: string | number,
+    private readonly newVal: string | number,
   ) {}
 
-  async perform(): Promise<any> {
-    switch (this.property) {
-      case TrackProperty.TITLE:
-        this.track.name = this.newVal
-        break
-      case TrackProperty.PAN:
-        this.track.setPan(this.newVal)
-        break
-      case TrackProperty.GAIN:
-        this.track.setGain(this.newVal)
-        break
-    }
+  async perform() {
+    this.setValue(this.newVal)
   }
-  async undo(): Promise<any> {
-    switch (this.property) {
-      case TrackProperty.TITLE:
-        this.track.name = this.oldVal
-        break
-      case TrackProperty.PAN:
-        this.track.setPan(this.oldVal)
-        break
-      case TrackProperty.GAIN:
-        this.track.setGain(this.oldVal)
-        break
-    }
+
+  async undo() {
+    this.setValue(this.oldVal)
   }
-  async save(): Promise<any> {
+
+  async save() {
     await ProjectManager.saveTrack(this.track)
   }
-  toString(): string {
-    return `Change track's ${this.property} to ${this.newVal}`
+
+  toString() {
+    return `Set track ${this.property}`
+  }
+
+  private setValue(value: string | number) {
+    switch (this.property) {
+      case TrackProperty.TITLE:
+        this.track.name = String(value)
+        break
+      case TrackProperty.PAN:
+        this.track.setPan(Number(value))
+        break
+      case TrackProperty.GAIN:
+        this.track.setGain(Number(value))
+        break
+    }
   }
 }
 
@@ -158,4 +217,26 @@ export enum TrackProperty {
   TITLE = 'title',
   PAN = 'pan',
   GAIN = 'gain',
+}
+
+export function clipViewsEqual(a: ClipView, b: ClipView) {
+  return (
+    a.clip === b.clip && a.offset === b.offset && a.startPosition === b.startPosition && a.viewLength === b.viewLength
+  )
+}
+
+function removeClipViewByReference(track: Track, clipView: ClipView) {
+  const clipViewIndex = track.clipViews.indexOf(clipView)
+  if (clipViewIndex < 0) {
+    throw new Error('Clip view not found')
+  }
+  track.removeClipView(clipViewIndex)
+}
+
+function setTrackClipViews(track: Track, clipViews: ClipView[]) {
+  track.clipViews.splice(0, track.clipViews.length, ...clipViews)
+}
+
+async function saveTracks(...tracks: Track[]) {
+  await Promise.all([...new Set(tracks)].map((track) => ProjectManager.saveTrack(track)))
 }

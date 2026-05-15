@@ -2,6 +2,7 @@ import { FileSystemUtils } from '../filesystem/FileSystemUtils'
 import { Clip } from '../project/Clip'
 import { Project } from '../project/Project'
 import { ProjectManager } from '../project/ProjectManager'
+import { editorHistory } from './undo/EditorHistory'
 
 export class ClipManagerController {
   private readonly dialog = document.getElementById('clip-manager-modal') as HTMLDialogElement
@@ -59,6 +60,7 @@ export class ClipManagerController {
         return
       }
       deleteButton.disabled = true
+      editorHistory.clear()
       await ProjectManager.deleteClip(clip)
       await this.refresh()
     }
