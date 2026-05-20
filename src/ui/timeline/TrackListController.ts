@@ -10,7 +10,7 @@ import { ClipView, cloneClipViewWithNewStartPosition } from '../../project/ClipV
 import { Clipboard } from '../Clipboard'
 import { TrackListTrack as TrackListInfo } from './TrackListTrack'
 import { InputListController } from './InputListController'
-import { SelectedRegion } from '../../playback/Player'
+import { Player, SelectedRegion } from '../../playback/Player'
 import { editorHistory } from '../undo/EditorHistory'
 import {
   AddClipViewCommand,
@@ -349,7 +349,6 @@ export class TrackListController {
       }
     })
     Clipboard.copiedClipViews = newClipboard
-    console.error(Clipboard.copiedClipViews.map(l => l.length))
     Clipboard.copyStartPosition = lowSample
     if (del && undoCommands.length > 0) {
       await this.history.recordApplied(new BatchCommand(undoCommands))
@@ -360,30 +359,23 @@ export class TrackListController {
     if (!Clipboard.copiedClipViews || Clipboard.copyStartPosition == null) {
       return
     }
-    console.error(Clipboard.copiedClipViews.map(l => l.length))
     const startPositionDelta = startingSample - Clipboard.copyStartPosition
     const tracks = (await ProjectManager.getActiveProject()).getTracks()
     const undoCommands: AddClipViewCommand[] = []
     let i = 0
-    console.error('1', startPositionDelta)
     for (const clipViews of Clipboard.copiedClipViews) {
       const track = tracks[trackIndex + i++]
       if (!track) {
         continue
       }
-      console.error('2')
-      let tmp = 0
       for (const clipView of clipViews) {
         const newClipView = cloneClipViewWithNewStartPosition(clipView, startPositionDelta)
         if (!track.canAddClipView(newClipView)) {
-          console.error('oh no ;(', ++tmp)
           return
         }
-        ++tmp
         undoCommands.push(new AddClipViewCommand(newClipView, track))
       }
     }
-    console.error('3', undoCommands.length)
     if (undoCommands.length > 0) {
       await this.history.execute(new BatchCommand(undoCommands))
     }

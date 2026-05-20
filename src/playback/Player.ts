@@ -81,7 +81,7 @@ export class Player {
       audioContext.close()
       return
     }
-    workerController.setAudioWorkletNode(playerNodes)
+    workerController.setAudioWorkletNodes(playerNodes)
     workerController.start(JobType.PLAYER, {
       projectName: `${project.id}`,
       position: startSample,

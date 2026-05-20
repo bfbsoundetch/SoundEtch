@@ -25,7 +25,7 @@ test('basic test', async () => {
     length: 4,
     clip: { id: 1, channelCount: 1 },
   }
-  const audioFileReader = new AudioFileReader('test', 0, [clipView1, clipView2], 1, ringBufferArray)
+  const audioFileReader = new AudioFileReader('test', 0, 999, [clipView1, clipView2], 1, false, ringBufferArray)
 
   await audioFileReader.runBufferFillingLoop()
   const outputArray = new Float32Array(16)
@@ -56,7 +56,7 @@ test('timed wait test', async () => {
     length: 4,
     clip: { id: 1, channelCount: 1 },
   }
-  const audioFileReader = new AudioFileReader('test', 0, [clipView1, clipView2], 1, ringBufferArray)
+  const audioFileReader = new AudioFileReader('test', 0, 999, [clipView1, clipView2], 1, false, ringBufferArray)
 
   audioFileReader.runBufferFillingLoop()
 
@@ -96,7 +96,7 @@ test('pause and resume', async () => {
     length: 3,
     clip: { id: 1, channelCount: 1 },
   }
-  const audioFileReader = new AudioFileReader('test', 5, [clipView1], 1, ringBufferArray)
+  const audioFileReader = new AudioFileReader('test', 5, 999, [clipView1], 1, false, ringBufferArray)
 
   audioFileReader.pause()
   audioFileReader.runBufferFillingLoop()
@@ -122,7 +122,7 @@ test('stop test', async () => {
     length: 3,
     clip: { id: 1, channelCount: 1 },
   }
-  const audioFileReader = new AudioFileReader('test', 0, [clipView1], 1, ringBufferArray)
+  const audioFileReader = new AudioFileReader('test', 0, 999, [clipView1], 1, false, ringBufferArray)
 
   audioFileReader.pause()
   const result = audioFileReader.runBufferFillingLoop()
@@ -148,7 +148,7 @@ test('large silence', async () => {
     length: 2,
     clip: { id: 1, channelCount: 1 },
   }
-  const audioFileReader = new AudioFileReader('test', 0, [clipView1], 1, ringBufferArray)
+  const audioFileReader = new AudioFileReader('test', 0, 999, [clipView1], 1, false, ringBufferArray)
 
   audioFileReader.runBufferFillingLoop()
 

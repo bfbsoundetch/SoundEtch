@@ -71,7 +71,7 @@ export class Recorder {
       return
     }
     reporterNode.connect(audioContext.destination)
-    workerController.setAudioWorkletNode(audioWorkletNodes)
+    workerController.setAudioWorkletNodes(audioWorkletNodes)
     workerController.start(JobType.RECORDER, inputs)
   }
 

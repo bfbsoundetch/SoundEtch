@@ -1,7 +1,7 @@
 import { Logger } from '../global/Logger'
 import { FileSystemSyncAccessHandle } from '../filesystem/FileSystemSyncAccessHandle'
-import { FileSystemUtils } from '../filesystem/FileSystemUtils'
 import { RingBuffer } from 'ringbuf.js'
+import { AudioFileCache } from './AudioFileCache'
 
 export interface ClipViewSubset {
   startPosition: number
@@ -84,9 +84,7 @@ export class AudioFileReader {
         var samplesToPush =
           Math.min(this.endSample - this.position, clipView.length - this.initialOffset) * clipView.clip.channelCount
 
-        this.activeFileHandle = await (
-          (await FileSystemUtils.getFileHandle(this.projectName, `${clipView.clip.id}`)) as any
-        ).createSyncAccessHandle()
+        this.activeFileHandle = await AudioFileCache.getHandle(`${this.projectName}`, `${clipView.clip.id}`)
         this.logger.debug(`File reading worker opened ${this.projectName}/${clipView.clip.id}`)
         var filePosition =
           (this.initialOffset + clipView.offset) * Float32Array.BYTES_PER_ELEMENT * clipView.clip.channelCount
@@ -130,7 +128,6 @@ export class AudioFileReader {
         ++this.clipViewIndex
 
         this.position = clipView.startPosition + clipView.length
-        this.activeFileHandle!.close()
       }
     } while (this.loop)
     this.logger.debug('Finished reading this track.')
@@ -147,7 +144,7 @@ export class AudioFileReader {
     } finally {
       this.resumeResolver?.('')
       this.resumeResolver = null
-      this.activeFileHandle?.close()
+      AudioFileCache.cleanUp()
     }
   }
 

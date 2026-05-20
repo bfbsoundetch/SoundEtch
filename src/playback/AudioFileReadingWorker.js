@@ -3,7 +3,6 @@ import { AudioFileReader } from './AudioFileReader.ts'
 self.audioFileReaders = []
 
 self.onmessage = async (e) => {
-  //TODO: reading from the same clip won't work with this scheme. You need to reuse the files
   console.debug(`File reading worker got message ${JSON.stringify(e.data)}`)
   if (e.data.type == 'pause') {
     self.audioFileReaders.forEach((reader) => reader.pause())

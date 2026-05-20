@@ -499,7 +499,7 @@ export class ClipViewController extends TrackListItemController {
           }
         }
         pathSegments.push(
-          `${this.samplesPerUnit > 2 ? 'L' : 'M'} ${(i / 2) * xIncrement} ${maximum} L ${(i / 2) * xIncrement} ${minimum}`,
+          `${this.samplesPerUnit > 2 ? 'L' : 'M'} ${(i / 2) * xIncrement} ${maximum.toFixed(0)} L ${(i / 2) * xIncrement} ${minimum.toFixed(0)}`,
         )
       }
       fullPath += `M 0 ${xAxis} ` + pathSegments.join(' ')
@@ -536,6 +536,7 @@ export class ClipViewController extends TrackListItemController {
     this.svgPathElement.remove()
     this.leftHandle.remove()
     this.rightHandle.remove()
+    this.fullClipGrayFilter.remove()
   }
 
   resize() {

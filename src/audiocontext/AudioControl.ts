@@ -78,6 +78,10 @@ export class AudioControl {
     return isActiveTimelineState(AudioControl.getState())
   }
 
+  static isPlaying() {
+    return AudioControl.getState() == AudioState.PLAYING || AudioControl.getState() == AudioState.PLAYING_PAUSED
+  }
+
   static isPaused() {
     return isPausedState(AudioControl.getState())
   }

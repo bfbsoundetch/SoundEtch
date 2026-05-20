@@ -46,7 +46,7 @@ export class WorkerController {
     })
   }
 
-  setAudioWorkletNode(audioWorkletNodes: Array<AudioWorkletNode>) {
+  setAudioWorkletNodes(audioWorkletNodes: Array<AudioWorkletNode>) {
     this.audioWorkletNodes = audioWorkletNodes
     let finishedNodes = 0
     const context = audioWorkletNodes[0]!.context as AudioContext
@@ -79,7 +79,7 @@ export class WorkerController {
       }
     })
   }
-
+  
   finish() {
     this.logger.debug('Worker is finished.')
     this.audioWorkletNodes.forEach((node) => {
