@@ -8,15 +8,18 @@ export class PositionMarkerController extends TrackListItemController {
   private readonly positionLineSvg = document.getElementById('position-line') as unknown as SVGLineElement
   private readonly positionTimeText = document.getElementById('pointer-position-text') as unknown as SVGTextElement
 
+  public x = 0 
+
   constructor(trackListController: TrackListController) {
     super(trackListController)
+    this.positionLineSvg.addEventListener('mousedown', (event) => {
+      if (event.buttons == 1 && event.button == 0) {
+        this.trackListController.pointerStateManager.startMovingMark()
+        event.preventDefault()
+      }
+    }, {passive: false})
+
     this.resize()
-    this.positionLineSvg.addEventListener('mousemove', (event) => {
-      event.preventDefault()
-    })
-    this.positionLineSvg.addEventListener('wheel', (event) => {
-      event.preventDefault()
-    })
   }
 
   resize() {
@@ -27,6 +30,8 @@ export class PositionMarkerController extends TrackListItemController {
   }
 
   hidePositionMarker() {
+    AudioControl.startPosition = 0
+    this.x = -100
     this.positionLineSvg.x1.baseVal.value = -100
     this.positionLineSvg.x2.baseVal.value = -100
     this.positionTimeText.setAttribute('x', '-100')
@@ -47,18 +52,10 @@ export class PositionMarkerController extends TrackListItemController {
     }
 
     const realPosition = positionOverride ?? position
-    const x = this.getXValueForSample(realPosition)
+    this.x = this.getXValueForSample(realPosition)
 
-    this.positionLineSvg.x1.baseVal.value = x
-    this.positionLineSvg.x2.baseVal.value = x
-
-    this.positionLineSvg.addEventListener('mousedown', (event) => {
-      if (event.buttons == 1 && event.button == 0) {
-        this.trackListController.pointerStateManager.startMovingMark()
-        console.error('', )
-        event.preventDefault()
-      }
-    })
+    this.positionLineSvg.x1.baseVal.value = this.x
+    this.positionLineSvg.x2.baseVal.value = this.x
 
     this.positionLineSvg.style.visibility = 'visible'
     this.positionTimeText.style.visibility = 'visible'
@@ -66,6 +63,6 @@ export class PositionMarkerController extends TrackListItemController {
     this.positionTimeText.style.fontSize = '18px'
     const time = TimeUtils.positionToString(realPosition, this.trackListController.sampleRate, true)
     this.positionTimeText.innerHTML = time
-    this.positionTimeText.setAttribute('x', `${x}`)
+    this.positionTimeText.setAttribute('x', `${this.x}`)
   }
 }

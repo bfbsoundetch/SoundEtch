@@ -1,4 +1,5 @@
 import { ControllableWorkerJob } from '../audiocontext/ControllableWorkerJob'
+import { AudioFileCache } from './AudioFileCache'
 import { AudioFileReader } from './AudioFileReader'
 
 export class PlaybackJob implements ControllableWorkerJob {
@@ -20,11 +21,15 @@ export class PlaybackJob implements ControllableWorkerJob {
   }
 
   async start(): Promise<any> {
-    const completionPromise = Promise.all(this.audioFileReaders.map((r) => r.runBufferFillingLoop()))
-    const readyPromise = Promise.all(this.audioFileReaders.map((r) => r.readyPromise))
-    await readyPromise
-    postMessage({ type: 'ready' })
-    await completionPromise
+    try {
+      const completionPromise = Promise.all(this.audioFileReaders.map((r) => r.runBufferFillingLoop()))
+      const readyPromise = Promise.all(this.audioFileReaders.map((r) => r.readyPromise))
+      await readyPromise
+      postMessage({ type: 'ready' })
+      await completionPromise
+    } finally {
+      AudioFileCache.cleanUp()
+    }
   }
   pause(): void {
     this.audioFileReaders.forEach((r) => r.pause())

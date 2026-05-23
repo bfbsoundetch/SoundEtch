@@ -194,14 +194,6 @@ export class TimelineController extends TrackListItemController {
     this.selection.rightExpand.setAttribute('x1', `${endX}`)
     this.selection.rightExpand.setAttribute('x2', `${endX}`)
 
-    const labelPush = Math.max(0, 
-      (Number(this.selection.rightLabel.getBoundingClientRect().width) + 
-      Number(this.selection.leftLabel.getBoundingClientRect().width)) * 
-      1.1 / 2 - (endX - startX)) / 2
-
-    this.selection.leftLabel.setAttribute('x', `${startX - labelPush}`)
-    this.selection.rightLabel.setAttribute('x', `${endX + labelPush}`)
-
     this.selection.leftLabel.innerHTML = TimeUtils.positionToString(
       lowSample,
       this.trackListController.sampleRate,
@@ -212,6 +204,14 @@ export class TimelineController extends TrackListItemController {
       this.trackListController.sampleRate,
       true,
     )
+
+    const labelPush = Math.max(0, 
+      (Number(this.selection.rightLabel.getBoundingClientRect().width) + 
+      Number(this.selection.leftLabel.getBoundingClientRect().width)) * 
+      1.1 / 2 - (endX - startX)) / 2
+
+    this.selection.leftLabel.setAttribute('x', `${startX - labelPush}`)
+    this.selection.rightLabel.setAttribute('x', `${endX + labelPush}`)
   }
 
   removeSelection() {

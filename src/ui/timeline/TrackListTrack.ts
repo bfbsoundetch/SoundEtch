@@ -1,5 +1,6 @@
 import { ProjectManager } from '../../project/ProjectManager'
 import { Track } from '../../project/Track'
+import { EffectType } from '../../effects/Effects'
 import { EditorHistory } from '../undo/EditorHistory'
 import { SetTrackPropertyCommand, TrackProperty } from '../undo/UndoableActions'
 
@@ -8,6 +9,7 @@ export class TrackListTrack {
     track: Track,
     private readonly trackInfoDiv: HTMLDivElement,
     private readonly history: EditorHistory,
+    onEffectSelectionChange: (track: Track, effect: EffectType | null) => void,
   ) {
     this.trackInfoDiv.classList = 'track-info tracklist-item'
 
@@ -48,18 +50,25 @@ export class TrackListTrack {
     this.trackInfoDiv.appendChild(deleteTrackButton)
 
     const effectsDropdown = document.createElement('select')
-    effectsDropdown.disabled = true
-    effectsDropdown.title = 'Effect selection is not wired up yet'
     effectsDropdown.style.gridArea = 'effects'
     effectsDropdown.style.width = '100%'
     effectsDropdown.style.boxSizing = 'border-box'
     effectsDropdown.style.font = 'inherit'
     effectsDropdown.style.minWidth = '0'
     effectsDropdown.style.alignSelf = 'center'
+    effectsDropdown.className = 'track-effect-selector'
     const effectPlaceholder = document.createElement('option')
     effectPlaceholder.innerText = 'Effect'
     effectPlaceholder.value = ''
     effectsDropdown.appendChild(effectPlaceholder)
+    const gainOption = document.createElement('option')
+    gainOption.innerText = 'Gain'
+    gainOption.value = 'gain'
+    effectsDropdown.appendChild(gainOption)
+    effectsDropdown.addEventListener('change', () => {
+      effectsDropdown.classList.toggle('track-effect-selector-active', !!effectsDropdown.value)
+      onEffectSelectionChange(track, (effectsDropdown.value || null) as EffectType | null)
+    })
     this.trackInfoDiv.appendChild(effectsDropdown)
 
     const gainSliderParent = document.createElement('div')

@@ -20,6 +20,7 @@ export class Waveform extends TrackListItemController {
   } | null = null
 
   private readonly clipViewControllerMap = new Map<ClipView, ClipViewController>()
+  readonly effectRegionGroupElement = document.createElementNS('http://www.w3.org/2000/svg', 'g')
   readonly clipViewGroupElement = document.createElementNS('http://www.w3.org/2000/svg', 'g')
   private readonly axesPathElement = document.createElementNS('http://www.w3.org/2000/svg', 'path')
   private readonly channelSeparatorPathElement = document.createElementNS('http://www.w3.org/2000/svg', 'path')
@@ -130,6 +131,7 @@ export class Waveform extends TrackListItemController {
     })
 
     this.topSvgElement.appendChild(this.clipViewGroupElement)
+    this.topSvgElement.appendChild(this.effectRegionGroupElement)
 
     this.axesPathElement.style.strokeWidth = '2'
     this.axesPathElement.style.stroke = 'currentColor'
@@ -164,11 +166,13 @@ export class Waveform extends TrackListItemController {
     const topSvgElement = this.getTopSvgElement()
 
     this.drawAudioDataForCanvasXRange(this, topSvgElement, 0, this.width)
+    this.drawEffectRegions()
     this.drawAxes()
   }
 
   drawAudioData() {
     this.drawAudioDataForCanvasXRange(this, this.getTopSvgElement(), 0, this.width)
+    this.drawEffectRegions()
   }
 
   resize() {
@@ -194,6 +198,72 @@ export class Waveform extends TrackListItemController {
     }
     this.axesPathElement.setAttribute('d', axesPath)
     this.channelSeparatorPathElement.setAttribute('d', channelSeparatorPath)
+  }
+
+  private drawEffectRegions() {
+    this.effectRegionGroupElement.replaceChildren()
+    const displayedEffect = this.trackListController.getDisplayedEffectForTrack(this.track)
+    if (!displayedEffect) {
+      return
+    }
+    const laneY = Waveform.HEADER_HEIGHT
+    const laneHeight = this.height
+    const barY = laneY
+    const barHeight = laneHeight
+    if (laneHeight <= 0) {
+      return
+    }
+
+    const laneBackground = document.createElementNS('http://www.w3.org/2000/svg', 'rect')
+    laneBackground.setAttribute('x', '0')
+    laneBackground.setAttribute('y', `${laneY}`)
+    laneBackground.setAttribute('width', `${this.width}`)
+    laneBackground.setAttribute('height', `${laneHeight}`)
+    laneBackground.classList.add('waveform-effect-lane')
+    this.effectRegionGroupElement.appendChild(laneBackground)
+
+    for (const effectRegion of this.track.getEffectRegions(displayedEffect)) {
+      const startX = this.getXValueForSample(effectRegion.startSample)
+      const endX = this.getXValueForSample(effectRegion.startSample + effectRegion.length)
+      const clampedStartX = Math.max(0, startX)
+      const clampedEndX = Math.min(this.width, endX)
+      if (clampedEndX <= 0 || clampedStartX >= this.width || clampedEndX <= clampedStartX) {
+        continue
+      }
+      const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect')
+      rect.setAttribute('x', `${clampedStartX}`)
+      rect.setAttribute('y', `${barY}`)
+      rect.setAttribute('width', `${clampedEndX - clampedStartX}`)
+      rect.setAttribute('height', `${barHeight}`)
+      rect.classList.add('waveform-effect-region')
+      rect.addEventListener('mousedown', (event) => {
+        event.preventDefault()
+        event.stopPropagation()
+      })
+      rect.addEventListener('mouseup', (event) => {
+        event.preventDefault()
+        event.stopPropagation()
+      })
+      rect.addEventListener('click', (event) => {
+        event.preventDefault()
+        event.stopPropagation()
+        this.trackListController.openEffectRegion(this.track, effectRegion.id)
+      })
+      this.effectRegionGroupElement.appendChild(rect)
+
+      this.effectRegionGroupElement.appendChild(this.createEffectRegionBoundaryLine(clampedStartX, laneY, laneHeight))
+      this.effectRegionGroupElement.appendChild(this.createEffectRegionBoundaryLine(clampedEndX, laneY, laneHeight))
+    }
+  }
+
+  private createEffectRegionBoundaryLine(x: number, y: number, height: number) {
+    const line = document.createElementNS('http://www.w3.org/2000/svg', 'line')
+    line.setAttribute('x1', `${x}`)
+    line.setAttribute('x2', `${x}`)
+    line.setAttribute('y1', `${y}`)
+    line.setAttribute('y2', `${y + height}`)
+    line.classList.add('waveform-effect-region-boundary')
+    return line
   }
 
   removeClipViewController(controller: ClipViewController) {
@@ -312,8 +382,8 @@ export class ClipViewController extends TrackListItemController {
     this.rectElement.classList = 'waveform-rect'
     this.rectElement.style.fill = color
     this.rectElement.addEventListener('dblclick', (event) => {
-      event.stopPropagation()
       trackListController.setSelection(clipView.startPosition, clipView.getEndPosition(), new Set([this.waveform]))
+      event.stopPropagation()
     })
 
     this.rectElement.setAttribute('x', '0')
@@ -515,6 +585,7 @@ export class ClipViewController extends TrackListItemController {
   reset() {
     this.waveform.clipViewGroupElement.appendChild(this.rectElement)
     this.waveform.clipViewGroupElement.appendChild(this.headerElement)
+    this.waveform.clipViewGroupElement.appendChild(this.headerTitleElement)
     this.waveform.clipViewGroupElement.appendChild(this.svgPathElement)
     this.waveform.clipViewGroupElement.appendChild(this.leftHandle)
     this.waveform.clipViewGroupElement.appendChild(this.rightHandle)

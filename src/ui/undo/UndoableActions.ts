@@ -1,6 +1,7 @@
 import { ClipView } from '../../project/ClipView'
 import { ProjectManager } from '../../project/ProjectManager'
 import { Track } from '../../project/Track'
+import { Effect } from '../../effects/Effects'
 import { Undoable } from './Undoable'
 
 export type UndoableAction =
@@ -9,6 +10,7 @@ export type UndoableAction =
   | ReplaceClipViewCommand
   | MoveClipViewBetweenTracksCommand
   | SetTrackClipViewsCommand
+  | SetTrackEffectRegionsCommand
   | SetTrackPropertyCommand
   | BatchCommand
 
@@ -171,6 +173,30 @@ export class SetTrackClipViewsCommand implements Undoable {
 
   toString() {
     return 'Set track clip views'
+  }
+}
+
+export class SetTrackEffectRegionsCommand implements Undoable {
+  constructor(
+    private readonly track: Track,
+    private readonly oldEffectRegions: Effect[],
+    private readonly newEffectRegions: Effect[],
+  ) {}
+
+  async perform() {
+    this.track.setEffectRegions(this.newEffectRegions)
+  }
+
+  async undo() {
+    this.track.setEffectRegions(this.oldEffectRegions)
+  }
+
+  async save() {
+    await ProjectManager.saveTrack(this.track)
+  }
+
+  toString() {
+    return 'Set track effect regions'
   }
 }
 

@@ -14,14 +14,25 @@ export class Renderer {
 
   static async exportProject(encoderInfo: EncoderInfo, selectedRegion: SelectedRegion | null) {
     const project = await ProjectManager.getActiveProject()
-    const projectLength = selectedRegion ? selectedRegion.endSample - selectedRegion.startSample : project.getTracks().reduce((maxLength, track) => Math.max(maxLength, track.length), 0)
+    const projectLength = selectedRegion
+      ? selectedRegion.endSample - selectedRegion.startSample
+      : project.getTracks().reduce((maxLength, track) => Math.max(maxLength, track.length), 0)
     const exportInfo = encoderInfo.encoder === 'wav' ? { ...encoderInfo, sampleCount: projectLength } : encoderInfo
+    const tracks = selectedRegion?.tracks ?? project.getTracks()
     const file = await showSaveFilePicker({
       startIn: 'downloads',
       suggestedName: `${project.title}.${exportInfo.encoder}`,
     } as any)
 
-    return Renderer.render(file, exportInfo.channelCount, project, exportInfo, selectedRegion?.startSample ?? 0, projectLength, ...project.getTracks())
+    return Renderer.render(
+      file,
+      exportInfo.channelCount,
+      project,
+      exportInfo,
+      selectedRegion?.startSample ?? 0,
+      projectLength,
+      ...tracks,
+    )
   }
 
   static async render(
@@ -57,7 +68,7 @@ export class Renderer {
               },
             }
           }),
-          effects: [],
+          effects: track.getEffectRegions(),
           gain: track.getGain(),
           pan: track.getPan(),
         }
@@ -113,7 +124,7 @@ export class Renderer {
         encoderInfo,
         channelCount: outputChannelCount,
         encodingPort: encodingChannel.port1,
-        length: projectLength
+        length: projectLength,
       }
       encodingWorker.postMessage(encodingInitMessage, [encodingChannel.port1])
 

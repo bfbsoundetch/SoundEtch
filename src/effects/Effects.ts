@@ -1,110 +1,109 @@
-export type Effect = Amplify | Fade | Biquad | Compressor | Delay
-
-export type Amplify = {
-  effect: 'amplify'
+export type GainEffect = {
+  id: string
+  effect: 'gain'
   startSample: number
   length: number
   value: number
 }
 
-export type Fade = {
-  effect: 'fade'
-  startSample: number
-  length: number
-  shape: 'linear' | 'logarithmic' | 'exponential' | 'scurve'
-  direction: 'in' | 'out'
+export type Effect = GainEffect
+export type EffectType = Effect['effect']
+
+type AutomatedAudioParam = {
+  value: number
+  cancelScheduledValues(startTime: number): AutomatedAudioParam
+  setValueAtTime(value: number, startTime: number): AutomatedAudioParam
 }
 
-export type Biquad = {
-  effect: 'biquad'
-  startSample: number
-  length: number
-  type: BiquadFilterType
-  frequency: number
-  q: number
-  gain: number
-  detune: number
+export function createEffectId() {
+  return `${Date.now()}-${Math.random().toString(36).slice(2, 10)}`
 }
 
-export type Compressor = {
-  effect: 'compressor'
-  startSample: number
-  length: number
-  threshold: number
-  knee: number
-  ratio: number
-  attack: number
-  release: number
+export function getEffectEndSample(effect: Pick<Effect, 'startSample' | 'length'>) {
+  return effect.startSample + effect.length
 }
 
-export type Delay = {
-  effect: 'delay'
-  delayTime: number
-  startSample: number
-  length: number
+export function dbToGain(valueDb: number) {
+  return 10 ** (valueDb / 20)
 }
 
-export function generateEffectsChain(
-  audioContext: AudioContext,
-  firstEffect: Effect,
-  ...effects: Array<Effect>
-): { firstNode: AudioNode; lastNode: AudioNode } {
-  const first = effectToNode(audioContext, firstEffect)
-  let last = first
+export function sortEffects(effects: Effect[]) {
+  return effects.slice().sort((a, b) => a.startSample - b.startSample || getEffectEndSample(a) - getEffectEndSample(b))
+}
+
+export function getGainEffectAtSample(effects: Effect[], sample: number): GainEffect | null {
   for (const effect of effects) {
-    const node = effectToNode(audioContext, effect)
-    last.connect(node)
-    last = node
+    if (effect.effect !== 'gain') {
+      continue
+    }
+    if (sample >= effect.startSample && sample < getEffectEndSample(effect)) {
+      return effect
+    }
   }
-  return { firstNode: first, lastNode: last }
+  return null
 }
 
-function effectToNode(audioContext: AudioContext, effect: Effect): AudioNode {
-  switch (effect.effect) {
-    case 'amplify':
-      const amplifyNode = audioContext.createGain()
-      amplifyNode.gain
-        .setValueAtTime(effect.value, effect.startSample / audioContext.sampleRate)
-        .setValueAtTime(1, effect.startSample + effect.length / audioContext.sampleRate)
-      return amplifyNode
-    case 'fade':
-      const fadeNode = audioContext.createGain()
-      const startValue = effect.direction === 'in' ? 0 : 1
-      const endValue = 1 - startValue
-      fadeNode.gain
-        .setValueAtTime(startValue, 0)
-        .setValueCurveAtTime(
-          [startValue, endValue],
-          effect.startSample / audioContext.sampleRate,
-          effect.length / audioContext.sampleRate,
-        )
-      return fadeNode
-    case 'biquad':
-      const biquadNode = audioContext.createBiquadFilter()
-      biquadNode.Q.value = effect.q
-      biquadNode.gain
-        .setValueAtTime(1, effect.startSample / audioContext.sampleRate)
-        .setValueAtTime(0, (effect.startSample + effect.length) / audioContext.sampleRate)
-      biquadNode.frequency.value = effect.frequency
-      biquadNode.detune.value = effect.detune
-      return biquadNode
-    case 'compressor':
-      const compressor = audioContext.createDynamicsCompressor()
-      compressor.attack.value = effect.attack
-      compressor.knee.value = effect.knee
-      compressor.release.value = effect.release
-      compressor.threshold
-        .setValueAtTime(0, 0)
-        .setValueAtTime(effect.threshold, effect.startSample / audioContext.sampleRate)
-        .setValueAtTime((effect.startSample + effect.length) / audioContext.sampleRate, 0)
-      compressor.ratio.value = effect.ratio
-      return compressor
-    case 'delay':
-      const delay = audioContext.createDelay(effect.delayTime)
-      delay.delayTime
-        .setValueAtTime(0, 0)
-        .setValueAtTime(effect.delayTime, effect.startSample / audioContext.sampleRate)
-        .setValueAtTime(0, (effect.startSample + effect.length) / audioContext.sampleRate)
-      return delay
+export function replaceEffectRegion(effects: Effect[], nextEffect: Effect): Effect[] {
+  const nextStart = nextEffect.startSample
+  const nextEnd = getEffectEndSample(nextEffect)
+  const updatedEffects = new Array<Effect>()
+  for (const effect of effects) {
+    if (effect.id === nextEffect.id) {
+      continue
+    }
+    if (effect.effect !== nextEffect.effect) {
+      updatedEffects.push(effect)
+      continue
+    }
+    const effectEnd = getEffectEndSample(effect)
+    if (effectEnd <= nextStart || effect.startSample >= nextEnd) {
+      updatedEffects.push(effect)
+      continue
+    }
+    if (effect.startSample < nextStart) {
+      updatedEffects.push({
+        ...effect,
+        length: nextStart - effect.startSample,
+      })
+    }
+    if (effectEnd > nextEnd) {
+      updatedEffects.push({
+        ...effect,
+        startSample: nextEnd,
+        length: effectEnd - nextEnd,
+      })
+    }
   }
+  updatedEffects.push(nextEffect)
+  return sortEffects(updatedEffects)
+}
+
+export function scheduleGainAutomation(
+  param: AutomatedAudioParam,
+  effects: Effect[],
+  sampleRate: number,
+  playbackStartSample: number,
+  playbackEndSample: number,
+  playbackStartTime: number,
+  resetAutomation = true,
+) {
+  if (resetAutomation) {
+    param.cancelScheduledValues(playbackStartTime)
+  }
+  const initialEffect = getGainEffectAtSample(effects, playbackStartSample)
+  param.setValueAtTime(initialEffect ? dbToGain(initialEffect.value) : 1, playbackStartTime)
+  for (const effect of effects) {
+    const effectStart = Math.max(effect.startSample, playbackStartSample)
+    const effectEnd = Math.min(getEffectEndSample(effect), playbackEndSample)
+    if (effectEnd <= playbackStartSample || effectStart >= playbackEndSample) {
+      continue
+    }
+    const startTime = playbackStartTime + (effectStart - playbackStartSample) / sampleRate
+    const endTime = playbackStartTime + (effectEnd - playbackStartSample) / sampleRate
+    if (effectStart > playbackStartSample) {
+      param.setValueAtTime(dbToGain(effect.value), startTime)
+    }
+    param.setValueAtTime(1, endTime)
+  }
+  param.setValueAtTime(1, playbackStartTime + (playbackEndSample - playbackStartSample) / sampleRate)
 }

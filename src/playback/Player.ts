@@ -6,6 +6,7 @@ import { JobType } from '../audiocontext/ControllableWorkerJob'
 import { AudioControl, AudioState } from '../audiocontext/AudioControl'
 import { cloneWithGetters } from '../global/ObjectUtils'
 import { Track } from '../project/Track'
+import { scheduleGainAutomation } from '../effects/Effects'
 
 export type SelectedRegion = {
   startSample: number
@@ -51,19 +52,30 @@ export class Player {
           ringBufferArray: ringBufferArray,
           underrunBits: underrunBits,
           index: i,
-          startPosition: AudioControl.startPosition,
+          startPosition: startSample,
         },
         outputChannelCount: [track.getChannelCount()],
         channelCountMode: 'explicit',
       })
+      const effectGainNode = audioContext.createGain()
       const gainNode = audioContext.createGain()
       gainNode.gain.value = track.getGain()
       const pannerNode = audioContext.createStereoPanner()
       pannerNode.pan.value = track.getPan()
 
-      playerNode.connect(gainNode)
+      playerNode.connect(effectGainNode)
+      effectGainNode.connect(gainNode)
       gainNode.connect(pannerNode)
       pannerNode.connect(audioContext.destination)
+
+      const cleanup = Player.scheduleTrackEffects(
+        track,
+        effectGainNode.gain,
+        audioContext,
+        startSample,
+        endSample,
+        !!loopRegion,
+      )
 
       playbackInfos.push({
         clipViews: track.clipViews.map((c) => {
@@ -74,7 +86,7 @@ export class Player {
         }),
         ringBufferArray: ringBufferArray,
       })
-      track.registerNewPlayback(playerNode, gainNode, pannerNode)
+      track.registerNewPlayback(playerNode, gainNode, pannerNode, [effectGainNode], cleanup)
       playerNodes.push(playerNode)
     })
     if (playerNodes.length == 0) {
@@ -97,6 +109,63 @@ export class Player {
       return Player.readingWorkerController
     }
     return (Player.readingWorkerController = new WorkerController())
+  }
+
+  private static scheduleTrackEffects(
+    track: Track,
+    param: GainNode['gain'],
+    audioContext: AudioContext,
+    startSample: number,
+    endSample: number,
+    loop: boolean,
+  ) {
+    const effects = track.getEffectRegions('gain')
+    if (!loop) {
+      scheduleGainAutomation(param, effects, audioContext.sampleRate, startSample, endSample, audioContext.currentTime)
+      return null
+    }
+
+    const loopDurationSeconds = (endSample - startSample) / audioContext.sampleRate
+    if (loopDurationSeconds <= 0) {
+      scheduleGainAutomation(param, effects, audioContext.sampleRate, startSample, endSample, audioContext.currentTime)
+      return null
+    }
+
+    let nextLoopStartTime = audioContext.currentTime
+    const scheduleAheadSeconds = Math.max(loopDurationSeconds * 4, 5)
+    const schedulePendingPasses = () => {
+      let resetAutomation = nextLoopStartTime == audioContext.currentTime
+      while (nextLoopStartTime < audioContext.currentTime + scheduleAheadSeconds) {
+        scheduleGainAutomation(
+          param,
+          effects,
+          audioContext.sampleRate,
+          startSample,
+          endSample,
+          nextLoopStartTime,
+          resetAutomation,
+        )
+        resetAutomation = false
+        nextLoopStartTime += loopDurationSeconds
+      }
+    }
+
+    schedulePendingPasses()
+    const intervalId = window.setInterval(
+      schedulePendingPasses,
+      Math.max(250, Math.min(2000, loopDurationSeconds * 500)),
+    )
+    const stateChangeListener = () => {
+      if (audioContext.state == 'closed') {
+        window.clearInterval(intervalId)
+        audioContext.removeEventListener('statechange', stateChangeListener)
+      }
+    }
+    audioContext.addEventListener('statechange', stateChangeListener)
+    return () => {
+      window.clearInterval(intervalId)
+      audioContext.removeEventListener('statechange', stateChangeListener)
+    }
   }
 }
 

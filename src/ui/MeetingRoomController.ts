@@ -391,7 +391,7 @@ export class MeetingRoomController {
           case 2:
           case 3:
             let i = 1
-            for (const container of this.containers()) {
+            for (const container of [this.selfVideoContainer, ...this.guestContainers]) {
               container.divElement.classList = 'vid-div meeting-grid-quarter'
               if (container != this.firstContainer) {
                 container.divElement.style.top = `${Math.floor(i / 2) * 50}%`

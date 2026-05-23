@@ -2,7 +2,7 @@ import { ClipView } from './ClipView'
 import { DatabasePersisted } from '../persistence/DatabasePersisted'
 import { Restorable } from '../persistence/Restoration'
 import { Analyzable } from '../analyzers/Analyzable'
-import { Effect } from 'effects/Effect'
+import { Effect, EffectType, sortEffects } from '../effects/Effects'
 import { WamParameterInfoMap } from '@webaudiomodules/api'
 
 class Playback {
@@ -11,6 +11,7 @@ class Playback {
     readonly gainNode: GainNode,
     readonly pannerNode: StereoPannerNode,
     readonly effectNodes: Array<AudioNode>,
+    readonly cleanup: (() => void) | null,
   ) {}
 }
 
@@ -20,6 +21,7 @@ export class Track extends DatabasePersisted implements Analyzable {
   private playback: Playback | null = null
   private pan: number = 0
   private gain: number = 1
+  private effectRegions: Effect[] = []
   readonly effectParams = new Map<string, WamParameterInfoMap>()
 
   constructor(
@@ -200,12 +202,20 @@ export class Track extends DatabasePersisted implements Analyzable {
     return slice
   }
 
-  registerNewPlayback(playerNode: AudioWorkletNode, gainNode: GainNode, pannerNode: StereoPannerNode) {
-    this.playback = new Playback(playerNode, gainNode, pannerNode, [])
+  registerNewPlayback(
+    playerNode: AudioWorkletNode,
+    gainNode: GainNode,
+    pannerNode: StereoPannerNode,
+    effectNodes: AudioNode[] = [],
+    cleanup: (() => void) | null = null,
+  ) {
+    this.playback = new Playback(playerNode, gainNode, pannerNode, effectNodes, cleanup)
   }
 
   stopPlayback() {
+    this.playback?.cleanup?.()
     this.playback?.playerNode.disconnect()
+    this.playback?.effectNodes.forEach((node) => node.disconnect())
     this.playback = null
   }
 
@@ -229,6 +239,21 @@ export class Track extends DatabasePersisted implements Analyzable {
 
   getGain(): number {
     return this.gain
+  }
+
+  getEffectRegions(effect?: EffectType): Effect[] {
+    if (!effect) {
+      return sortEffects(this.effectRegions)
+    }
+    return sortEffects(this.effectRegions.filter((effectRegion) => effectRegion.effect == effect))
+  }
+
+  getEffectRegionById(effectRegionId: string): Effect | null {
+    return this.effectRegions.find((effectRegion) => effectRegion.id == effectRegionId) ?? null
+  }
+
+  setEffectRegions(effectRegions: Effect[]) {
+    this.effectRegions = sortEffects(effectRegions)
   }
 
   getLevel(): number {

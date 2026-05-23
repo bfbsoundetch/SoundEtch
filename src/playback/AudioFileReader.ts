@@ -144,7 +144,6 @@ export class AudioFileReader {
     } finally {
       this.resumeResolver?.('')
       this.resumeResolver = null
-      AudioFileCache.cleanUp()
     }
   }
 
