@@ -10,6 +10,7 @@ export class ProjectModalController {
   private readonly openButton = document.getElementById('open-project-manager-modal-button') as HTMLButtonElement
   private readonly newProjectButton = document.getElementById('project-manager-new-button') as HTMLButtonElement
   private readonly listContainer = document.getElementById('project-manager-list') as HTMLDivElement
+  private projectIdToEditAfterRefresh: number | undefined = undefined
 
   constructor() {
     this.openButton.onclick = () => void this.open()
@@ -34,6 +35,8 @@ export class ProjectModalController {
   private async refresh() {
     const activeProject = await ProjectManager.getActiveProject()
     const projects = await ProjectManager.getProjects()
+    const projectIdToEdit = this.projectIdToEditAfterRefresh
+    this.projectIdToEditAfterRefresh = undefined
     this.listContainer.replaceChildren()
 
     if (projects.length == 0) {
@@ -43,25 +46,37 @@ export class ProjectModalController {
       return
     }
 
-    const rows = await Promise.all(
-      projects.map((project) => this.createProjectRow(project, project.id == activeProject.id)),
+    await Promise.all(
+      projects.map((project) => this.appendProjectRow(project, project.id == activeProject.id, project.id == projectIdToEdit)),
     )
-    this.listContainer.replaceChildren(...rows)
   }
 
-  private async createProjectRow(project: Project, isActiveProject: boolean): Promise<HTMLDivElement> {
+  private async appendProjectRow(
+    project: Project,
+    isActiveProject: boolean,
+    editImmediately: boolean,
+  ) {
     const row = document.createElement('div')
     row.className = isActiveProject ? 'project-manager-row project-manager-row-active' : 'project-manager-row'
 
     const nameElement = document.createElement('div')
     nameElement.className = 'project-manager-name'
-    nameElement.innerText = project.title
+    const titleElement = document.createElement('div')
+    titleElement.className = 'project-manager-title-text'
+    titleElement.innerText = project.title
+    nameElement.appendChild(titleElement)
     if (isActiveProject) {
       const activeLabel = document.createElement('span')
       activeLabel.className = 'project-manager-active-label'
       activeLabel.innerText = 'Current'
       nameElement.appendChild(activeLabel)
     }
+    let titleEditStart = project.title
+    titleElement.addEventListener('dblclick', () => {
+      titleEditStart = project.title
+      this.makeEditable(titleElement)
+    })
+    titleElement.addEventListener('blur', () => void this.saveTitleChanges(titleElement, project, titleEditStart))
 
     const metaGrid = document.createElement('div')
     metaGrid.className = 'project-manager-meta-grid'
@@ -89,7 +104,16 @@ export class ProjectModalController {
 
     actionsElement.append(openButton, deleteButton)
     row.append(nameElement, metaGrid, actionsElement)
-    return row
+
+    this.listContainer.appendChild(row)
+
+    if (editImmediately) {
+      requestAnimationFrame(() => {
+        titleEditStart = project.title
+        this.makeEditable(titleElement)
+        this.selectElementText(titleElement)
+      })
+    }
   }
 
   private createMetaElement(label: string, value: string): HTMLDivElement {
@@ -127,8 +151,8 @@ export class ProjectModalController {
       const title = this.getNewProjectTitle(await ProjectManager.getProjects())
       await AudioControl.stop()
       editorHistory.clear()
-      await ProjectManager.createProject(title, activeProject.sampleRate)
-      this.dialog.close()
+      const project = await ProjectManager.createProject(title, activeProject.sampleRate)
+      this.projectIdToEditAfterRefresh = project.id
     } catch (error) {
       this.showError(error)
     } finally {
@@ -149,11 +173,63 @@ export class ProjectModalController {
         editorHistory.clear()
       }
       await ProjectManager.deleteProject(project)
-      await this.refresh()
     } catch (error) {
       this.showError(error)
       button.disabled = false
     }
+  }
+
+  private makeEditable(element: HTMLElement) {
+    element.contentEditable = 'true'
+    element.classList.add('project-manager-title-editing')
+    element.focus()
+    element.onkeydown = (event) => {
+      if (event.key == 'Enter') {
+        event.preventDefault()
+        element.blur()
+      }
+      if (event.key == 'Escape') {
+        event.preventDefault()
+        element.innerText = element.dataset.editStart ?? element.innerText
+        element.blur()
+      }
+    }
+    element.dataset.editStart = element.innerText
+  }
+
+  private async saveTitleChanges(element: HTMLElement, project: Project, oldTitle: string) {
+    if (!element.isContentEditable) {
+      return
+    }
+    element.contentEditable = 'false'
+    element.classList.remove('project-manager-title-editing')
+    element.onkeydown = null
+    delete element.dataset.editStart
+
+    const newTitle = element.innerText.trim()
+    if (!newTitle) {
+      element.innerText = oldTitle
+      return
+    }
+    element.innerText = newTitle
+    if (newTitle == oldTitle) {
+      return
+    }
+
+    try {
+      await ProjectManager.renameProject(project, newTitle)
+    } catch (error) {
+      element.innerText = oldTitle
+      this.showError(error)
+    }
+  }
+
+  private selectElementText(element: HTMLElement) {
+    const selection = window.getSelection()
+    const range = document.createRange()
+    range.selectNodeContents(element)
+    selection?.removeAllRanges()
+    selection?.addRange(range)
   }
 
   private getNewProjectTitle(projects: Project[]): string {

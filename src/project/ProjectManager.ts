@@ -88,6 +88,14 @@ export class ProjectManager {
     return project
   }
 
+  static async renameProject(project: Project, title: string): Promise<void> {
+    project.title = title
+    await DatabasePersister.save(project)
+    if (ProjectManager.activeProject?.id == project.id) {
+      ProjectManager.projectListeners.forEach((listener) => listener(project))
+    }
+  }
+
   static async openProject(projectOrId: Project | number): Promise<Project> {
     const project = typeof projectOrId == 'number' ? await DatabasePersister.getObjectById<Project>(projectOrId) : projectOrId
     if (!project) {
