@@ -69,6 +69,7 @@
       window.logsModalController = new window.LogsModalController()
       window.processingModalController = new window.ProcessingModalController()
       window.clipManagerController = new window.ClipManagerController()
+      window.projectModalController = new window.ProjectModalController()
       if (window.location.search) {
         const meetingParam = new URL(window.location).searchParams.get('meeting')
         if (meetingParam) {
@@ -138,6 +139,7 @@
         <div popover="auto" id="menu-dropdown">
           <div class="menu-item clickable">Edit</div>
           <button class="menu-item clickable">Settings</button>
+          <button id="open-project-manager-modal-button" class="menu-item clickable">Project</button>
           <button class="menu-item clickable" onclick="showDialog(document.getElementById('export-project-modal'))">
             Export
           </button>
@@ -495,6 +497,20 @@
           <button id="logs-modal-download-button" class="menu-item clickable logs-modal-button">Download .txt</button>
         </div>
         <pre id="logs-modal-content-text"></pre>
+      </div>
+    </dialog>
+    <dialog id="project-manager-modal" class="overlay">
+      <div class="overlay-close-button clickable" onclick="closeOverlay()">
+        <svg class="meeting-icon" viewBox="0 0 500 500">
+          <use xlink:href="#menu-close" />
+        </svg>
+      </div>
+      <div id="project-manager-modal-content" class="overlay-content" onclick="event.stopPropagation()">
+        <div id="project-manager-header">
+          <h1>Projects</h1>
+          <button id="project-manager-new-button" class="menu-item clickable">Open New Project</button>
+        </div>
+        <div id="project-manager-list"></div>
       </div>
     </dialog>
     <dialog id="clip-manager-modal" class="overlay">

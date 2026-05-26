@@ -1340,6 +1340,118 @@ video {
   font-size: 2rem;
 }
 
+#project-manager-modal-content {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.75rem;
+  padding: 3.5rem 1rem 1rem;
+  box-sizing: border-box;
+  width: min(94vw, 58rem);
+  height: auto;
+  max-height: 85vh;
+}
+
+#project-manager-header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+#project-manager-header h1 {
+  margin: 0;
+  font-size: 2rem;
+}
+
+#project-manager-new-button {
+  width: auto;
+  margin-left: auto;
+  font-size: 1rem;
+  padding: 0.5rem 0.75rem;
+}
+
+#project-manager-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  overflow: auto;
+}
+
+.project-manager-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  grid-template-areas:
+    'name actions'
+    'meta actions';
+  gap: 0.6rem 1rem;
+  padding: 0.75rem;
+  background-color: var(--alt-background);
+  border: 1px solid var(--color);
+}
+
+.project-manager-row-active {
+  box-shadow: inset 0 0 0 2px var(--color);
+}
+
+.project-manager-name {
+  grid-area: name;
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  min-width: 0;
+  font-size: 1.15rem;
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.project-manager-active-label {
+  flex: none;
+  font-size: 0.75rem;
+  padding: 0.1rem 0.35rem;
+  border: 1px solid var(--color);
+}
+
+.project-manager-meta-grid {
+  grid-area: meta;
+  display: grid;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  gap: 0.5rem;
+}
+
+.project-manager-meta {
+  display: flex;
+  flex-direction: column;
+  gap: 0.15rem;
+  min-width: 0;
+  font-size: 0.95rem;
+}
+
+.project-manager-meta-label {
+  font-size: 0.8rem;
+  opacity: 0.75;
+}
+
+.project-manager-actions {
+  grid-area: actions;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  align-self: center;
+  min-width: 8rem;
+}
+
+.project-manager-action-button {
+  width: auto;
+  font-size: 1rem;
+  padding: 0.5rem 0.75rem;
+  text-align: center;
+}
+
+.project-manager-action-button:disabled {
+  opacity: 0.55;
+}
+
 #clip-manager-list {
   display: flex;
   flex-direction: column;
@@ -1391,6 +1503,35 @@ video {
   width: auto;
   font-size: 1rem;
   padding: 0.5rem 0.75rem;
+}
+
+@media (max-width: 650px) {
+  #project-manager-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  #project-manager-new-button {
+    margin-left: 0;
+  }
+
+  .project-manager-row {
+    grid-template-columns: 1fr;
+    grid-template-areas:
+      'name'
+      'meta'
+      'actions';
+  }
+
+  .project-manager-meta-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .project-manager-actions {
+    flex-direction: row;
+    flex-wrap: wrap;
+    min-width: 0;
+  }
 }
 
 #logs-modal-download-button {

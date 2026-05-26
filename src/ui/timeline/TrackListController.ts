@@ -79,7 +79,11 @@ export class TrackListController {
   private readonly activeTrackEffects = new Map<number, EffectType | null>()
   private readonly tracklistElement = document.getElementById('track-list')!
   private readonly tracklistInfoElement = document.getElementById('track-info-list')!
-  private readonly infoWaveformPairs = new Map<string, { info: HTMLElement; waveform: HTMLElement }>()
+  private readonly infoWaveformPairs = new Map<
+    string,
+    { info: HTMLElement; waveform: HTMLElement; controller: Waveform }
+  >()
+  private renderedProjectId: number | undefined = undefined
   private openEffectPanelState: { track: Track; effectRegionId: string } | null = null
   private effectEditStart: { track: Track; effectRegions: Effect[] } | null = null
   private openEffectPanelInput: HTMLInputElement | null = null
@@ -176,15 +180,34 @@ export class TrackListController {
 
     ProjectManager.addProjectListener((project) => {
       this.sampleRate = project.sampleRate
+      if (this.renderedProjectId != project.id) {
+        this.renderedProjectId = project.id
+        this.msPerUnit = Infinity
+        this.translationUnits = 0
+        this.waveforms = []
+        this.infoWaveformPairs.clear()
+        this.activeTrackEffects.clear()
+        this.clearSelection()
+        this.effectPanelController.close()
+      }
+
       const infoDivs = new Array<Node>()
       const waveformDivs = new Array<Node>()
+      const nextWaveforms = new Array<Waveform>()
+      const trackIds = new Set(project.getTracks().map((track) => `${track.id}`))
+      for (const trackId of this.infoWaveformPairs.keys()) {
+        if (!trackIds.has(trackId)) {
+          this.infoWaveformPairs.delete(trackId)
+        }
+      }
 
       for (let i = 0; i < project.getTracks().length; ++i) {
         const track = project.getTracks()[i]
         const existing = this.infoWaveformPairs.get(`${track.id}`)
-        if (existing) {
+        if (existing && existing.controller.index == i) {
           infoDivs.push(existing.info)
           waveformDivs.push(existing.waveform)
+          nextWaveforms.push(existing.controller)
           continue
         }
 
@@ -207,8 +230,8 @@ export class TrackListController {
         // const trackPeakMeterController = new PeakMeterController(trackPeakMeterDiv)
 
         const waveform = new Waveform(this, track, waveformDiv, i)
-        this.waveforms.push(waveform)
-        this.infoWaveformPairs.set(`${track.id}`, { info: trackInfoDiv, waveform: waveformDiv })
+        nextWaveforms.push(waveform)
+        this.infoWaveformPairs.set(`${track.id}`, { info: trackInfoDiv, waveform: waveformDiv, controller: waveform })
 
         new ResizeObserver(async (_) => {
           waveform.resize()
@@ -218,6 +241,7 @@ export class TrackListController {
         infoDivs.push(trackInfoDiv)
         waveformDivs.push(waveformDiv)
       }
+      this.waveforms = nextWaveforms
       this.tracklistInfoElement.replaceChildren(...infoDivs)
       this.tracklistElement.replaceChildren(...waveformDivs)
       this.waveforms.forEach((waveform) => waveform.draw())

@@ -1,7 +1,7 @@
-import { FileSystemUtils } from '../filesystem/FileSystemUtils'
 import { Clip } from '../project/Clip'
 import { Project } from '../project/Project'
 import { ProjectManager } from '../project/ProjectManager'
+import { getClipDiskUsage, humanizeBytes } from './DiskUsage'
 import { editorHistory } from './undo/EditorHistory'
 
 export class ClipManagerController {
@@ -45,7 +45,7 @@ export class ClipManagerController {
 
     const sizeElement = document.createElement('div')
     sizeElement.className = 'clip-manager-meta'
-    sizeElement.innerText = this.humanizeBytes(await this.getDiskUsage(project, clip))
+    sizeElement.innerText = humanizeBytes(await getClipDiskUsage(project, clip))
 
     const usedTrackCount = this.countTracksUsingClip(project, clip)
     const usageElement = document.createElement('div')
@@ -71,26 +71,5 @@ export class ClipManagerController {
 
   private countTracksUsingClip(project: Project, clip: Clip): number {
     return project.getTracks().filter((track) => track.clipViews.some((clipView) => clipView.clip === clip)).length
-  }
-
-  private async getDiskUsage(project: Project, clip: Clip): Promise<number> {
-    const [clipFile, summaryFile] = await Promise.all([
-      (await FileSystemUtils.getFileHandle(project.directoryName, clip.filename)).getFile(),
-      (await FileSystemUtils.getFileHandle(project.directoryName, `${clip.filename}_summary`)).getFile(),
-    ])
-    return clipFile.size + summaryFile.size
-  }
-
-  private humanizeBytes(bytes: number): string {
-    if (bytes < 1024) {
-      return `${bytes} B`
-    }
-    if (bytes < 1024 ** 2) {
-      return `${(bytes / 1024).toFixed(1)} KiB`
-    }
-    if (bytes < 1024 ** 3) {
-      return `${(bytes / 1024 ** 2).toFixed(1)} MiB`
-    }
-    return `${(bytes / 1024 ** 3).toFixed(2)} GiB`
   }
 }

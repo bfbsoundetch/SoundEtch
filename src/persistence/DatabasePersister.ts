@@ -42,11 +42,48 @@ export class DatabasePersister {
     })
   }
 
+  static async getObjectsByRestorationName<T extends DatabasePersisted>(restorationName: string): Promise<T[]> {
+    const db = await this.dbPromise
+    const objectStore = db.transaction('objects', 'readonly').objectStore('objects')
+    const getRequest = objectStore.getAll()
+    return new Promise<T[]>((resolve, reject) => {
+      getRequest.onsuccess = async () => {
+        try {
+          const persistedObjects = getRequest.result.filter((object) => object?.restorationName == restorationName)
+          const restoredObjects = new Array<T>()
+          for (const persistedObject of persistedObjects) {
+            const id = persistedObject.id
+            const restoredObject = DatabasePersister.objectCache.has(id)
+              ? DatabasePersister.objectCache.get(id)
+              : await DatabasePersister.fromPersistedObject(persistedObject)
+            if (restoredObject) {
+              DatabasePersister.objectCache.set(id, restoredObject)
+              restoredObjects.push(restoredObject)
+            }
+          }
+          resolve(restoredObjects)
+        } catch (error) {
+          reject(error)
+        }
+      }
+      getRequest.onerror = () => {
+        reject('getObjectsByRestorationName ' + getRequest.error)
+      }
+    })
+  }
+
   static async save<T extends DatabasePersisted>(object: T): Promise<T> {
     const objectToPersist = DatabasePersister.toPersistedObject(object, true)
     const db = await this.dbPromise
     const objectStore = db.transaction('objects', 'readwrite').objectStore('objects')
-    objectToPersist.version = Date.now()
+    const now = Date.now()
+    if (!objectToPersist.id) {
+      objectToPersist.dateCreated = now
+      ;(object as any).dateCreated = now
+    }
+    objectToPersist.dateModified = now
+    ;(object as any).dateModified = now
+    objectToPersist.version = now
     if (!objectToPersist.id) {
       delete objectToPersist.id
     }
@@ -54,6 +91,7 @@ export class DatabasePersister {
     return new Promise<any>((resolve, reject) => {
       request.onsuccess = () => {
         ;(object as any).id = request.result
+        DatabasePersister.objectCache.set(Number(request.result), object)
         resolve(object)
       }
       request.onerror = () => {
@@ -144,6 +182,7 @@ export class DatabasePersister {
     const deleteRequest = objectStore.delete(id)
     return new Promise<any>((resolve, reject) => {
       deleteRequest.onsuccess = () => {
+        DatabasePersister.objectCache.delete(id)
         resolve('')
       }
       deleteRequest.onerror = () => {

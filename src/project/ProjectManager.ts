@@ -7,6 +7,7 @@ import { Track } from './Track'
 
 export class ProjectManager {
   static readonly ACTIVE_PROJECT_PROPERTY_NAME = 'activeProject'
+  static readonly DEFAULT_PROJECT_TITLE = 'My First Etching'
 
   private static activeProject: Project | null
   private static projectListeners = new Array<(_: Project) => any>()
@@ -55,15 +56,99 @@ export class ProjectManager {
     const activeProjectId = await DatabasePersister.getGlobalProperty(ProjectManager.ACTIVE_PROJECT_PROPERTY_NAME)
     if (activeProjectId != null) {
       ProjectManager.activeProject = await DatabasePersister.getObjectById<Project>(Number(activeProjectId))
-      await this.populateSummaries(ProjectManager.activeProject!)
+      if (ProjectManager.activeProject) {
+        await this.populateSummaries(ProjectManager.activeProject)
+      } else {
+        ProjectManager.activeProject = await DatabasePersister.save(new Project(ProjectManager.DEFAULT_PROJECT_TITLE, 48000))
+        await DatabasePersister.setGlobalProperty(
+          ProjectManager.ACTIVE_PROJECT_PROPERTY_NAME,
+          ProjectManager.activeProject.id,
+        )
+      }
     } else {
-      ProjectManager.activeProject = await DatabasePersister.save(new Project('My First Etching', 48000))
+      ProjectManager.activeProject = await DatabasePersister.save(new Project(ProjectManager.DEFAULT_PROJECT_TITLE, 48000))
       await DatabasePersister.setGlobalProperty(
         ProjectManager.ACTIVE_PROJECT_PROPERTY_NAME,
         ProjectManager.activeProject.id,
       )
     }
     return ProjectManager.activeProject!
+  }
+
+  static async getProjects(): Promise<Project[]> {
+    const projects = await DatabasePersister.getObjectsByRestorationName<Project>('Project')
+    return projects.sort((a, b) => (ProjectManager.getProjectModifiedDate(b) ?? 0) - (ProjectManager.getProjectModifiedDate(a) ?? 0))
+  }
+
+  static async createProject(title: string = 'Untitled Project', sampleRate = 48000): Promise<Project> {
+    const project = await DatabasePersister.save(new Project(title, sampleRate))
+    ProjectManager.activeProject = project
+    await DatabasePersister.setGlobalProperty(ProjectManager.ACTIVE_PROJECT_PROPERTY_NAME, project.id)
+    ProjectManager.projectListeners.forEach((listener) => listener(project))
+    return project
+  }
+
+  static async openProject(projectOrId: Project | number): Promise<Project> {
+    const project = typeof projectOrId == 'number' ? await DatabasePersister.getObjectById<Project>(projectOrId) : projectOrId
+    if (!project) {
+      throw new Error('Project not found')
+    }
+    ProjectManager.activeProject = project
+    await this.populateSummaries(project)
+    await DatabasePersister.setGlobalProperty(ProjectManager.ACTIVE_PROJECT_PROPERTY_NAME, project.id)
+    ProjectManager.projectListeners.forEach((listener) => listener(project))
+    return project
+  }
+
+  static async deleteProject(project: Project): Promise<void> {
+    if (!project.id) {
+      return
+    }
+
+    const deletedActiveProject = (await ProjectManager.getActiveProject()).id == project.id
+    await Promise.all([
+      ...project.getTracks().map(async (track) => {
+        if (!track.id) {
+          return
+        }
+        ProjectManager.trackListeners.delete(track.id)
+        await DatabasePersister.deleteObjectById(track.id)
+      }),
+      ...project.getClips().map(async (clip) => {
+        if (!clip.id) {
+          return
+        }
+        ProjectManager.clipListeners.delete(clip.id)
+        await DatabasePersister.deleteObjectById(clip.id)
+      }),
+    ])
+    await FileSystemUtils.deleteDirectory(project.directoryName)
+    await DatabasePersister.deleteObjectById(project.id)
+
+    if (!deletedActiveProject) {
+      return
+    }
+
+    ProjectManager.activeProject = null
+    const remainingProjects = await ProjectManager.getProjects()
+    if (remainingProjects.length > 0) {
+      await ProjectManager.openProject(remainingProjects[0])
+    } else {
+      await ProjectManager.createProject(ProjectManager.DEFAULT_PROJECT_TITLE, project.sampleRate)
+    }
+  }
+
+  static async getProjectDiskUsage(project: Project): Promise<number> {
+    return FileSystemUtils.getDirectorySize(project.directoryName)
+  }
+
+  static getProjectModifiedDate(project: Project): number | undefined {
+    const dateModified = Math.max(
+      project.dateModified ?? 0,
+      ...project.getTracks().map((track) => track.dateModified ?? 0),
+      ...project.getClips().map((clip) => clip.dateModified ?? 0),
+    )
+    return dateModified || undefined
   }
 
   private static async populateSummaries(project: Project) {

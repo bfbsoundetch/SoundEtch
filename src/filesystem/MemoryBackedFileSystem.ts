@@ -18,4 +18,24 @@ export class MemoryBackedFileSystem {
     const path = `${dirName}/${fileName}`
     MemoryBackedFileSystem.files.delete(path)
   }
+
+  static deleteDirectory(dirName: string) {
+    const prefix = `${dirName}/`
+    for (const path of MemoryBackedFileSystem.files.keys()) {
+      if (path.startsWith(prefix)) {
+        MemoryBackedFileSystem.files.delete(path)
+      }
+    }
+  }
+
+  static getDirectorySize(dirName: string): number {
+    const prefix = `${dirName}/`
+    let size = 0
+    for (const [path, file] of MemoryBackedFileSystem.files) {
+      if (path.startsWith(prefix)) {
+        size += file.getSize()
+      }
+    }
+    return size
+  }
 }
