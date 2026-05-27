@@ -6,6 +6,7 @@ import { Logger } from '../global/Logger'
 export class AudioFileWriter {
   private readonly ringBuffer: RingBuffer
   private readonly writeBuffer: Float32Array
+  private readonly overrunSampleCount: Int32Array
   private readonly logger = new Logger('AudioFileWriter')
 
   private position = 0
@@ -16,10 +17,12 @@ export class AudioFileWriter {
   constructor(
     private readonly fileSyncHandle: FileSystemSyncAccessHandle,
     private readonly summary: Summary,
+    overrunSampleCount: SharedArrayBuffer,
     ringBufferArray: SharedArrayBuffer,
   ) {
     this.ringBuffer = new RingBuffer(ringBufferArray, Float32Array)
     this.writeBuffer = new Float32Array(new ArrayBuffer(32 * 1024))
+    this.overrunSampleCount = new Int32Array(overrunSampleCount)
   }
 
   stop() {
@@ -52,10 +55,18 @@ export class AudioFileWriter {
   }
 
   async maybeGetChunkAndWrite(): Promise<boolean> {
+    const overrunSamples = Atomics.exchange(this.overrunSampleCount, 0, 0)
+    if (overrunSamples > 0) {
+      const silence = new Float32Array(overrunSamples)
+      this.fileSyncHandle.write(silence, { at: this.position })
+      this.summary.summarizeInterleavedData(silence, overrunSamples)
+      this.position += overrunSamples * Float32Array.BYTES_PER_ELEMENT
+      this.fileSyncHandle.flush()
+    }
     const poppedLength = this.ringBuffer.pop(this.writeBuffer)
     if (poppedLength > 0) {
       if (this.position % 48000 < 128) {
-        this.logger.log('Writer heartbeat at frame ' + this.position)
+        this.logger.log('Writer heartbeat at frame ' + this.position / Float32Array.BYTES_PER_ELEMENT)
       }
       this.fileSyncHandle.write(
         (this.writeBuffer.buffer as ArrayBuffer).slice(0, poppedLength * Float32Array.BYTES_PER_ELEMENT),

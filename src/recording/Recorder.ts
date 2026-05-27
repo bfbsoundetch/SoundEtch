@@ -39,11 +39,13 @@ export class Recorder {
       )
       const clipView = track.clipViews[0]!
       const ringBufferArray = RingBuffer.getStorageForCapacity(8 * 1024 * 1024, Float32Array)
+      const overrunSampleCount = new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT)
       inputs.push({
         dirname: `${(await ProjectManager.getActiveProject()).id}`,
         ringBufferArray: ringBufferArray,
         channelCount: audioInput.channelCount,
         clip: cloneWithGetters(clipView.clip),
+        overrunSampleCount: overrunSampleCount,
       })
 
       await unusedAddModuleResult
@@ -51,6 +53,7 @@ export class Recorder {
         processorOptions: {
           ringBufferArray: ringBufferArray,
           channelCount: audioInput.channelCount,
+          overrunSampleCount: overrunSampleCount,
         },
       })
       await audioInput.connect(recordingWorkletNode)

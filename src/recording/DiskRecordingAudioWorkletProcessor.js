@@ -6,6 +6,7 @@ class DiskRecordingAudioWorkletProcessor extends AudioWorkletProcessor {
     this.dataRingBuffer = new RingBuffer(options.processorOptions.ringBufferArray, Float32Array)
     // Workaround for mono with https://issues.chromium.org/issues/40403559
     this.channelCount = options.processorOptions.channelCount
+    this.overrunSampleCount = options.processorOptions.overrunSampleCount
     console.log('Ready for action')
   }
 
@@ -34,6 +35,7 @@ class DiskRecordingAudioWorkletProcessor extends AudioWorkletProcessor {
     const pushed = this.dataRingBuffer.push(this.copyBuffer, this.copyBuffer.length)
     if (pushed != this.copyBuffer.length) {
       console.error(`Pushed ${pushed}, but buffer length was ${this.copyBuffer.length}`)
+      Atomics.add(this.overrunSampleCount, 0, this.copyBuffer.length - pushed)
     }
 
     return true
