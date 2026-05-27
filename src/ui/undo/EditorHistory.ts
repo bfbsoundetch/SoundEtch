@@ -13,6 +13,22 @@ export class EditorHistory {
     return () => this.changeListeners.delete(listener)
   }
 
+  get canUndo() {
+    return this.backStack.canUndo
+  }
+
+  get canRedo() {
+    return this.backStack.canRedo
+  }
+
+  get undoActionString() {
+    return this.backStack.undoActionString
+  }
+
+  get redoActionString() {
+    return this.backStack.redoActionString
+  }
+
   async execute(undoable: Undoable): Promise<void> {
     await this.run(() => this.backStack.execute(undoable))
   }
@@ -36,7 +52,11 @@ export class EditorHistory {
   }
 
   clear() {
+    const hadChanges = this.canUndo || this.canRedo
     this.backStack.clear()
+    if (hadChanges) {
+      void this.notifyChangeListeners().catch((error) => console.error(error))
+    }
   }
 
   private async run(operation: () => Promise<void>): Promise<void> {
@@ -46,10 +66,14 @@ export class EditorHistory {
     this.running = true
     try {
       await operation()
-      await Promise.all([...this.changeListeners].map((listener) => listener()))
+      await this.notifyChangeListeners()
     } finally {
       this.running = false
     }
+  }
+
+  private async notifyChangeListeners(): Promise<void> {
+    await Promise.all([...this.changeListeners].map((listener) => listener()))
   }
 }
 

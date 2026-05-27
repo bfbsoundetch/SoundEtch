@@ -36,7 +36,7 @@ export class BatchCommand implements Undoable {
   }
 
   toString() {
-    return 'Batch edit'
+    return 'batch edit'
   }
 }
 
@@ -59,7 +59,7 @@ export class AddClipViewCommand implements Undoable {
   }
 
   toString() {
-    return 'Add clip view'
+    return 'add clip view'
   }
 }
 
@@ -82,7 +82,7 @@ export class RemoveClipViewCommand implements Undoable {
   }
 
   toString() {
-    return 'Remove clip view'
+    return 'remove clip view'
   }
 }
 
@@ -106,7 +106,7 @@ export class ReplaceClipViewCommand implements Undoable {
   }
 
   toString() {
-    return 'Replace clip view'
+    return 'replace clip view'
   }
 
   private replace(oldClipView: ClipView, newClipView: ClipView) {
@@ -138,7 +138,7 @@ export class MoveClipViewBetweenTracksCommand implements Undoable {
   }
 
   toString() {
-    return 'Move clip view between tracks'
+    return 'move clip view between tracks'
   }
 
   private move(fromTrack: Track, toTrack: Track, fromClipView: ClipView, toClipView: ClipView) {
@@ -172,7 +172,7 @@ export class SetTrackClipViewsCommand implements Undoable {
   }
 
   toString() {
-    return 'Set track clip views'
+    return 'set track clip views'
   }
 }
 
@@ -196,7 +196,7 @@ export class SetTrackEffectRegionsCommand implements Undoable {
   }
 
   toString() {
-    return 'Set track effect regions'
+    return 'set track effect regions'
   }
 }
 

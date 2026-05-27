@@ -12,6 +12,14 @@ export class BackStack {
     return this.position < this.stack.length
   }
 
+  get undoActionString() {
+    return this.canUndo ? String(this.stack[this.position - 1]) : null
+  }
+
+  get redoActionString() {
+    return this.canRedo ? String(this.stack[this.position]) : null
+  }
+
   async execute(undoable: Undoable): Promise<void> {
     await undoable.perform()
     await undoable.save()

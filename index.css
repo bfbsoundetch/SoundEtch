@@ -93,10 +93,40 @@ body {
   margin: 0;
   top: anchor(bottom);
   min-width: 10rem;
+  overflow: visible;
   border: solid;
   background-color: var(--bg-color);
   color: var(--color);
   border-width: 1px;
+}
+
+.main-menu-submenu {
+  position: relative;
+}
+
+.main-menu-submenu-button {
+  display: flex;
+  justify-content: space-between;
+  gap: 1rem;
+}
+
+.main-menu-submenu-content {
+  display: none;
+  position: absolute;
+  z-index: 2;
+  left: 100%;
+  top: -1px;
+  min-width: 16rem;
+  border: solid;
+  border-width: 1px;
+  background-color: var(--bg-color);
+  color: var(--color);
+}
+
+.main-menu-submenu.open .main-menu-submenu-content,
+.main-menu-submenu:hover .main-menu-submenu-content,
+.main-menu-submenu:focus-within .main-menu-submenu-content {
+  display: block;
 }
 
 .menu-item {
@@ -110,6 +140,22 @@ body {
   width: 100%;
   box-sizing: border-box;
   border-width: 1px;
+}
+
+.menu-item:disabled {
+  cursor: default;
+  opacity: 0.55;
+}
+
+.menu-item:disabled::after {
+  display: none;
+}
+
+@media (max-width: 40rem) {
+  .main-menu-submenu-content {
+    position: static;
+    min-width: 100%;
+  }
 }
 
 #title {

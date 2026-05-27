@@ -64,6 +64,7 @@
       window.trackListController = new window.TrackListController()
       window.audioInputsController = new window.AudioInputsController()
       window.keyPressController = new window.KeyPressController()
+      window.mainMenuController = new window.MainMenuController()
       window.headerController = new window.HeaderController()
       window.exportProjectController = new window.ExportProjectController()
       window.logsModalController = new window.LogsModalController()
@@ -138,7 +139,21 @@
         </button>
         <div popover="auto" id="menu-dropdown">
           <button id="open-project-manager-modal-button" class="menu-item clickable">Project</button>
-          <div class="menu-item clickable">Edit</div>
+          <div id="main-menu-edit-submenu" class="main-menu-submenu">
+            <button
+              id="main-menu-edit-button"
+              class="menu-item clickable main-menu-submenu-button"
+              aria-haspopup="menu"
+              aria-expanded="false"
+            >
+              <span>Edit</span>
+              <span aria-hidden="true">&gt;</span>
+            </button>
+            <div class="main-menu-submenu-content" role="menu">
+              <button id="main-menu-undo-button" class="menu-item clickable" role="menuitem">Undo</button>
+              <button id="main-menu-redo-button" class="menu-item clickable" role="menuitem">Redo</button>
+            </div>
+          </div>
           <button class="menu-item clickable">Settings</button>
           <button class="menu-item clickable" onclick="showDialog(document.getElementById('export-project-modal'))">
             Export
