@@ -14,7 +14,7 @@ test('write test', async () => {
   const ringBuffer = new RingBuffer(ringBufferArray, Float32Array)
   const inputBuffer = getInputArrayBuffer(1.1, 2.2, 3.3, 4.4, 5.5)
   ringBuffer.push(new Float32Array(inputBuffer))
-  const audioFileWriter = new AudioFileWriter(syncFileAccessHandle, new Summary(1), ringBufferArray)
+  const audioFileWriter = new AudioFileWriter(syncFileAccessHandle, new Summary(1), ringBufferArray, new SharedArrayBuffer(4))
 
   audioFileWriter.maybeGetChunkAndWrite()
 

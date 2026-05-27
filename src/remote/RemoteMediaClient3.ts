@@ -598,11 +598,11 @@ export class RemoteMediaClient3 {
     newPeerConnection.oniceconnectionstatechange = () => {
       this.logger.log('New ice connecting state ' + newPeerConnection.iceConnectionState)
       switch (newPeerConnection.iceConnectionState) {
-        case 'closed':
         case 'failed':
-        case 'disconnected':
+          newPeerConnection.restartIce()
+          break
+        case 'closed':
           remotePeerState.rtcPeerConnection = null
-          this.getAndMaybeAddPeerConnection(remoteId)
           break
       }
     }
@@ -614,7 +614,6 @@ export class RemoteMediaClient3 {
       switch (newPeerConnection.signalingState) {
         case 'closed':
           remotePeerState.rtcPeerConnection = null
-          this.getAndMaybeAddPeerConnection(remoteId)
           break
       }
     }
