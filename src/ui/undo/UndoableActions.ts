@@ -15,7 +15,10 @@ export type UndoableAction =
   | BatchCommand
 
 export class BatchCommand implements Undoable {
-  constructor(private readonly actions: Undoable[]) {}
+  constructor(
+    private readonly actions: Undoable[],
+    private readonly description: string,
+  ) {}
 
   async perform() {
     for (const action of this.actions) {
@@ -36,7 +39,7 @@ export class BatchCommand implements Undoable {
   }
 
   toString() {
-    return 'batch edit'
+    return this.description
   }
 }
 
@@ -91,6 +94,7 @@ export class ReplaceClipViewCommand implements Undoable {
     private readonly track: Track,
     private readonly oldClipView: ClipView,
     private readonly newClipView: ClipView,
+    private readonly description: string,
   ) {}
 
   async perform() {
@@ -106,13 +110,13 @@ export class ReplaceClipViewCommand implements Undoable {
   }
 
   toString() {
-    return 'replace clip view'
+    return this.description
   }
 
   private replace(oldClipView: ClipView, newClipView: ClipView) {
     const oldClipViewIndex = this.track.clipViews.indexOf(oldClipView)
     if (oldClipViewIndex < 0 || !this.track.replaceClipView(oldClipViewIndex, newClipView)) {
-      throw new Error('Could not replace clip view')
+      throw new Error('Could not ' + this.description)
     }
   }
 }

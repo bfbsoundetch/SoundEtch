@@ -383,7 +383,7 @@ export class TrackListController {
     Clipboard.copiedClipViews = newClipboard
     Clipboard.copyStartPosition = lowSample
     if (del && undoCommands.length > 0) {
-      await this.history.recordApplied(new BatchCommand(undoCommands))
+      await this.history.recordApplied(new BatchCommand(undoCommands, del ? 'cut' : 'copy'))
     }
   }
 
@@ -409,7 +409,7 @@ export class TrackListController {
       }
     }
     if (undoCommands.length > 0) {
-      await this.history.execute(new BatchCommand(undoCommands))
+      await this.history.execute(new BatchCommand(undoCommands, 'paste'))
     }
   }
 
@@ -548,7 +548,7 @@ export class TrackListController {
     if (undoCommands.length == 1) {
       await this.history.execute(undoCommands[0])
     } else {
-      await this.history.execute(new BatchCommand(undoCommands))
+      await this.history.execute(new BatchCommand(undoCommands, 'change gain'))
     }
     const firstCreatedRegion = createdRegions[0]
     if (firstCreatedRegion) {

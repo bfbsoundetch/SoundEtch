@@ -38,7 +38,7 @@ export class Recorder {
         inputs.length,
       )
       const clipView = track.clipViews[0]!
-      const ringBufferArray = RingBuffer.getStorageForCapacity(8 * 1024 * 1024, Float32Array)
+      const ringBufferArray = RingBuffer.getStorageForCapacity(64 * 1024, Float32Array)
       const overrunSampleCount = new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT)
       inputs.push({
         dirname: `${(await ProjectManager.getActiveProject()).id}`,

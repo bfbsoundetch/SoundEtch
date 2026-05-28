@@ -465,7 +465,7 @@ export class ClipViewController extends TrackListItemController {
       return
     }
     await this.trackListController.history.execute(
-      new ReplaceClipViewCommand(this.waveform.track, this.clipView, newClipView),
+      new ReplaceClipViewCommand(this.waveform.track, this.clipView, newClipView, 'move clip view'),
     )
   }
 
@@ -702,7 +702,7 @@ export class ClipViewController extends TrackListItemController {
       return
     }
     await this.trackListController.history.execute(
-      new ReplaceClipViewCommand(this.waveform.track, this.clipView, newClipView),
+      new ReplaceClipViewCommand(this.waveform.track, this.clipView, newClipView, 'resize clip view'),
     )
   }
 

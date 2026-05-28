@@ -17,8 +17,8 @@ export class AudioFileWriter {
   constructor(
     private readonly fileSyncHandle: FileSystemSyncAccessHandle,
     private readonly summary: Summary,
-    overrunSampleCount: SharedArrayBuffer,
     ringBufferArray: SharedArrayBuffer,
+    overrunSampleCount: SharedArrayBuffer,
   ) {
     this.ringBuffer = new RingBuffer(ringBufferArray, Float32Array)
     this.writeBuffer = new Float32Array(new ArrayBuffer(32 * 1024))
