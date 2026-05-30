@@ -40,12 +40,20 @@
     function setAddClipSource(sourceType) {
       const localSection = document.getElementById('add-clip-local-section')
       const remoteSection = document.getElementById('add-clip-remote-section')
+      const existingSection = document.getElementById('add-clip-existing-section')
       if (sourceType === 'local') {
         localSection.style.display = 'block'
         remoteSection.style.display = 'none'
-      } else {
+        existingSection.style.display = 'none'
+      } else if (sourceType === 'remote') {
         localSection.style.display = 'none'
         remoteSection.style.display = 'flex'
+        existingSection.style.display = 'none'
+      } else {
+        localSection.style.display = 'none'
+        remoteSection.style.display = 'none'
+        existingSection.style.display = 'flex'
+        window.addClipController?.refreshExistingClips()
       }
     }
 
@@ -56,6 +64,9 @@
       }
       if (dialogElement.id == 'meeting-room' && !window.meetingRoomController) {
         window.meetingRoomController = new window.MeetingRoomController()
+      }
+      if (dialogElement.id == 'add-clip-modal') {
+        window.addClipController?.refreshExistingClips()
       }
       dialogElement.showModal()
     }
@@ -69,6 +80,7 @@
       window.exportProjectController = new window.ExportProjectController()
       window.logsModalController = new window.LogsModalController()
       window.processingModalController = new window.ProcessingModalController()
+      window.addClipController = new window.AddClipController()
       window.clipManagerController = new window.ClipManagerController()
       window.projectModalController = new window.ProjectModalController()
       if (window.location.search) {
@@ -223,11 +235,7 @@
         </div>
       </div>
       <div id="timeline">
-        <svg
-          id="timeline-svg"
-          style="height: 100%; width: 100%; user-select: none"
-          xmlns="http://www.w3.org/2000/svg"
-        >
+        <svg id="timeline-svg" style="height: 100%; width: 100%; user-select: none" xmlns="http://www.w3.org/2000/svg">
           <path id="timeline-major-ticks"></path>
           <path id="timeline-minor-ticks"></path>
         </svg>
@@ -238,11 +246,18 @@
           <div id="track-info-list"></div>
         </div>
         <div id="timeline-area">
-           <svg
-              id="position-marker"
-              style="position: absolute; width: calc(100% - 14rem); right: 0; top: 4rem; pointer-events: none; user-select: none;"
-              xmlns="http://www.w3.org/2000/svg"
-            >
+          <svg
+            id="position-marker"
+            style="
+              position: absolute;
+              width: calc(100% - 14rem);
+              right: 0;
+              top: 4rem;
+              pointer-events: none;
+              user-select: none;
+            "
+            xmlns="http://www.w3.org/2000/svg"
+          >
             <line id="position-line" x1="150" y1="30" x2="150" y2="600" stroke-width="4"></line>
             <text
               id="pointer-position-text"
@@ -276,6 +291,10 @@
             <input type="radio" name="add-clip-source" onchange="setAddClipSource('remote')" />
             Remote URL
           </label>
+          <label class="add-clip-source-option">
+            <input type="radio" name="add-clip-source" onchange="setAddClipSource('existing')" />
+            Existing clip
+          </label>
         </div>
         <div id="add-clip-local-section">
           <label class="menu-item clickable add-clip-option" for="audio-file-local">Choose local file...</label>
@@ -286,6 +305,16 @@
           <input type="text" id="audio-file-url" placeholder="https://example.com/audio-file.wav" />
           <button class="menu-item clickable add-clip-option" onclick="audioFileRemoteHandler()">
             Load remote file
+          </button>
+        </div>
+        <div id="add-clip-existing-section" class="add-clip-existing-option" style="display: none">
+          <div id="add-clip-existing-list"></div>
+          <button
+            id="add-clip-open-clip-manager-button"
+            class="menu-item clickable add-clip-manager-button"
+            type="button"
+          >
+            Manage clips...
           </button>
         </div>
       </div>
@@ -613,7 +642,15 @@
 
             <div class="export-option-row">
               <label for="flac-sample-rate">Sample Rate</label>
-              <input type="range" id="flac-sample-rate" value="48000" min="8000" max="655350" step="1" data-output-suffix=" Hz" />
+              <input
+                type="range"
+                id="flac-sample-rate"
+                value="48000"
+                min="8000"
+                max="655350"
+                step="1"
+                data-output-suffix=" Hz"
+              />
               <div class="slider-output-container">
                 <output class="slider-value">48000 Hz</output>
               </div>
@@ -665,7 +702,15 @@
 
             <div id="mp3-vbr-options" class="export-option-row" style="display: block" hidden>
               <label for="vbr-quality-slider">Quality (0 for best sound, 9 for smallest file)</label>
-              <input type="range" id="vbr-quality-slider" style="margin-top: 0.5rem" value="2" min="0" max="9" step="1" />
+              <input
+                type="range"
+                id="vbr-quality-slider"
+                style="margin-top: 0.5rem"
+                value="2"
+                min="0"
+                max="9"
+                step="1"
+              />
               <div class="slider-output-container">
                 <output class="slider-value">2</output>
               </div>
@@ -698,7 +743,15 @@
 
             <div class="export-option-row">
               <label for="opus-bitrate">Bitrate</label>
-              <input type="range" id="opus-bitrate" value="128000" min="1000" max="512000" step="1000" data-output-suffix=" bps" />
+              <input
+                type="range"
+                id="opus-bitrate"
+                value="128000"
+                min="1000"
+                max="512000"
+                step="1000"
+                data-output-suffix=" bps"
+              />
               <div class="slider-output-container">
                 <output class="slider-value">128000 bps</output>
               </div>
@@ -1063,9 +1116,9 @@
         </path>
       </g>
       <g id="three-dots" viewBox="0 0 500 500">
-        <ellipse style="fill: currentColor;" cx="250" cy="100" rx="50" ry="50"></ellipse>
-        <ellipse style="fill: currentColor;" cx="250" cy="250" rx="50" ry="50"></ellipse>
-        <ellipse style="fill: currentColor;" cx="250" cy="400" rx="50" ry="50"></ellipse>
+        <ellipse style="fill: currentColor" cx="250" cy="100" rx="50" ry="50"></ellipse>
+        <ellipse style="fill: currentColor" cx="250" cy="250" rx="50" ry="50"></ellipse>
+        <ellipse style="fill: currentColor" cx="250" cy="400" rx="50" ry="50"></ellipse>
       </g>
       <g id="logo" viewBox="0 0 600 100">
         <text
@@ -1089,7 +1142,15 @@
           SoundEtch
         </text>
       </g>
-      <g id="link-icon" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="3" stroke-linecap="round" stroke-linejoin="round">
+      <g
+        id="link-icon"
+        viewBox="0 0 24 24"
+        fill="none"
+        stroke="currentColor"
+        stroke-width="3"
+        stroke-linecap="round"
+        stroke-linejoin="round"
+      >
         <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>
         <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
       </g>

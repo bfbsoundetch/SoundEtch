@@ -21,6 +21,7 @@ import { ProcessingModalController } from './ui/ProcessingModalController.ts'
 import { ClipManagerController } from './ui/ClipManagerController.ts'
 import { ProjectModalController } from './ui/ProjectModalController.ts'
 import { MainMenuController } from './ui/MainMenuController.ts'
+import { AddClipController } from './ui/AddClipController.ts'
 
 window.AudioInputs = AudioInputs
 window.LocalMediaStreams = LocalMediaStreams
@@ -45,3 +46,4 @@ window.ProcessingModalController = ProcessingModalController
 window.ClipManagerController = ClipManagerController
 window.ProjectModalController = ProjectModalController
 window.MainMenuController = MainMenuController
+window.AddClipController = AddClipController

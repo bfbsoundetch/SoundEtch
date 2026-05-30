@@ -13,7 +13,7 @@ export class ClipManagerController {
     this.openButton.onclick = () => this.open()
   }
 
-  private async open() {
+  async open() {
     await this.refresh()
     document.getElementById('menu-dropdown')?.hidePopover()
     this.dialog.showModal()

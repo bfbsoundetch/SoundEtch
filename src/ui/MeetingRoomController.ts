@@ -252,6 +252,7 @@ export class MeetingRoomController {
     this.remoteMediaClient = new RemoteMediaClient3(username)
     this.remoteMediaClient.setRecordingActivity(this.localRecordingActivity)
     this.remoteMediaClient.addStateListener((state) => this.stateListener(state))
+    this.remoteMediaClient.addMessageListener((message) => NotificationsController.showLongDurationMessage(message.info))
     this.setUiForConnectedState()
     return true
   }

@@ -59,14 +59,18 @@ export class ProjectManager {
       if (ProjectManager.activeProject) {
         await this.populateSummaries(ProjectManager.activeProject)
       } else {
-        ProjectManager.activeProject = await DatabasePersister.save(new Project(ProjectManager.DEFAULT_PROJECT_TITLE, 48000))
+        ProjectManager.activeProject = await DatabasePersister.save(
+          new Project(ProjectManager.DEFAULT_PROJECT_TITLE, 48000),
+        )
         await DatabasePersister.setGlobalProperty(
           ProjectManager.ACTIVE_PROJECT_PROPERTY_NAME,
           ProjectManager.activeProject.id,
         )
       }
     } else {
-      ProjectManager.activeProject = await DatabasePersister.save(new Project(ProjectManager.DEFAULT_PROJECT_TITLE, 48000))
+      ProjectManager.activeProject = await DatabasePersister.save(
+        new Project(ProjectManager.DEFAULT_PROJECT_TITLE, 48000),
+      )
       await DatabasePersister.setGlobalProperty(
         ProjectManager.ACTIVE_PROJECT_PROPERTY_NAME,
         ProjectManager.activeProject.id,
@@ -77,7 +81,9 @@ export class ProjectManager {
 
   static async getProjects(): Promise<Project[]> {
     const projects = await DatabasePersister.getObjectsByRestorationName<Project>('Project')
-    return projects.sort((a, b) => (ProjectManager.getProjectModifiedDate(b) ?? 0) - (ProjectManager.getProjectModifiedDate(a) ?? 0))
+    return projects.sort(
+      (a, b) => (ProjectManager.getProjectModifiedDate(b) ?? 0) - (ProjectManager.getProjectModifiedDate(a) ?? 0),
+    )
   }
 
   static async createProject(title: string = 'Untitled Project', sampleRate = 48000): Promise<Project> {
@@ -97,7 +103,8 @@ export class ProjectManager {
   }
 
   static async openProject(projectOrId: Project | number): Promise<Project> {
-    const project = typeof projectOrId == 'number' ? await DatabasePersister.getObjectById<Project>(projectOrId) : projectOrId
+    const project =
+      typeof projectOrId == 'number' ? await DatabasePersister.getObjectById<Project>(projectOrId) : projectOrId
     if (!project) {
       throw new Error('Project not found')
     }
@@ -213,6 +220,17 @@ export class ProjectManager {
 
     await ProjectManager.saveTrack(track)
     await ProjectManager.addTrackToProject(track, index ?? activeProject.getTracks().length)
+    return track
+  }
+
+  static async addExistingClipWithTrack(clip: Clip, startPosition: number): Promise<Track> {
+    const activeProject = await this.getActiveProject()
+    const clipView = new ClipView(clip, 0, startPosition, 2 ** 31)
+    const track = new Track(`Clip: ${clip.name} ${activeProject.getTracks().length}`, clip.getChannelCount())
+    track.addClipView(clipView)
+
+    await ProjectManager.saveTrack(track)
+    await ProjectManager.addTrackToProject(track, activeProject.getTracks().length)
     return track
   }
 

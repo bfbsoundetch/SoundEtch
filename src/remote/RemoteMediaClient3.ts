@@ -67,7 +67,13 @@ export interface State {
   error: string | null
 }
 
+export type RemoteMediaClientMessage = {
+  type: 'info',
+  info: string,
+}
+
 export type StateListener = (state: State) => void
+export type MessageListener = (message: RemoteMediaClientMessage) => void
 
 class RemotePeerState {
   private pendingIceCandidates = new Array<RTCIceCandidateInit>()
@@ -103,6 +109,7 @@ export class RemoteMediaClient3 {
   private readonly remotePeerStates = new Map<string, RemotePeerState>()
   private readonly state: State = { members: new Array<Member>(), roomId: null, screenShare: null, error: null }
   private readonly stateListeners = new Array<StateListener>()
+  private readonly messageListeners = new Array<MessageListener>()
   private readonly initializedDataConnections = new Set<string>()
   private readonly openedDataConnections = new Set<string>()
   private readonly logger = new Logger('RemoteMediaClient')
@@ -194,8 +201,12 @@ export class RemoteMediaClient3 {
         case 'socket-closed':
         case 'unavailable-id':
         case 'webrtc':
-          this.state.error = error.message
-          this.notifyStateListeners()
+          if (this.connections.size > 0) {
+            this.notifyMessageListeners({type:'info', info:'Server disconnected, but the message'})
+          } else {
+            this.state.error = error.message
+            this.notifyStateListeners()
+          }
           break
       }
     })
@@ -235,6 +246,10 @@ export class RemoteMediaClient3 {
     this.currentRecordingActivity = recordingActivity
     this.currentCountdownStartedAtMs = recordingActivity.state === 'countdown' ? performance.now() : null
     this.sendRecordingActivity(this.getCurrentRecordingActivityForMessage())
+  }
+
+  addMessageListener(listener: MessageListener) {
+    this.messageListeners.push(listener)
   }
 
   addStateListener(listener: StateListener) {
@@ -418,6 +433,12 @@ export class RemoteMediaClient3 {
     this.peer.addListener('open', onOpen)
   }
 
+  private notifyMessageListeners(message: RemoteMediaClientMessage) {
+    for (let i = 0; i < this.messageListeners.length; ++i) {
+      this.messageListeners[i](message)
+    }
+  }
+
   private notifyStateListeners() {
     for (let i = 0; i < this.stateListeners.length; ++i) {
       this.stateListeners[i](this.state)
@@ -581,7 +602,7 @@ export class RemoteMediaClient3 {
       }
 
       if (trackEvent.track.kind === 'audio') {
-        await AudioInputs.maybeAddRemoteAudioSource(remoteId, isScreenShare, trackEvent.track)
+        await AudioInputs.maybeAddRemoteAudioSource(member.username, isScreenShare, trackEvent.track)
       }
       trackEvent.track.onended = () => removeTrack()
       trackEvent.streams.forEach((stream) => {

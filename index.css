@@ -457,7 +457,7 @@ dialog.overlay[open] {
   gap: 0.75rem;
   padding: 3.5rem 1rem 1rem;
   box-sizing: border-box;
-  width: min(90vw, 36rem);
+  width: min(90vw, 42rem);
   height: auto;
   max-height: 85vh;
 }
@@ -496,6 +496,52 @@ dialog.overlay[open] {
   flex-direction: column;
   gap: 0.5rem;
   padding: 0.75rem;
+}
+
+.add-clip-existing-option {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  max-height: min(50vh, 24rem);
+}
+
+#add-clip-existing-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+  overflow: auto;
+}
+
+.add-clip-existing-row {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.25rem;
+  padding: 0.75rem;
+  background-color: var(--alt-background);
+  font-size: 1rem;
+}
+
+.add-clip-existing-name {
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
+}
+
+.add-clip-existing-meta,
+.add-clip-existing-empty {
+  font-size: 0.9rem;
+  opacity: 0.85;
+}
+
+.add-clip-existing-empty {
+  margin: 0;
+}
+
+.add-clip-manager-button {
+  font-size: 1rem;
+  padding: 0.5rem 0.75rem;
+  text-align: center;
 }
 
 #audio-file-url {
