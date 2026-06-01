@@ -2,8 +2,10 @@
   "dependencies": {
     "@descript/web-audio-js": "^0.15.3-patched.6",
     "@huggingface/transformers": "^3.8.0",
+    "@mediabunny/aac-encoder": "^1.45.4",
     "@webaudiomodules/api": "^2.0.0-alpha.6",
     "file-system-access": "^1.0.4",
+    "mediabunny": "^1.45.4",
     "peerjs": "^1.5.5",
     "ringbuf.js": "^0.4.0",
     "wasm-audio-resampler": "^2.0.0",

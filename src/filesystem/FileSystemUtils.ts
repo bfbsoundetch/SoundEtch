@@ -40,6 +40,7 @@ export class FileSystemUtils {
         return
       }
       try {
+        console.error('removeEntry')
         await directory.removeEntry(fileName)
       } catch (error) {
         if (!FileSystemUtils.isNotFoundError(error)) {
@@ -84,6 +85,7 @@ export class FileSystemUtils {
     if (FileSystemUtils.hasOpfs()) {
       const rootDir = await navigator.storage.getDirectory()
       try {
+        console.error('removeEntry')
         await (rootDir as any).removeEntry(dirName, { recursive: true })
       } catch (error) {
         if (!FileSystemUtils.isNotFoundError(error)) {

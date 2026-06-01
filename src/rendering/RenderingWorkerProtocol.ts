@@ -37,8 +37,6 @@ export type TrackSubset = {
 }
 
 export type RenderingArgument = {
-  file: FileSystemFileHandle
-  encoderInfo: EncoderInfo
   projectId: number
   sampleRate: number
   channelCount: number

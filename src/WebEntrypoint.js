@@ -22,6 +22,7 @@ import { ClipManagerController } from './ui/ClipManagerController.ts'
 import { ProjectModalController } from './ui/ProjectModalController.ts'
 import { MainMenuController } from './ui/MainMenuController.ts'
 import { AddClipController } from './ui/AddClipController.ts'
+import { VideoRenderer } from './video/VideoRenderer.ts'
 
 window.AudioInputs = AudioInputs
 window.LocalMediaStreams = LocalMediaStreams
@@ -47,3 +48,4 @@ window.ClipManagerController = ClipManagerController
 window.ProjectModalController = ProjectModalController
 window.MainMenuController = MainMenuController
 window.AddClipController = AddClipController
+window.VideoRenderer = VideoRenderer

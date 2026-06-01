@@ -146,6 +146,11 @@ class ReadingOfflineProcessor {
     const output = audioProcessingEvent.outputBuffer
     let emitted = 0
     let clipView = this.clipViews[this.readingClipViewIndex]
+    if (!clipView) {
+      for (let channel = 0; channel < this.channelCount; ++channel) {
+        this.outputBuffers[channel].fill(0)
+      }
+    }
     while (emitted < output.length && clipView) {
       if (this.readPosition < clipView.startPosition) {
         const silenceSamples = Math.min(output.length, clipView.startPosition - this.readPosition)

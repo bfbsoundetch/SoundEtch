@@ -15,23 +15,31 @@ import {
 import { TrackListController } from './timeline/TrackListController'
 import { NotificationsController } from './NotificationsController'
 import { ProjectManager } from '../project/ProjectManager'
+import { VideoExportPresetName, VIDEO_EXPORT_PRESETS, VideoRenderer } from '../video/VideoRenderer'
 
 export class ExportProjectController {
   private readonly formatContainerMap = new Map<Format, HTMLDivElement>()
   private readonly mp3ModeContainerMap = new Map<Mp3Mode, HTMLDivElement>()
   private readonly formatSelect: HTMLSelectElement
+  private readonly advancedSection: HTMLElement
+  private readonly channelCountContainer: HTMLElement
   private readonly channelCountInputs: HTMLInputElement[]
   private readonly mp3ModeInputs: HTMLInputElement[]
+  private readonly videoPresetInputs: HTMLInputElement[]
 
   constructor() {
     this.formatSelect = document.getElementById('format') as HTMLSelectElement
+    this.advancedSection = document.querySelector('#export-project-modal .export-advanced-section') as HTMLElement
+    this.channelCountContainer = document.getElementById('channel-count-container') as HTMLElement
     this.channelCountInputs = Array.from(document.querySelectorAll('input[name="channel-count"]')) as HTMLInputElement[]
     this.mp3ModeInputs = Array.from(document.querySelectorAll('input[name="mp3-mode"]')) as HTMLInputElement[]
+    this.videoPresetInputs = Array.from(document.querySelectorAll('input[name="video-preset"]')) as HTMLInputElement[]
 
     this.formatContainerMap.set(Format.WAV, document.getElementById('wav-options-container') as HTMLDivElement)
     this.formatContainerMap.set(Format.FLAC, document.getElementById('flac-options-container') as HTMLDivElement)
     this.formatContainerMap.set(Format.MP3, document.getElementById('mp3-options-container') as HTMLDivElement)
     this.formatContainerMap.set(Format.OPUS, document.getElementById('opus-options-container') as HTMLDivElement)
+    this.formatContainerMap.set(Format.VIDEO, document.getElementById('video-options-container') as HTMLDivElement)
 
     this.mp3ModeContainerMap.set(Mp3Mode.CBR, document.getElementById('mp3-cbr-options') as HTMLDivElement)
     this.mp3ModeContainerMap.set(Mp3Mode.VBR, document.getElementById('mp3-vbr-options') as HTMLDivElement)
@@ -58,6 +66,8 @@ export class ExportProjectController {
     this.formatContainerMap.forEach((element, format) => {
       element.style.display = format === newFormat ? 'flex' : 'none'
     })
+    this.channelCountContainer.style.display = newFormat === Format.VIDEO ? 'none' : 'flex'
+    this.advancedSection.style.display = newFormat === Format.VIDEO ? 'none' : 'flex'
   }
 
   handleMp3ModeSwitch(newMode: Mp3Mode) {
@@ -73,6 +83,10 @@ export class ExportProjectController {
 
   private getSelectedChannelCount(): number {
     return Number(this.channelCountInputs.find((input) => input.checked)?.value ?? 1)
+  }
+
+  private getSelectedVideoPreset(): VideoExportPresetName {
+    return (this.videoPresetInputs.find((input) => input.checked)?.value as VideoExportPresetName | undefined) ?? 'youtube'
   }
 
   private initializeSliderOutputs() {
@@ -102,12 +116,35 @@ export class ExportProjectController {
   }
 
   async exportProject() {
+    if (this.formatSelect.value === Format.VIDEO) {
+      await this.exportVideoProject()
+      return
+    }
+
     const encoderInfo = this.createEncoderInfo()
     ;(document.getElementById('export-project-modal') as HTMLDialogElement).close()
     const selectedRegion = ((window as any).trackListController as TrackListController).selectedRegion
     ;(window as any).processingModalController?.show('Exporting project...', () => Renderer.cancelRender())
     try {
       await Renderer.exportProject(encoderInfo, selectedRegion)
+    } catch (e) {
+      NotificationsController.showError(e as Error)
+    } finally {
+      ;(window as any).processingModalController?.hide()
+    }
+  }
+
+  private async exportVideoProject() {
+    const presetName = this.getSelectedVideoPreset()
+    ;(document.getElementById('export-project-modal') as HTMLDialogElement).close()
+    const selectedRegion = ((window as any).trackListController as TrackListController).selectedRegion
+    const preset = VIDEO_EXPORT_PRESETS[presetName]
+    ;(window as any).processingModalController?.show(
+      `Exporting ${preset.label} video...`,
+      () => VideoRenderer.cancelExport(),
+    )
+    try {
+      await VideoRenderer.exportProject(presetName, selectedRegion)
     } catch (e) {
       NotificationsController.showError(e as Error)
     } finally {
@@ -173,6 +210,7 @@ enum Format {
   FLAC = 'flac',
   MP3 = 'mp3',
   OPUS = 'opus',
+  VIDEO = 'video',
 }
 
 enum Mp3Mode {

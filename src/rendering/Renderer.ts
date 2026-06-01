@@ -4,8 +4,9 @@ import { WorkerController } from '../audiocontext/WorkerController'
 import { ClipViewSubset } from '../playback/AudioFileReader'
 import { ProjectManager } from '../project/ProjectManager'
 import { EncoderInfo } from '../encoders/EncoderType'
-import { RenderingArgument, RenderingEncodingInitMessage, RenderingWorkerStartMessage } from './RenderingWorkerProtocol'
+import { RenderingEncodingInitMessage, RenderingWorkerStartMessage } from './RenderingWorkerProtocol'
 import { SelectedRegion } from 'playback/Player'
+import { createRenderingArgument } from './RenderingArgumentFactory'
 
 export class Renderer {
   private static readingWorkerController: WorkerController | null = null
@@ -44,36 +45,7 @@ export class Renderer {
     projectLength: number,
     ...tracks: Array<Track>
   ) {
-    const argument: RenderingArgument = {
-      file: file,
-      projectId: project.id!,
-      sampleRate: project.sampleRate,
-      channelCount: outputChannelCount,
-      startPosition: startPosition,
-      length: projectLength,
-      encoderInfo,
-      trackSubsets: tracks.map((track) => {
-        return {
-          name: track.name,
-          length: track.length,
-          channelCount: track.getChannelCount(),
-          clipViews: track.clipViews.map((clipView) => {
-            return {
-              startPosition: clipView.startPosition,
-              offset: clipView.offset,
-              length: clipView.length,
-              clip: {
-                id: clipView.clip.id!,
-                channelCount: clipView.clip.getChannelCount(),
-              },
-            }
-          }),
-          effects: track.getEffectRegions(),
-          gain: track.getGain(),
-          pan: track.getPan(),
-        }
-      }),
-    }
+    const argument = createRenderingArgument(project, outputChannelCount, startPosition, projectLength, tracks)
 
     const renderingWorker = new Worker('./assets/renderingWorker.js', { type: 'module' })
     const encodingWorker = new Worker(new URL('./RenderingEncodingWorker.ts', import.meta.url), { type: 'module' })

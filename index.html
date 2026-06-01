@@ -575,7 +575,7 @@
         </svg>
       </div>
       <div class="overlay-content">
-        <h1>Audio Export Settings</h1>
+        <h1>Export Settings</h1>
 
         <div class="form-group">
           <label for="format" style="">Export Format</label>
@@ -584,10 +584,11 @@
             <option value="flac">FLAC - Lossless Compression</option>
             <option value="mp3" selected>MP3 - Lossy Compression</option>
             <option value="opus">Opus - Modern Lossy Codec</option>
+            <option value="video">Video - MP4 Visualizer</option>
           </select>
         </div>
 
-        <div class="form-group">
+        <div id="channel-count-container" class="form-group">
           <div class="radio-group">
             <label>Channels</label>
             <div class="radio-option">
@@ -595,6 +596,20 @@
               <label for="channel-count-mono">Mono</label>
               <input type="radio" id="channel-count-stereo" name="channel-count" value="2" />
               <label for="channel-count-stereo">Stereo</label>
+            </div>
+          </div>
+        </div>
+
+        <div id="video-options-container" class="export-options-container">
+          <div class="export-option-row">
+            <div class="radio-group">
+              <label>Video Shape</label>
+              <div class="radio-option">
+                <input type="radio" id="video-preset-youtube" name="video-preset" value="youtube" checked />
+                <label for="video-preset-youtube">Hamburger - YouTube 1920x1080</label>
+                <input type="radio" id="video-preset-tiktok" name="video-preset" value="tiktok" />
+                <label for="video-preset-tiktok">Hotdog - TikTok 1080x1920</label>
+              </div>
             </div>
           </div>
         </div>
@@ -800,11 +815,8 @@
           </div>
         </details>
 
-        <button
-          class="menu-item clickable export-project-button"
-          onclick="window.exportProjectController.exportProject()"
-        >
-          Export Audio
+        <button class="menu-item clickable export-project-button" onclick="window.exportProjectController.exportProject()">
+          Export
         </button>
       </div>
     </dialog>

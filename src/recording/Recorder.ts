@@ -121,6 +121,7 @@ export class Recorder {
         Recorder.showImportCanceledNotification()
         return null
       }
+      NotificationsController.showErrorMessage('Import failed')
       throw error
     } finally {
       ;(window as any).processingModalController?.hide()
