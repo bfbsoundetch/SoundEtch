@@ -77,6 +77,7 @@ self.onmessage = async (e) => {
         }
       })
       .catch((error) => {
+        console.error(error)
         postMessage({ error: error instanceof Error ? error.message : String(error) })
       })
   }

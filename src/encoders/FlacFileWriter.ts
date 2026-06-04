@@ -4,9 +4,11 @@ import { FileSystemUtils } from '../filesystem/FileSystemUtils'
 import createModule, { MainModule } from './wasm/flac/flac_encoder'
 
 export class FlacFileWriter {
-  private readonly inputBufferSize = 32 * 1024
+  private readonly inputBufferSize = 256 * 1024
   private readonly inputBuffer: Float32Array
   private readonly int32BufferView: Int32Array
+  
+  private aaaaa = 0
 
   static async create(fileWritable: FileSystemWritableFileStream, flacEncoderInfo: FlacEncoderInfo) {
     const privateTmpFile = await ((await FileSystemUtils.getFileHandle('tmp', 'exportTmp.flac')) as any)
@@ -33,7 +35,8 @@ export class FlacFileWriter {
     this.int32BufferView = module.HEAP32.subarray(start, start + flacEncoderInfo.channelCount * this.inputBufferSize)
     let fileWritePosition = 0
     ;(globalThis as any).flacEncoderWriteCallback = function (bufferPointer: number, length: BigInt, samples: number) {
-      privateTmpFileSync.write(module.HEAPU8.slice(bufferPointer, bufferPointer + Number(length)))
+      console.error('fiwp', fileWritePosition)
+      privateTmpFileSync.write(module.HEAPU8.slice(bufferPointer, bufferPointer + Number(length)), { at: fileWritePosition })
       fileWritePosition += Number(length)
 
       return 0 // FLAC__STREAM_ENCODER_WRITE_STATUS_OK
@@ -62,14 +65,20 @@ export class FlacFileWriter {
   }
 
   async writeChunk(length: number) {
+    console.error('leng', length)
+    const start = Date.now()
     for (let i = 0; i < this.inputBuffer.length; ++i) {
       this.int32BufferView[i] = this.inputBuffer[i] * ((1 << (this.flacEncoderInfo.bitDepth - 1)) - 1)
     }
-    this.module._encode_chunk(length)
+
+    this.aaaaa += length
+    const result = this.module._encode_chunk(length)
+    console.error('dn', Date.now() - start, result, this.aaaaa)
   }
 
   async finish() {
     this.module._finish_encoding()
+    this.privateTmpFileSync.flush()
     this.privateTmpFileSync.close()
     await (await this.privateTmpFile.getFile()).stream().pipeTo(this.fileWritable)
     await FileSystemUtils.deleteFile('tmp', 'exportTmp.flac')

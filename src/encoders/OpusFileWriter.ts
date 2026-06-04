@@ -7,7 +7,7 @@ import createModule, { MainModule } from './wasm/opus/opus_encoder'
 // https://github.com/xiph/opus/blob/b5dc74f26ff9a9ef1f1af9a473b9ae07520eed7d/include/opus_defines.h
 
 export class OpusFileWriter {
-  private readonly inputBufferSize = 32 * 1024
+  private readonly inputBufferSize = 256 * 1024
   private readonly inputBuffer: Float32Array
 
   static async create(fileWritable: FileSystemWritableFileStream, flacEncoderInfo: OpusEncoderInfo) {
@@ -29,19 +29,20 @@ export class OpusFileWriter {
     private readonly privateTmpFile: FileSystemFileHandle,
     private readonly privateTmpFileSync: FileSystemSyncAccessHandle,
   ) {
-    const inputBufferPointer = module._get_input_buffer_pointer(opusEncoderInfo.channelCount, this.inputBufferSize)
-    const start = inputBufferPointer / Float32Array.BYTES_PER_ELEMENT
-    this.inputBuffer = module.HEAPF32.subarray(start, start + opusEncoderInfo.channelCount * this.inputBufferSize)
+    privateTmpFileSync.truncate(0)
+    let fileWritePosition = 0
     ;(globalThis as any).opusEncoderWriteCallback = function (
       userDataPointer: number,
       bufferPointer: number,
       length: number,
     ) {
-      privateTmpFileSync.write(module.HEAPU8.slice(bufferPointer, bufferPointer + length))
+      const bytes = module.HEAPU8.slice(bufferPointer, bufferPointer + length)
+      const written = privateTmpFileSync.write(bytes, { at: fileWritePosition })
+      fileWritePosition += written
 
-      return 0
+      return written === length ? 0 : 1
     }
-    ;(globalThis as any).opusEncoderCloseCallback = async function () {
+    ;(globalThis as any).opusEncoderCloseCallback = function () {
       return 0
     }
 
@@ -54,6 +55,10 @@ export class OpusFileWriter {
       opusEncoderInfo.bandwidth,
       opusEncoderInfo.application,
     )
+
+    const inputBufferPointer = module._get_input_buffer_pointer(opusEncoderInfo.channelCount, this.inputBufferSize)
+    const start = inputBufferPointer / Float32Array.BYTES_PER_ELEMENT
+    this.inputBuffer = module.HEAPF32.subarray(start, start + opusEncoderInfo.channelCount * this.inputBufferSize)
   }
 
   readonly inputSampleFormat = 'interleaved'
@@ -68,8 +73,9 @@ export class OpusFileWriter {
 
   async finish() {
     this.module._finalize_encoding()
+    this.privateTmpFileSync.flush()
     this.privateTmpFileSync.close()
     await (await this.privateTmpFile.getFile()).stream().pipeTo(this.fileWritable)
-    await FileSystemUtils.deleteFile('.', 'exportTmp.opus')
+    await FileSystemUtils.deleteFile('tmp', 'exportTmp.opus')
   }
 }

@@ -65,17 +65,19 @@ void create_encoder(int sample_rate, int channel_count, int bitrate,
     ope_encoder_ctl(enc, OPUS_SET_BITRATE(bitrate));
     ope_encoder_ctl(enc, OPUS_SET_COMPLEXITY(complexity));
     ope_encoder_ctl(enc, OPUS_SET_APPLICATION(application));
+    ope_encoder_ctl(enc, OPE_SET_COMMENT_PADDING(0));
     
     switch (bitrate_mode) {
         case VARIABLE:
-            ope_encoder_ctl(enc, OPUS_SET_VBR(0));
+            ope_encoder_ctl(enc, OPUS_SET_VBR(1));
+            ope_encoder_ctl(enc, OPUS_SET_VBR_CONSTRAINT(0));
             break;
         case CONSTANT:
-            ope_encoder_ctl(enc, OPUS_SET_VBR(1));
-            ope_encoder_ctl(enc, OPUS_SET_VBR_CONSTRAINT(1));
+            ope_encoder_ctl(enc, OPUS_SET_VBR(0));
             break;
         case CONSTRAINED:
             ope_encoder_ctl(enc, OPUS_SET_VBR(1));
+            ope_encoder_ctl(enc, OPUS_SET_VBR_CONSTRAINT(1));
             break;
     }
     
@@ -91,7 +93,7 @@ float* get_input_buffer_pointer(int channelCount, int inputBufferSize) {
 }
 
 EMSCRIPTEN_KEEPALIVE
-int encode_frame(int length) {    
+int encode_frame(int length) {
     return ope_encoder_write_float(enc, inputBuffer, length);
 }
 

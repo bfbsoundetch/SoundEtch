@@ -1,4 +1,5 @@
 import { FlacFileWriter } from './FlacFileWriter'
+import { MediabunnyOpusFileWriter } from './MediabunnyOpusFileWriter'
 import { Mp3FileWriter } from './Mp3FileWriter'
 import { OpusFileWriter } from './OpusFileWriter'
 import { WavFileWriter } from './WavFileWriter'
@@ -80,6 +81,7 @@ export async function encoderInforWritableStreamFactory(
       return new WavFileWriter(fileWritable, encoderInfo)
     case 'opus':
       return OpusFileWriter.create(fileWritable, encoderInfo)
+      // return MediabunnyOpusFileWriter.create(fileWritable, encoderInfo)
     case 'mp3':
       return Mp3FileWriter.create(fileWritable, encoderInfo)
     case 'flac':
