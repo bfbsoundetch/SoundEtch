@@ -35,7 +35,6 @@ export class FlacFileWriter {
     this.int32BufferView = module.HEAP32.subarray(start, start + flacEncoderInfo.channelCount * this.inputBufferSize)
     let fileWritePosition = 0
     ;(globalThis as any).flacEncoderWriteCallback = function (bufferPointer: number, length: BigInt, samples: number) {
-      console.error('fiwp', fileWritePosition)
       privateTmpFileSync.write(module.HEAPU8.slice(bufferPointer, bufferPointer + Number(length)), { at: fileWritePosition })
       fileWritePosition += Number(length)
 
@@ -65,15 +64,13 @@ export class FlacFileWriter {
   }
 
   async writeChunk(length: number) {
-    console.error('leng', length)
     const start = Date.now()
     for (let i = 0; i < this.inputBuffer.length; ++i) {
-      this.int32BufferView[i] = this.inputBuffer[i] * ((1 << (this.flacEncoderInfo.bitDepth - 1)) - 1)
+      this.int32BufferView[i] = Math.min(1, Math.max(-1, this.inputBuffer[i])) * ((1 << (this.flacEncoderInfo.bitDepth - 1)) - 1)
     }
 
     this.aaaaa += length
     const result = this.module._encode_chunk(length)
-    console.error('dn', Date.now() - start, result, this.aaaaa)
   }
 
   async finish() {
