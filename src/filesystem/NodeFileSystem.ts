@@ -8,7 +8,8 @@ export class NodeFileSystem {
 
   static async deleteFile(dirName: string, fileName: string) {
     const path = `${dirName}/${fileName}`
-    ;(await import('fs')).rmSync(path)
+    const fs = (await import('fs'))
+    fs.rmSync(path)
   }
 
   static async deleteDirectory(dirName: string) {

@@ -25,6 +25,7 @@ test('basic test', async () => {
     fillBuffer(inputBuffer, n)
     await flacFileWriter.writeChunk(inputBuffer.length)
   }
+  flacFileWriter.checkStatus()
   await flacFileWriter.finish()
 })
 
@@ -43,9 +44,10 @@ test('stereo test', async () => {
   const inputBuffer = flacFileWriter.getInputBuffer()
   for (let n = 0; n < 10; ++n) {
     fillBuffer(inputBuffer.subarray(0, inputBuffer.length / 2), n)
-    fillBuffer(inputBuffer.subarray(inputBuffer.length / 2), n + 1)
+    fillBuffer(inputBuffer.subarray(inputBuffer.length / 2), n - 2)
     await flacFileWriter.writeChunk(inputBuffer.length / 2)
   }
+  flacFileWriter.checkStatus()
   await flacFileWriter.finish()
 })
 

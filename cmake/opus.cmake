@@ -13,7 +13,7 @@ ExternalProject_Add(libopusenc
     GIT_REPOSITORY https://github.com/xiph/libopusenc.git
     CONFIGURE_COMMAND <SOURCE_DIR>/autogen.sh 
         COMMAND emconfigure <SOURCE_DIR>/configure 
-            CFLAGS=-I${opus_SOURCE_DIR}/include
+            CFLAGS=-I${opus_SOURCE_DIR}/include\ -O3\ -msimd128
             LDFLAGS=-L${opus_BINARY_DIR}
             --host=wasm32-unknown-wasi
             --prefix=<INSTALL_DIR> 

@@ -6,9 +6,17 @@
 #include <stdlib.h>
 #include <string.h>
 #include <emscripten.h>
+#include <math.h>
+#include <wasm_simd128.h>
 
 FLAC__StreamEncoder* encoder;
-const FLAC__int32** inputBufferPointerInternal;
+FLAC__int32** inputBufferPointerInternal;
+float** inputBufferFloatView;
+int channelCount;
+int floatToIntFactor;
+v128_t floatToIntSimd;
+v128_t maxV128;
+v128_t minV128;
 
 extern FLAC__StreamEncoderWriteStatus writeEncodedChunk(const FLAC__StreamEncoder *encoder,
                     const FLAC__byte buffer[], size_t bytes, uint32_t samples,
@@ -22,8 +30,29 @@ extern FLAC__StreamEncoderTellStatus tell(const FLAC__StreamEncoder *encoder,
 
 EMSCRIPTEN_KEEPALIVE
 void create_encoder(int bitsPerSample, int sampleRate,
-                                    int channelCount, int compressionLevel,
+                                    int chanCnt, int compressionLevel,
                                     char **metadata) {
+  #ifdef __wasm_simd128__
+    const float floatToIntArray[] = {
+      (1 << (bitsPerSample - 1)) - 1,
+      (1 << (bitsPerSample - 1)) - 1,
+      (1 << (bitsPerSample - 1)) - 1,
+      (1 << (bitsPerSample - 1)) - 1,
+    };
+    const float maxArray[] = {
+      1,1,1,1
+    };
+    const float minArray[] = {
+      -1,-1,-1,-1
+    };
+    floatToIntSimd = wasm_v128_load(floatToIntArray);
+    maxV128 = wasm_v128_load(maxArray);
+    minV128 = wasm_v128_load(minArray);
+  #else
+    floatToIntFactor = (1 << (bitsPerSample - 1)) - 1;
+  #endif
+  channelCount = chanCnt;
+
   FLAC__bool ok = true;
   encoder = FLAC__stream_encoder_new();
   if (encoder == NULL) {
@@ -49,7 +78,28 @@ void create_encoder(int bitsPerSample, int sampleRate,
 
 EMSCRIPTEN_KEEPALIVE
 char encode_chunk(uint32_t length) {
-  return FLAC__stream_encoder_process(encoder, inputBufferPointerInternal, length);
+  #ifdef __wasm_simd128__
+  for (int channel = 0; channel < channelCount; ++channel) {
+    for (int i = 0; i < length; i+=4) {
+      v128_t in = wasm_v128_load(inputBufferFloatView[channel] + i);
+      in = wasm_f32x4_max(in, minV128);
+      in = wasm_f32x4_min(in, maxV128);
+      v128_t outs = wasm_f32x4_mul(in, floatToIntSimd);
+      inputBufferPointerInternal[channel][i]   = (FLAC__int32) wasm_f32x4_extract_lane(outs, 0);
+      inputBufferPointerInternal[channel][i+1] = (FLAC__int32) wasm_f32x4_extract_lane(outs, 1);
+      inputBufferPointerInternal[channel][i+2] = (FLAC__int32) wasm_f32x4_extract_lane(outs, 2);
+      inputBufferPointerInternal[channel][i+3] = (FLAC__int32) wasm_f32x4_extract_lane(outs, 3);
+    }
+  }
+  #else
+  for (int channel = 0; channel < channelCount; ++channel) {
+    for (int i = 0; i < length; i++) {
+      inputBufferPointerInternal[channel][i] = (FLAC__int32) floatToIntFactor * (fmax(fmin(1, inputBufferFloatView[channel][i]),-1));
+    }
+  }
+  #endif
+  FLAC__stream_encoder_process(encoder, (const int *const *) inputBufferPointerInternal, length);
+  return 0;
 }
 
 EMSCRIPTEN_KEEPALIVE
@@ -61,8 +111,10 @@ EMSCRIPTEN_KEEPALIVE
 FLAC__int32* get_input_buffer_pointer(int channels, int size) {
   FLAC__int32* result = calloc(channels * size, sizeof(FLAC__int32));
   inputBufferPointerInternal = calloc(channels, sizeof(FLAC__int32*));
+  inputBufferFloatView = (float**) inputBufferPointerInternal;
   for (int i = 0; i < channels; ++i) {
     inputBufferPointerInternal[i] = result + i * size;
+    inputBufferFloatView[i] = (float*) inputBufferPointerInternal[i];
   }
   return result;
 }

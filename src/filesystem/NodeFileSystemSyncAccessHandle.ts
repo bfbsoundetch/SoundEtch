@@ -16,12 +16,11 @@ export class NodeFileSystemSyncAccessHandle implements FileSystemSyncAccessHandl
 
   static async create(path: string): Promise<NodeFileSystemSyncAccessHandle> {
     const fs = await import('fs')
-    // const fsPromises = await import('fs/promises')
     return new NodeFileSystemSyncAccessHandle(fs, null, path)
   }
 
   close(): void {
-    this.fs.close(this.fileDescriptor)
+    this.fs.closeSync(this.fileDescriptor)
   }
   flush(): void {
     this.fs.fsync(this.fileDescriptor, (exception: any) => {
@@ -65,8 +64,11 @@ export class NodeFileSystemSyncAccessHandle implements FileSystemSyncAccessHandl
   }
 
   async getFile(): Promise<File> {
-    const stream = (await this.fs.promises.open(this.name)).readableWebStream()
-    return { stream: () => stream } as any
+    const { Readable } = await import('stream')
+    return {
+      size: this.fs.statSync(this.name).size,
+      stream: () => Readable.toWeb(this.fs.createReadStream(this.name)),
+    } as any
   }
 
   readonly isFile = true
