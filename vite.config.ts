@@ -49,9 +49,7 @@ export default defineConfig({
           return 'assets/[name]-[hash].js'
         },
       },
-      external: [
-        '@huggingface/transformers', 
-      ],
+      external: ['@huggingface/transformers'],
     },
   },
   worker: {

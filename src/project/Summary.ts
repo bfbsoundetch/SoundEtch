@@ -130,11 +130,7 @@ export class Summary {
       if (channel == 0) {
         ++samplesRepresented
       }
-      if (
-        samplesRepresented % Summary.SAMPLES_PER_SUMMARY == 0 &&
-        samplesRepresented > 0 &&
-        channel == 0
-      ) {
+      if (samplesRepresented % Summary.SAMPLES_PER_SUMMARY == 0 && samplesRepresented > 0 && channel == 0) {
         this.writeValueToDisk(chunkPosition, chunkIndex)
         chunkPosition += 2 * this.channelCount
         if (chunkPosition >= this.chunkSize) {

@@ -76,7 +76,6 @@ export class Notification {
 }
 
 export class NotificationsController {
-
   private static instance: NotificationsController | null = null
 
   private static getInstance() {
@@ -127,7 +126,7 @@ export class NotificationsController {
         this.notifications[i].updateElement(this.htmlElements[i])
       }
     }
-    
+
     const notif = new Notification(this.htmlElements[0], message, level)
     this.notifications[0] = notif
     // put the notifications above any modals

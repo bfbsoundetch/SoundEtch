@@ -159,14 +159,14 @@ export class PointerStateManager extends TrackListItemController {
           break
       }
     }
-    
+
     const scrollListener = (event: WheelEvent) => {
       if (event.ctrlKey) {
-        (trackListController as any).zoom(event)
+        ;(trackListController as any).zoom(event)
         event.preventDefault()
         event.stopPropagation()
       } else if (event.deltaX) {
-        (trackListController as any).translate(event.deltaX)
+        ;(trackListController as any).translate(event.deltaX)
         event.preventDefault()
         event.stopPropagation()
       }

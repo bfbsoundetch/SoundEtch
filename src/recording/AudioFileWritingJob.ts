@@ -16,7 +16,9 @@ export class AudioFileWritingJob implements ControllableWorkerJob {
       const summary = new Summary(input.channelCount)
       Object.keys(input.clip.summary).forEach((key) => ((summary as any)[key] = input.clip.summary[key]))
       summary.setSyncFileHandle(await (summaryFileHandle as any).createSyncAccessHandle())
-      audioFileWriters.push(new AudioFileWriter(fileSyncHandle, summary, input.ringBufferArray, input.overrunSampleCount))
+      audioFileWriters.push(
+        new AudioFileWriter(fileSyncHandle, summary, input.ringBufferArray, input.overrunSampleCount),
+      )
     }
     return new AudioFileWritingJob(audioFileWriters)
   }
@@ -24,7 +26,7 @@ export class AudioFileWritingJob implements ControllableWorkerJob {
   async start(): Promise<any> {
     postMessage({ type: 'ready' })
     await Promise.allSettled(this.audioFileWriters.map((writer) => writer.runFileWritingLoop()))
-    postMessage({ type: 'finish'})
+    postMessage({ type: 'finish' })
   }
   pause(): void {
     this.audioFileWriters.forEach((w) => w.pause())

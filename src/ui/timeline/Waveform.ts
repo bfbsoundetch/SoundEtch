@@ -1,11 +1,11 @@
 import { Track } from '../../project/Track'
 import { ClipView, cloneClipViewWithNewStartPosition } from '../../project/ClipView'
-import { AudioControl, AudioState } from '../../audiocontext/AudioControl'
 import { TrackListItemController } from './TrackListItemController'
 import { TrackListController } from './TrackListController'
 import { ContextMenuController, ContextMenuItem } from '../../ui/ContextMenuController'
 import { SummaryGenerator } from '../../project/SummaryGenerator'
 import { ReplaceClipViewCommand, SetTrackClipViewsCommand, clipViewsEqual } from '../undo/UndoableActions'
+import { TimelineRegionController } from './TimelineRegionController'
 
 /** Handles displaying a track's waveform. */
 export class Waveform extends TrackListItemController {
@@ -13,17 +13,22 @@ export class Waveform extends TrackListItemController {
   private readonly PIXEL_RATIO = window.devicePixelRatio || 1
 
   topSvgElement: SVGSVGElement
-  private selection: {
-    rect: SVGRectElement
-    leftExpand: SVGLineElement
-    rightExpand: SVGLineElement
-  } | null = null
 
   private readonly clipViewControllerMap = new Map<ClipView, ClipViewController>()
   readonly effectRegionGroupElement = document.createElementNS('http://www.w3.org/2000/svg', 'g')
+  readonly topGroupElement = document.createElementNS('http://www.w3.org/2000/svg', 'g')
   readonly clipViewGroupElement = document.createElementNS('http://www.w3.org/2000/svg', 'g')
   private readonly axesPathElement = document.createElementNS('http://www.w3.org/2000/svg', 'path')
   private readonly channelSeparatorPathElement = document.createElementNS('http://www.w3.org/2000/svg', 'path')
+  private readonly selection = new TimelineRegionController(
+    -1,
+    -1,
+    this,
+    (event: PointerEvent) => this.trackListController.timelineSelectionContextMenu.draw(event.clientX, event.clientY),
+    (_) => this.trackListController.pointerStateManager.startResizingSelection(true),
+    (_) => this.trackListController.pointerStateManager.startResizingSelection(false),
+    this.trackListController,
+  )
   private readonly color: string
   width = 0
   private height = 0
@@ -32,78 +37,14 @@ export class Waveform extends TrackListItemController {
     return this.height
   }
 
-  drawSelection(lowSample: number, highSample: number) {
-    const highX = this.getXValueForSample(highSample)
-    if (highX < this.translation) {
-      this.removeSelection()
-    }
-    const lowX = this.getXValueForSample(lowSample)
-    if (!this.selection) {
-      this.selection = {
-        rect: document.createElementNS('http://www.w3.org/2000/svg', 'rect'),
-        leftExpand: document.createElementNS('http://www.w3.org/2000/svg', 'line'),
-        rightExpand: document.createElementNS('http://www.w3.org/2000/svg', 'line'),
-      }
-
-      this.selection.rect.setAttribute('y', '0')
-      this.selection.rect.setAttribute('height', `${this.height + Waveform.HEADER_HEIGHT}`)
-      this.selection.rect.setAttribute('x', `${lowX}`)
-      this.selection.rect.classList = 'waveform-selection'
-      this.selection.rect.addEventListener('mousedown', (event) => {
-        event.stopPropagation()
-      })
-      this.selection.rect.addEventListener('contextmenu', (event) => {
-        event.preventDefault()
-        this.trackListController.timelineSelectionContextMenu.draw(event.clientX, event.clientY)
-        event.stopPropagation()
-      })
-
-      this.selection.leftExpand.style.cursor = 'col-resize'
-      this.selection.leftExpand.style.strokeWidth = '10'
-      this.selection.leftExpand.style.strokeOpacity = '0'
-      this.selection.leftExpand.setAttribute('y1', '0')
-      this.selection.leftExpand.setAttribute('y2', `${this.height + Waveform.HEADER_HEIGHT}`)
-
-      this.selection.rightExpand.style.cursor = 'col-resize'
-      this.selection.rightExpand.style.strokeWidth = '10'
-      this.selection.rightExpand.style.strokeOpacity = '0'
-      this.selection.rightExpand.setAttribute('y1', '0')
-      this.selection.rightExpand.setAttribute('y2', `${this.height + Waveform.HEADER_HEIGHT}`)
-
-      this.selection.leftExpand.addEventListener('mousedown', (event) => {
-        if (event.buttons == 1 && event.button == 0) {
-          this.trackListController.pointerStateManager.startResizingSelection(true)
-          event.stopPropagation()
-        }
-      })
-
-      this.selection.rightExpand.addEventListener('mousedown', (event) => {
-        if (event.buttons == 1 && event.button == 0) {
-          this.trackListController.pointerStateManager.startResizingSelection(false)
-          event.stopPropagation()
-        }
-      })
-
-      this.clipViewGroupElement.appendChild(this.selection.rect)
-      this.clipViewGroupElement.appendChild(this.selection.leftExpand)
-      this.clipViewGroupElement.appendChild(this.selection.rightExpand)
-    }
-
-    this.selection.rect.setAttribute('x', `${lowX}`)
-    this.selection.rect.setAttribute('width', `${highX - lowX}`)
-
-    this.selection.leftExpand.setAttribute('x1', `${lowX}`)
-    this.selection.leftExpand.setAttribute('x2', `${lowX}`)
-
-    this.selection.rightExpand.setAttribute('x2', `${highX}`)
-    this.selection.rightExpand.setAttribute('x1', `${highX}`)
+  get fullHeight() {
+    return this.height + Waveform.HEADER_HEIGHT
   }
 
-  removeSelection() {
-    this.selection?.rect.remove()
-    this.selection?.leftExpand.remove()
-    this.selection?.rightExpand.remove()
-    this.selection = null
+  drawSelection(lowSample: number, highSample: number) {
+    const low = Math.min(lowSample, highSample)
+    const high = Math.max(lowSample, highSample)
+    this.selection.updateRange(low, high)
   }
 
   /**
@@ -131,6 +72,7 @@ export class Waveform extends TrackListItemController {
     })
 
     this.topSvgElement.appendChild(this.clipViewGroupElement)
+    this.topSvgElement.appendChild(this.topGroupElement)
     this.topSvgElement.appendChild(this.effectRegionGroupElement)
 
     this.axesPathElement.style.strokeWidth = '2'
@@ -179,6 +121,7 @@ export class Waveform extends TrackListItemController {
     this.width = this.div.clientWidth
     this.height = Math.max(0, this.div.clientHeight - Waveform.HEADER_HEIGHT)
     this.topSvgElement.setAttribute('viewBox', `0 0 ${this.width} ${this.height + Waveform.HEADER_HEIGHT}`)
+    this.selection.resize()
   }
 
   private drawAxes() {
@@ -206,64 +149,9 @@ export class Waveform extends TrackListItemController {
     if (!displayedEffect) {
       return
     }
-    const laneY = Waveform.HEADER_HEIGHT
-    const laneHeight = this.height
-    const barY = laneY
-    const barHeight = laneHeight
-    if (laneHeight <= 0) {
-      return
-    }
-
-    const laneBackground = document.createElementNS('http://www.w3.org/2000/svg', 'rect')
-    laneBackground.setAttribute('x', '0')
-    laneBackground.setAttribute('y', `${laneY}`)
-    laneBackground.setAttribute('width', `${this.width}`)
-    laneBackground.setAttribute('height', `${laneHeight}`)
-    laneBackground.classList.add('waveform-effect-lane')
-    this.effectRegionGroupElement.appendChild(laneBackground)
 
     for (const effectRegion of this.track.getEffectRegions(displayedEffect)) {
-      const startX = this.getXValueForSample(effectRegion.startSample)
-      const endX = this.getXValueForSample(effectRegion.startSample + effectRegion.length)
-      const clampedStartX = Math.max(0, startX)
-      const clampedEndX = Math.min(this.width, endX)
-      if (clampedEndX <= 0 || clampedStartX >= this.width || clampedEndX <= clampedStartX) {
-        continue
-      }
-      const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect')
-      rect.setAttribute('x', `${clampedStartX}`)
-      rect.setAttribute('y', `${barY}`)
-      rect.setAttribute('width', `${clampedEndX - clampedStartX}`)
-      rect.setAttribute('height', `${barHeight}`)
-      rect.classList.add('waveform-effect-region')
-      rect.addEventListener('mousedown', (event) => {
-        event.preventDefault()
-        event.stopPropagation()
-      })
-      rect.addEventListener('mouseup', (event) => {
-        event.preventDefault()
-        event.stopPropagation()
-      })
-      rect.addEventListener('click', (event) => {
-        event.preventDefault()
-        event.stopPropagation()
-        this.trackListController.openEffectRegion(this.track, effectRegion.id)
-      })
-      this.effectRegionGroupElement.appendChild(rect)
-
-      this.effectRegionGroupElement.appendChild(this.createEffectRegionBoundaryLine(clampedStartX, laneY, laneHeight))
-      this.effectRegionGroupElement.appendChild(this.createEffectRegionBoundaryLine(clampedEndX, laneY, laneHeight))
     }
-  }
-
-  private createEffectRegionBoundaryLine(x: number, y: number, height: number) {
-    const line = document.createElementNS('http://www.w3.org/2000/svg', 'line')
-    line.setAttribute('x1', `${x}`)
-    line.setAttribute('x2', `${x}`)
-    line.setAttribute('y1', `${y}`)
-    line.setAttribute('y2', `${y + height}`)
-    line.classList.add('waveform-effect-region-boundary')
-    return line
   }
 
   removeClipViewController(controller: ClipViewController) {

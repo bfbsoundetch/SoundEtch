@@ -8,7 +8,10 @@ export class SimpleAnalyzerProcessor extends AudioWorkletProcessor {
     this.rmsOutput = processorOptions.rmsOutput
 
     this.updateSampleCount = Math.max(1, Math.round(processorOptions.updateSampleCount ?? (100 * sampleRate) / 1000))
-    this.holdSampleCount = Math.max(this.updateSampleCount, Math.round(processorOptions.holdSampleCount ?? 1.5 * sampleRate))
+    this.holdSampleCount = Math.max(
+      this.updateSampleCount,
+      Math.round(processorOptions.holdSampleCount ?? 1.5 * sampleRate),
+    )
     this.rmsWindow = Math.max(1, Math.round(((processorOptions.rmsWindow ?? 400) * sampleRate) / 1000))
 
     this.samplesUntilUpdate = this.updateSampleCount

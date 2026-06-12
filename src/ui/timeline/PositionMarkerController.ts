@@ -8,16 +8,20 @@ export class PositionMarkerController extends TrackListItemController {
   private readonly positionLineSvg = document.getElementById('position-line') as unknown as SVGLineElement
   private readonly positionTimeText = document.getElementById('pointer-position-text') as unknown as SVGTextElement
 
-  public x = 0 
+  public x = 0
 
   constructor(trackListController: TrackListController) {
     super(trackListController)
-    this.positionLineSvg.addEventListener('mousedown', (event) => {
-      if (event.buttons == 1 && event.button == 0) {
-        this.trackListController.pointerStateManager.startMovingMark()
-        event.preventDefault()
-      }
-    }, {passive: false})
+    this.positionLineSvg.addEventListener(
+      'mousedown',
+      (event) => {
+        if (event.buttons == 1 && event.button == 0) {
+          this.trackListController.pointerStateManager.startMovingMark()
+          event.preventDefault()
+        }
+      },
+      { passive: false },
+    )
 
     this.resize()
   }

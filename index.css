@@ -1126,29 +1126,6 @@ video {
   font-weight: bold;
 }
 
-.waveform-effect-lane {
-  fill: rgba(255, 153, 0, 0.06);
-  stroke: rgba(255, 153, 0, 0.85);
-  stroke-width: 1;
-}
-
-.waveform-effect-region {
-  fill: rgba(255, 153, 0, 0.22);
-  stroke: rgba(255, 153, 0, 0.35);
-  stroke-width: 1;
-  cursor: pointer;
-}
-
-.waveform-effect-region-boundary {
-  stroke: var(--color);
-  stroke-width: 2;
-  pointer-events: none;
-}
-
-.waveform-effect-region:hover {
-  filter: brightness(1.15);
-}
-
 .waveform-rect {
   fill: rgba(0, 0, 0, 0.1);
   stroke: none;

@@ -33,7 +33,7 @@ export class AudioInputs {
       }
       AudioInputs.notifyListeners()
     })
-    AudioControl.addAudioControlListener(async state => {
+    AudioControl.addAudioControlListener(async (state) => {
       const inputs = this.gatherActiveAudioInputs()
       if (inputs.length == 0) {
         return

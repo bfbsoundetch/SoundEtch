@@ -36,7 +36,6 @@ export class TimelineController extends TrackListItemController {
 
   private readonly mainLine = document.createElementNS('http://www.w3.org/2000/svg', 'line')
 
-
   constructor(trackListController: TrackListController) {
     super(trackListController)
 
@@ -205,10 +204,15 @@ export class TimelineController extends TrackListItemController {
       true,
     )
 
-    const labelPush = Math.max(0, 
-      (Number(this.selection.rightLabel.getBoundingClientRect().width) + 
-      Number(this.selection.leftLabel.getBoundingClientRect().width)) * 
-      1.1 / 2 - (endX - startX)) / 2
+    const labelPush =
+      Math.max(
+        0,
+        ((Number(this.selection.rightLabel.getBoundingClientRect().width) +
+          Number(this.selection.leftLabel.getBoundingClientRect().width)) *
+          1.1) /
+          2 -
+          (endX - startX),
+      ) / 2
 
     this.selection.leftLabel.setAttribute('x', `${startX - labelPush}`)
     this.selection.rightLabel.setAttribute('x', `${endX + labelPush}`)

@@ -47,15 +47,13 @@ export class ProjectModalController {
     }
 
     await Promise.all(
-      projects.map((project) => this.appendProjectRow(project, project.id == activeProject.id, project.id == projectIdToEdit)),
+      projects.map((project) =>
+        this.appendProjectRow(project, project.id == activeProject.id, project.id == projectIdToEdit),
+      ),
     )
   }
 
-  private async appendProjectRow(
-    project: Project,
-    isActiveProject: boolean,
-    editImmediately: boolean,
-  ) {
+  private async appendProjectRow(project: Project, isActiveProject: boolean, editImmediately: boolean) {
     const row = document.createElement('div')
     row.className = isActiveProject ? 'project-manager-row project-manager-row-active' : 'project-manager-row'
 

@@ -9,7 +9,7 @@ export class InputListController {
   readonly inputControllers = new Map<string, AudioInputController>()
 
   constructor() {
-    AudioControl.addAudioControlListener(state => {
+    AudioControl.addAudioControlListener((state) => {
       switch (state) {
         case AudioState.PLAYING:
         case AudioState.RECORDING:

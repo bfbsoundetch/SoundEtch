@@ -6,7 +6,7 @@ import createModule, { MainModule } from './wasm/flac/flac_encoder'
 export class FlacFileWriter {
   private readonly inputBufferSize = 256 * 1024
   private readonly inputBuffer: Float32Array
-  
+
   static async create(fileWritable: FileSystemWritableFileStream, flacEncoderInfo: FlacEncoderInfo) {
     const tmpFileName = `${Date.now()}.flac`
     const privateTmpFile = await ((await FileSystemUtils.getFileHandle('tmp', tmpFileName)) as any)
@@ -32,7 +32,9 @@ export class FlacFileWriter {
     this.inputBuffer = module.HEAPF32.subarray(start, start + flacEncoderInfo.channelCount * this.inputBufferSize)
     let fileWritePosition = 0
     ;(globalThis as any).flacEncoderWriteCallback = function (bufferPointer: number, length: BigInt, samples: number) {
-      privateTmpFileSync.write(module.HEAPU8.slice(bufferPointer, bufferPointer + Number(length)), { at: fileWritePosition })
+      privateTmpFileSync.write(module.HEAPU8.slice(bufferPointer, bufferPointer + Number(length)), {
+        at: fileWritePosition,
+      })
       fileWritePosition += Number(length)
 
       return 0 // FLAC__STREAM_ENCODER_WRITE_STATUS_OK

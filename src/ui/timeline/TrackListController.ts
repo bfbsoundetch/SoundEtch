@@ -326,7 +326,7 @@ export class TrackListController {
     this.selection = null
     this.draggedFirstWaveform = null
     this.timelineController.removeSelection()
-    this.waveforms.forEach((w) => w.removeSelection())
+    this.waveforms.forEach((w) => w.drawSelection(-1, -1))
   }
 
   getDisplayedEffectForTrack(track: Track): EffectType | null {
@@ -421,7 +421,7 @@ export class TrackListController {
     const endSample = Math.max(this.selection!.startSample, this.selection!.endSample)
     this.timelineController.drawSelection(startSample, endSample)
     this.waveforms.forEach((w) =>
-      this.selection?.waveforms.has(w) ? w.drawSelection(startSample, endSample) : w.removeSelection(),
+      this.selection?.waveforms.has(w) ? w.drawSelection(startSample, endSample) : w.drawSelection(-1, -1),
     )
   }
 

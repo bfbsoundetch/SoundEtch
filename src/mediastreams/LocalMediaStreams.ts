@@ -20,12 +20,15 @@ export class LocalMediaStreams {
         noiseSuppression: false,
         voiceIsolation: true,
         echoCancellation: true,
-      } as MediaTrackConstraints // VS Code doesn't recognize voiceIsolation
+      } as MediaTrackConstraints, // VS Code doesn't recognize voiceIsolation
     })
     console.debug(
-      'Got mic with capabilities:', JSON.stringify(mediaStream.getAudioTracks()[0].getCapabilities()),
-      'and constraints:', JSON.stringify(mediaStream.getAudioTracks()[0].getConstraints()),
-      ' and settings:', JSON.stringify(mediaStream.getAudioTracks()[0].getSettings()),
+      'Got mic with capabilities:',
+      JSON.stringify(mediaStream.getAudioTracks()[0].getCapabilities()),
+      'and constraints:',
+      JSON.stringify(mediaStream.getAudioTracks()[0].getConstraints()),
+      ' and settings:',
+      JSON.stringify(mediaStream.getAudioTracks()[0].getSettings()),
     )
     mediaStream.getAudioTracks().forEach((track) => {
       track.onended = (_) => {
@@ -91,7 +94,7 @@ export class LocalMediaStreams {
         sampleSize: 32,
       },
     })
-    mediaStream.getTracks().forEach(track => LocalMediaStreams.localScreenMediaStream.addTrack(track))
+    mediaStream.getTracks().forEach((track) => LocalMediaStreams.localScreenMediaStream.addTrack(track))
     // The video stream needs to stay open the entire time it's capturing audio.
     mediaStream.getTracks().forEach((track) => {
       track.onended = (_) => {

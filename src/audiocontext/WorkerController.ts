@@ -16,7 +16,13 @@ export class WorkerController {
       type: 'module',
     })
     this.worker.addEventListener('message', async (event) => {
-      this.logger.debug('worker sent {' + Object.keys(event.data).map(k => `${k}: ${JSON.stringify(event.data[k]).substring(0, 100)}`).join('\n') + '}')
+      this.logger.debug(
+        'worker sent {' +
+          Object.keys(event.data)
+            .map((k) => `${k}: ${JSON.stringify(event.data[k]).substring(0, 100)}`)
+            .join('\n') +
+          '}',
+      )
       switch (event.data.type) {
         case 'finished':
           this.finish()
@@ -51,19 +57,18 @@ export class WorkerController {
     let finishedNodes = 0
     const context = audioWorkletNodes[0]!.context as AudioContext
     audioWorkletNodes.forEach((node) => {
-        node.port.onmessage = (e) => {
-          if (e.data.type == 'finished') {
-            if (++finishedNodes == audioWorkletNodes.length) {
-              context.close()
-            }
+      node.port.onmessage = (e) => {
+        if (e.data.type == 'finished') {
+          if (++finishedNodes == audioWorkletNodes.length) {
+            context.close()
           }
         }
-        node.addEventListener('processorerror', (e) => {
-          this.logger.errorMessage(e.error?.toString?.() ?? String(e.error))
-          ;(audioContext as any)?.close?.() ?? (audioContext as any)?.suspend()
-        })
       }
-    )
+      node.addEventListener('processorerror', (e) => {
+        this.logger.errorMessage(e.error?.toString?.() ?? String(e.error))
+        ;(audioContext as any)?.close?.() ?? (audioContext as any)?.suspend()
+      })
+    })
     context.addEventListener('statechange', () => {
       this.logger.debug('Audio context state is now ' + context.state)
       switch (context.state) {
@@ -79,7 +84,7 @@ export class WorkerController {
       }
     })
   }
-  
+
   finish() {
     this.logger.debug('Worker is finished.')
     this.audioWorkletNodes.forEach((node) => {

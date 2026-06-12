@@ -1,4 +1,4 @@
-import { Logger } from "../global/Logger"
+import { Logger } from '../global/Logger'
 
 export enum Direction {
   UP,
@@ -12,7 +12,10 @@ export class ErrorBubbleController {
   private timeout: number | null = null
   private readonly logger: Logger
 
-  constructor(label: string, private readonly parentDiv: HTMLElement) {
+  constructor(
+    label: string,
+    private readonly parentDiv: HTMLElement,
+  ) {
     this.errorSpan = document.createElement('span')
     this.errorSpan.className = 'error-span'
     this.errorSpan.style.opacity = '0'

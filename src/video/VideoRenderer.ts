@@ -99,7 +99,14 @@ export class VideoRenderer {
 
     try {
       VideoRenderer.setProcessingProgress(0.01)
-      const visualData = await VideoRenderer.createVisualData(project, startPosition, projectLength, tracks, preset, signal)
+      const visualData = await VideoRenderer.createVisualData(
+        project,
+        startPosition,
+        projectLength,
+        tracks,
+        preset,
+        signal,
+      )
       VideoRenderer.setProcessingProgress(0.05)
 
       const channelCount = VideoRenderer.getOutputChannelCount(tracks)
@@ -155,10 +162,19 @@ export class VideoRenderer {
           audioProgress = progress
           updateProgress()
         }),
-        VideoRenderer.renderVideoFrames(project, preset, visualData, videoSource, context, projectLength, signal, (progress) => {
-          videoProgress = progress
-          updateProgress()
-        }),
+        VideoRenderer.renderVideoFrames(
+          project,
+          preset,
+          visualData,
+          videoSource,
+          context,
+          projectLength,
+          signal,
+          (progress) => {
+            videoProgress = progress
+            updateProgress()
+          },
+        ),
       ])
 
       VideoRenderer.throwIfAborted(signal)
@@ -590,9 +606,7 @@ export class VideoRenderer {
 
       context.beginPath()
       context.roundRect(x, y - rowHeight * 0.45, pillWidth, rowHeight * 0.9, radius)
-      context.fillStyle = isLoudest
-        ? `rgba(34, 211, 238, ${0.22 + amplitude * 0.5})`
-        : 'rgba(15, 23, 42, 0.36)'
+      context.fillStyle = isLoudest ? `rgba(34, 211, 238, ${0.22 + amplitude * 0.5})` : 'rgba(15, 23, 42, 0.36)'
       context.fill()
 
       if (isLoudest) {

@@ -86,7 +86,9 @@ export class ExportProjectController {
   }
 
   private getSelectedVideoPreset(): VideoExportPresetName {
-    return (this.videoPresetInputs.find((input) => input.checked)?.value as VideoExportPresetName | undefined) ?? 'youtube'
+    return (
+      (this.videoPresetInputs.find((input) => input.checked)?.value as VideoExportPresetName | undefined) ?? 'youtube'
+    )
   }
 
   private initializeSliderOutputs() {
@@ -139,9 +141,8 @@ export class ExportProjectController {
     ;(document.getElementById('export-project-modal') as HTMLDialogElement).close()
     const selectedRegion = ((window as any).trackListController as TrackListController).selectedRegion
     const preset = VIDEO_EXPORT_PRESETS[presetName]
-    ;(window as any).processingModalController?.show(
-      `Exporting ${preset.label} video...`,
-      () => VideoRenderer.cancelExport(),
+    ;(window as any).processingModalController?.show(`Exporting ${preset.label} video...`, () =>
+      VideoRenderer.cancelExport(),
     )
     try {
       await VideoRenderer.exportProject(presetName, selectedRegion)

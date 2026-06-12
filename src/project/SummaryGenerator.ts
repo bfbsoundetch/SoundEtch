@@ -49,7 +49,11 @@ class ClipSummarizer {
     }
 
     // prewarm to reduce laggy transitions from summary to raw file
-    if (!isRecordingState(AudioControl.getState()) && skip > Summary.SAMPLES_PER_SUMMARY && skip < Summary.SAMPLES_PER_SUMMARY * 1.2) {
+    if (
+      !isRecordingState(AudioControl.getState()) &&
+      skip > Summary.SAMPLES_PER_SUMMARY &&
+      skip < Summary.SAMPLES_PER_SUMMARY * 1.2
+    ) {
       this.warmFileCache(startPosition, endPosition)
     }
 

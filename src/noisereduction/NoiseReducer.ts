@@ -54,11 +54,11 @@ export class NoiseReducer {
           break
         }
         case 'running':
-          this.worker?.postMessage({ 
+          this.worker?.postMessage({
             type: 'resume',
             rawSab: rawSab,
             denoisedSab: denoisedSab,
-           })
+          })
           break
       }
     })
