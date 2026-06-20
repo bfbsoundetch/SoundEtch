@@ -6,6 +6,7 @@ import { ContextMenuController, ContextMenuItem } from '../../ui/ContextMenuCont
 import { SummaryGenerator } from '../../project/SummaryGenerator'
 import { ReplaceClipViewCommand, SetTrackClipViewsCommand, clipViewsEqual } from '../undo/UndoableActions'
 import { TimelineRegionController } from './TimelineRegionController'
+import { Effect as EffectRegion, EffectType } from 'effects/Effects'
 
 /** Handles displaying a track's waveform. */
 export class Waveform extends TrackListItemController {
@@ -20,15 +21,8 @@ export class Waveform extends TrackListItemController {
   readonly clipViewGroupElement = document.createElementNS('http://www.w3.org/2000/svg', 'g')
   private readonly axesPathElement = document.createElementNS('http://www.w3.org/2000/svg', 'path')
   private readonly channelSeparatorPathElement = document.createElementNS('http://www.w3.org/2000/svg', 'path')
-  private readonly selection = new TimelineRegionController(
-    -1,
-    -1,
-    this,
-    (event: PointerEvent) => this.trackListController.timelineSelectionContextMenu.draw(event.clientX, event.clientY),
-    (_) => this.trackListController.pointerStateManager.startResizingSelection(true),
-    (_) => this.trackListController.pointerStateManager.startResizingSelection(false),
-    this.trackListController,
-  )
+  private effectShown: EffectType | null = null
+  private effectRegions = new Map<EffectRegion, TimelineRegionController>()
   private readonly color: string
   width = 0
   private height = 0
@@ -39,12 +33,6 @@ export class Waveform extends TrackListItemController {
 
   get fullHeight() {
     return this.height + Waveform.HEADER_HEIGHT
-  }
-
-  drawSelection(lowSample: number, highSample: number) {
-    const low = Math.min(lowSample, highSample)
-    const high = Math.max(lowSample, highSample)
-    this.selection.updateRange(low, high)
   }
 
   /**
@@ -121,7 +109,6 @@ export class Waveform extends TrackListItemController {
     this.width = this.div.clientWidth
     this.height = Math.max(0, this.div.clientHeight - Waveform.HEADER_HEIGHT)
     this.topSvgElement.setAttribute('viewBox', `0 0 ${this.width} ${this.height + Waveform.HEADER_HEIGHT}`)
-    this.selection.resize()
   }
 
   private drawAxes() {
@@ -144,14 +131,32 @@ export class Waveform extends TrackListItemController {
   }
 
   private drawEffectRegions() {
-    this.effectRegionGroupElement.replaceChildren()
+    const lowSample = this.getSampleForXValue(0)
+    const highSample = this.getSampleForXValue(this.width)
     const displayedEffect = this.trackListController.getDisplayedEffectForTrack(this.track)
     if (!displayedEffect) {
       return
     }
 
-    for (const effectRegion of this.track.getEffectRegions(displayedEffect)) {
-    }
+    const effectRegions = new Set(this.track.getEffectRegions(displayedEffect))
+    this.effectRegions.forEach((value, key) => {
+      if (!effectRegions.has(key)) {
+        value.remove()
+        this.effectRegions.delete(key)
+      } else {
+        value.draw()
+        effectRegions.delete(key)
+      }
+    })
+    effectRegions.forEach(effectRegion => {
+      const controller = new TimelineRegionController(
+        true,
+        () => {},
+        () => {}, 
+        this.trackListController
+      )
+      this.effectRegions.set(effectRegion, controller)
+    })
   }
 
   removeClipViewController(controller: ClipViewController) {
@@ -270,7 +275,7 @@ export class ClipViewController extends TrackListItemController {
     this.rectElement.classList = 'waveform-rect'
     this.rectElement.style.fill = color
     this.rectElement.addEventListener('dblclick', (event) => {
-      trackListController.setSelection(clipView.startPosition, clipView.getEndPosition(), new Set([this.waveform]))
+      trackListController.selectClipView(clipView, this.waveform)
       event.stopPropagation()
     })
 

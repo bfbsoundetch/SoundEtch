@@ -1158,7 +1158,7 @@ video {
   opacity: 1;
 }
 
-.effect-panel {
+.bottom-panel {
   position: fixed;
   left: 0;
   right: 0;
@@ -1175,16 +1175,16 @@ video {
   grid-template-rows: auto 1fr;
 }
 
-.effect-panel.open {
+.bottom-panel.open {
   transform: translateY(0);
 }
 
-.effect-panel-header,
-.effect-panel-body {
+.bottom-panel-header,
+.bottom-panel-body {
   box-sizing: border-box;
 }
 
-.effect-panel-header {
+.bottom-panel-header {
   display: flex;
   align-items: center;
   justify-content: space-between;
@@ -1195,20 +1195,20 @@ video {
   padding: 0 0 0 1.25rem;
 }
 
-.effect-panel-header h2 {
+.bottom-panel-header h2 {
   margin: 0;
   font-size: 1.75rem;
   font-variant: small-caps;
   letter-spacing: 0.12rem;
 }
 
-.effect-panel-heading {
+.bottom-panel-heading {
   display: grid;
   gap: 0.25rem;
   min-width: 0;
 }
 
-.effect-panel-subtitle {
+.bottom-panel-subtitle {
   font-family: 'Courier New', Courier, monospace;
   font-size: 0.9rem;
   opacity: 0.85;
@@ -1217,33 +1217,33 @@ video {
   white-space: nowrap;
 }
 
-.effect-panel-body {
+.bottom-panel-body {
   display: flex;
   flex-direction: column;
   gap: 1rem;
   padding: 1.25rem;
 }
 
-.effect-panel-actions {
+.bottom-panel-actions {
   display: flex;
   gap: 0.75rem;
   padding: 0 1.25rem 1.25rem;
   box-sizing: border-box;
 }
 
-.effect-panel-control-group {
+.bottom-panel-control-group {
   display: flex;
   flex-direction: column;
   gap: 0.75rem;
   max-width: min(32rem, 100%);
 }
 
-.effect-panel-control-group input[type='range'] {
+.bottom-panel-control-group input[type='range'] {
   width: 100%;
   margin: 0;
 }
 
-.effect-panel-value-output {
+.bottom-panel-value-output {
   position: static;
   transform: none;
   left: auto;
@@ -1252,7 +1252,7 @@ video {
   width: fit-content;
 }
 
-.effect-panel-close {
+.bottom-panel-close {
   display: grid;
   place-items: center;
   align-self: stretch;
@@ -1260,12 +1260,12 @@ video {
   border-left: 1px solid var(--color);
 }
 
-.effect-panel-close svg {
+.bottom-panel-close svg {
   width: 55%;
   height: 55%;
 }
 
-.effect-panel-delete {
+.bottom-panel-delete {
   width: fit-content;
   border: 1px solid;
   background: var(--alt-background);

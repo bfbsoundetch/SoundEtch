@@ -5,15 +5,15 @@ describe('replaceEffectRegion', () => {
     const existing: Effect[] = [
       {
         id: 'left',
-        effect: 'gain',
-        startSample: 10,
+        type: 'gain',
+        startPosition: 10,
         length: 20,
         value: -6,
       },
       {
         id: 'right',
-        effect: 'gain',
-        startSample: 40,
+        type: 'gain',
+        startPosition: 40,
         length: 20,
         value: 3,
       },
@@ -56,8 +56,8 @@ describe('replaceEffectRegion', () => {
     const existing: Effect[] = [
       {
         id: 'first',
-        effect: 'gain',
-        startSample: 0,
+        type: 'gain',
+        startPosition: 0,
         length: 10,
         value: -3,
       },

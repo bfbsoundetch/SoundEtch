@@ -10,7 +10,7 @@ export type UndoableAction =
   | ReplaceClipViewCommand
   | MoveClipViewBetweenTracksCommand
   | SetTrackClipViewsCommand
-  | SetTrackEffectRegionsCommand
+  | AddTrackEffectRegionCommand
   | SetTrackPropertyCommand
   | BatchCommand
 
@@ -180,19 +180,18 @@ export class SetTrackClipViewsCommand implements Undoable {
   }
 }
 
-export class SetTrackEffectRegionsCommand implements Undoable {
+export class AddTrackEffectRegionCommand implements Undoable {
   constructor(
     private readonly track: Track,
-    private readonly oldEffectRegions: Effect[],
-    private readonly newEffectRegions: Effect[],
+    private readonly newEffectRegion: Effect,
   ) {}
 
   async perform() {
-    this.track.setEffectRegions(this.newEffectRegions)
+    this.track.addEffectRegion(this.newEffectRegion)
   }
 
   async undo() {
-    this.track.setEffectRegions(this.oldEffectRegions)
+    this.track.removeEffectRegion(this.newEffectRegion)
   }
 
   async save() {
@@ -200,7 +199,58 @@ export class SetTrackEffectRegionsCommand implements Undoable {
   }
 
   toString() {
-    return 'set track effect regions'
+    return 'add track effect region'
+  }
+}
+
+export class RemoveTrackEffectRegionCommand implements Undoable {
+  constructor(
+    private readonly track: Track,
+    private readonly effectRegion: Effect,
+  ) {}
+
+  async perform() {
+    this.track.removeEffectRegion(this.effectRegion)
+  }
+
+  async undo() {
+    this.track.addEffectRegion(this.effectRegion)
+  }
+
+  async save() {
+    await ProjectManager.saveTrack(this.track)
+  }
+
+  toString() {
+    return 'remove track effect region'
+  }
+}
+
+export class ChangeTrackEffectRegionCommand implements Undoable {
+  constructor(
+    private readonly track: Track,
+    private readonly oldEffectRegion: Effect,
+    private readonly newEffectRegion: Effect,
+  ) {}
+
+  async perform() {
+    this.track.removeEffectRegion(this.oldEffectRegion)
+    if (!this.track.addEffectRegion(this.newEffectRegion)) {
+      this.track.addEffectRegion(this.oldEffectRegion)
+    }
+  }
+
+  async undo() {
+    this.track.removeEffectRegion(this.newEffectRegion)
+    this.track.addEffectRegion(this.oldEffectRegion)
+  }
+
+  async save() {
+    await ProjectManager.saveTrack(this.track)
+  }
+
+  toString() {
+    return 'change track effect region'
   }
 }
 

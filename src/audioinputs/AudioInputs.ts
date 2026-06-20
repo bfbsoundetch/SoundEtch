@@ -6,9 +6,9 @@ import { MediaStreamInput as MediaStreamInput } from './MediaStreamInput'
 export class AudioInputs {
   private static listeners = new Array<() => any>()
   static generators = new Array<AudioInput>()
-  static localAVDevice: MediaStreamInput | null = null
-  static localScreenShare: AudioInput | null = null
-  static remoteStreams = new Map<string, AudioInput>()
+  static localAVDevice: MediaStreamInput = new MediaStreamInput('local-mic', 'local microphone', false)
+  static localScreenShare = new MediaStreamInput('local-screen', 'local screen', false)
+  static remoteStreams = new Map<{username: string, isScreenShare: boolean}, MediaStreamInput>()
 
   static {
     LocalMediaStreams.registerAVDeviceListener((added, track) => {
@@ -16,9 +16,9 @@ export class AudioInputs {
         return
       }
       if (added) {
-        AudioInputs.localAVDevice = new MediaStreamInput('local-mic', track, false)
+        AudioInputs.localAVDevice.updateMediaStreamTrack(track)
       } else {
-        AudioInputs.localAVDevice = null
+        AudioInputs.localAVDevice.stop()
       }
       AudioInputs.notifyListeners()
     })
@@ -27,9 +27,9 @@ export class AudioInputs {
         return
       }
       if (added) {
-        AudioInputs.localScreenShare = new MediaStreamInput('local-screen', track, false)
+        AudioInputs.localScreenShare.updateMediaStreamTrack(track)
       } else {
-        AudioInputs.localScreenShare = null
+        AudioInputs.localScreenShare.stop()
       }
       AudioInputs.notifyListeners()
     })
@@ -56,10 +56,6 @@ export class AudioInputs {
     AudioInputs.listeners.forEach((listener) => listener())
   }
 
-  private static getRemoteStreamKey(username: string, isScreenShare: boolean) {
-    return `${username}::${isScreenShare ? 'screen' : 'av'}`
-  }
-
   static gatherActiveAudioInputs(): Array<AudioInput> {
     const result = new Array<AudioInput>()
     if (this.localAVDevice) {
@@ -73,24 +69,22 @@ export class AudioInputs {
     return result
   }
 
-  static async maybeAddRemoteAudioSource(
+  static addRemoteAudioSource(
     username: string,
     isScreenShare: boolean,
-    remoteMediaStreamTrack: MediaStreamTrack,
   ) {
-    AudioInputs.remoteStreams.set(
-      this.getRemoteStreamKey(username, isScreenShare),
-      new MediaStreamInput(
-        `${username.replaceAll(' ', '.')}-${isScreenShare ? 'screen' : ''}`,
-        remoteMediaStreamTrack,
-        false,
-      ),
+    const newInput = new MediaStreamInput(
+      `${username.replaceAll(' ', '.')}-${isScreenShare ? 'screen' : ''}`,
+      username,
+      false,
     )
+    AudioInputs.remoteStreams.set({username, isScreenShare}, newInput)
     AudioInputs.notifyListeners()
+    return newInput
   }
 
   static removeRemoteAudioSource(username: string, isScreenShare: boolean) {
-    AudioInputs.remoteStreams.delete(this.getRemoteStreamKey(username, isScreenShare))
+    AudioInputs.remoteStreams.delete({username, isScreenShare})
     AudioInputs.notifyListeners()
   }
 }

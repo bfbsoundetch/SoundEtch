@@ -2,7 +2,7 @@ import { ClipView } from './ClipView'
 import { DatabasePersisted } from '../persistence/DatabasePersisted'
 import { Restorable } from '../persistence/Restoration'
 import { Analyzable } from '../analyzers/Analyzable'
-import { Effect, EffectType, sortEffects } from '../effects/Effects'
+import { Effect, EffectType } from '../effects/Effects'
 import { WamParameterInfoMap } from '@webaudiomodules/api'
 
 class Playback {
@@ -21,8 +21,7 @@ export class Track extends DatabasePersisted implements Analyzable {
   private playback: Playback | null = null
   private pan: number = 0
   private gain: number = 1
-  private effectRegions: Effect[] = []
-  readonly effectParams = new Map<string, WamParameterInfoMap>()
+  private effectRegions = new Map<EffectType, Array<Effect>>()
 
   constructor(
     public name: string,
@@ -241,19 +240,38 @@ export class Track extends DatabasePersisted implements Analyzable {
     return this.gain
   }
 
-  getEffectRegions(effect?: EffectType): Effect[] {
-    if (!effect) {
-      return sortEffects(this.effectRegions)
+  getEffectRegions(effect: EffectType): Effect[] {
+    return this.effectRegions.get(effect) ?? []
+  }
+
+  removeEffectRegion(effect: Effect) {
+    const effectArray = this.effectRegions.get(effect.type)
+    if (effectArray) {
+      effectArray.splice(effectArray.indexOf(effect), 1)
     }
-    return sortEffects(this.effectRegions.filter((effectRegion) => effectRegion.effect == effect))
   }
 
-  getEffectRegionById(effectRegionId: string): Effect | null {
-    return this.effectRegions.find((effectRegion) => effectRegion.id == effectRegionId) ?? null
-  }
-
-  setEffectRegions(effectRegions: Effect[]) {
-    this.effectRegions = sortEffects(effectRegions)
+  addEffectRegion(effect: Effect): boolean {
+    const effectArray = this.effectRegions.get(effect.type)
+    if (!effectArray) {
+      this.effectRegions.set(effect.type, [effect])
+      return true
+    }
+    for (let i = 0; i < effectArray.length; ++i) {
+      if (effectArray[i].startPosition <= effect.startPosition) {
+        if (effectArray[i].startPosition + effectArray[i].length > effect.startPosition) {
+          throw Error('New effect appears in the middle of an existing effect!')
+        }
+      } else {
+        if (effectArray[i].startPosition < effect.startPosition + effect.length) {
+          throw Error('New effect appears in the middle of an existing effect!')
+        }
+        effectArray.splice(i, 0, effect)
+        return true
+      }
+    }
+    effectArray.push(effect)
+    return true
   }
 
   getLevel(): number {

@@ -26,8 +26,6 @@
       const inputForm = document.getElementById('audio-file-local')
       if (inputForm.files.length == 1) {
         Recorder.createFromFile(inputForm.files[0])
-      } else {
-        console.error('test failed ;(')
       }
     }
     function audioFileRemoteHandler() {
@@ -327,15 +325,6 @@
           </svg>
         </div>
         <h1>About SoundEtch</h1>
-        <p>
-          SoundEtch is a browser-based audio recorder and editor built for quickly capturing ideas, interviews, and
-          collaborative sessions without installing a desktop app.
-        </p>
-        <p>
-          You can record from microphones, tab/screen audio, or imported files, then trim, layer, and export in multiple
-          formats.
-        </p>
-        <p>Thanks for trying this preview. Feedback and rough edges are both welcome while the app keeps evolving.</p>
       </div>
     </dialog>
     <dialog id="meeting-room" class="overlay">
@@ -578,7 +567,7 @@
         <h1>Export Settings</h1>
 
         <div class="form-group">
-          <label for="format" style="">Export Format</label>
+          <label for="format">Export Format</label>
           <select id="format" onchange="exportProjectController.handleFormatSwitch(this.value)">
             <option value="wav">WAV - Uncompressed Audio</option>
             <option value="flac">FLAC - Lossless Compression</option>

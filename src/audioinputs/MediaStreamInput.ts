@@ -3,23 +3,19 @@ import { SimpleAnalyzer } from '../analyzers/SimpleAnalyzer'
 import { AudioInput } from './AudioInput'
 
 export class MediaStreamInput implements AudioInput {
-  readonly name: string
-  readonly channelCount: number
+  readonly channelCount = 1
+  private mediaStreamTrack: MediaStreamTrack | null = null
   private sourceNode: MediaStreamAudioSourceNode | null = null
   private noiseReducer: NoiseReducer | null = null
+  private destination: AudioNode | null = null
   private analyzer: SimpleAnalyzer
   isReducingNoise = false
 
   constructor(
     readonly id: string,
-    private readonly mediaStreamTrack: MediaStreamTrack,
+    readonly name: string,
     private readonly supportsNoiseReduction: boolean,
   ) {
-    if (mediaStreamTrack.kind != 'audio') {
-      throw new Error('Not an audio track!')
-    }
-    this.channelCount = mediaStreamTrack.getSettings().channelCount ?? 1
-    this.name = mediaStreamTrack.label
     this.analyzer = new SimpleAnalyzer()
   }
 
@@ -34,7 +30,7 @@ export class MediaStreamInput implements AudioInput {
   }
 
   async init(context: AudioContext) {
-    if (this.sourceNode?.context != context) {
+    if (this.mediaStreamTrack && this.sourceNode?.context != context) {
       this.sourceNode = context.createMediaStreamSource(new MediaStream([this.mediaStreamTrack]))
       this.sourceNode.channelCount = this.channelCount
       if (this.supportsNoiseReduction) {
@@ -80,17 +76,34 @@ export class MediaStreamInput implements AudioInput {
   }
 
   stop(): void {
-    this.mediaStreamTrack.stop()
+    this.mediaStreamTrack?.stop()
     this.sourceNode?.disconnect()
     this.noiseReducer?.disconnect()
   }
 
   mute(): void {
-    this.mediaStreamTrack.enabled = false
+    if (this.mediaStreamTrack) {
+      this.mediaStreamTrack.enabled = false
+    }
   }
 
   unmute(): void {
-    this.mediaStreamTrack.enabled = true
+    if (this.mediaStreamTrack) {
+      this.mediaStreamTrack.enabled = false
+    }
+  }
+
+  async updateMediaStreamTrack(mediaStreamTrack: MediaStreamTrack) {
+    if (mediaStreamTrack.kind != 'audio') {
+      throw new Error('Not an audio track!')
+    }
+    this.mediaStreamTrack = mediaStreamTrack
+    if (this.sourceNode) {
+      await this.init(this.sourceNode.context as AudioContext)
+    }
+    if (this.destination) {
+      await this.connect(this.destination)
+    }
   }
 
   private getNoiseReducer(): NoiseReducer {

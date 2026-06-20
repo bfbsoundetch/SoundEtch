@@ -1,5 +1,6 @@
 import { AudioControl, AudioState } from '../audiocontext/AudioControl'
 import { KeyPressController } from './KeyPressController'
+import { TimelineRegionController } from './timeline/TimelineRegionController'
 import { TrackListController } from './timeline/TrackListController'
 import { TrackListItemController } from './timeline/TrackListItemController'
 import { ClipViewController, Waveform } from './timeline/Waveform'
@@ -7,10 +8,11 @@ import { ClipViewController, Waveform } from './timeline/Waveform'
 export class PointerStateManager extends TrackListItemController {
   private state = State.DEFAULT
 
-  private activeClipViewController: ClipViewController | null = null
-  private activeWaveform: Waveform | null = null
+  public activeClipViewController: ClipViewController | null = null
+  public activeWaveform: Waveform | null = null
   private mouseDownPoint: { x: number; y: number } | null = null
   private clipViewMoveInfo: { clipViewController: ClipViewController } | null = null
+  private timelineRegionController: TimelineRegionController | null = null
 
   private readonly timelineAreaElement = document.getElementById('timeline-area')!
 
@@ -53,8 +55,8 @@ export class PointerStateManager extends TrackListItemController {
             mouseEvent.button == 0 &&
             Math.abs(mouseEvent.clientX - this.mouseDownPoint!.x) >= 2
           ) {
-            this.trackListController.positionMarkerController.hidePositionMarker()
-            trackListController.updateSelection(
+            trackListController.positionMarkerController.hidePositionMarker()
+            this.timelineRegionController!.updateSelection(
               this.getSampleForXValue(this.mouseEventToSvgCoord(mouseEvent).x),
               this.activeWaveform,
               true,
@@ -89,6 +91,7 @@ export class PointerStateManager extends TrackListItemController {
           if (mouseEvent.buttons == 1 && mouseEvent.button == 0) {
             if (AudioControl.getState() == AudioState.STOPPED || AudioControl.getState() == AudioState.MONITORING) {
               this.markPointerDown(mouseEvent)
+              this.timelineRegionController = this.trackListController.selectionController
               this.changeState(State.SELECTING)
             }
           }
@@ -101,7 +104,8 @@ export class PointerStateManager extends TrackListItemController {
         case State.SELECTING:
           if (mouseEvent.buttons == 1 && mouseEvent.button == 0) {
             if (KeyPressController.metaPressed) {
-              trackListController.updateSelection(
+              this.timelineRegionController = this.trackListController.selectionController
+              this.timelineRegionController.updateSelection(
                 this.getSampleForXValue(this.mouseEventToSvgCoord(mouseEvent).x),
                 this.activeWaveform,
                 false,
@@ -128,8 +132,9 @@ export class PointerStateManager extends TrackListItemController {
           this.changeState(State.DEFAULT)
           break
         case State.SELECTING:
-          await this.trackListController.finishSelectionDrag()
           this.changeState(State.DEFAULT)
+          this.timelineRegionController!.updateListener()
+          this.timelineRegionController = null
           break
         case State.MOVING_CLIPVIEW:
           this.changeState(State.DEFAULT)
@@ -184,10 +189,10 @@ export class PointerStateManager extends TrackListItemController {
     timelineElement.addEventListener('mousemove', mouseMoveListener)
   }
 
-  startResizingSelection(leftExpand: boolean) {
+  startResizingSelection(timelineRegionController: TimelineRegionController) {
     this.activeClipViewController = null
     this.activeWaveform = null
-    this.trackListController.updateSelectionStartSample(leftExpand)
+    this.timelineRegionController = timelineRegionController
     this.changeState(State.SELECTING)
   }
 

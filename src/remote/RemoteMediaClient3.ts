@@ -197,7 +197,7 @@ export class RemoteMediaClient3 {
         case 'unavailable-id':
         case 'webrtc':
           if (this.connections.size > 0) {
-            this.notifyMessageListeners({ type: 'info', info: 'Server disconnected, but the message' })
+            this.notifyMessageListeners({ type: 'info', info: 'Disconnected from server, but the meeting is still active.'})
           } else {
             this.state.error = error.message
             this.notifyStateListeners()
@@ -597,7 +597,11 @@ export class RemoteMediaClient3 {
       }
 
       if (trackEvent.track.kind === 'audio') {
-        await AudioInputs.maybeAddRemoteAudioSource(member.username, isScreenShare, trackEvent.track)
+        const existing = AudioInputs.remoteStreams.get({username: member.username, isScreenShare})
+        if (!existing) {
+          AudioInputs.addRemoteAudioSource(member.username, isScreenShare)
+        }
+        await existing?.updateMediaStreamTrack(trackEvent.track)
       }
       trackEvent.track.onended = () => removeTrack()
       trackEvent.streams.forEach((stream) => {

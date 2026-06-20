@@ -1,4 +1,5 @@
 import { TimeUtils } from '../../global/TimeUtils'
+import { TimelineRegionController } from './TimelineRegionController'
 import { TrackListController } from './TrackListController'
 import { TrackListItemController } from './TrackListItemController'
 
@@ -24,7 +25,7 @@ export class TimelineController extends TrackListItemController {
   private readonly minorTicks = document.getElementById('timeline-minor-ticks') as unknown as SVGPathElement
   private readonly tickLabels = new Array<SVGTextElement>()
 
-  private selection: {
+  private selectionElements: {
     lines: SVGPathElement
     leftExpand: SVGLineElement
     rightExpand: SVGLineElement
@@ -119,8 +120,8 @@ export class TimelineController extends TrackListItemController {
   }
 
   drawSelection(lowSample: number, highSample: number) {
-    if (!this.selection) {
-      this.selection = {
+    if (!this.selectionElements) {
+      this.selectionElements = {
         lines: document.createElementNS('http://www.w3.org/2000/svg', 'path'),
         leftExpand: document.createElementNS('http://www.w3.org/2000/svg', 'line'),
         rightExpand: document.createElementNS('http://www.w3.org/2000/svg', 'line'),
@@ -128,77 +129,79 @@ export class TimelineController extends TrackListItemController {
         rightLabel: document.createElementNS('http://www.w3.org/2000/svg', 'text'),
       }
 
-      this.selection.lines.style.strokeWidth = '2'
+      this.selectionElements.lines.style.strokeWidth = '2'
 
-      this.selection.leftExpand.style.cursor = 'ew-resize'
-      this.selection.leftExpand.style.userSelect = 'none'
-      this.selection.leftExpand.style.strokeWidth = '10'
-      this.selection.leftExpand.style.strokeOpacity = '0'
-      this.selection.leftExpand.setAttribute('y1', '30')
-      this.selection.leftExpand.setAttribute('y2', `${this.height}`)
+      this.selectionElements.leftExpand.style.cursor = 'ew-resize'
+      this.selectionElements.leftExpand.style.userSelect = 'none'
+      this.selectionElements.leftExpand.style.strokeWidth = '10'
+      this.selectionElements.leftExpand.style.strokeOpacity = '0'
+      this.selectionElements.leftExpand.setAttribute('y1', '30')
+      this.selectionElements.leftExpand.setAttribute('y2', `${this.height}`)
 
-      this.selection.rightExpand.style.cursor = 'ew-resize'
-      this.selection.rightExpand.style.userSelect = 'none'
-      this.selection.rightExpand.style.strokeWidth = '10'
-      this.selection.rightExpand.style.strokeOpacity = '0'
-      this.selection.rightExpand.setAttribute('y1', '30')
-      this.selection.rightExpand.setAttribute('y2', `${this.height}`)
+      this.selectionElements.rightExpand.style.cursor = 'ew-resize'
+      this.selectionElements.rightExpand.style.userSelect = 'none'
+      this.selectionElements.rightExpand.style.strokeWidth = '10'
+      this.selectionElements.rightExpand.style.strokeOpacity = '0'
+      this.selectionElements.rightExpand.setAttribute('y1', '30')
+      this.selectionElements.rightExpand.setAttribute('y2', `${this.height}`)
 
-      this.selection.leftLabel.setAttribute('y', '15')
-      this.selection.leftLabel.style.stroke = 'none'
-      this.selection.leftLabel.style.dominantBaseline = 'middle'
-      this.selection.leftLabel.style.textAnchor = 'middle'
-      this.selection.leftLabel.style.fontFamily = "'Courier New', Courier, monospace"
-      this.selection.leftLabel.style.fontSize = '18px'
-      this.selection.leftLabel.style.fontWeight = 'bold'
+      this.selectionElements.leftLabel.setAttribute('y', '15')
+      this.selectionElements.leftLabel.style.stroke = 'none'
+      this.selectionElements.leftLabel.style.dominantBaseline = 'middle'
+      this.selectionElements.leftLabel.style.textAnchor = 'middle'
+      this.selectionElements.leftLabel.style.fontFamily = "'Courier New', Courier, monospace"
+      this.selectionElements.leftLabel.style.fontSize = '18px'
+      this.selectionElements.leftLabel.style.fontWeight = 'bold'
 
-      this.selection.rightLabel.setAttribute('y', '15')
-      this.selection.rightLabel.style.stroke = 'none'
-      this.selection.rightLabel.style.dominantBaseline = 'middle'
-      this.selection.rightLabel.style.textAnchor = 'middle'
-      this.selection.rightLabel.style.fontFamily = "'Courier New', Courier, monospace"
-      this.selection.rightLabel.style.fontSize = '18px'
-      this.selection.rightLabel.style.fontWeight = 'bold'
+      this.selectionElements.rightLabel.setAttribute('y', '15')
+      this.selectionElements.rightLabel.style.stroke = 'none'
+      this.selectionElements.rightLabel.style.dominantBaseline = 'middle'
+      this.selectionElements.rightLabel.style.textAnchor = 'middle'
+      this.selectionElements.rightLabel.style.fontFamily = "'Courier New', Courier, monospace"
+      this.selectionElements.rightLabel.style.fontSize = '18px'
+      this.selectionElements.rightLabel.style.fontWeight = 'bold'
 
-      this.selection.leftExpand.addEventListener('mousedown', (event) => {
+      this.selectionElements.leftExpand.addEventListener('mousedown', (event) => {
         if (event.buttons == 1 && event.button == 0) {
-          this.trackListController.pointerStateManager.startResizingSelection(true)
+          this.trackListController.selectionController.updateSelectionStartSample(true)
+          this.trackListController.pointerStateManager.startResizingSelection(this.trackListController.selectionController)
           event.stopPropagation()
         }
       })
 
-      this.selection.rightExpand.addEventListener('mousedown', (event) => {
+      this.selectionElements.rightExpand.addEventListener('mousedown', (event) => {
         if (event.buttons == 1 && event.button == 0) {
-          this.trackListController.pointerStateManager.startResizingSelection(false)
+          this.trackListController.selectionController.updateSelectionStartSample(false)
+          this.trackListController.pointerStateManager.startResizingSelection(this.trackListController.selectionController)
           event.stopPropagation()
         }
       })
 
       this.svg.append(
-        this.selection.lines,
-        this.selection.leftExpand,
-        this.selection.rightExpand,
-        this.selection.leftLabel,
-        this.selection.rightLabel,
+        this.selectionElements.lines,
+        this.selectionElements.leftExpand,
+        this.selectionElements.rightExpand,
+        this.selectionElements.leftLabel,
+        this.selectionElements.rightLabel,
       )
     }
     const startX = this.getXValueForSample(lowSample) + 14 * this.rootFontSize
     const endX = this.getXValueForSample(highSample) + 14 * this.rootFontSize
-    this.selection.lines.setAttribute(
+    this.selectionElements.lines.setAttribute(
       'd',
       `M ${startX} 30 L ${startX} ${this.height} M ${endX} 30 L ${endX} ${this.height}`,
     )
-    this.selection.leftExpand.setAttribute('x1', `${startX}`)
-    this.selection.leftExpand.setAttribute('x2', `${startX}`)
-    this.selection.rightExpand.setAttribute('x1', `${endX}`)
-    this.selection.rightExpand.setAttribute('x2', `${endX}`)
+    this.selectionElements.leftExpand.setAttribute('x1', `${startX}`)
+    this.selectionElements.leftExpand.setAttribute('x2', `${startX}`)
+    this.selectionElements.rightExpand.setAttribute('x1', `${endX}`)
+    this.selectionElements.rightExpand.setAttribute('x2', `${endX}`)
 
-    this.selection.leftLabel.innerHTML = TimeUtils.positionToString(
+    this.selectionElements.leftLabel.innerHTML = TimeUtils.positionToString(
       lowSample,
       this.trackListController.sampleRate,
       true,
     )
-    this.selection.rightLabel.innerHTML = TimeUtils.positionToString(
+    this.selectionElements.rightLabel.innerHTML = TimeUtils.positionToString(
       highSample,
       this.trackListController.sampleRate,
       true,
@@ -207,25 +210,25 @@ export class TimelineController extends TrackListItemController {
     const labelPush =
       Math.max(
         0,
-        ((Number(this.selection.rightLabel.getBoundingClientRect().width) +
-          Number(this.selection.leftLabel.getBoundingClientRect().width)) *
+        ((Number(this.selectionElements.rightLabel.getBoundingClientRect().width) +
+          Number(this.selectionElements.leftLabel.getBoundingClientRect().width)) *
           1.1) /
           2 -
           (endX - startX),
       ) / 2
 
-    this.selection.leftLabel.setAttribute('x', `${startX - labelPush}`)
-    this.selection.rightLabel.setAttribute('x', `${endX + labelPush}`)
+    this.selectionElements.leftLabel.setAttribute('x', `${startX - labelPush}`)
+    this.selectionElements.rightLabel.setAttribute('x', `${endX + labelPush}`)
   }
 
   removeSelection() {
-    this.selection?.lines.remove()
-    this.selection?.leftExpand.remove()
-    this.selection?.rightExpand.remove()
-    this.selection?.leftLabel.remove()
-    this.selection?.rightLabel.remove()
+    this.selectionElements?.lines.remove()
+    this.selectionElements?.leftExpand.remove()
+    this.selectionElements?.rightExpand.remove()
+    this.selectionElements?.leftLabel.remove()
+    this.selectionElements?.rightLabel.remove()
 
-    this.selection = null
+    this.selectionElements = null
   }
 
   private getTickMarkBucket(): TickMarkBucket {
@@ -236,7 +239,7 @@ export class TimelineController extends TrackListItemController {
   }
 
   private getTickMarkForPosition(position: number, bucket: TickMarkBucket): number {
-    return Math.floor(position / bucket.majorIntervalMs) * bucket.majorIntervalMs
+    return Math.round(position / bucket.majorIntervalMs) * bucket.majorIntervalMs
   }
 }
 

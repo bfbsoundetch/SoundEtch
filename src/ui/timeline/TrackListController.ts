@@ -10,19 +10,17 @@ import { ClipView, cloneClipViewWithNewStartPosition } from '../../project/ClipV
 import { Clipboard } from '../Clipboard'
 import { TrackListTrack as TrackListInfo } from './TrackListTrack'
 import { InputListController } from './InputListController'
-import { Player, SelectedRegion } from '../../playback/Player'
+import { SelectedRegion } from '../../playback/Player'
 import { editorHistory } from '../undo/EditorHistory'
-import { EffectPanelController } from '../effects/EffectPanelController'
-import { Effect, EffectType, createEffectId, replaceEffectRegion } from '../../effects/Effects'
-import { TimeUtils } from '../../global/TimeUtils'
+import { EffectType } from '../../effects/Effects'
 import {
   AddClipViewCommand,
   BatchCommand,
   MoveClipViewBetweenTracksCommand,
-  SetTrackEffectRegionsCommand,
   SetTrackClipViewsCommand,
 } from '../undo/UndoableActions'
 import { Track } from '../../project/Track'
+import { TimelineRegionController } from './TimelineRegionController'
 
 interface Selection {
   startSample: number
@@ -56,26 +54,22 @@ export class TrackListController {
   }
 
   get selectedRegion(): SelectedRegion | null {
-    if (!this.selection) {
-      return null
-    }
-    return {
-      startSample: Math.min(this.selection.startSample, this.selection.endSample),
-      endSample: Math.max(this.selection.startSample, this.selection.endSample),
-      tracks: [...this.selection.waveforms.values().map((w) => w.track)],
-    }
+    return this.selectionController.selectedRegion
   }
 
-  private waveforms = new Array<Waveform>()
+  readonly waveforms = new Array<Waveform>()
   readonly timelineController = new TimelineController(this)
   readonly inputListController = new InputListController()
   readonly positionMarkerController = new PositionMarkerController(this)
   readonly history = editorHistory
   readonly pointerStateManager = new PointerStateManager(this)
-  private readonly effectPanelController = new EffectPanelController()
+  readonly selectionController = new TimelineRegionController(
+    false,
+    (event: PointerEvent) => this.timelineSelectionContextMenu.draw(event.clientX, event.clientY),
+    () => {},
+    this,
+  )
 
-  private selection: Selection | null = null
-  private draggedFirstWaveform: Waveform | null = null
   private readonly activeTrackEffects = new Map<number, EffectType | null>()
   private readonly tracklistElement = document.getElementById('track-list')!
   private readonly tracklistInfoElement = document.getElementById('track-info-list')!
@@ -84,10 +78,6 @@ export class TrackListController {
     { info: HTMLElement; waveform: HTMLElement; controller: Waveform }
   >()
   private renderedProjectId: number | undefined = undefined
-  private openEffectPanelState: { track: Track; effectRegionId: string } | null = null
-  private effectEditStart: { track: Track; effectRegions: Effect[] } | null = null
-  private openEffectPanelInput: HTMLInputElement | null = null
-  private openEffectPanelOutput: HTMLOutputElement | null = null
 
   readonly timelineSelectionContextMenu = new ContextMenuController(
     'timeline-selection-contextmenu',
@@ -95,7 +85,7 @@ export class TrackListController {
     new ContextMenuItem('Cut', () => this.sliceSelection(true)),
     new ContextMenuItem('Copy', () => this.sliceSelection(false)),
     new ContextMenuItem('Paste', (activeTrackIndex, startSample) => this.paste(activeTrackIndex, startSample)),
-    new ContextMenuItem('Effect...', () => this.createGainEffectsFromSelection(false)),
+    new ContextMenuItem('Effect...', () => {}),
   )
 
   private readonly timelineUnselectionContextMenu = new ContextMenuController(
@@ -166,6 +156,7 @@ export class TrackListController {
           Number.isFinite(project.getLength()) && project.getLength() > 0 ? project.getLength() : 15 * this.sampleRate
         this.msPerUnit = (length * 1.1 * 1000) / this.sampleRate / this.width
       }
+      this.selectionController.resize()
       this.draw()
     }).observe(this.tracklistElement)
 
@@ -184,11 +175,10 @@ export class TrackListController {
         this.renderedProjectId = project.id
         this.msPerUnit = Infinity
         this.translationUnits = 0
-        this.waveforms = []
+        this.waveforms.splice(0)
         this.infoWaveformPairs.clear()
         this.activeTrackEffects.clear()
         this.clearSelection()
-        this.effectPanelController.close()
       }
 
       const infoDivs = new Array<Node>()
@@ -213,9 +203,7 @@ export class TrackListController {
 
         const trackInfoDiv = document.createElement('div')
         trackInfoDiv.style.height = `${7 * track.getChannelCount() + 1.5}rem`
-        const trackListInfo = new TrackListInfo(track, trackInfoDiv, this.history, (changedTrack, effect) =>
-          this.setActiveTrackEffect(changedTrack, effect),
-        )
+        const trackListInfo = new TrackListInfo(track, trackInfoDiv, this.history, (changedTrack, effect) => {})
 
         const waveformDiv = document.createElement('div')
         waveformDiv.addEventListener('contextmenu', (mouseEvent) => {
@@ -241,7 +229,7 @@ export class TrackListController {
         infoDivs.push(trackInfoDiv)
         waveformDivs.push(waveformDiv)
       }
-      this.waveforms = nextWaveforms
+      this.waveforms.splice(0, this.waveforms.length, ...nextWaveforms)
       this.tracklistInfoElement.replaceChildren(...infoDivs)
       this.tracklistElement.replaceChildren(...waveformDivs)
       this.waveforms.forEach((waveform) => waveform.draw())
@@ -249,106 +237,19 @@ export class TrackListController {
   }
 
   selectTrack(waveform: Waveform) {
-    this.selection = {
-      startSample: 0,
-      endSample: waveform.track.length,
-      waveforms: new Set<Waveform>(),
-    }
-    this.pointerStateManager.startSelecting()
-    this.selection.waveforms.add(waveform)
-    this.drawSelection()
+    this.selectionController.setSelection(0, waveform.track.length, new Set([waveform]))
   }
 
-  setSelection(startSample: number, endSample: number, waveforms: Set<Waveform>) {
-    this.selection = {
-      startSample: startSample,
-      endSample: endSample,
-      waveforms: waveforms,
-    }
-    this.pointerStateManager.startSelecting()
-    this.drawSelection()
-  }
-
-  updateSelectionStartSample(leftExpand: boolean) {
-    if (
-      (leftExpand && this.selection!.startSample < this.selection!.endSample) ||
-      (!leftExpand && this.selection!.startSample > this.selection!.endSample)
-    ) {
-      const startSample = this.selection!.startSample
-      this.selection!.startSample = this.selection!.endSample
-      this.selection!.endSample = startSample
-    }
-  }
-
-  updateSelection(xCoord: number, waveform: Waveform | null, dragged: boolean) {
-    xCoord = Math.max(xCoord, 0)
-    if (!dragged || !waveform) {
-      this.selection = {
-        startSample: this.selection?.startSample ?? xCoord,
-        endSample: xCoord,
-        waveforms: this.selection?.waveforms ?? new Set<Waveform>(),
-      }
-      if (waveform) {
-        this.selection.waveforms.add(waveform)
-      }
-      this.drawSelection()
-      return
-    }
-    if (!this.draggedFirstWaveform) {
-      this.draggedFirstWaveform = waveform
-    }
-    this.selection = {
-      startSample: this.selection?.startSample ?? xCoord,
-      endSample: xCoord,
-      waveforms: this.selection?.waveforms ?? new Set<Waveform>(),
-    }
-    let firstWaveform: Waveform | null = null
-    for (const w of this.waveforms) {
-      if (!firstWaveform && (w == this.draggedFirstWaveform || w == waveform)) {
-        firstWaveform = w
-      }
-      if (firstWaveform) {
-        this.selection!.waveforms.add(w)
-      } else if (!KeyPressController.metaPressed) {
-        this.selection!.waveforms.delete(w)
-      }
-      if (
-        (w != firstWaveform && (w == this.draggedFirstWaveform || w == waveform)) ||
-        this.draggedFirstWaveform == waveform
-      ) {
-        firstWaveform = null
-      }
-    }
-    this.drawSelection()
+  selectClipView(clipView: ClipView, waveform: Waveform) {
+    this.selectionController.setSelection(clipView.startPosition, clipView.getEndPosition(), new Set([waveform]))
   }
 
   clearSelection() {
-    this.selection = null
-    this.draggedFirstWaveform = null
-    this.timelineController.removeSelection()
-    this.waveforms.forEach((w) => w.drawSelection(-1, -1))
+    this.selectionController.remove()
   }
 
   getDisplayedEffectForTrack(track: Track): EffectType | null {
     return this.activeTrackEffects.get(track.id ?? -1) ?? null
-  }
-
-  async finishSelectionDrag() {
-    await this.createGainEffectsFromSelection(true)
-  }
-
-  openEffectRegion(track: Track, effectRegionId: string) {
-    const effectRegion = track.getEffectRegionById(effectRegionId)
-    if (!effectRegion) {
-      return
-    }
-    this.openEffectPanelState = { track, effectRegionId }
-    this.effectEditStart = null
-    switch (effectRegion.effect) {
-      case 'gain':
-        this.openGainEffectPanel(track, effectRegion)
-        break
-    }
   }
 
   async transferClipViewBetweenTracks(clipViewController: ClipViewController, newWaveform: Waveform, shift: number) {
@@ -364,27 +265,23 @@ export class TrackListController {
   }
 
   async sliceSelection(del: boolean) {
-    if (!this.selection) {
-      return
-    }
     const newClipboard: typeof Clipboard.copiedClipViews = []
     const undoCommands: SetTrackClipViewsCommand[] = []
-    const lowSample = Math.min(this.selection!.startSample, this.selection!.endSample)
-    const highSample = Math.max(this.selection!.startSample, this.selection!.endSample)
-    this.selection.waveforms.forEach((waveform) => {
-      const oldClipViews = waveform.track.clipViews.slice()
-      newClipboard.push(waveform.track.slice(lowSample, highSample, del))
-      if (del && !this.clipViewArraysEqual(oldClipViews, waveform.track.clipViews)) {
-        undoCommands.push(new SetTrackClipViewsCommand(waveform.track, oldClipViews, waveform.track.clipViews.slice()))
-      } else {
-        waveform.drawAudioData()
+    const selection = this.selectionController.selectedRegion
+    if (!selection) { return }
+    selection?.tracks.forEach(track => {
+      const oldClipViews = track.clipViews.slice()
+      newClipboard.push(track.slice(selection.startSample, selection.endSample, del))
+      if (del && !this.clipViewArraysEqual(oldClipViews, track.clipViews)) {
+        undoCommands.push(new SetTrackClipViewsCommand(track, oldClipViews, track.clipViews.slice()))
       }
     })
     Clipboard.copiedClipViews = newClipboard
-    Clipboard.copyStartPosition = lowSample
+    Clipboard.copyStartPosition = selection.startSample
     if (del && undoCommands.length > 0) {
       await this.history.recordApplied(new BatchCommand(undoCommands, del ? 'cut' : 'copy'))
     }
+    this.draw()
   }
 
   async paste(trackIndex: number, startingSample: number) {
@@ -413,24 +310,11 @@ export class TrackListController {
     }
   }
 
-  private drawSelection() {
-    if (!this.selection || this.selection.startSample == this.selection.endSample) {
-      return
-    }
-    const startSample = Math.min(this.selection!.startSample, this.selection!.endSample)
-    const endSample = Math.max(this.selection!.startSample, this.selection!.endSample)
-    this.timelineController.drawSelection(startSample, endSample)
-    this.waveforms.forEach((w) =>
-      this.selection?.waveforms.has(w) ? w.drawSelection(startSample, endSample) : w.drawSelection(-1, -1),
-    )
-  }
-
   draw() {
     this.timelineController.draw()
     this.waveforms.forEach((waveform) => waveform.draw())
-    this.drawSelection()
+    this.selectionController.draw()
     this.positionMarkerController.draw()
-    this.refreshOpenEffectPanel()
   }
 
   private handleKeyDown(event: KeyboardEvent) {
@@ -442,11 +326,8 @@ export class TrackListController {
       return
     }
     if (!event.shiftKey && event.code == 'KeyC') {
-      if (!this.selection) {
-        return
-      }
       event.preventDefault()
-      void this.sliceSelection(false)
+      this.sliceSelection(false)
       return
     }
     if (!event.shiftKey && event.code == 'KeyV') {
@@ -459,9 +340,9 @@ export class TrackListController {
       }
       const trackIndex =
         this.pointerStateManager.getActiveTrack()?.index ??
-        this.waveforms.find((waveform) => this.selection?.waveforms.has(waveform))?.index ??
+        this.waveforms.find((waveform) => this.selectionController?.isInRegion(waveform))?.index ??
         0
-      void this.paste(trackIndex, AudioControl.startPosition)
+      this.paste(trackIndex, AudioControl.startPosition)
       return
     }
     if (event.code == 'KeyZ') {
@@ -470,9 +351,9 @@ export class TrackListController {
         return
       }
       if (event.shiftKey) {
-        void this.history.redo()
+        this.history.redo()
       } else {
-        void this.history.undo()
+        this.history.undo()
       }
       return
     }
@@ -481,7 +362,7 @@ export class TrackListController {
       if (!this.canEdit()) {
         return
       }
-      void this.history.redo()
+      this.history.redo()
     }
   }
 
@@ -506,210 +387,6 @@ export class TrackListController {
     return a.length == b.length && a.every((clipView, index) => clipView == b[index])
   }
 
-  private setActiveTrackEffect(track: Track, effect: EffectType | null) {
-    this.activeTrackEffects.set(track.id ?? -1, effect)
-    if (!effect && this.openEffectPanelState?.track == track) {
-      this.effectPanelController.close()
-    }
-    this.draw()
-  }
-
-  private async createGainEffectsFromSelection(onlyForActiveTrackEffects: boolean) {
-    if (!this.selection || this.selection.startSample == this.selection.endSample || !this.canEdit()) {
-      return
-    }
-    const startSample = Math.min(this.selection.startSample, this.selection.endSample)
-    const endSample = Math.max(this.selection.startSample, this.selection.endSample)
-    const undoCommands: SetTrackEffectRegionsCommand[] = []
-    const createdRegions = new Array<{ track: Track; effectRegionId: string }>()
-
-    for (const waveform of this.selection.waveforms) {
-      const effect = this.getDisplayedEffectForTrack(waveform.track)
-      if (onlyForActiveTrackEffects && effect != 'gain') {
-        continue
-      }
-      const effectRegion: Effect = {
-        id: createEffectId(),
-        effect: 'gain',
-        startSample,
-        length: endSample - startSample,
-        value: 0,
-      }
-      const oldEffectRegions = this.cloneEffectRegions(waveform.track.getEffectRegions())
-      const newEffectRegions = replaceEffectRegion(oldEffectRegions, effectRegion)
-      undoCommands.push(new SetTrackEffectRegionsCommand(waveform.track, oldEffectRegions, newEffectRegions))
-      createdRegions.push({ track: waveform.track, effectRegionId: effectRegion.id })
-    }
-
-    if (undoCommands.length == 0) {
-      return
-    }
-
-    if (undoCommands.length == 1) {
-      await this.history.execute(undoCommands[0])
-    } else {
-      await this.history.execute(new BatchCommand(undoCommands, 'change gain'))
-    }
-    const firstCreatedRegion = createdRegions[0]
-    if (firstCreatedRegion) {
-      this.openEffectRegion(firstCreatedRegion.track, firstCreatedRegion.effectRegionId)
-    }
-  }
-
-  private startEffectRegionEdit(track: Track) {
-    if (this.effectEditStart?.track == track) {
-      return
-    }
-    this.effectEditStart = {
-      track,
-      effectRegions: this.cloneEffectRegions(track.getEffectRegions()),
-    }
-  }
-
-  private updateGainEffectRegion(track: Track, effectRegionId: string, value: number) {
-    const effectRegion = track.getEffectRegionById(effectRegionId)
-    if (!effectRegion || effectRegion.effect != 'gain') {
-      return
-    }
-    track.setEffectRegions(
-      replaceEffectRegion(track.getEffectRegions(), {
-        ...effectRegion,
-        value,
-      }),
-    )
-    this.draw()
-  }
-
-  private openGainEffectPanel(track: Track, effectRegion: Effect) {
-    const valueLabelElement = document.createElement('label')
-    valueLabelElement.textContent = 'Gain'
-    valueLabelElement.htmlFor = 'effect-panel-gain-value'
-
-    const valueSlider = document.createElement('input')
-    valueSlider.id = 'effect-panel-gain-value'
-    valueSlider.type = 'range'
-    valueSlider.min = '-36'
-    valueSlider.max = '36'
-    valueSlider.step = '0.1'
-    valueSlider.value = `${effectRegion.value}`
-
-    const valueOutput = document.createElement('output')
-    valueOutput.className = 'slider-value effect-panel-value-output'
-    valueOutput.style.opacity = '1'
-    this.updateGainEffectOutput(valueOutput, effectRegion.value)
-
-    valueSlider.addEventListener('pointerdown', () => this.startEffectRegionEdit(track))
-    valueSlider.addEventListener('focus', () => this.startEffectRegionEdit(track))
-    valueSlider.addEventListener('input', () => {
-      const value = Number(valueSlider.value)
-      this.updateGainEffectOutput(valueOutput, value)
-      this.updateGainEffectRegion(track, effectRegion.id, value)
-    })
-    valueSlider.addEventListener('change', () => void this.commitEffectRegionEdit(track))
-
-    const valueGroup = document.createElement('div')
-    valueGroup.className = 'effect-panel-control-group'
-    valueGroup.append(valueLabelElement, valueSlider, valueOutput)
-
-    const deleteButton = document.createElement('button')
-    deleteButton.className = 'menu-item clickable effect-panel-delete'
-    deleteButton.textContent = 'Delete Region'
-    deleteButton.type = 'button'
-    deleteButton.addEventListener('click', () => void this.deleteEffectRegion(track, effectRegion.id))
-
-    this.openEffectPanelInput = valueSlider
-    this.openEffectPanelOutput = valueOutput
-    this.effectPanelController.open({
-      title: 'Gain',
-      subtitle: this.getEffectPanelSubtitle(track, effectRegion),
-      body: [valueGroup],
-      actions: [deleteButton],
-      onClose: () => {
-        this.openEffectPanelState = null
-        this.effectEditStart = null
-        this.openEffectPanelInput = null
-        this.openEffectPanelOutput = null
-      },
-    })
-  }
-
-  private async commitEffectRegionEdit(track: Track) {
-    if (!this.effectEditStart || this.effectEditStart.track != track) {
-      return
-    }
-    const newEffectRegions = this.cloneEffectRegions(track.getEffectRegions())
-    if (this.effectArraysEqual(this.effectEditStart.effectRegions, newEffectRegions)) {
-      this.effectEditStart = null
-      return
-    }
-    await this.history.recordApplied(
-      new SetTrackEffectRegionsCommand(track, this.effectEditStart.effectRegions, newEffectRegions),
-    )
-    this.effectEditStart = null
-  }
-
-  private async deleteEffectRegion(track: Track, effectRegionId: string) {
-    const oldEffectRegions = this.cloneEffectRegions(track.getEffectRegions())
-    const newEffectRegions = oldEffectRegions.filter((effectRegion) => effectRegion.id != effectRegionId)
-    if (newEffectRegions.length == oldEffectRegions.length) {
-      return
-    }
-    this.openEffectPanelState = null
-    this.effectEditStart = null
-    this.openEffectPanelInput = null
-    this.openEffectPanelOutput = null
-    this.effectPanelController.hide()
-    await this.history.execute(new SetTrackEffectRegionsCommand(track, oldEffectRegions, newEffectRegions))
-  }
-
-  private refreshOpenEffectPanel() {
-    if (!this.openEffectPanelState) {
-      return
-    }
-    const effectRegion = this.openEffectPanelState.track.getEffectRegionById(this.openEffectPanelState.effectRegionId)
-    if (!effectRegion) {
-      this.openEffectPanelState = null
-      this.effectEditStart = null
-      this.openEffectPanelInput = null
-      this.openEffectPanelOutput = null
-      this.effectPanelController.hide()
-      return
-    }
-    this.effectPanelController.setSubtitle(this.getEffectPanelSubtitle(this.openEffectPanelState.track, effectRegion))
-    if (effectRegion.effect == 'gain' && this.openEffectPanelInput && this.openEffectPanelOutput) {
-      this.openEffectPanelInput.value = `${effectRegion.value}`
-      this.updateGainEffectOutput(this.openEffectPanelOutput, effectRegion.value)
-    }
-  }
-
-  private getEffectPanelSubtitle(track: Track, effectRegion: Effect) {
-    const start = TimeUtils.positionToString(effectRegion.startSample, this.sampleRate, true)
-    const end = TimeUtils.positionToString(effectRegion.startSample + effectRegion.length, this.sampleRate, true)
-    return `${track.name} · ${start} - ${end}`
-  }
-
-  private updateGainEffectOutput(output: HTMLOutputElement, value: number) {
-    output.value = `${value > 0 ? '+' : ''}${value.toFixed(1)} dB`
-  }
-
-  private cloneEffectRegions(effectRegions: Effect[]) {
-    return effectRegions.map((effectRegion) => ({ ...effectRegion }))
-  }
-
-  private effectArraysEqual(a: Effect[], b: Effect[]) {
-    return (
-      a.length == b.length &&
-      a.every(
-        (effectRegion, index) =>
-          effectRegion.id == b[index]?.id &&
-          effectRegion.effect == b[index]?.effect &&
-          effectRegion.startSample == b[index]?.startSample &&
-          effectRegion.length == b[index]?.length &&
-          effectRegion.value == b[index]?.value,
-      )
-    )
-  }
-
   private translateToFollowPosition(timestamp: number, controller: TrackListController) {
     if (AudioControl.getState() != AudioState.PLAYING && AudioControl.getState() != AudioState.RECORDING) {
       this.draw()
@@ -727,7 +404,7 @@ export class TrackListController {
     }
     this.timelineController.draw()
     this.waveforms.forEach((waveform) => waveform.drawAudioData())
-    this.drawSelection()
+    this.selectionController.draw()
     this.positionMarkerController.draw(position)
   }
 }

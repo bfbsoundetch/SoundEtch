@@ -2,7 +2,6 @@ import { ClipViewSubset } from '../playback/AudioFileReader'
 import { RawDataAudioContext } from '@descript/web-audio-js'
 import { FileSystemUtils } from '../filesystem/FileSystemUtils'
 import { FileSystemSyncAccessHandle } from '../filesystem/FileSystemSyncAccessHandle'
-import { scheduleGainAutomation } from '../effects/Effects'
 import { RenderingWorkerStartMessage } from './RenderingWorkerProtocol'
 
 const BLOCK_SIZE = 1024
@@ -34,24 +33,13 @@ self.onmessage = async (e) => {
     processors.push(processor)
     readingProcessorNode.onaudioprocess = (e: AudioProcessingEvent) => processor.process(e)
 
-    const effectGainNode = audioContext.createGain()
-    scheduleGainAutomation(
-      effectGainNode.gain,
-      track.effects,
-      argument.sampleRate,
-      argument.startPosition,
-      argument.startPosition + argument.length,
-      audioContext.currentTime,
-    )
-
     const gainNode = audioContext.createGain()
     gainNode.channelCount = argument.channelCount
     gainNode.channelCountMode = 'explicit'
     gainNode.channelInterpretation = 'speakers'
     gainNode.gain.value = track.gain
 
-    readingProcessorNode.connect(effectGainNode, 0, 0)
-    effectGainNode.connect(gainNode, 0, 0)
+    readingProcessorNode.connect(gainNode, 0, 0)
     if (argument.channelCount == 1) {
       gainNode.connect(audioContext.destination, 0, 0)
     } else {
