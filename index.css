@@ -91,7 +91,8 @@ body {
 
 #menu-dropdown {
   margin: 0;
-  top: anchor(bottom);
+  position: fixed;
+  inset: 4rem auto auto 0;
   min-width: 10rem;
   overflow: visible;
   border: solid;
