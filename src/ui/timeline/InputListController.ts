@@ -2,6 +2,7 @@ import { PeakMeterController } from '../PeakMeterController'
 import { AudioInput } from '../../audioinputs/AudioInput'
 import { AudioInputs } from '../../audioinputs/AudioInputs'
 import { AudioControl, AudioState } from '../../audiocontext/AudioControl'
+import { LocalMediaStreams } from '../../mediastreams/LocalMediaStreams'
 
 export class InputListController {
   readonly inputInfoListElement = document.getElementById('input-info-list')!
@@ -34,25 +35,27 @@ export class InputListController {
       context.resume()
       const infoDivs = new Array<Node>()
       const inputDivs = new Array<Node>()
-      const func = (input: AudioInput | null, type: AudioInputType) => {
-        if (input) {
-          input.init(context)
-          const id = `${input.id}-list-item`
-          const inputController = this.inputControllers.get(id)
-          if (inputController) {
-            infoDivs.push(inputController.inputInfoDiv)
-            inputDivs.push(inputController.inputDiv)
-          } else {
-            const newInputController = new AudioInputController(id, input, type)
-            this.inputControllers.set(id, newInputController)
-            infoDivs.push(newInputController.inputInfoDiv)
-            inputDivs.push(newInputController.inputDiv)
-          }
+      const func = (input: AudioInput, type: AudioInputType) => {
+        input.init(context)
+        const id = `${input.id}-list-item`
+        const inputController = this.inputControllers.get(id)
+        if (inputController) {
+          infoDivs.push(inputController.inputInfoDiv)
+          inputDivs.push(inputController.inputDiv)
+        } else {
+          const newInputController = new AudioInputController(id, input, type)
+          this.inputControllers.set(id, newInputController)
+          infoDivs.push(newInputController.inputInfoDiv)
+          inputDivs.push(newInputController.inputDiv)
         }
       }
-      func(AudioInputs.localAVDevice, AudioInputType.MIC)
-      func(AudioInputs.localScreenShare, AudioInputType.SCREEN_SHARE)
-      AudioInputs.remoteStreams.forEach((remoteInput) => {
+      if (LocalMediaStreams.localAVDeviceMediaStream.getAudioTracks().length > 0) {
+        func(AudioInputs.localAVDevice, AudioInputType.MIC)
+      }
+      if (LocalMediaStreams.localScreenMediaStream.getAudioTracks().length > 0) {
+        func(AudioInputs.localScreenShare, AudioInputType.SCREEN_SHARE)
+      }
+      AudioInputs.getRemoteInputs().forEach((remoteInput) => {
         func(remoteInput, AudioInputType.REMOTE)
       })
       if (infoDivs.length === 0) {

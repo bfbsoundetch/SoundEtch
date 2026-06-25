@@ -26,7 +26,9 @@ export class SimpleAnalyzer {
 
   async attachAnalyzer(inputNode: AudioNode) {
     if (this.analyzerNode?.context == inputNode.context) {
+      console.error('b4', this.analyzerNode.numberOfInputs)
       inputNode.connect(this.analyzerNode)
+      console.error('after', this.analyzerNode.numberOfInputs)
       return this.forkOutput ? this.analyzerNode : inputNode
     }
 

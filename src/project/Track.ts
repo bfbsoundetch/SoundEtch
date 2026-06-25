@@ -240,7 +240,10 @@ export class Track extends DatabasePersisted implements Analyzable {
     return this.gain
   }
 
-  getEffectRegions(effect: EffectType): Effect[] {
+  getEffectRegions(effect: EffectType | null = null): Effect[] {
+    if (!effect) {
+      return Object.values(EffectType).flatMap(type => this.effectRegions.get(type as EffectType) ?? [])
+    }
     return this.effectRegions.get(effect) ?? []
   }
 

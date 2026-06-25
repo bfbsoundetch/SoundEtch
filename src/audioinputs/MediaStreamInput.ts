@@ -7,7 +7,6 @@ export class MediaStreamInput implements AudioInput {
   private mediaStreamTrack: MediaStreamTrack | null = null
   private sourceNode: MediaStreamAudioSourceNode | null = null
   private noiseReducer: NoiseReducer | null = null
-  private destination: AudioNode | null = null
   private analyzer: SimpleAnalyzer
   isReducingNoise = false
 
@@ -99,10 +98,9 @@ export class MediaStreamInput implements AudioInput {
     }
     this.mediaStreamTrack = mediaStreamTrack
     if (this.sourceNode) {
-      await this.init(this.sourceNode.context as AudioContext)
-    }
-    if (this.destination) {
-      await this.connect(this.destination)
+      const context = this.sourceNode.context as AudioContext
+      this.sourceNode = null
+      await this.init(context)
     }
   }
 

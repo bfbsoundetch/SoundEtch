@@ -124,7 +124,7 @@ export class RecordButtonController {
   }
 
   private hasRemoteAudioInputs() {
-    return AudioInputs.remoteStreams.size > 0
+    return AudioInputs.getRemoteInputs().length > 0
   }
 
   private hideCountdown() {

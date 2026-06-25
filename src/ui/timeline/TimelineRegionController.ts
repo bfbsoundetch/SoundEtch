@@ -102,6 +102,21 @@ export class TimelineRegionController extends TrackListItemController {
   }
 
   draw(isActive = true) {
+    if (this.firstPosition == this.secondPosition) {
+      this.waveformElements.values().forEach(v => {
+        v.rect.setAttribute('width', '0')
+
+        v.leftExpand.setAttribute('x1', `-1`)
+        v.leftExpand.setAttribute('x2', `-1`)
+
+        v.rightExpand.setAttribute('x2', `-1`)
+        v.rightExpand.setAttribute('x1', `-1`)
+      })
+      if (isActive) {
+        this.trackListController.timelineController.removeSelection()
+      }
+      return
+    }
     const lowSample = Math.min(this.firstPosition, this.secondPosition)
     const highSample = Math.max(this.firstPosition, this.secondPosition)
     const lowX = this.getXValueForSample(lowSample)

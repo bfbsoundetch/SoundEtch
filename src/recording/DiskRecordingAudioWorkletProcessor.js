@@ -8,22 +8,17 @@ class DiskRecordingAudioWorkletProcessor extends AudioWorkletProcessor {
     this.channelCount = options.processorOptions.channelCount
     this.overrunSampleCount = options.processorOptions.overrunSampleCount
     console.log('Ready for action')
+    const QUANTUM_SIZE = 128
+    this.copyBuffer = new Float32Array(QUANTUM_SIZE * this.channelCount)
   }
 
   process(inputs, outputs, parameters) {
-    if (!this.copyBuffer) {
-      this.copyBuffer = new Float32Array(this.channelCount * inputs[0][0].length)
-      console.log(`My first frame was ${currentFrame} and my channel count is ${this.channelCount}`)
-    }
-    if (inputs[0].length == 0) {
-      return false
-    }
-    for (let channel = 0; channel < this.channelCount; ++channel) {
-      for (let i = 0; i < inputs[0][0].length; ++i) {
-        this.copyBuffer[i * this.channelCount + channel] = inputs[0][channel][i]
+    if (inputs.length > 0 && inputs[0].length > 0) {
+      for (let channel = 0; channel < this.channelCount; ++channel) {
+        for (let i = 0; i < inputs[0][0].length; ++i) {
+          this.copyBuffer[i * this.channelCount + channel] = inputs[0][channel][i]
+        }
       }
-    }
-    if (inputs.length > 1) {
       for (let input = 1; input < inputs.length; ++input) {
         for (let channel = 0; channel < this.channelCount; ++channel) {
           for (let i = 0; i < inputs[0][0].length; ++i) {
@@ -31,6 +26,9 @@ class DiskRecordingAudioWorkletProcessor extends AudioWorkletProcessor {
           }
         }
       }
+    } else {
+      console.error('you have', inputs.length, 'inputs')
+      this.copyBuffer.fill(0)
     }
     const pushed = this.dataRingBuffer.push(this.copyBuffer, this.copyBuffer.length)
     if (pushed != this.copyBuffer.length) {

@@ -463,14 +463,37 @@ export class MeetingRoomController {
     } else {
       this.screenVideoContainer.vidElement.srcObject = null
       this.screenVideoContainer.isActive = false
+      this.videoLayout = VideoLayout.GRID
+      this.applyVideoLayout()
     }
     for (let i = 0; i < this.guestContainers.length; ++i) {
       if (state.members.length > i) {
-        if (this.guestContainers[i].vidElement.srcObject != state.members[i].mediaStream) {
-          this.guestContainers[i].vidElement.srcObject = state.members[i].mediaStream
+        const mediaStream = state.members[i].mediaStream
+        if (this.guestContainers[i].vidElement.srcObject != mediaStream) {
+          this.guestContainers[i].vidElement.srcObject = mediaStream
         }
         this.guestContainers[i].vidElement.poster = this.getSvgPosterForUser(state.members[i].username, false)
         this.guestContainers[i].setRecordingActivity(state.members[i].username, state.members[i].recordingActivity)
+        mediaStream.addEventListener('removetrack', (trackEvent) => {
+          if (trackEvent.track.kind == 'video') {
+            this.guestContainers[i].vidElement.srcObject = null
+          }
+        })
+
+        mediaStream.getVideoTracks().forEach(track => {
+          track.addEventListener('mute', () => {
+            this.guestContainers[i].vidElement.srcObject = null
+          })
+        })
+        
+        mediaStream.addEventListener('addtrack', (trackEvent) => {
+          if (trackEvent.track.kind == 'video') {
+            this.guestContainers[i].vidElement.srcObject = mediaStream
+            trackEvent.track.addEventListener('mute', () => {
+              this.guestContainers[i].vidElement.srcObject = null
+            })
+          }
+        })
         // this.guestContainers[i].startPeakMeter(
         //   AudioInputs.remoteStreams.get({ username: state.members[i].username, isScreenShare: false })!,
         // )

@@ -60,20 +60,11 @@ export class Recorder {
       audioWorkletNodes.push(recordingWorkletNode)
       workerController.worker.addEventListener('message', clipView.clip.summary.getWorkerMessageListener())
     }
-    await audioContext.audioWorklet.addModule(
-      new URL('../audiocontext/ReportingAudioWorkletProcessor.js', import.meta.url),
-    )
 
-    const reporterNode = new AudioWorkletNode(audioContext, 'ReportingAudioWorkletProcessor', {
-      processorOptions: {
-        position: new Float32Array(new SharedArrayBuffer(4)),
-      },
-    })
     if (audioWorkletNodes.length == 0) {
       audioContext.close()
       return
     }
-    reporterNode.connect(audioContext.destination)
     workerController.setAudioWorkletNodes(audioWorkletNodes)
     workerController.start(JobType.RECORDER, inputs)
   }

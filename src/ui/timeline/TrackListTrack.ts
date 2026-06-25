@@ -196,9 +196,11 @@ export class TrackListTrack {
       this.updatePanOutput(panOutput, panValue)
     })
 
-    deleteTrackButton.onclick = () => {
+    deleteTrackButton.onclick = (event) => {
       this.history.clear()
       void ProjectManager.deleteTrack(track)
+      event.stopPropagation()
+      event.preventDefault()
     }
   }
 

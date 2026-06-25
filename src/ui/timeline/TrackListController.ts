@@ -46,7 +46,7 @@ export class TrackListController {
   }
 
   get width() {
-    return this.timelineController.getWidth()
+    return this.tracklistElement.clientWidth
   }
 
   get height() {
@@ -233,6 +233,8 @@ export class TrackListController {
       this.tracklistInfoElement.replaceChildren(...infoDivs)
       this.tracklistElement.replaceChildren(...waveformDivs)
       this.waveforms.forEach((waveform) => waveform.draw())
+      this.selectionController.remove()
+      this.pointerStateManager
     })
   }
 

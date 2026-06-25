@@ -8,7 +8,7 @@ export class AudioInputs {
   static generators = new Array<AudioInput>()
   static localAVDevice: MediaStreamInput = new MediaStreamInput('local-mic', 'local microphone', false)
   static localScreenShare = new MediaStreamInput('local-screen', 'local screen', false)
-  static remoteStreams = new Map<{username: string, isScreenShare: boolean}, MediaStreamInput>()
+  private static remoteStreams = new Map<string, MediaStreamInput>()
 
   static {
     LocalMediaStreams.registerAVDeviceListener((added, track) => {
@@ -58,10 +58,10 @@ export class AudioInputs {
 
   static gatherActiveAudioInputs(): Array<AudioInput> {
     const result = new Array<AudioInput>()
-    if (this.localAVDevice) {
+    if (LocalMediaStreams.localAVDeviceMediaStream.getAudioTracks().length > 0) {
       result.push(this.localAVDevice)
     }
-    if (this.localScreenShare) {
+    if (LocalMediaStreams.localScreenMediaStream.getAudioTracks().length > 0) {
       result.push(this.localScreenShare)
     }
     result.push(...this.generators)
@@ -78,13 +78,21 @@ export class AudioInputs {
       username,
       false,
     )
-    AudioInputs.remoteStreams.set({username, isScreenShare}, newInput)
+    AudioInputs.remoteStreams.set(`${username}::${isScreenShare}`, newInput)
     AudioInputs.notifyListeners()
     return newInput
   }
 
   static removeRemoteAudioSource(username: string, isScreenShare: boolean) {
-    AudioInputs.remoteStreams.delete({username, isScreenShare})
+    AudioInputs.remoteStreams.delete(`${username}::${isScreenShare}`)
     AudioInputs.notifyListeners()
+  }
+
+  static getRemoteStreamForUser(username: string, isScreenShare: boolean) {
+    return this.remoteStreams.get(`${username}::${isScreenShare}`)
+  }
+
+  static getRemoteInputs() {
+    return [...this.remoteStreams.values()]
   }
 }

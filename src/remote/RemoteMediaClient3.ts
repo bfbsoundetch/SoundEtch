@@ -333,7 +333,7 @@ export class RemoteMediaClient3 {
     this.getAndMaybeAddPeerConnection(dataConnection.peer)
     const peerNeworkDelayEstimator = new PeerNetworkDelayEstimator(dataConnection)
     this.getOrCreateRemotePeerState(dataConnection.peer).peerNeworkDelayEstimator = peerNeworkDelayEstimator
-    peerNeworkDelayEstimator.getNewEstimate().then((e) => console.error(`your delay time is: ${e}`))
+    peerNeworkDelayEstimator.getNewEstimate().then((e) => console.debug(`your delay time is: ${e}`))
   }
 
   private handleClosedDataConnection(dataConnection: DataConnection) {
@@ -597,11 +597,11 @@ export class RemoteMediaClient3 {
       }
 
       if (trackEvent.track.kind === 'audio') {
-        const existing = AudioInputs.remoteStreams.get({username: member.username, isScreenShare})
-        if (!existing) {
-          AudioInputs.addRemoteAudioSource(member.username, isScreenShare)
+        let input = AudioInputs.getRemoteStreamForUser(member.username, isScreenShare)
+        if (!input) {
+          input = AudioInputs.addRemoteAudioSource(member.username, isScreenShare)
         }
-        await existing?.updateMediaStreamTrack(trackEvent.track)
+        await input.updateMediaStreamTrack(trackEvent.track)
       }
       trackEvent.track.onended = () => removeTrack()
       trackEvent.streams.forEach((stream) => {
