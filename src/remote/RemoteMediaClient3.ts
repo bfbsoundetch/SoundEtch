@@ -80,6 +80,7 @@ class RemotePeerState {
   rtcPeerConnection: RTCPeerConnection | null = null
   remoteScreenShareStreamId: string | null = null
   peerNeworkDelayEstimator: PeerNetworkDelayEstimator | null = null
+  iceDisconnectedCleanupTimeout: number | null = null
 
   withRtcPeerConnection(callback: (peerConnection: RTCPeerConnection) => void) {
     if (this.rtcPeerConnection) {
@@ -197,7 +198,10 @@ export class RemoteMediaClient3 {
         case 'unavailable-id':
         case 'webrtc':
           if (this.connections.size > 0) {
-            this.notifyMessageListeners({ type: 'info', info: 'Disconnected from server, but the meeting is still active.'})
+            this.notifyMessageListeners({
+              type: 'info',
+              info: 'Disconnected from server, but the meeting is still active.',
+            })
           } else {
             this.state.error = error.message
             this.notifyStateListeners()
@@ -308,6 +312,10 @@ export class RemoteMediaClient3 {
   }
 
   private removePeerState(peerId: string) {
+    const remotePeerState = this.remotePeerStates.get(peerId)
+    if (remotePeerState) {
+      this.clearIceDisconnectedCleanupTimeout(remotePeerState)
+    }
     this.deleteMember(peerId)
     this.remotePeerStates.delete(peerId)
     if (this.state.screenShare != 'self' && this.state.screenShare?.peerId == peerId) {
@@ -357,6 +365,45 @@ export class RemoteMediaClient3 {
         dataConnection.send({ type: 'otherPeer', peer: peerId })
       }
     }
+  }
+
+  private clearIceDisconnectedCleanupTimeout(remotePeerState: RemotePeerState) {
+    if (remotePeerState.iceDisconnectedCleanupTimeout == null) {
+      return
+    }
+
+    window.clearTimeout(remotePeerState.iceDisconnectedCleanupTimeout)
+    remotePeerState.iceDisconnectedCleanupTimeout = null
+  }
+
+  private scheduleIceDisconnectedCleanup(
+    remoteId: string,
+    remotePeerState: RemotePeerState,
+    rtcPeerConnection: RTCPeerConnection,
+  ) {
+    if (remotePeerState.iceDisconnectedCleanupTimeout != null) {
+      return
+    }
+
+    remotePeerState.iceDisconnectedCleanupTimeout = window.setTimeout(() => {
+      remotePeerState.iceDisconnectedCleanupTimeout = null
+      if (remotePeerState.rtcPeerConnection != rtcPeerConnection) {
+        return
+      }
+
+      switch (rtcPeerConnection.iceConnectionState) {
+        case 'connected':
+        case 'completed':
+        case 'closed':
+          return
+      }
+
+      this.logger.log(`Removing ${remoteId} after ICE ${rtcPeerConnection.iceConnectionState}`)
+      rtcPeerConnection.close()
+      ;[...this.getPeerConnections(remoteId)].forEach((connection) => connection.close())
+      this.removePeerState(remoteId)
+      this.notifyStateListeners()
+    }, ICE_DISCONNECTED_CLEANUP_TIMEOUT_MS)
   }
 
   private sendRecordingActivity(recordingActivity: RecordingActivity) {
@@ -618,10 +665,19 @@ export class RemoteMediaClient3 {
     newPeerConnection.oniceconnectionstatechange = () => {
       this.logger.log('New ice connecting state ' + newPeerConnection.iceConnectionState)
       switch (newPeerConnection.iceConnectionState) {
+        case 'connected':
+        case 'completed':
+          this.clearIceDisconnectedCleanupTimeout(remotePeerState)
+          break
+        case 'disconnected':
+          this.scheduleIceDisconnectedCleanup(remoteId, remotePeerState, newPeerConnection)
+          break
         case 'failed':
           newPeerConnection.restartIce()
+          this.scheduleIceDisconnectedCleanup(remoteId, remotePeerState, newPeerConnection)
           break
         case 'closed':
+          this.clearIceDisconnectedCleanupTimeout(remotePeerState)
           remotePeerState.rtcPeerConnection = null
           break
       }
@@ -687,6 +743,8 @@ export class RemoteMediaClient3 {
     this.getDataConnection(remoteId)!.send(answer)
   }
 }
+
+const ICE_DISCONNECTED_CLEANUP_TIMEOUT_MS = 5000
 
 const rtcConfig = {
   iceServers: [
