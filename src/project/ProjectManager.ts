@@ -9,7 +9,7 @@ export class ProjectManager {
   static readonly ACTIVE_PROJECT_PROPERTY_NAME = 'activeProject'
   static readonly DEFAULT_PROJECT_TITLE = 'My First Etching'
 
-  private static activeProject: Project | null
+  private static activeProject: Promise<Project> | null
   private static projectListeners = new Array<(_: Project) => any>()
   private static trackListeners = new Map<number, Array<(_: Track) => any>>()
   private static clipListeners = new Map<number, Array<(_: Clip) => any>>()
@@ -42,10 +42,10 @@ export class ProjectManager {
     if (!project) {
       project = await ProjectManager.getActiveProject()
     }
-    if (project != ProjectManager.activeProject) {
-      ProjectManager.activeProject = project
+    if (project != await ProjectManager.activeProject) {
+      ProjectManager.activeProject = Promise.resolve(project)
     }
-    await DatabasePersister.save(ProjectManager.activeProject)
+    await DatabasePersister.save(project)
     ProjectManager.projectListeners.forEach((listener) => listener(project))
   }
 
@@ -53,30 +53,36 @@ export class ProjectManager {
     if (ProjectManager.activeProject) {
       return ProjectManager.activeProject
     }
+    ProjectManager.activeProject = this.createOrLoadActiveProject()
+    return ProjectManager.activeProject
+  }
+
+  private static async createOrLoadActiveProject() {
     const activeProjectId = await DatabasePersister.getGlobalProperty(ProjectManager.ACTIVE_PROJECT_PROPERTY_NAME)
+    let result: Project | null
     if (activeProjectId != null) {
-      ProjectManager.activeProject = await DatabasePersister.getObjectById<Project>(Number(activeProjectId))
-      if (ProjectManager.activeProject) {
-        await this.populateSummaries(ProjectManager.activeProject)
+      result = await DatabasePersister.getObjectById<Project>(Number(activeProjectId))
+      if (result) {
+        await this.populateSummaries(result)
       } else {
-        ProjectManager.activeProject = await DatabasePersister.save(
+        result = await DatabasePersister.save(
           new Project(ProjectManager.DEFAULT_PROJECT_TITLE, 48000),
         )
         await DatabasePersister.setGlobalProperty(
           ProjectManager.ACTIVE_PROJECT_PROPERTY_NAME,
-          ProjectManager.activeProject.id,
+          result.id,
         )
       }
     } else {
-      ProjectManager.activeProject = await DatabasePersister.save(
+      result = await DatabasePersister.save(
         new Project(ProjectManager.DEFAULT_PROJECT_TITLE, 48000),
       )
       await DatabasePersister.setGlobalProperty(
         ProjectManager.ACTIVE_PROJECT_PROPERTY_NAME,
-        ProjectManager.activeProject.id,
+        result.id,
       )
     }
-    return ProjectManager.activeProject!
+    return result
   }
 
   static async getProjects(): Promise<Project[]> {
@@ -87,17 +93,17 @@ export class ProjectManager {
   }
 
   static async createProject(title: string = 'Untitled Project', sampleRate = 48000): Promise<Project> {
-    const project = await DatabasePersister.save(new Project(title, sampleRate))
-    ProjectManager.activeProject = project
+    ProjectManager.activeProject = DatabasePersister.save(new Project(title, sampleRate))
+    const project = await ProjectManager.activeProject
     await DatabasePersister.setGlobalProperty(ProjectManager.ACTIVE_PROJECT_PROPERTY_NAME, project.id)
     ProjectManager.projectListeners.forEach((listener) => listener(project))
-    return project
+    return ProjectManager.activeProject
   }
 
   static async renameProject(project: Project, title: string): Promise<void> {
     project.title = title
     await DatabasePersister.save(project)
-    if (ProjectManager.activeProject?.id == project.id) {
+    if ((await ProjectManager.activeProject)?.id == project.id) {
       ProjectManager.projectListeners.forEach((listener) => listener(project))
     }
   }
@@ -108,7 +114,7 @@ export class ProjectManager {
     if (!project) {
       throw new Error('Project not found')
     }
-    ProjectManager.activeProject = project
+    ProjectManager.activeProject = Promise.resolve(project)
     await this.populateSummaries(project)
     await DatabasePersister.setGlobalProperty(ProjectManager.ACTIVE_PROJECT_PROPERTY_NAME, project.id)
     ProjectManager.projectListeners.forEach((listener) => listener(project))

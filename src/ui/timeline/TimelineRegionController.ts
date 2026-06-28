@@ -23,6 +23,14 @@ export class TimelineRegionController extends TrackListItemController {
     super(trackListController)
   }
 
+  get lowSample() {
+    return this.getSampleForXValue(Math.min(this.firstPosition, this.secondPosition))
+  }
+
+  get highSample() {
+    return this.getSampleForXValue(Math.max(this.firstPosition, this.secondPosition))
+  }
+
   get selectedRegion() {
     if (this.waveformElements.size == 0 || this.firstPosition == this.secondPosition) {
       return null

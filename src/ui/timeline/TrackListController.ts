@@ -203,7 +203,9 @@ export class TrackListController {
 
         const trackInfoDiv = document.createElement('div')
         trackInfoDiv.style.height = `${7 * track.getChannelCount() + 1.5}rem`
-        const trackListInfo = new TrackListInfo(track, trackInfoDiv, this.history, (changedTrack, effect) => {})
+        const trackListInfo = new TrackListInfo(track, trackInfoDiv, this.history, (changedTrack, effect) => {
+          
+        })
 
         const waveformDiv = document.createElement('div')
         waveformDiv.addEventListener('contextmenu', (mouseEvent) => {
@@ -220,11 +222,6 @@ export class TrackListController {
         const waveform = new Waveform(this, track, waveformDiv, i)
         nextWaveforms.push(waveform)
         this.infoWaveformPairs.set(`${track.id}`, { info: trackInfoDiv, waveform: waveformDiv, controller: waveform })
-
-        new ResizeObserver(async (_) => {
-          waveform.resize()
-          waveform.draw()
-        }).observe(waveformDiv)
 
         infoDivs.push(trackInfoDiv)
         waveformDivs.push(waveformDiv)

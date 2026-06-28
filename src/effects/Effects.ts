@@ -1,6 +1,6 @@
 export enum EffectType {
-  'gain',
-  'eq',
+  gain,
+  eq,
 }
 
 export type GainEffect = {

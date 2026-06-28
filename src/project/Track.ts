@@ -3,7 +3,6 @@ import { DatabasePersisted } from '../persistence/DatabasePersisted'
 import { Restorable } from '../persistence/Restoration'
 import { Analyzable } from '../analyzers/Analyzable'
 import { Effect, EffectType } from '../effects/Effects'
-import { WamParameterInfoMap } from '@webaudiomodules/api'
 
 class Playback {
   constructor(
@@ -21,13 +20,14 @@ export class Track extends DatabasePersisted implements Analyzable {
   private playback: Playback | null = null
   private pan: number = 0
   private gain: number = 1
-  private effectRegions = new Map<EffectType, Array<Effect>>()
+  private readonly effectRegions: Effect[][]
 
   constructor(
     public name: string,
     private readonly channelCount: number,
   ) {
     super(['playback'])
+    this.effectRegions = Object.values(EffectType).map(_ => [])
   }
 
   getChannelCount(): number {
@@ -242,24 +242,20 @@ export class Track extends DatabasePersisted implements Analyzable {
 
   getEffectRegions(effect: EffectType | null = null): Effect[] {
     if (!effect) {
-      return Object.values(EffectType).flatMap(type => this.effectRegions.get(type as EffectType) ?? [])
+      return this.effectRegions.flatMap(e => e)
     }
-    return this.effectRegions.get(effect) ?? []
+    return this.effectRegions[effect]
   }
 
   removeEffectRegion(effect: Effect) {
-    const effectArray = this.effectRegions.get(effect.type)
+    const effectArray = this.effectRegions[effect.type]
     if (effectArray) {
       effectArray.splice(effectArray.indexOf(effect), 1)
     }
   }
 
   addEffectRegion(effect: Effect): boolean {
-    const effectArray = this.effectRegions.get(effect.type)
-    if (!effectArray) {
-      this.effectRegions.set(effect.type, [effect])
-      return true
-    }
+    const effectArray = this.effectRegions[effect.type]
     for (let i = 0; i < effectArray.length; ++i) {
       if (effectArray[i].startPosition <= effect.startPosition) {
         if (effectArray[i].startPosition + effectArray[i].length > effect.startPosition) {

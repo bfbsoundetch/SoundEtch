@@ -22,7 +22,7 @@ export class Waveform extends TrackListItemController {
   private readonly axesPathElement = document.createElementNS('http://www.w3.org/2000/svg', 'path')
   private readonly channelSeparatorPathElement = document.createElementNS('http://www.w3.org/2000/svg', 'path')
   private effectShown: EffectType | null = null
-  private effectRegions = new Map<EffectRegion, TimelineRegionController>()
+  private readonly effectRegionControllers = new Map<EffectRegion, TimelineRegionController>()
   private readonly color: string
   width = 0
   private height = 0
@@ -131,6 +131,7 @@ export class Waveform extends TrackListItemController {
   }
 
   private drawEffectRegions() {
+    console.error('aaaa')
     const lowSample = this.getSampleForXValue(0)
     const highSample = this.getSampleForXValue(this.width)
     const displayedEffect = this.trackListController.getDisplayedEffectForTrack(this.track)
@@ -138,24 +139,28 @@ export class Waveform extends TrackListItemController {
       return
     }
 
-    const effectRegions = new Set(this.track.getEffectRegions(displayedEffect))
-    this.effectRegions.forEach((value, key) => {
-      if (!effectRegions.has(key)) {
+    const effectRegionSet = new Set(this.track.getEffectRegions(displayedEffect))
+    this.effectRegionControllers.forEach((value, key) => {
+      if (!effectRegionSet.has(key)) {
         value.remove()
-        this.effectRegions.delete(key)
+        this.effectRegionControllers.delete(key)
       } else {
         value.draw()
-        effectRegions.delete(key)
+        effectRegionSet.delete(key)
       }
     })
-    effectRegions.forEach(effectRegion => {
+    effectRegionSet.forEach(effectRegion => {
       const controller = new TimelineRegionController(
         true,
-        () => {},
-        () => {}, 
+        () => null,
+        () => {
+          effectRegion.startPosition = controller.lowSample
+          effectRegion.length = controller.highSample - controller.lowSample
+        }, 
         this.trackListController
       )
-      this.effectRegions.set(effectRegion, controller)
+      this.effectRegionControllers.set(effectRegion, controller)
+      controller.draw()
     })
   }
 
