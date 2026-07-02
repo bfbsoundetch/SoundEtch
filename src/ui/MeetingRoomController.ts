@@ -250,6 +250,7 @@ export class MeetingRoomController {
       return false
     }
     this.remoteMediaClient = new RemoteMediaClient3(username)
+    AudioInputs.registerRemoteMediaClient(this.remoteMediaClient)
     this.remoteMediaClient.setRecordingActivity(this.localRecordingActivity)
     this.remoteMediaClient.addStateListener((state) => this.stateListener(state))
     this.remoteMediaClient.addMessageListener((message) =>

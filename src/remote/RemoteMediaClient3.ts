@@ -1,7 +1,6 @@
 import { Logger } from '../global/Logger'
 import { LocalMediaStreams } from '../mediastreams/LocalMediaStreams'
-import { AudioInputs } from '../audioinputs/AudioInputs'
-import { Peer, DataConnection, MediaConnection, ConnectionType } from 'peerjs'
+import { Peer, DataConnection, MediaConnection, ConnectionType, LogLevel } from 'peerjs'
 import { PeerNetworkDelayEstimator, TimestampMessage } from './PeerNetworkDelayEstimator'
 
 export type PeerMessage =
@@ -120,6 +119,7 @@ export class RemoteMediaClient3 {
   constructor(
     private readonly username: string,
     roomName: string | null = null,
+    createForTest = false
   ) {
     LocalMediaStreams.registerAVDeviceListener((added, track) => {
       if (added) {
@@ -173,10 +173,11 @@ export class RemoteMediaClient3 {
     })
 
     this.state.roomId = roomName
-    this.peer = new Peer({ config: rtcConfig })
-
+    this.peer = createForTest ? new Peer('username', { config: rtcConfig, host: 'localhost', port: 8080, debug: 4 as any /*LogLevel.All*/ }) : new Peer({ config: rtcConfig })
+    
+        
     this.peer.addListener('open', () => {
-      console.debug('opened')
+      console.debug('opened', this.peer.id)
       if (!this.state.roomId) {
         this.state.roomId = this.peer.id
         this.notifyStateListeners()
@@ -321,8 +322,6 @@ export class RemoteMediaClient3 {
     if (this.state.screenShare != 'self' && this.state.screenShare?.peerId == peerId) {
       this.state.screenShare = null
     }
-    AudioInputs.removeRemoteAudioSource(peerId, false)
-    AudioInputs.removeRemoteAudioSource(peerId, true)
   }
 
   private handleOpenedDataConnection(dataConnection: DataConnection) {
@@ -627,10 +626,6 @@ export class RemoteMediaClient3 {
         }
 
         removed = true
-
-        if (trackEvent.track.kind === 'audio') {
-          AudioInputs.removeRemoteAudioSource(remoteId, isScreenShare)
-        }
         this.notifyStateListeners()
       }
 
@@ -641,14 +636,6 @@ export class RemoteMediaClient3 {
         }
       } else if (!isScreenShare) {
         member.mediaStream.addTrack(trackEvent.track)
-      }
-
-      if (trackEvent.track.kind === 'audio') {
-        let input = AudioInputs.getRemoteStreamForUser(member.username, isScreenShare)
-        if (!input) {
-          input = AudioInputs.addRemoteAudioSource(member.username, isScreenShare)
-        }
-        await input.updateMediaStreamTrack(trackEvent.track)
       }
       trackEvent.track.onended = () => removeTrack()
       trackEvent.streams.forEach((stream) => {

@@ -1,3 +1,4 @@
+import { RemoteMediaClient3 } from 'remote/RemoteMediaClient3'
 import { AudioControl, AudioState } from '../audiocontext/AudioControl'
 import { LocalMediaStreams } from '../mediastreams/LocalMediaStreams'
 import { AudioInput } from './AudioInput'
@@ -9,6 +10,7 @@ export class AudioInputs {
   static localAVDevice: MediaStreamInput = new MediaStreamInput('local-mic', 'local microphone', false)
   static localScreenShare = new MediaStreamInput('local-screen', 'local screen', false)
   private static remoteStreams = new Map<string, MediaStreamInput>()
+  private static remoteScreenShare: MediaStreamInput | null = null
 
   static {
     LocalMediaStreams.registerAVDeviceListener((added, track) => {
@@ -64,6 +66,9 @@ export class AudioInputs {
     if (LocalMediaStreams.localScreenMediaStream.getAudioTracks().length > 0) {
       result.push(this.localScreenShare)
     }
+    if (this.remoteScreenShare) {
+      result.push(this.remoteScreenShare)
+    }
     result.push(...this.generators)
     result.push(...this.remoteStreams.values())
     return result
@@ -94,5 +99,42 @@ export class AudioInputs {
 
   static getRemoteInputs() {
     return [...this.remoteStreams.values()]
+  }
+
+  static registerRemoteMediaClient(remoteMediaClient: RemoteMediaClient3) {
+    remoteMediaClient.addStateListener((state) => {
+      if (state.screenShare && state.screenShare != 'self') {
+        this.remoteScreenShare = new MediaStreamInput(
+          `${state.screenShare.peerId}-screen`,
+          state.screenShare.username,
+          false,
+        )
+      } else {
+        this.remoteScreenShare?.stop()
+        this.remoteScreenShare = null
+      }
+      state.members.forEach(member => {
+        member.mediaStream.addEventListener('addtrack', (trackEvent) => {
+          if (trackEvent.track.kind == 'audio') {
+            let input = this.remoteStreams.get(member.peerId)
+            if (!input) {
+              input = new MediaStreamInput(
+                  member.peerId,
+                  member.username,
+                  false,
+                )
+              this.remoteStreams.set(member.peerId, input)
+            }
+            input.updateMediaStreamTrack(trackEvent.track)
+          }
+        })
+        member.mediaStream.addEventListener('removetrack', (trackEvent) => {
+          if (trackEvent.track.kind == 'audio') {
+            this.remoteStreams.delete(member.peerId)
+          }
+        })
+      })
+      AudioInputs.notifyListeners()
+    })
   }
 }
