@@ -113,8 +113,14 @@ export class AudioInputs {
         this.remoteScreenShare?.stop()
         this.remoteScreenShare = null
       }
-      state.members.forEach(member => {
+      const ourMembers = new Set(this.remoteStreams.keys())
+      for (const member of state.members) {
+        if (ourMembers.has(member.peerId)) {
+          ourMembers.delete(member.peerId)
+          continue
+        }
         member.mediaStream.addEventListener('addtrack', (trackEvent) => {
+          console.error('add track')
           if (trackEvent.track.kind == 'audio') {
             let input = this.remoteStreams.get(member.peerId)
             if (!input) {
@@ -129,11 +135,17 @@ export class AudioInputs {
           }
         })
         member.mediaStream.addEventListener('removetrack', (trackEvent) => {
+          console.error('remove track')
           if (trackEvent.track.kind == 'audio') {
-            this.remoteStreams.delete(member.peerId)
+            this.remoteStreams.get(member.peerId)?.stop()
           }
         })
+      }
+      ourMembers.forEach(id => {
+        this.remoteStreams.get(id)?.stop()
+        this.remoteStreams.delete(id)
       })
+
       AudioInputs.notifyListeners()
     })
   }

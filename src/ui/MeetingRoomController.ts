@@ -279,6 +279,7 @@ export class MeetingRoomController {
 
       this.logger.log('About to join ' + meetingId)
       this.remoteMediaClient = new RemoteMediaClient3(username, meetingId)
+      AudioInputs.registerRemoteMediaClient(this.remoteMediaClient)
       this.remoteMediaClient.setRecordingActivity(this.localRecordingActivity)
       this.remoteMediaClient.addStateListener((state) => this.stateListener(state))
       this.setUiForConnectedState()
@@ -473,28 +474,12 @@ export class MeetingRoomController {
         if (this.guestContainers[i].vidElement.srcObject != mediaStream) {
           this.guestContainers[i].vidElement.srcObject = mediaStream
         }
+        const videoTrack = mediaStream.getVideoTracks()[0]
+        if (!videoTrack) {
+          this.guestContainers[i].vidElement.load()
+        }
         this.guestContainers[i].vidElement.poster = this.getSvgPosterForUser(state.members[i].username, false)
         this.guestContainers[i].setRecordingActivity(state.members[i].username, state.members[i].recordingActivity)
-        mediaStream.addEventListener('removetrack', (trackEvent) => {
-          if (trackEvent.track.kind == 'video') {
-            this.guestContainers[i].vidElement.srcObject = null
-          }
-        })
-
-        mediaStream.getVideoTracks().forEach(track => {
-          track.addEventListener('mute', () => {
-            this.guestContainers[i].vidElement.srcObject = null
-          })
-        })
-        
-        mediaStream.addEventListener('addtrack', (trackEvent) => {
-          if (trackEvent.track.kind == 'video') {
-            this.guestContainers[i].vidElement.srcObject = mediaStream
-            trackEvent.track.addEventListener('mute', () => {
-              this.guestContainers[i].vidElement.srcObject = null
-            })
-          }
-        })
         // this.guestContainers[i].startPeakMeter(
         //   AudioInputs.remoteStreams.get({ username: state.members[i].username, isScreenShare: false })!,
         // )

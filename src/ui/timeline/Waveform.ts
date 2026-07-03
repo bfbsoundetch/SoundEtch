@@ -131,7 +131,6 @@ export class Waveform extends TrackListItemController {
   }
 
   private drawEffectRegions() {
-    console.error('aaaa')
     const lowSample = this.getSampleForXValue(0)
     const highSample = this.getSampleForXValue(this.width)
     const displayedEffect = this.trackListController.getDisplayedEffectForTrack(this.track)

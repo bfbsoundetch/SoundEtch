@@ -336,11 +336,6 @@ export class RemoteMediaClient3 {
       screenShareStreamId: LocalMediaStreams.localScreenMediaStream.id,
       recordingActivity: this.getCurrentRecordingActivityForMessage(),
     })
-
-    this.getAndMaybeAddPeerConnection(dataConnection.peer)
-    const peerNeworkDelayEstimator = new PeerNetworkDelayEstimator(dataConnection)
-    this.getOrCreateRemotePeerState(dataConnection.peer).peerNeworkDelayEstimator = peerNeworkDelayEstimator
-    peerNeworkDelayEstimator.getNewEstimate().then((e) => console.debug(`your delay time is: ${e}`))
   }
 
   private handleClosedDataConnection(dataConnection: DataConnection) {
@@ -515,6 +510,11 @@ export class RemoteMediaClient3 {
           await this.setRemoteRecordingActivity(self.peer, peerMessage.recordingActivity, false)
         }
         this.shareKnownPeers(self)
+
+        this.getAndMaybeAddPeerConnection(self.peer)
+        const peerNeworkDelayEstimator = new PeerNetworkDelayEstimator(self)
+        this.getOrCreateRemotePeerState(self.peer).peerNeworkDelayEstimator = peerNeworkDelayEstimator
+        peerNeworkDelayEstimator.getNewEstimate().then((e) => console.debug(`your delay time is: ${e}`))
         this.notifyStateListeners()
         break
       case 'otherPeer':
@@ -536,6 +536,7 @@ export class RemoteMediaClient3 {
             await this.answerRemoteOffer(self.peer, new RTCSessionDescription(peerMessage.desc))
             break
           case 'answer':
+                console.error('tell me mf222')
             await this.getAndMaybeAddPeerConnection(self.peer).setRemoteDescription(peerMessage.desc)
             await this.getOrCreateRemotePeerState(self.peer).flushPendingIceCandidates(
               this.getAndMaybeAddPeerConnection(self.peer),
@@ -603,6 +604,7 @@ export class RemoteMediaClient3 {
       this.getDataConnection(remoteId).send(iceCandidateMessage)
     }
     newPeerConnection.ontrack = async (trackEvent) => {
+      console.error('we are on track')
       const screenShareStreamId = remotePeerState.remoteScreenShareStreamId
       const screenShareStream = trackEvent.streams.find((stream) => stream.id === screenShareStreamId) ?? null
       const isScreenShare = screenShareStream != null
@@ -623,6 +625,7 @@ export class RemoteMediaClient3 {
           }
         } else {
           member.mediaStream.removeTrack(trackEvent.track)
+          member.mediaStream.dispatchEvent(new MediaStreamTrackEvent('removetrack', {track: trackEvent.track}))
         }
 
         removed = true
@@ -636,8 +639,10 @@ export class RemoteMediaClient3 {
         }
       } else if (!isScreenShare) {
         member.mediaStream.addTrack(trackEvent.track)
+        member.mediaStream.dispatchEvent(new MediaStreamTrackEvent('addtrack', {track: trackEvent.track}))
       }
       trackEvent.track.onended = () => removeTrack()
+      trackEvent.track.onmute = () => removeTrack()
       trackEvent.streams.forEach((stream) => {
         stream.addEventListener('removetrack', (event) => {
           if (event.track == trackEvent.track) {

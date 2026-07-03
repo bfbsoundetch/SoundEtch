@@ -72,11 +72,10 @@ export class TimelineController extends TrackListItemController {
       return
     }
     const bucket = this.getTickMarkBucket(this.tickLabels[0]?.getBoundingClientRect()?.width)
-    console.error(JSON.stringify(bucket))
     const increment = bucket.majorIntervalMs / this.msPerUnit
 
     const timelineOffset = 14 * this.rootFontSize // width of 'info' column
-    const offset = (timelineOffset - this.translation % increment)
+    const offset = timelineOffset - this.translation % increment
     const timelineOffsetTicks = Math.ceil(offset / increment)
     const tickMarkTime = this.getTickMarkForPosition(this.translation * this.msPerUnit, bucket)
 
@@ -233,13 +232,12 @@ export class TimelineController extends TrackListItemController {
   }
 
   private getTickMarkBucket(labelWidth: number | undefined): TickMarkBucket {
+    labelWidth = labelWidth ?? 100
     return (
-      this.TICK_MARKS.findLast(
+      this.TICK_MARKS.find(
         (bucket) => 
-          bucket.majorIntervalMs / this.msPerUnit < 600 * 
-            ((!labelWidth || bucket.majorIntervalMs / this.msPerUnit / 1.2 > labelWidth) ? 1 : 2)
-        ) ??
-      this.TICK_MARKS[0]
+            labelWidth && bucket.majorIntervalMs / this.msPerUnit / 1.2 > labelWidth
+        ) ?? this.TICK_MARKS[this.TICK_MARKS.length - 1]
     )
   }
 
