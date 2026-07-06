@@ -149,11 +149,27 @@ const remoteTestFakes = vi.hoisted(() => {
       }
     }
 
+    dispatchEvent(event: Event) {
+      for (const listener of this.listeners.get(event.type) ?? []) {
+        listener(event)
+      }
+      return true
+    }
+
     private dispatchTrackEvent(eventName: string, track: MediaStreamTrack) {
       const event = { type: eventName, target: this, track }
       for (const listener of this.listeners.get(eventName) ?? []) {
         listener(event)
       }
+    }
+  }
+
+  class FakeMediaStreamTrackEvent extends Event {
+    readonly track: MediaStreamTrack
+
+    constructor(type: string, eventInitDict: MediaStreamTrackEventInit) {
+      super(type)
+      this.track = eventInitDict.track
     }
   }
 
@@ -387,9 +403,21 @@ const remoteTestFakes = vi.hoisted(() => {
 
     async setLocalDescription(description: RTCSessionDescriptionInit) {
       if (description.type === 'rollback') {
+        if (this.signalingState !== 'have-local-offer') {
+          throw this.invalidStateError('set local rollback')
+        }
+
         this.localDescription = null
         this.updateSignalingState('stable')
         return
+      }
+
+      if (description.type === 'offer' && this.signalingState !== 'stable') {
+        throw this.invalidStateError('set local offer')
+      }
+
+      if (description.type === 'answer' && this.signalingState !== 'have-remote-offer') {
+        throw this.invalidStateError('set local answer')
       }
 
       this.localDescription = new FakeRTCSessionDescription(description) as RTCSessionDescription
@@ -398,6 +426,14 @@ const remoteTestFakes = vi.hoisted(() => {
     }
 
     async setRemoteDescription(description: RTCSessionDescriptionInit) {
+      if (description.type === 'offer' && this.signalingState !== 'stable') {
+        throw this.invalidStateError('set remote offer')
+      }
+
+      if (description.type === 'answer' && this.signalingState !== 'have-local-offer') {
+        throw this.invalidStateError('set remote answer')
+      }
+
       this.remoteDescription = new FakeRTCSessionDescription(description) as RTCSessionDescription
       this.updateSignalingState(description.type === 'offer' ? 'have-remote-offer' : 'stable')
       this.deliverTracksForPair()
@@ -480,6 +516,10 @@ const remoteTestFakes = vi.hoisted(() => {
         this.onsignalingstatechange?.call(this as unknown as RTCPeerConnection, new Event('signalingstatechange'))
       })
     }
+
+    private invalidStateError(action: string) {
+      return new Error(`Failed to ${action}: Called in wrong state: ${this.signalingState}`)
+    }
   }
 
   function getAvailablePeerId(requestedId: string | null) {
@@ -544,6 +584,7 @@ const remoteTestFakes = vi.hoisted(() => {
     connectionType,
     FakeDataConnection,
     FakeMediaStream,
+    FakeMediaStreamTrackEvent,
     FakeMediaStreamTrack,
     FakePeer,
     FakeRTCIceCandidate,
@@ -575,6 +616,7 @@ installGlobal('location', 'http://localhost/')
 installGlobal('window', globalThis)
 installGlobal('MediaStream', remoteTestFakes.FakeMediaStream)
 installGlobal('MediaStreamTrack', remoteTestFakes.FakeMediaStreamTrack)
+installGlobal('MediaStreamTrackEvent', remoteTestFakes.FakeMediaStreamTrackEvent)
 installGlobal('RTCIceCandidate', remoteTestFakes.FakeRTCIceCandidate)
 installGlobal('RTCPeerConnection', remoteTestFakes.FakeRTCPeerConnection)
 installGlobal('RTCSessionDescription', remoteTestFakes.FakeRTCSessionDescription)

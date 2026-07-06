@@ -80,6 +80,17 @@ class RemotePeerState {
   remoteScreenShareStreamId: string | null = null
   peerNeworkDelayEstimator: PeerNetworkDelayEstimator | null = null
   iceDisconnectedCleanupTimeout: number | null = null
+  ignoreOffer = false
+  private rtcOperationQueue: Promise<void> = Promise.resolve()
+
+  enqueueRtcOperation(operation: () => Promise<void>): Promise<void> {
+    const queuedOperation = this.rtcOperationQueue.then(operation, operation)
+    this.rtcOperationQueue = queuedOperation.then(
+      () => undefined,
+      () => undefined,
+    )
+    return queuedOperation
+  }
 
   withRtcPeerConnection(callback: (peerConnection: RTCPeerConnection) => void) {
     if (this.rtcPeerConnection) {
@@ -119,7 +130,7 @@ export class RemoteMediaClient3 {
   constructor(
     private readonly username: string,
     roomName: string | null = null,
-    createForTest = false
+    createForTest = false,
   ) {
     LocalMediaStreams.registerAVDeviceListener((added, track) => {
       if (added) {
@@ -173,9 +184,10 @@ export class RemoteMediaClient3 {
     })
 
     this.state.roomId = roomName
-    this.peer = createForTest ? new Peer('username', { config: rtcConfig, host: 'localhost', port: 8080, debug: 4 as any /*LogLevel.All*/ }) : new Peer({ config: rtcConfig })
-    
-        
+    this.peer = createForTest
+      ? new Peer('username', { config: rtcConfig, host: 'localhost', port: 8080, debug: 4 as any /*LogLevel.All*/ })
+      : new Peer({ config: rtcConfig })
+
     this.peer.addListener('open', () => {
       console.debug('opened', this.peer.id)
       if (!this.state.roomId) {
@@ -268,8 +280,7 @@ export class RemoteMediaClient3 {
   private getDataConnection(peerId: string): DataConnection {
     return (
       (this.getPeerConnections(peerId).find((connection) => connection.type === ConnectionType.Data) as
-        | DataConnection
-        | undefined) ?? this.peer.connect(peerId, { metadata: { soundetch: true } })
+        DataConnection | undefined) ?? this.peer.connect(peerId, { metadata: { soundetch: true } })
     )
   }
 
@@ -506,12 +517,12 @@ export class RemoteMediaClient3 {
       case 'self':
         this.ensureMember(self.peer, peerMessage.username)
         this.getOrCreateRemotePeerState(self.peer).remoteScreenShareStreamId = peerMessage.screenShareStreamId
+        this.getAndMaybeAddPeerConnection(self.peer)
         if (peerMessage.recordingActivity) {
           await this.setRemoteRecordingActivity(self.peer, peerMessage.recordingActivity, false)
         }
         this.shareKnownPeers(self)
 
-        this.getAndMaybeAddPeerConnection(self.peer)
         const peerNeworkDelayEstimator = new PeerNetworkDelayEstimator(self)
         this.getOrCreateRemotePeerState(self.peer).peerNeworkDelayEstimator = peerNeworkDelayEstimator
         peerNeworkDelayEstimator.getNewEstimate().then((e) => console.debug(`your delay time is: ${e}`))
@@ -536,11 +547,7 @@ export class RemoteMediaClient3 {
             await this.answerRemoteOffer(self.peer, new RTCSessionDescription(peerMessage.desc))
             break
           case 'answer':
-                console.error('tell me mf222')
-            await this.getAndMaybeAddPeerConnection(self.peer).setRemoteDescription(peerMessage.desc)
-            await this.getOrCreateRemotePeerState(self.peer).flushPendingIceCandidates(
-              this.getAndMaybeAddPeerConnection(self.peer),
-            )
+            await this.acceptRemoteAnswer(self.peer, new RTCSessionDescription(peerMessage.desc))
             break
         }
         break
@@ -581,8 +588,13 @@ export class RemoteMediaClient3 {
   }
 
   private async addOrQueueIceCandidate(remoteId: string, candidate: RTCIceCandidateInit) {
+    const remotePeerState = this.getOrCreateRemotePeerState(remoteId)
+    if (remotePeerState.ignoreOffer) {
+      return
+    }
+
     const rtcPeerConnection = this.getAndMaybeAddPeerConnection(remoteId)
-    await this.getOrCreateRemotePeerState(remoteId).addOrQueueIceCandidate(candidate, rtcPeerConnection)
+    await remotePeerState.addOrQueueIceCandidate(candidate, rtcPeerConnection)
   }
 
   getAndMaybeAddPeerConnection(remoteId: string): RTCPeerConnection {
@@ -625,7 +637,7 @@ export class RemoteMediaClient3 {
           }
         } else {
           member.mediaStream.removeTrack(trackEvent.track)
-          member.mediaStream.dispatchEvent(new MediaStreamTrackEvent('removetrack', {track: trackEvent.track}))
+          member.mediaStream.dispatchEvent(new MediaStreamTrackEvent('removetrack', { track: trackEvent.track }))
         }
 
         removed = true
@@ -639,7 +651,7 @@ export class RemoteMediaClient3 {
         }
       } else if (!isScreenShare) {
         member.mediaStream.addTrack(trackEvent.track)
-        member.mediaStream.dispatchEvent(new MediaStreamTrackEvent('addtrack', {track: trackEvent.track}))
+        member.mediaStream.dispatchEvent(new MediaStreamTrackEvent('addtrack', { track: trackEvent.track }))
       }
       trackEvent.track.onended = () => removeTrack()
       trackEvent.track.onmute = () => removeTrack()
@@ -689,7 +701,11 @@ export class RemoteMediaClient3 {
       this.logger.errorMessage('ice candidate error ' + event.errorCode + ' ' + event.errorText)
       console.error(newPeerConnection.iceConnectionState, newPeerConnection.iceGatheringState)
     }
-    newPeerConnection.onnegotiationneeded = () => this.negotiateRtc(newPeerConnection, remoteId)
+    newPeerConnection.onnegotiationneeded = () => {
+      this.negotiateRtc(newPeerConnection, remoteId).catch((error: unknown) => {
+        this.logger.error(error instanceof Error ? error : new Error(String(error)))
+      })
+    }
     remotePeerState.rtcPeerConnection = newPeerConnection
     LocalMediaStreams.localAVDeviceMediaStream.getTracks().forEach((track) => {
       newPeerConnection.addTrack(track, LocalMediaStreams.localAVDeviceMediaStream)
@@ -701,38 +717,72 @@ export class RemoteMediaClient3 {
   }
 
   async negotiateRtc(newPeerConnection: RTCPeerConnection, remoteId: string) {
-    this.logger.log('negotiateRtc ' + remoteId)
-    const offer = await newPeerConnection.createOffer()
-    // If the connection hasn't yet achieved the "stable" state,
-    // return to the caller. Another negotiationneeded event
-    // will be fired when the state stabilizes.
-    if (newPeerConnection.signalingState !== 'stable') {
-      return
-    }
-    await newPeerConnection.setLocalDescription(offer)
-    this.getDataConnection(remoteId).send({
-      type: 'rtcSessionDescription',
-      desc: newPeerConnection.localDescription!.toJSON(),
+    const remotePeerState = this.getOrCreateRemotePeerState(remoteId)
+    await remotePeerState.enqueueRtcOperation(async () => {
+      if (remotePeerState.rtcPeerConnection != newPeerConnection || newPeerConnection.signalingState !== 'stable') {
+        return
+      }
+
+      this.logger.log('negotiateRtc ' + remoteId)
+      const offer = await newPeerConnection.createOffer()
+      await newPeerConnection.setLocalDescription(offer)
+      this.getDataConnection(remoteId).send({
+        type: 'rtcSessionDescription',
+        desc: newPeerConnection.localDescription!.toJSON(),
+      })
     })
   }
 
   async answerRemoteOffer(remoteId: string, sessionDescription: RTCSessionDescription) {
-    const rtcPeerConnection = this.getAndMaybeAddPeerConnection(remoteId)
-    if (rtcPeerConnection.signalingState != 'stable') {
-      // Set the local and remove descriptions for rollback; don't proceed
-      // until both return.
-      this.logger.errorMessage('Peer connection was not stable ' + rtcPeerConnection.signalingState)
-      await rtcPeerConnection.setLocalDescription({ type: 'rollback' })
-    }
+    const remotePeerState = this.getOrCreateRemotePeerState(remoteId)
+    await remotePeerState.enqueueRtcOperation(async () => {
+      const rtcPeerConnection = this.getAndMaybeAddPeerConnection(remoteId)
+      const offerCollision = rtcPeerConnection.signalingState !== 'stable'
+      remotePeerState.ignoreOffer = offerCollision && !this.isPolitePeer(remoteId)
+      if (remotePeerState.ignoreOffer) {
+        this.logger.log('Ignoring colliding offer from ' + remoteId)
+        return
+      }
 
-    await rtcPeerConnection.setRemoteDescription(sessionDescription)
-    await this.getOrCreateRemotePeerState(remoteId).flushPendingIceCandidates(rtcPeerConnection)
-    await rtcPeerConnection.setLocalDescription(await rtcPeerConnection.createAnswer())
-    const answer = {
-      type: 'rtcSessionDescription',
-      desc: rtcPeerConnection.localDescription!.toJSON(),
-    }
-    this.getDataConnection(remoteId)!.send(answer)
+      if (offerCollision) {
+        if (rtcPeerConnection.signalingState !== 'have-local-offer') {
+          this.logger.log('Ignoring offer from ' + remoteId + ' in state ' + rtcPeerConnection.signalingState)
+          return
+        }
+
+        this.logger.log('Rolling back local offer for ' + remoteId)
+        await rtcPeerConnection.setLocalDescription({ type: 'rollback' })
+      }
+
+      remotePeerState.ignoreOffer = false
+      await rtcPeerConnection.setRemoteDescription(sessionDescription)
+      await remotePeerState.flushPendingIceCandidates(rtcPeerConnection)
+      await rtcPeerConnection.setLocalDescription(await rtcPeerConnection.createAnswer())
+      const answer = {
+        type: 'rtcSessionDescription',
+        desc: rtcPeerConnection.localDescription!.toJSON(),
+      }
+      this.getDataConnection(remoteId).send(answer)
+    })
+  }
+
+  private async acceptRemoteAnswer(remoteId: string, sessionDescription: RTCSessionDescription) {
+    const remotePeerState = this.getOrCreateRemotePeerState(remoteId)
+    await remotePeerState.enqueueRtcOperation(async () => {
+      const rtcPeerConnection = this.getAndMaybeAddPeerConnection(remoteId)
+      if (rtcPeerConnection.signalingState !== 'have-local-offer') {
+        this.logger.log('Ignoring answer from ' + remoteId + ' in state ' + rtcPeerConnection.signalingState)
+        return
+      }
+
+      remotePeerState.ignoreOffer = false
+      await rtcPeerConnection.setRemoteDescription(sessionDescription)
+      await remotePeerState.flushPendingIceCandidates(rtcPeerConnection)
+    })
+  }
+
+  private isPolitePeer(remoteId: string) {
+    return this.peer.id < remoteId
   }
 }
 

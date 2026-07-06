@@ -105,6 +105,14 @@ test('sends an already-enabled microphone to a user that joins later', async () 
   await waitForMemberTracks(alice, 'Bob', ['audio'])
 })
 
+test('handles simultaneous microphone offers when both users join with microphones already enabled', async () => {
+  const alice = await createParticipant('Alice', null, true)
+  const bob = await createParticipant('Bob', alice.client.id, true)
+
+  await waitForMemberTracks(alice, 'Bob', ['audio'])
+  await waitForMemberTracks(bob, 'Alice', ['audio'])
+})
+
 test('connects three users into a mesh and each user hears the other speakers', async () => {
   const alice = await createParticipant('Alice')
   const bob = await createParticipant('Bob', alice.client.id)
@@ -179,8 +187,12 @@ test('removes disconnected peers from state and notifies remaining clients', asy
   expect(cara.states.length).toBeGreaterThan(caraStateCount)
 })
 
-async function createParticipant(username: string, roomId: string | null = null) {
+async function createParticipant(username: string, roomId: string | null = null, startMic = false) {
   const { LocalMediaStreams, RemoteMediaClient3 } = await importRemoteRuntime()
+  if (startMic) {
+    await LocalMediaStreams.startAudioDevice()
+  }
+
   const client = new RemoteMediaClient3(username, roomId)
   const participant: TestParticipant = {
     client,
