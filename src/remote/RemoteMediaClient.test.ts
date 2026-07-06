@@ -1,6 +1,6 @@
 import './FakesForRemoteTests'
 import { afterAll, afterEach, beforeAll, beforeEach, expect, test, vi } from 'vitest'
-import { resetRemoteTestFakes } from './FakesForRemoteTests'
+import { blockFutureDataConnectionsWithPeer, resetRemoteTestFakes } from './FakesForRemoteTests'
 import type { RecordingActivity, RemoteMediaClient3, State } from './RemoteMediaClient3'
 
 type LocalMediaStreamsClass = typeof import('../mediastreams/LocalMediaStreams').LocalMediaStreams
@@ -24,6 +24,7 @@ type TestParticipant = {
   username: string
   client: RemoteMediaClient3
   localMedia: LocalMediaStreamsClass
+  messages: Array<string>
   states: Array<StateSnapshot>
 }
 
@@ -138,6 +139,24 @@ test('connects three users into a mesh and each user hears the other speakers', 
   expect(memberUsernames(cara)).toEqual(['Alice', 'Bob'])
 })
 
+test('kicks the later peer when an introduced mesh connection cannot open', async () => {
+  const alice = await createParticipant('Alice')
+  const bob = await createParticipant('Bob', alice.client.id)
+  await waitForMember(alice, 'Bob')
+  await waitForMember(bob, 'Alice')
+
+  blockFutureDataConnectionsWithPeer(bob.client.id)
+  const cara = await createParticipant('Cara', alice.client.id, false, 5)
+
+  await waitFor(() => latest(cara).error?.includes('removed from the meeting') === true, 'Cara to be kicked')
+  await waitFor(() => !memberUsernames(alice).includes('Cara'), 'Alice to remove Cara')
+
+  expect(memberUsernames(alice)).toEqual(['Bob'])
+  expect(memberUsernames(bob)).toEqual(['Alice'])
+  expect(alice.messages.some((message) => message.includes('Removed Cara from the meeting'))).toBe(true)
+  expect(latest(cara).error).toContain('Bob')
+})
+
 test('broadcasts recording activity changes and notifies remote listeners', async () => {
   const alice = await createParticipant('Alice')
   const bob = await createParticipant('Bob', alice.client.id)
@@ -187,20 +206,27 @@ test('removes disconnected peers from state and notifies remaining clients', asy
   expect(cara.states.length).toBeGreaterThan(caraStateCount)
 })
 
-async function createParticipant(username: string, roomId: string | null = null, startMic = false) {
+async function createParticipant(
+  username: string,
+  roomId: string | null = null,
+  startMic = false,
+  meshConnectionTimeoutMs = 10000,
+) {
   const { LocalMediaStreams, RemoteMediaClient3 } = await importRemoteRuntime()
   if (startMic) {
     await LocalMediaStreams.startAudioDevice()
   }
 
-  const client = new RemoteMediaClient3(username, roomId)
+  const client = new RemoteMediaClient3(username, roomId, false, meshConnectionTimeoutMs)
   const participant: TestParticipant = {
     client,
     localMedia: LocalMediaStreams,
+    messages: [],
     states: [],
     username,
   }
   client.addStateListener((state) => participant.states.push(snapshotState(state)))
+  client.addMessageListener((message) => participant.messages.push(message.info))
   participants.push(participant)
   await waitFor(() => (client as any).peer.open === true, `${username} peer to open`)
   return participant

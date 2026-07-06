@@ -282,6 +282,9 @@ export class MeetingRoomController {
       AudioInputs.registerRemoteMediaClient(this.remoteMediaClient)
       this.remoteMediaClient.setRecordingActivity(this.localRecordingActivity)
       this.remoteMediaClient.addStateListener((state) => this.stateListener(state))
+      this.remoteMediaClient.addMessageListener((message) =>
+        NotificationsController.showLongDurationMessage(message.info),
+      )
       this.setUiForConnectedState()
       return true
     }
@@ -443,6 +446,10 @@ export class MeetingRoomController {
   private async stateListener(state: State) {
     console.error(`new state ${JSON.stringify(state)}`)
     if (state.error) {
+      if (!this.remoteMediaClient) {
+        return
+      }
+
       NotificationsController.showErrorMessage(state.error)
       this.remoteMediaClient = null
       this.setUiForDisconnectedState()

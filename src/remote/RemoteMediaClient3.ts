@@ -19,6 +19,14 @@ export type PeerMessage =
       peer: string
     }
   | {
+      type: 'meshConnectionFailed'
+      failedPeer: string
+    }
+  | {
+      type: 'kicked'
+      reason: string
+    }
+  | {
       type: 'chat'
       message: string
     }
@@ -80,6 +88,10 @@ class RemotePeerState {
   remoteScreenShareStreamId: string | null = null
   peerNeworkDelayEstimator: PeerNetworkDelayEstimator | null = null
   iceDisconnectedCleanupTimeout: number | null = null
+  meshConnectionTimeout: number | null = null
+  introducedByPeerId: string | null = null
+  joinedSequence: number | null = null
+  meshFailureReported = false
   ignoreOffer = false
   private rtcOperationQueue: Promise<void> = Promise.resolve()
 
@@ -124,6 +136,7 @@ export class RemoteMediaClient3 {
   private readonly initializedDataConnections = new Set<string>()
   private readonly openedDataConnections = new Set<string>()
   private readonly logger = new Logger('RemoteMediaClient')
+  private nextJoinedSequence = 0
   private currentRecordingActivity: RecordingActivity = { state: 'idle', countdownId: null }
   private currentCountdownStartedAtMs: number | null = null
 
@@ -131,6 +144,7 @@ export class RemoteMediaClient3 {
     private readonly username: string,
     roomName: string | null = null,
     createForTest = false,
+    private readonly meshConnectionTimeoutMs = MESH_CONNECTION_TIMEOUT_MS,
   ) {
     LocalMediaStreams.registerAVDeviceListener((added, track) => {
       if (added) {
@@ -251,6 +265,10 @@ export class RemoteMediaClient3 {
   }
 
   disconnect() {
+    this.remotePeerStates.forEach((remotePeerState) => {
+      this.clearIceDisconnectedCleanupTimeout(remotePeerState)
+      this.clearMeshConnectionTimeout(remotePeerState)
+    })
     this.peer.destroy()
   }
 
@@ -327,6 +345,7 @@ export class RemoteMediaClient3 {
     const remotePeerState = this.remotePeerStates.get(peerId)
     if (remotePeerState) {
       this.clearIceDisconnectedCleanupTimeout(remotePeerState)
+      this.clearMeshConnectionTimeout(remotePeerState)
     }
     this.deleteMember(peerId)
     this.remotePeerStates.delete(peerId)
@@ -341,6 +360,7 @@ export class RemoteMediaClient3 {
     }
 
     this.openedDataConnections.add(dataConnection.connectionId)
+    this.clearMeshConnectionTimeout(this.getOrCreateRemotePeerState(dataConnection.peer))
     dataConnection.send({
       type: 'self',
       username: this.username,
@@ -350,9 +370,14 @@ export class RemoteMediaClient3 {
   }
 
   private handleClosedDataConnection(dataConnection: DataConnection) {
+    const wasOpen = this.openedDataConnections.has(dataConnection.connectionId)
     this.openedDataConnections.delete(dataConnection.connectionId)
     if (this.getOpenDataConnection(dataConnection.peer)) {
       return
+    }
+
+    if (!wasOpen) {
+      this.reportMeshConnectionFailedIfIntroduced(dataConnection.peer)
     }
 
     ;[...this.getPeerConnections(dataConnection.peer)].forEach((connection) => {
@@ -370,6 +395,50 @@ export class RemoteMediaClient3 {
         dataConnection.send({ type: 'otherPeer', peer: peerId })
       }
     }
+  }
+
+  private clearMeshConnectionTimeout(remotePeerState: RemotePeerState) {
+    if (remotePeerState.meshConnectionTimeout == null) {
+      return
+    }
+
+    window.clearTimeout(remotePeerState.meshConnectionTimeout)
+    remotePeerState.meshConnectionTimeout = null
+  }
+
+  private expectMeshConnection(remoteId: string, introducedByPeerId: string) {
+    if (this.getOpenDataConnection(remoteId)) {
+      return
+    }
+
+    const remotePeerState = this.getOrCreateRemotePeerState(remoteId)
+    remotePeerState.introducedByPeerId = introducedByPeerId
+    remotePeerState.meshFailureReported = false
+    this.clearMeshConnectionTimeout(remotePeerState)
+    remotePeerState.meshConnectionTimeout = window.setTimeout(() => {
+      remotePeerState.meshConnectionTimeout = null
+      if (this.getOpenDataConnection(remoteId)) {
+        return
+      }
+
+      this.reportMeshConnectionFailedIfIntroduced(remoteId)
+    }, this.meshConnectionTimeoutMs)
+  }
+
+  private reportMeshConnectionFailedIfIntroduced(remoteId: string) {
+    const remotePeerState = this.remotePeerStates.get(remoteId)
+    const introducedByPeerId = remotePeerState?.introducedByPeerId
+    if (!remotePeerState || !introducedByPeerId || remotePeerState.meshFailureReported) {
+      return
+    }
+
+    const introducerDataConnection = this.getOpenDataConnection(introducedByPeerId)
+    if (!introducerDataConnection) {
+      return
+    }
+
+    remotePeerState.meshFailureReported = true
+    introducerDataConnection.send({ type: 'meshConnectionFailed', failedPeer: remoteId })
   }
 
   private clearIceDisconnectedCleanupTimeout(remotePeerState: RemotePeerState) {
@@ -404,6 +473,7 @@ export class RemoteMediaClient3 {
       }
 
       this.logger.log(`Removing ${remoteId} after ICE ${rtcPeerConnection.iceConnectionState}`)
+      this.reportMeshConnectionFailedIfIntroduced(remoteId)
       rtcPeerConnection.close()
       ;[...this.getPeerConnections(remoteId)].forEach((connection) => connection.close())
       this.removePeerState(remoteId)
@@ -453,6 +523,36 @@ export class RemoteMediaClient3 {
     if (notifyListeners) {
       this.notifyStateListeners()
     }
+  }
+
+  private handleMeshConnectionFailed(reportingPeerId: string, failedPeerId: string) {
+    const reportingPeerState = this.remotePeerStates.get(reportingPeerId)
+    const failedPeerState = this.remotePeerStates.get(failedPeerId)
+    if (!reportingPeerState || !failedPeerState) {
+      return
+    }
+
+    const reportingPeerSequence = reportingPeerState.joinedSequence
+    const failedPeerSequence = failedPeerState.joinedSequence
+    if (reportingPeerSequence == null || failedPeerSequence == null) {
+      return
+    }
+
+    const kickedPeerId = reportingPeerSequence > failedPeerSequence ? reportingPeerId : failedPeerId
+    const otherPeerId = kickedPeerId == reportingPeerId ? failedPeerId : reportingPeerId
+    const kickedUsername = this.getMember(kickedPeerId)?.username ?? kickedPeerId
+    const otherUsername = this.getMember(otherPeerId)?.username ?? otherPeerId
+    const middleMessage = `Removed ${kickedUsername} from the meeting because ${kickedUsername} could not connect directly to ${otherUsername}. Everyone in the meeting must be able to connect directly.`
+    const kickedMessage = `You were removed from the meeting because your browser could not connect directly to ${otherUsername}. Everyone in the meeting must be able to connect directly.`
+
+    this.notifyMessageListeners({ type: 'info', info: middleMessage })
+    this.getOpenDataConnection(kickedPeerId)?.send({ type: 'kicked', reason: kickedMessage })
+  }
+
+  private handleKicked(reason: string) {
+    this.state.error = reason
+    this.notifyStateListeners()
+    this.disconnect()
   }
 
   private async join(peerId: string) {
@@ -516,7 +616,11 @@ export class RemoteMediaClient3 {
     switch (peerMessage.type) {
       case 'self':
         this.ensureMember(self.peer, peerMessage.username)
-        this.getOrCreateRemotePeerState(self.peer).remoteScreenShareStreamId = peerMessage.screenShareStreamId
+        const remotePeerState = this.getOrCreateRemotePeerState(self.peer)
+        remotePeerState.remoteScreenShareStreamId = peerMessage.screenShareStreamId
+        if (remotePeerState.joinedSequence == null) {
+          remotePeerState.joinedSequence = ++this.nextJoinedSequence
+        }
         this.getAndMaybeAddPeerConnection(self.peer)
         if (peerMessage.recordingActivity) {
           await this.setRemoteRecordingActivity(self.peer, peerMessage.recordingActivity, false)
@@ -530,6 +634,7 @@ export class RemoteMediaClient3 {
         break
       case 'otherPeer':
         if (peerMessage.peer != this.peer.id && !this.getOpenDataConnection(peerMessage.peer)) {
+          this.expectMeshConnection(peerMessage.peer, self.peer)
           this.join(peerMessage.peer)
         }
         break
@@ -537,6 +642,12 @@ export class RemoteMediaClient3 {
         if (this.getOpenDataConnection(peerMessage.peer)) {
           self.send({ type: 'otherPeer', peer: peerMessage.peer })
         }
+        break
+      case 'meshConnectionFailed':
+        this.handleMeshConnectionFailed(self.peer, peerMessage.failedPeer)
+        break
+      case 'kicked':
+        this.handleKicked(peerMessage.reason)
         break
       case 'iceCandidate':
         await this.addOrQueueIceCandidate(self.peer, peerMessage.candidate)
@@ -787,6 +898,7 @@ export class RemoteMediaClient3 {
 }
 
 const ICE_DISCONNECTED_CLEANUP_TIMEOUT_MS = 5000
+const MESH_CONNECTION_TIMEOUT_MS = 10000
 
 const rtcConfig = {
   iceServers: [

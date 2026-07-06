@@ -20,6 +20,7 @@ const remoteTestFakes = vi.hoisted(() => {
   let activeConnectionContext: ConnectionContext | null = null
   const peers = new Map<string, FakePeer>()
   const rtcPeerConnections = new Map<string, FakeRTCPeerConnection>()
+  const blockedFutureDataConnectionPeers = new Set<string>()
 
   class FakeEventEmitter {
     private readonly listeners = new Map<string, Array<Listener>>()
@@ -290,6 +291,11 @@ const remoteTestFakes = vi.hoisted(() => {
       const remotePeer = peers.get(peerId)
       if (!remotePeer) {
         queueMicrotask(() => localConnection.emitError(new Error(`Peer ${peerId} is unavailable`)))
+        return localConnection
+      }
+
+      if (blockedFutureDataConnectionPeers.has(this.id) || blockedFutureDataConnectionPeers.has(peerId)) {
+        this.addConnection(peerId, localConnection)
         return localConnection
       }
 
@@ -573,6 +579,7 @@ const remoteTestFakes = vi.hoisted(() => {
     existingPeers.forEach((peer) => peer.destroy())
     peers.clear()
     rtcPeerConnections.clear()
+    blockedFutureDataConnectionPeers.clear()
     activeConnectionContext = null
     peerCounter = 0
     connectionCounter = 0
@@ -580,7 +587,12 @@ const remoteTestFakes = vi.hoisted(() => {
     trackCounter = 0
   }
 
+  function blockFutureDataConnectionsWithPeer(peerId: string) {
+    blockedFutureDataConnectionPeers.add(peerId)
+  }
+
   return {
+    blockFutureDataConnectionsWithPeer,
     connectionType,
     FakeDataConnection,
     FakeMediaStream,
@@ -643,4 +655,5 @@ function installGlobal(name: string, value: unknown) {
   })
 }
 
+export const blockFutureDataConnectionsWithPeer = remoteTestFakes.blockFutureDataConnectionsWithPeer
 export const resetRemoteTestFakes = remoteTestFakes.resetRemoteTestFakes
