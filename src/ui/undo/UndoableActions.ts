@@ -11,6 +11,9 @@ export type UndoableAction =
   | MoveClipViewBetweenTracksCommand
   | SetTrackClipViewsCommand
   | AddTrackEffectRegionCommand
+  | RemoveTrackEffectRegionCommand
+  | ChangeTrackEffectRegionCommand
+  | SetTrackEffectRegionsCommand
   | SetTrackPropertyCommand
   | BatchCommand
 
@@ -251,6 +254,31 @@ export class ChangeTrackEffectRegionCommand implements Undoable {
 
   toString() {
     return 'change track effect region'
+  }
+}
+
+export class SetTrackEffectRegionsCommand implements Undoable {
+  constructor(
+    private readonly track: Track,
+    private readonly oldEffectRegions: Effect[],
+    private readonly newEffectRegions: Effect[],
+    private readonly description: string,
+  ) {}
+
+  async perform() {
+    this.track.setEffectRegions(this.newEffectRegions)
+  }
+
+  async undo() {
+    this.track.setEffectRegions(this.oldEffectRegions)
+  }
+
+  async save() {
+    await ProjectManager.saveTrack(this.track)
+  }
+
+  toString() {
+    return this.description
   }
 }
 

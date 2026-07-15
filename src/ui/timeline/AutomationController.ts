@@ -1,5 +1,5 @@
-import { ParameterValueSequence, ParamValueTransition } from 'effects/ParameterValueSequence'
-import { Track } from 'project/Track'
+import { ParameterValueSequence, ParamValueTransition } from '../../effects/ParameterValueSequence'
+import { Track } from '../../project/Track'
 import { TrackListItemController } from './TrackListItemController'
 import { TrackListController } from './TrackListController'
 

@@ -93,6 +93,11 @@ export class PointerStateManager extends TrackListItemController {
             if (AudioControl.getState() == AudioState.STOPPED || AudioControl.getState() == AudioState.MONITORING) {
               this.markPointerDown(mouseEvent)
               this.timelineRegionController = this.trackListController.selectionController
+              this.timelineRegionController.updateSelection(
+                this.getSampleForXValue(this.mouseEventToSvgCoord(mouseEvent).x),
+                this.activeWaveform,
+                false,
+              )
               this.changeState(State.SELECTING)
             }
           }

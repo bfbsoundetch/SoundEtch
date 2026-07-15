@@ -1,6 +1,6 @@
-import { EqEffect } from 'effects/Effects';
-import { Track } from 'project/Track';
-import { BottomPanelController } from 'ui/BottomPanelController';
+import { EqEffect } from '../../effects/Effects';
+import { Track } from '../../project/Track';
+import { BottomPanelController } from '../BottomPanelController';
 import { WEQ8Runtime } from 'weq8';
 
 export class EqPanelController {

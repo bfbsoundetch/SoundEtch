@@ -6,7 +6,6 @@ import { ContextMenuController, ContextMenuItem } from '../../ui/ContextMenuCont
 import { SummaryGenerator } from '../../project/SummaryGenerator'
 import { ReplaceClipViewCommand, SetTrackClipViewsCommand, clipViewsEqual } from '../undo/UndoableActions'
 import { TimelineRegionController } from './TimelineRegionController'
-import { Effect as EffectRegion, EffectType } from 'effects/Effects'
 
 /** Handles displaying a track's waveform. */
 export class Waveform extends TrackListItemController {
@@ -21,8 +20,6 @@ export class Waveform extends TrackListItemController {
   readonly clipViewGroupElement = document.createElementNS('http://www.w3.org/2000/svg', 'g')
   private readonly axesPathElement = document.createElementNS('http://www.w3.org/2000/svg', 'path')
   private readonly channelSeparatorPathElement = document.createElementNS('http://www.w3.org/2000/svg', 'path')
-  private effectShown: EffectType | null = null
-  private readonly effectRegionControllers = new Map<EffectRegion, TimelineRegionController>()
   private readonly color: string
   width = 0
   private height = 0
@@ -96,13 +93,11 @@ export class Waveform extends TrackListItemController {
     const topSvgElement = this.getTopSvgElement()
 
     this.drawAudioDataForCanvasXRange(this, topSvgElement, 0, this.width)
-    this.drawEffectRegions()
     this.drawAxes()
   }
 
   drawAudioData() {
     this.drawAudioDataForCanvasXRange(this, this.getTopSvgElement(), 0, this.width)
-    this.drawEffectRegions()
   }
 
   resize() {
@@ -128,39 +123,6 @@ export class Waveform extends TrackListItemController {
     }
     this.axesPathElement.setAttribute('d', axesPath)
     this.channelSeparatorPathElement.setAttribute('d', channelSeparatorPath)
-  }
-
-  private drawEffectRegions() {
-    const lowSample = this.getSampleForXValue(0)
-    const highSample = this.getSampleForXValue(this.width)
-    const displayedEffect = this.trackListController.getDisplayedEffectForTrack(this.track)
-    if (!displayedEffect) {
-      return
-    }
-
-    const effectRegionSet = new Set(this.track.getEffectRegions(displayedEffect))
-    this.effectRegionControllers.forEach((value, key) => {
-      if (!effectRegionSet.has(key)) {
-        value.remove()
-        this.effectRegionControllers.delete(key)
-      } else {
-        value.draw()
-        effectRegionSet.delete(key)
-      }
-    })
-    effectRegionSet.forEach(effectRegion => {
-      const controller = new TimelineRegionController(
-        true,
-        () => null,
-        () => {
-          effectRegion.startPosition = controller.lowSample
-          effectRegion.length = controller.highSample - controller.lowSample
-        }, 
-        this.trackListController
-      )
-      this.effectRegionControllers.set(effectRegion, controller)
-      controller.draw()
-    })
   }
 
   removeClipViewController(controller: ClipViewController) {

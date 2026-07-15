@@ -24,11 +24,11 @@ export class TimelineRegionController extends TrackListItemController {
   }
 
   get lowSample() {
-    return this.getSampleForXValue(Math.min(this.firstPosition, this.secondPosition))
+    return Math.min(this.firstPosition, this.secondPosition)
   }
 
   get highSample() {
-    return this.getSampleForXValue(Math.max(this.firstPosition, this.secondPosition))
+    return Math.max(this.firstPosition, this.secondPosition)
   }
 
   get selectedRegion() {
@@ -38,7 +38,7 @@ export class TimelineRegionController extends TrackListItemController {
     return {
       startSample: Math.min(this.firstPosition, this.secondPosition),
       endSample: Math.max(this.firstPosition, this.secondPosition),
-      tracks: [...this.waveformElements.keys().map((w) => w.track)],
+      tracks: [...this.waveformElements.keys()].map((w) => w.track),
     }
   }
 
@@ -65,7 +65,7 @@ export class TimelineRegionController extends TrackListItemController {
         firstWaveform = w
       }
       if (firstWaveform) {
-        this.setUpElementsForWaveform(waveform)
+        this.setUpElementsForWaveform(w)
       } else if (!KeyPressController.metaPressed) {
         const elements = this.waveformElements.get(w)
         elements?.rect?.remove()
@@ -88,7 +88,7 @@ export class TimelineRegionController extends TrackListItemController {
     this.firstPosition = startSample
     this.secondPosition = endSample
     waveforms.forEach(w => this.setUpElementsForWaveform(w))
-    this.trackListController.pointerStateManager.startSelecting()
+      this.trackListController.pointerStateManager.startSelecting()
     this.draw()
   }
 
@@ -165,11 +165,11 @@ export class TimelineRegionController extends TrackListItemController {
     this.firstPosition = 0
     this.secondPosition = 0
     this.draggedFirstWaveform = null
-    this.trackListController.timelineController.removeSelection()
+      this.trackListController.timelineController.removeSelection()
   }
 
   isInRegion(waveform: Waveform) {
-    this.waveformElements.has(waveform)
+    return this.waveformElements.has(waveform)
   }
 
   private setUpElementsForWaveform(waveform: Waveform) {
