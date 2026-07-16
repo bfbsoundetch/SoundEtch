@@ -12,7 +12,6 @@ import { TrackListTrack as TrackListInfo } from './TrackListTrack'
 import { InputListController } from './InputListController'
 import { SelectedRegion } from '../../playback/Player'
 import { editorHistory } from '../undo/EditorHistory'
-import { EffectType } from '../../effects/Effects'
 import {
   AddClipViewCommand,
   BatchCommand,
@@ -70,7 +69,6 @@ export class TrackListController {
     this,
   )
 
-  private readonly activeTrackEffects = new Map<number, EffectType | null>()
   private readonly tracklistElement = document.getElementById('track-list')!
   private readonly tracklistInfoElement = document.getElementById('track-info-list')!
   private readonly infoWaveformPairs = new Map<
@@ -177,7 +175,6 @@ export class TrackListController {
         this.translationUnits = 0
         this.waveforms.splice(0)
         this.infoWaveformPairs.clear()
-        this.activeTrackEffects.clear()
         this.clearSelection()
       }
 
@@ -203,9 +200,7 @@ export class TrackListController {
 
         const trackInfoDiv = document.createElement('div')
         trackInfoDiv.style.height = `${7 * track.getChannelCount() + 1.5}rem`
-        const trackListInfo = new TrackListInfo(track, trackInfoDiv, this.history, (changedTrack, effect) => {
-          
-        })
+        const trackListInfo = new TrackListInfo(track, trackInfoDiv, this.history)
 
         const waveformDiv = document.createElement('div')
         waveformDiv.addEventListener('contextmenu', (mouseEvent) => {
@@ -245,10 +240,6 @@ export class TrackListController {
 
   clearSelection() {
     this.selectionController.remove()
-  }
-
-  getDisplayedEffectForTrack(track: Track): EffectType | null {
-    return this.activeTrackEffects.get(track.id ?? -1) ?? null
   }
 
   async transferClipViewBetweenTracks(clipViewController: ClipViewController, newWaveform: Waveform, shift: number) {

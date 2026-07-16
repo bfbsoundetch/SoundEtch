@@ -2,7 +2,6 @@ import { ClipView } from './ClipView'
 import { DatabasePersisted } from '../persistence/DatabasePersisted'
 import { Restorable } from '../persistence/Restoration'
 import { Analyzable } from '../analyzers/Analyzable'
-import { Effect, EffectType } from '../effects/Effects'
 
 class Playback {
   constructor(
@@ -20,14 +19,12 @@ export class Track extends DatabasePersisted implements Analyzable {
   private playback: Playback | null = null
   private pan: number = 0
   private gain: number = 1
-  private readonly effectRegions: Effect[][]
 
   constructor(
     public name: string,
     private readonly channelCount: number,
   ) {
     super(['playback'])
-    this.effectRegions = Object.values(EffectType).map(_ => [])
   }
 
   getChannelCount(): number {
@@ -238,39 +235,6 @@ export class Track extends DatabasePersisted implements Analyzable {
 
   getGain(): number {
     return this.gain
-  }
-
-  getEffectRegions(effect: EffectType | null = null): Effect[] {
-    if (!effect) {
-      return this.effectRegions.flatMap(e => e)
-    }
-    return this.effectRegions[effect]
-  }
-
-  removeEffectRegion(effect: Effect) {
-    const effectArray = this.effectRegions[effect.type]
-    if (effectArray) {
-      effectArray.splice(effectArray.indexOf(effect), 1)
-    }
-  }
-
-  addEffectRegion(effect: Effect): boolean {
-    const effectArray = this.effectRegions[effect.type]
-    for (let i = 0; i < effectArray.length; ++i) {
-      if (effectArray[i].startPosition <= effect.startPosition) {
-        if (effectArray[i].startPosition + effectArray[i].length > effect.startPosition) {
-          throw Error('New effect appears in the middle of an existing effect!')
-        }
-      } else {
-        if (effectArray[i].startPosition < effect.startPosition + effect.length) {
-          throw Error('New effect appears in the middle of an existing effect!')
-        }
-        effectArray.splice(i, 0, effect)
-        return true
-      }
-    }
-    effectArray.push(effect)
-    return true
   }
 
   getLevel(): number {

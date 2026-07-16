@@ -1,8 +1,8 @@
 import { initializeWamHost, WebAudioModule } from '@webaudiomodules/sdk'
+import { WamPluginIndex } from './WamPluginIndex'
 
 export class WamManager {
     
-    private static COMMUNITY_WAM_URL = 'https://www.webaudiomodules.com/community/plugins/'
     private hostGroupId: string | null = null
 
     private async getHostGroupId(audioContext: AudioContext) {
@@ -15,7 +15,7 @@ export class WamManager {
     }
 
     async loadPlugin(pluginPath: string, audioContext: AudioContext) {
-        const { default: WAM } = await import(WamManager.COMMUNITY_WAM_URL + pluginPath) as { default: typeof WebAudioModule}
+        const { default: WAM } = await import(pluginPath) as { default: typeof WebAudioModule}
         return WAM.createInstance(await this.getHostGroupId(audioContext), audioContext)
     }
 }

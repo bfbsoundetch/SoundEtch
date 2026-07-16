@@ -8,6 +8,13 @@ export type BottomPanelOptions = {
 }
 
 export class BottomPanelController {
+
+  private static instance: BottomPanelController | null = null
+
+  static getInstance() {
+    return this.instance ?? (this.instance = new BottomPanelController())
+  }
+
   private readonly root = document.createElement('div')
   private readonly titleElement = document.createElement('h2')
   private readonly subtitleElement = document.createElement('div')
@@ -16,7 +23,7 @@ export class BottomPanelController {
   private onClose: (() => void) | null = null
   private isOpen = false
 
-  constructor() {
+  private constructor() {
     this.root.id = 'bottom-panel'
     this.root.className = 'bottom-panel'
 

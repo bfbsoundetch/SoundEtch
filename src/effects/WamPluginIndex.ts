@@ -16,15 +16,17 @@ interface Wam2PluginDescriptor {
 
 export class WamPluginIndex {
 
+    static COMMUNITY_WAM_URL = 'https://www.webaudiomodules.com/community/plugins/'
+
     private communityPluginMap = new Map<string, Wam2PluginDescriptor>()
 
     async getCommunityPluginsList() {
-        this.initCommunityPluginMap()
+        await this.initCommunityPluginMap()
         return [...this.communityPluginMap.values()]
     }
 
     async getPluginById(id: string) {
-        this.initCommunityPluginMap()
+        await this.initCommunityPluginMap()
         return this.communityPluginMap.get(id)
     }
 

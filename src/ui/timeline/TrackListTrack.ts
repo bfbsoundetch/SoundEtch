@@ -1,6 +1,6 @@
+import { EffectPanelController } from '../../ui/effects/EffectPanelController'
 import { ProjectManager } from '../../project/ProjectManager'
 import { Track } from '../../project/Track'
-import { EffectType } from '../../effects/Effects'
 import { EditorHistory } from '../undo/EditorHistory'
 import { SetTrackPropertyCommand, TrackProperty } from '../undo/UndoableActions'
 
@@ -9,7 +9,6 @@ export class TrackListTrack {
     track: Track,
     private readonly trackInfoDiv: HTMLDivElement,
     private readonly history: EditorHistory,
-    onEffectSelectionChange: (track: Track, effect: EffectType | null) => void,
   ) {
     this.trackInfoDiv.classList = 'track-info tracklist-item'
 
@@ -49,27 +48,20 @@ export class TrackListTrack {
     deleteTrackButton.appendChild(deleteTrackIcon)
     this.trackInfoDiv.appendChild(deleteTrackButton)
 
-    const effectsDropdown = document.createElement('select')
-    effectsDropdown.style.gridArea = 'effects'
-    effectsDropdown.style.width = '100%'
-    effectsDropdown.style.boxSizing = 'border-box'
-    effectsDropdown.style.font = 'inherit'
-    effectsDropdown.style.minWidth = '0'
-    effectsDropdown.style.alignSelf = 'center'
-    effectsDropdown.className = 'track-effect-selector'
-    const effectPlaceholder = document.createElement('option')
-    effectPlaceholder.innerText = 'Effect'
-    effectPlaceholder.value = ''
-    effectsDropdown.appendChild(effectPlaceholder)
-    const gainOption = document.createElement('option')
-    gainOption.innerText = 'Gain'
-    gainOption.value = 'gain'
-    effectsDropdown.appendChild(gainOption)
-    effectsDropdown.addEventListener('change', () => {
-      effectsDropdown.classList.toggle('track-effect-selector-active', !!effectsDropdown.value)
-      onEffectSelectionChange(track, (effectsDropdown.value || null) as EffectType | null)
+    const effectButton = document.createElement('button')
+    effectButton.style.gridArea = 'effects'
+    effectButton.style.width = '100%'
+    effectButton.style.boxSizing = 'border-box'
+    effectButton.style.font = 'inherit'
+    effectButton.style.minWidth = '0'
+    effectButton.style.textAlign = 'center'
+    effectButton.style.objectFit = 'contain'
+    effectButton.classList = 'track-effect-selector clickable'
+    effectButton.innerText = 'Effects'
+    effectButton.addEventListener('click', () => {
+      EffectPanelController.getInstance().showEffectsList()
     })
-    this.trackInfoDiv.appendChild(effectsDropdown)
+    this.trackInfoDiv.appendChild(effectButton)
 
     const gainSliderParent = document.createElement('div')
     gainSliderParent.style.width = '100%'
