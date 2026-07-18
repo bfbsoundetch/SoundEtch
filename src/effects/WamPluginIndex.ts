@@ -1,4 +1,4 @@
-interface Wam2PluginDescriptor {
+export interface Wam2PluginDescriptor {
 	identifier: string
 	name: string
 	vendor: string
@@ -36,6 +36,7 @@ export class WamPluginIndex {
         }
         const pluginList: Array<Wam2PluginDescriptor> = await (await fetch(new URL('./plugins.json', import.meta.url))).json()
         for (const plugin of pluginList) {
+            plugin.path = WamPluginIndex.COMMUNITY_WAM_URL + plugin.path
             this.communityPluginMap.set(plugin.identifier, plugin)
         }
     }

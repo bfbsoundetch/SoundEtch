@@ -59,7 +59,7 @@ export class TrackListTrack {
     effectButton.classList = 'track-effect-selector clickable'
     effectButton.innerText = 'Effects'
     effectButton.addEventListener('click', () => {
-      EffectPanelController.getInstance().showEffectsList()
+      EffectPanelController.getInstance().showTrackEffectsList(track)
     })
     this.trackInfoDiv.appendChild(effectButton)
 
