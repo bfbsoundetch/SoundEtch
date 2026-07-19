@@ -839,6 +839,25 @@
         <line style="stroke: currentColor; stroke-width: 50" x1="100" y1="400" x2="400" y2="100" />
         <line style="stroke: currentColor; stroke-width: 50" x1="100" y1="100" x2="400" y2="400" />
       </g>
+      <g id="arrow-right" viewBox="0 0 500 500">
+        <line
+          style="fill: none; stroke: currentColor; stroke-linecap: round; stroke-width: 45"
+          x1="75"
+          y1="250"
+          x2="425"
+          y2="250"
+        />
+        <polyline
+          style="fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 45"
+          points="280 100 425 250 280 400"
+        />
+      </g>
+      <g id="arrow-block-right" viewBox="0 0 500 500">
+        <path
+          d="M 45 200 H 255 V 100 L 455 250 L 255 400 V 300 H 45 V 200 Z"
+          style="fill: currentColor; stroke: currentColor; stroke-linejoin: round; stroke-width: 14px"
+        />
+      </g>
       <g id="stop" viewBox="0 0 500 500">
         <polygon style="fill: rgba(0, 0, 0, 0.3); stroke-width: 30" points="50 450 50 50 450 50 450 450" />
       </g>
@@ -1016,12 +1035,7 @@
           ry="2"
           style="stroke: currentColor; fill: none; stroke-width: 35px"
         />
-        <path
-          d="M 275 630 H 360 L 360 590 L 440 650 L 360 710 L 360 670 H 275 V 630 Z"
-          bx:shape="arrow 275 590 160 120 40 75 0 1@4ade829c"
-          style="stroke: currentColor; stroke-width: 14px"
-          transform="matrix(0.000848, -1, 1, 0.000848, -400, 600)"
-        />
+        <use href="#arrow-block-right" transform="matrix(0, -0.4, 0.4, 0, 150, 342)" />
       </g>
       <g id="slash" viewBox="0 0 500 500">
         <line style="stroke: rgba(255, 0, 0, 0.6); stroke-width: 60" x1="50" y1="450" x2="450" y2="50"></line>

@@ -25,6 +25,14 @@ export class WamManager {
         const { default: WAM } = await import(pluginPath) as { default: typeof WebAudioModule}
         const result = await WAM.createInstance(await this.getHostGroupId(audioContext), audioContext)
         console.error('state: ', await result._audioNode.getState())
+        result._audioNode.addEventListener('wam-info', (e) => console.error('i', JSON.stringify(e)))
+        result._audioNode.addEventListener('wam-automation', (e) => console.error('a', JSON.stringify(e)))
+        result._audioNode.addEventListener('wam-sysex', (e) => console.error('s', JSON.stringify(e)))
+        result._audioNode.addEventListener('wam-transport', (e) => console.error('t', JSON.stringify(e)))
+        result._audioNode.addEventListener('wam-mpe', (e) => console.error('m', JSON.stringify(e)))
+        result._audioNode.addEventListener('wam-osc', (e) => console.error('o', JSON.stringify(e)))
+
+
         return result
     }
 }

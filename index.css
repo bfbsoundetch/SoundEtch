@@ -1286,6 +1286,34 @@ video {
   overflow-y: scroll;
 }
 
+.svg-icon {
+  display: block;
+  width: 100%;
+  height: 100%;
+}
+
+.effect-chain-item {
+  flex: 0 0 8rem;
+  margin: 1rem;
+  padding: .5rem;
+  height: calc(100% - 2rem);
+  user-select: none;
+  display: grid;
+  place-items: center;
+  text-align: center;
+  border: solid;
+  box-sizing: border-box;
+}
+
+.effect-list-arrow {
+  flex: 0 0 auto;
+  align-self: center;
+  margin: 1rem 0;
+  width: 2rem;
+  height: 2rem;
+  user-select: none;
+}
+
 .effect-list-item img {
   display: block;
   width: 100%;

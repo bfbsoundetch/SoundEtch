@@ -218,6 +218,10 @@ export class Track extends DatabasePersisted implements Analyzable {
     this.playback = null
   }
 
+  getEffectModuleById(id: string) {
+    return this.playback?.effectNodes.find(e => e.moduleId == id)
+  }
+
   setPan(pan: number) {
     if (this.playback) {
       this.playback.pannerNode.pan.value = pan
