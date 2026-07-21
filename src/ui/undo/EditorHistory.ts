@@ -6,7 +6,7 @@ type ChangeListener = () => Promise<void> | void
 export class EditorHistory {
   private readonly backStack = new BackStack()
   private readonly changeListeners = new Set<ChangeListener>()
-  private running = false
+  private operationQueue = Promise.resolve()
 
   addChangeListener(listener: ChangeListener) {
     this.changeListeners.add(listener)
@@ -38,38 +38,32 @@ export class EditorHistory {
   }
 
   async undo(): Promise<void> {
-    if (!this.backStack.canUndo) {
-      return
-    }
-    await this.run(() => this.backStack.undo())
+    await this.run(async () => {
+      if (this.backStack.canUndo) {
+        await this.backStack.undo()
+      }
+    })
   }
 
   async redo(): Promise<void> {
-    if (!this.backStack.canRedo) {
-      return
-    }
-    await this.run(() => this.backStack.redo())
+    await this.run(async () => {
+      if (this.backStack.canRedo) {
+        await this.backStack.redo()
+      }
+    })
   }
 
   clear() {
-    const hadChanges = this.canUndo || this.canRedo
-    this.backStack.clear()
-    if (hadChanges) {
-      void this.notifyChangeListeners().catch((error) => console.error(error))
-    }
+    return this.run(async () => this.backStack.clear())
   }
 
   private async run(operation: () => Promise<void>): Promise<void> {
-    if (this.running) {
-      return
-    }
-    this.running = true
-    try {
+    const result = this.operationQueue.then(async () => {
       await operation()
       await this.notifyChangeListeners()
-    } finally {
-      this.running = false
-    }
+    })
+    this.operationQueue = result.catch(() => {})
+    await result
   }
 
   private async notifyChangeListeners(): Promise<void> {

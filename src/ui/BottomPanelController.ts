@@ -1,14 +1,14 @@
-import { editorHistory } from "./undo/EditorHistory"
+import { createArrowIcon } from './SvgIcon'
 
 export type BottomPanelOptions = {
   title: string
   subtitle: string
   body: HTMLElement
-  onClose: () => void
+  onBack?: () => Promise<void> | void
+  onClose: () => Promise<void> | void
 }
 
 export class BottomPanelController {
-
   private static instance: BottomPanelController | null = null
 
   static getInstance() {
@@ -19,8 +19,10 @@ export class BottomPanelController {
   private readonly titleElement = document.createElement('h2')
   private readonly subtitleElement = document.createElement('div')
   private readonly bodyElement = document.createElement('div')
+  private readonly backButton = document.createElement('button')
   private readonly closeButton = document.createElement('button')
-  private onClose: (() => void) | null = null
+  private onBack: (() => Promise<void> | void) | null = null
+  private onClose: (() => Promise<void> | void) | null = null
   private isOpen = false
 
   private constructor() {
@@ -32,6 +34,30 @@ export class BottomPanelController {
 
     const headingGroup = document.createElement('div')
     headingGroup.className = 'bottom-panel-heading'
+
+    this.backButton.className = 'clickable bottom-panel-back'
+    this.backButton.type = 'button'
+    this.backButton.title = 'Back'
+    this.backButton.setAttribute('aria-label', 'Back')
+    this.backButton.appendChild(createArrowIcon('line', { className: 'bottom-panel-back-icon' }))
+    this.backButton.hidden = true
+    this.backButton.addEventListener('click', () => {
+      const onBack = this.onBack
+      if (!onBack || this.backButton.disabled) {
+        return
+      }
+      this.backButton.disabled = true
+      try {
+        void Promise.resolve(onBack())
+          .catch((error) => console.error('Bottom panel back action failed', error))
+          .finally(() => {
+            this.backButton.disabled = false
+          })
+      } catch (error) {
+        this.backButton.disabled = false
+        console.error('Bottom panel back action failed', error)
+      }
+    })
 
     this.subtitleElement.className = 'bottom-panel-subtitle'
     headingGroup.append(this.titleElement, this.subtitleElement)
@@ -49,7 +75,7 @@ export class BottomPanelController {
     this.closeButton.appendChild(closeIcon)
     this.closeButton.addEventListener('click', () => this.close())
 
-    header.append(headingGroup, this.closeButton)
+    header.append(this.backButton, headingGroup, this.closeButton)
 
     this.bodyElement.className = 'bottom-panel-body'
     this.root.append(header, this.bodyElement)
@@ -57,7 +83,10 @@ export class BottomPanelController {
   }
 
   open(options: BottomPanelOptions) {
+    this.onBack = options.onBack ?? null
     this.onClose = options.onClose
+    this.backButton.disabled = false
+    this.backButton.hidden = !this.onBack
     this.setTitle(options.title)
     this.setSubtitle(options.subtitle)
     this.setBody(options.body)
@@ -87,7 +116,13 @@ export class BottomPanelController {
       return
     }
     this.hide()
-    this.onClose?.()
+    const onClose = this.onClose
+    this.onBack = null
     this.onClose = null
+    try {
+      void Promise.resolve(onClose?.()).catch((error) => console.error('Bottom panel close action failed', error))
+    } catch (error) {
+      console.error('Bottom panel close action failed', error)
+    }
   }
 }

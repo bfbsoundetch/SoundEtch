@@ -2,6 +2,7 @@ import { DatabasePersisted } from './DatabasePersisted'
 import { Restoration } from './Restoration'
 
 export class DatabasePersister {
+  private static readonly OPAQUE_VALUE_KEY = '__soundetchOpaqueValue'
   private static objectCache = new Map<number, any>()
 
   private static dbPromise = new Promise<IDBDatabase>((resolve, reject) => {
@@ -104,6 +105,9 @@ export class DatabasePersister {
     if (!target || typeof target !== 'object') {
       return target
     }
+    if (DatabasePersister.isStructuredCloneValue(target)) {
+      return target
+    }
     if (Array.isArray(target)) {
       return target.map((i) => DatabasePersister.toPersistedObject(i, false))
     }
@@ -112,11 +116,13 @@ export class DatabasePersister {
     }
     const objectToPersist: any = {}
     for (const key of Object.keys(target)) {
-      if (Array.isArray(target.ignoredFields) && target.ignoredFields.includes(key)) {
+      if (target.dbPersisted && Array.isArray(target.ignoredFields) && target.ignoredFields.includes(key)) {
         continue
       }
 
-      objectToPersist[key] = DatabasePersister.toPersistedObject(target[key], false)
+      objectToPersist[key] = target.wamPluginEffect && key == 'state'
+        ? { [DatabasePersister.OPAQUE_VALUE_KEY]: true, value: target[key] }
+        : DatabasePersister.toPersistedObject(target[key], false)
     }
     return objectToPersist
   }
@@ -125,6 +131,12 @@ export class DatabasePersister {
     if (!object || typeof object !== 'object') {
       return object
     }
+    if (DatabasePersister.isStructuredCloneValue(object)) {
+      return object
+    }
+    if (object[DatabasePersister.OPAQUE_VALUE_KEY] === true && Object.keys(object).length == 2) {
+      return object.value
+    }
     if (Array.isArray(object)) {
       const result = new Array<any>(object.length)
       for (let i = 0; i < object.length; ++i) {
@@ -132,7 +144,7 @@ export class DatabasePersister {
       }
       return result
     }
-    if (object.i) {
+    if (Object.keys(object).length == 1 && object.i) {
       return DatabasePersister.getObjectById(object.i)
     }
     const constructorFunction = Restoration.restorationFunctions.get(object.restorationName)
@@ -141,6 +153,17 @@ export class DatabasePersister {
       objectToReturn[key] = await DatabasePersister.fromPersistedObject(object[key])
     }
     return objectToReturn
+  }
+
+  private static isStructuredCloneValue(value: any) {
+    return (
+      value instanceof ArrayBuffer ||
+      ArrayBuffer.isView(value) ||
+      value instanceof Blob ||
+      value instanceof Date ||
+      value instanceof Map ||
+      value instanceof Set
+    )
   }
 
   static async setGlobalProperty(propertyName: string, propertyValue: any): Promise<any> {

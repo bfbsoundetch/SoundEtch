@@ -22,14 +22,24 @@ export class BackStack {
 
   async execute(undoable: Undoable): Promise<void> {
     await undoable.perform()
-    await undoable.save()
+    try {
+      await undoable.save()
+    } catch (error) {
+      await undoable.undo()
+      throw error
+    }
     this.stack.splice(this.position)
     this.stack.push(undoable)
     ++this.position
   }
 
   async recordApplied(undoable: Undoable): Promise<void> {
-    await undoable.save()
+    try {
+      await undoable.save()
+    } catch (error) {
+      await undoable.undo()
+      throw error
+    }
     this.stack.splice(this.position)
     this.stack.push(undoable)
     ++this.position
@@ -41,7 +51,12 @@ export class BackStack {
     }
     const undoable = this.stack[this.position - 1]
     await undoable.undo()
-    await undoable.save()
+    try {
+      await undoable.save()
+    } catch (error) {
+      await undoable.perform()
+      throw error
+    }
     --this.position
   }
 
@@ -51,7 +66,12 @@ export class BackStack {
     }
     const undoable = this.stack[this.position]
     await undoable.perform()
-    await undoable.save()
+    try {
+      await undoable.save()
+    } catch (error) {
+      await undoable.undo()
+      throw error
+    }
     ++this.position
   }
 

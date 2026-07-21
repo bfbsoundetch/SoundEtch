@@ -222,6 +222,10 @@ export class Track extends DatabasePersisted implements Analyzable {
     return this.playback?.effectNodes.find(e => e.moduleId == id)
   }
 
+  setEffectRegions(effectRegions: readonly EffectData[]) {
+    this.effectRegions.splice(0, this.effectRegions.length, ...effectRegions)
+  }
+
   setPan(pan: number) {
     if (this.playback) {
       this.playback.pannerNode.pan.value = pan

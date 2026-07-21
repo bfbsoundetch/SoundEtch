@@ -1193,7 +1193,7 @@ video {
   background: var(--alt-background);
   border-bottom: 1px solid var(--color);
   min-height: 4rem;
-  padding: 0 0 0 1.25rem;
+  padding: 0;
 }
 
 .bottom-panel-header h2 {
@@ -1207,6 +1207,30 @@ video {
   display: grid;
   gap: 0.25rem;
   min-width: 0;
+  flex: 1;
+  padding-left: 1.25rem;
+}
+
+.bottom-panel-back {
+  display: grid;
+  place-items: center;
+  align-self: stretch;
+  aspect-ratio: 1 / 1;
+  border-right: 1px solid var(--color);
+}
+
+.bottom-panel-back[hidden] {
+  display: none;
+}
+
+.bottom-panel-back svg,
+.bottom-panel-close svg {
+  width: 55%;
+  height: 55%;
+}
+
+.bottom-panel-back-icon {
+  transform: rotate(180deg);
 }
 
 .bottom-panel-subtitle {
@@ -1260,11 +1284,6 @@ video {
   border-left: 1px solid var(--color);
 }
 
-.bottom-panel-close svg {
-  width: 55%;
-  height: 55%;
-}
-
 .bottom-panel-delete {
   width: fit-content;
   border: 1px solid;
@@ -1295,7 +1314,7 @@ video {
 .effect-chain-item {
   flex: 0 0 8rem;
   margin: 1rem;
-  padding: .5rem;
+  padding: 0.5rem;
   height: calc(100% - 2rem);
   user-select: none;
   display: grid;
@@ -1303,6 +1322,91 @@ video {
   text-align: center;
   border: solid;
   box-sizing: border-box;
+}
+
+.effect-chain-endpoint {
+  align-content: center;
+  gap: 0.75rem;
+}
+
+.effect-plugin-item {
+  grid-template-rows: minmax(0, 1fr) auto;
+  gap: 0.5rem;
+  padding: 0;
+  overflow: hidden;
+}
+
+.effect-chain-open {
+  display: grid;
+  align-content: center;
+  justify-items: center;
+  gap: 0.75rem;
+  width: 100%;
+  height: 100%;
+  min-width: 0;
+  padding: 0.5rem;
+  border: 0;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  overflow-wrap: anywhere;
+}
+
+.effect-chain-open:disabled {
+  cursor: not-allowed;
+  opacity: 0.55;
+}
+
+.effect-chain-open:disabled:hover::after,
+.effect-chain-control:disabled:hover::after {
+  background-color: transparent;
+}
+
+.effect-chain-controls {
+  display: grid;
+  grid-template-columns: repeat(3, 1fr);
+  width: 100%;
+  border-top: 1px solid currentColor;
+}
+
+.effect-chain-control {
+  display: grid;
+  place-items: center;
+  min-width: 0;
+  height: 2.5rem;
+  padding: 0.55rem;
+  border: 0;
+  border-right: 1px solid currentColor;
+  color: inherit;
+}
+
+.effect-chain-control:last-child {
+  border-right: 0;
+}
+
+.effect-chain-control:disabled {
+  cursor: default;
+  opacity: 0.25;
+}
+
+.effect-chain-remove {
+  color: var(--record-button-red, currentColor);
+}
+
+.effect-icon-left {
+  transform: rotate(180deg);
+}
+
+.effect-chain-add {
+  align-content: center;
+  gap: 1rem;
+  color: inherit;
+  font: inherit;
+}
+
+.effect-chain-add-icon {
+  width: 2.5rem;
+  height: 2.5rem;
 }
 
 .effect-list-arrow {
@@ -1318,6 +1422,63 @@ video {
   display: block;
   width: 100%;
   object-fit: contain;
+}
+
+.effect-catalog-item {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  padding: 0.75rem;
+  box-sizing: border-box;
+}
+
+.effect-catalog-add {
+  flex: 0 0 auto;
+  padding: 0.6rem;
+  font: inherit;
+}
+
+.effect-plugin-description p {
+  margin: 0.75rem 0;
+}
+
+.effect-plugin-name {
+  font-weight: bold;
+  text-align: center;
+}
+
+.effect-plugin-category {
+  font-size: 0.85rem;
+  opacity: 0.8;
+}
+
+.effect-plugin-body {
+  width: 100%;
+  height: 100%;
+  overflow: auto;
+}
+
+.effect-panel-message {
+  display: grid;
+  place-items: center;
+  height: 100%;
+  padding: 2rem;
+  box-sizing: border-box;
+  text-align: center;
+}
+
+@media (max-width: 600px) {
+  .bottom-panel {
+    height: 60vh;
+  }
+
+  .bottom-panel-header h2 {
+    font-size: 1.25rem;
+  }
+
+  .bottom-panel-heading {
+    padding-left: 0.75rem;
+  }
 }
 
 #export-project-modal .overlay-content {

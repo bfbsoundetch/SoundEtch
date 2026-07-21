@@ -23,7 +23,7 @@ export default class GainWam extends WebAudioModule {
 
         compositeNode.setUp(gainNode, paramMgrNode)
 
-        if (initialState) compositeNode.setState(initialState)
+        if (initialState) await compositeNode.setState(initialState)
 
 		return compositeNode
 	}

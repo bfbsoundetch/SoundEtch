@@ -1,38 +1,41 @@
 import { initializeWamHost, WebAudioModule } from '@webaudiomodules/sdk'
 
 export class WamManager {
+  private static instance: WamManager | null = null
 
-    private static instance: WamManager | null = null
+  static getInstance() {
+    return this.instance ?? (this.instance = new WamManager())
+  }
 
-    static getInstance() {
-        return this.instance ?? (this.instance = new WamManager())
+  private constructor() {}
+
+  private readonly hostGroupIds = new WeakMap<AudioContext, Promise<string>>()
+
+  private async getHostGroupId(audioContext: AudioContext) {
+    let hostGroupId = this.hostGroupIds.get(audioContext)
+    if (!hostGroupId) {
+      const startTime = Date.now()
+      hostGroupId = initializeWamHost(audioContext)
+        .then(([groupId]) => {
+          console.debug('Loaded WAM in ', Date.now() - startTime)
+          return groupId
+        })
+        .catch((error) => {
+          this.hostGroupIds.delete(audioContext)
+          throw error
+        })
+      this.hostGroupIds.set(audioContext, hostGroupId)
     }
+    return hostGroupId
+  }
 
-    private constructor() {}
-    
-    private hostGroupId: string | null = null
-    
-    private async getHostGroupId(audioContext: AudioContext) {
-        if (!this.hostGroupId) {
-            const startTime = Date.now()
-            this.hostGroupId = (await initializeWamHost(audioContext))[0]
-            console.debug('Loaded WAM in ', Date.now() - startTime)
-        }
-        return this.hostGroupId
+  async loadPlugin(pluginPath: string, audioContext: AudioContext, initialState?: unknown) {
+    const { default: WAM } = (await import(pluginPath)) as { default: typeof WebAudioModule }
+    const result = await WAM.createInstance(await this.getHostGroupId(audioContext), audioContext, initialState)
+    // Some WAM SDK implementations ignore createInstance's initial state.
+    if (initialState !== undefined) {
+      await result.audioNode.setState(initialState)
     }
-
-    async loadPlugin(pluginPath: string, audioContext: AudioContext) {
-        const { default: WAM } = await import(pluginPath) as { default: typeof WebAudioModule}
-        const result = await WAM.createInstance(await this.getHostGroupId(audioContext), audioContext)
-        console.error('state: ', await result._audioNode.getState())
-        result._audioNode.addEventListener('wam-info', (e) => console.error('i', JSON.stringify(e)))
-        result._audioNode.addEventListener('wam-automation', (e) => console.error('a', JSON.stringify(e)))
-        result._audioNode.addEventListener('wam-sysex', (e) => console.error('s', JSON.stringify(e)))
-        result._audioNode.addEventListener('wam-transport', (e) => console.error('t', JSON.stringify(e)))
-        result._audioNode.addEventListener('wam-mpe', (e) => console.error('m', JSON.stringify(e)))
-        result._audioNode.addEventListener('wam-osc', (e) => console.error('o', JSON.stringify(e)))
-
-
-        return result
-    }
+    return result
+  }
 }
