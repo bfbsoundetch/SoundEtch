@@ -84,6 +84,16 @@ export class AudioFileReader {
         var samplesToPush =
           Math.min(this.endSample - this.position, clipView.length - this.initialOffset) * clipView.clip.channelCount
 
+        const clipInitialOffset = this.initialOffset
+        const nextClipView = this.clipViews[this.clipViewIndex + 1]
+        const overlapStart = nextClipView == null ? 0 : nextClipView.startPosition
+        const overlapEnd =
+          nextClipView == null
+            ? 0
+            : Math.min(clipView.startPosition + clipView.length, nextClipView.startPosition + nextClipView.length)
+        const overlapLength = overlapEnd - overlapStart
+        const crossfadeFileHandle =
+          overlapLength > 0 ? await AudioFileCache.getHandle(`${this.projectName}`, `${nextClipView.clip.id}`) : null
         this.activeFileHandle = await AudioFileCache.getHandle(`${this.projectName}`, `${clipView.clip.id}`)
         this.logger.debug(`File reading worker opened ${this.projectName}/${clipView.clip.id}`)
         var filePosition =
@@ -97,6 +107,38 @@ export class AudioFileReader {
             at: filePosition,
           })
           filePosition += bytesRead
+          const samplesRead = Math.min(bytesRead / Float32Array.BYTES_PER_ELEMENT, samplesToPush)
+          const framesRead = samplesRead / clipView.clip.channelCount
+          const bufferStartPosition =
+            clipView.startPosition + clipInitialOffset + totalSamplesRead / clipView.clip.channelCount
+
+          // Handle crossfades
+          const crossfadeStartPosition = Math.max(bufferStartPosition, overlapStart)
+          const crossfadeEndPosition = Math.min(bufferStartPosition + framesRead, overlapEnd)
+          if (crossfadeFileHandle != null && crossfadeStartPosition < crossfadeEndPosition) {
+            const crossfadeFrames = crossfadeEndPosition - crossfadeStartPosition
+            const crossfadeBuffer = new Float32Array(crossfadeFrames * clipView.clip.channelCount)
+            crossfadeFileHandle.read(crossfadeBuffer.buffer, {
+              at:
+                (nextClipView.offset + crossfadeStartPosition - nextClipView.startPosition) *
+                Float32Array.BYTES_PER_ELEMENT *
+                nextClipView.clip.channelCount,
+            })
+            for (let frame = 0; frame < crossfadeFrames; ++frame) {
+              const position = crossfadeStartPosition + frame
+              const progress = (position - overlapStart) / overlapLength
+              const fadeOutGain = Math.cos((progress * Math.PI) / 2)
+              const fadeInGain = Math.sin((progress * Math.PI) / 2)
+              for (let channel = 0; channel < clipView.clip.channelCount; ++channel) {
+                const readBufferIndex =
+                  (crossfadeStartPosition - bufferStartPosition + frame) * clipView.clip.channelCount + channel
+                const crossfadeBufferIndex = frame * clipView.clip.channelCount + channel
+                readBuffer[readBufferIndex] =
+                  readBuffer[readBufferIndex] * fadeOutGain + crossfadeBuffer[crossfadeBufferIndex] * fadeInGain
+              }
+            }
+          }
+
           let bufferOffset = 0
           while (true) {
             await this.pausePromise
@@ -126,8 +168,11 @@ export class AudioFileReader {
         this.logger.debug('Finished reading a clipView for ' + totalSamplesRead)
 
         ++this.clipViewIndex
+        if (overlapLength > 0) {
+          this.initialOffset = Math.min(overlapLength, nextClipView.length)
+        }
 
-        this.position = clipView.startPosition + clipView.length
+        this.position = Math.max(this.position, clipView.startPosition + clipView.length)
       }
     } while (this.loop)
     this.logger.debug('Finished reading this track.')

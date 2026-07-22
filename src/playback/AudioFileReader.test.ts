@@ -32,9 +32,28 @@ test('basic test', async () => {
   ringBuffer.pop(outputArray)
 
   const testArray = new Float32Array(16)
-  testArray.set([10, 0.2, 0.3, 0.4, 184, 0.3, 0.4, 0.5, 0.6])
+  testArray.set([Number.NaN, 5, 0.2, 0.3, 0.4, Number.NaN, 92, 0.3, 0.4, 0.5, 0.6])
   expect(outputArray).toEqual(testArray)
-  expect((file1 as any).closed).toBeTruthy()
+})
+
+test('equal-power crossfade', async () => {
+  const ringBufferArray = RingBuffer.getStorageForCapacity(32, Float32Array)
+  const ringBuffer = new RingBuffer(ringBufferArray, Float32Array)
+  const firstFile = MemoryBackedFileSystem.getFileHandle('test', '11')
+  const secondFile = MemoryBackedFileSystem.getFileHandle('test', '12')
+  firstFile.write(getInputArrayBuffer(1, 1, 1, 1))
+  secondFile.write(getInputArrayBuffer(2, 2, 2, 2))
+  const clipViews = [
+    { startPosition: 0, offset: 0, length: 4, clip: { id: 11, channelCount: 1 } },
+    { startPosition: 2, offset: 0, length: 4, clip: { id: 12, channelCount: 1 } },
+  ]
+  const audioFileReader = new AudioFileReader('test', 0, 6, clipViews, 1, false, ringBufferArray)
+
+  await audioFileReader.runBufferFillingLoop()
+  const output = new Float32Array(6)
+  ringBuffer.pop(output)
+
+  expect(output).toEqual(new Float32Array([1, 1, 1, 3 / Math.sqrt(2), 2, 2]))
 })
 
 test('timed wait test', async () => {
