@@ -1,5 +1,4 @@
 import { EncoderInfo } from '../encoders/EncoderType'
-import { Effect } from '../effects/Effects'
 import { ClipViewSubset } from '../playback/AudioFileReader'
 
 export type RenderingWorkerStartMessage = {
@@ -31,7 +30,6 @@ export type TrackSubset = {
   length: number
   channelCount: number
   clipViews: Array<ClipViewSubset>
-  effects: Array<Effect>
   gain: number
   pan: number
 }

@@ -106,6 +106,7 @@ class ReadingOfflineProcessor {
   private bufferWritePosition = 0
   private clipViewFile: FileSystemSyncAccessHandle | null = null
   private clipFileOffset = -1
+  private writingClipInitialOffset = 0
 
   private writePosition
   private readPosition
@@ -128,6 +129,7 @@ class ReadingOfflineProcessor {
     while (this.readPosition >= this.clipView.startPosition + this.clipView.length) {
       this.clipView = this.clipViews[++this.readingClipViewIndex]
     }
+    this.writingClipViewIndex = this.readingClipViewIndex
   }
 
   process(audioProcessingEvent: AudioProcessingEvent) {
@@ -141,7 +143,7 @@ class ReadingOfflineProcessor {
     }
     while (emitted < output.length && clipView) {
       if (this.readPosition < clipView.startPosition) {
-        const silenceSamples = Math.min(output.length, clipView.startPosition - this.readPosition)
+        const silenceSamples = Math.min(output.length - emitted, clipView.startPosition - this.readPosition)
         this.readPosition += silenceSamples
         for (let i = 0; i < silenceSamples; ++i) {
           for (let channel = 0; channel < this.channelCount; ++channel) {
@@ -152,7 +154,7 @@ class ReadingOfflineProcessor {
       }
 
       let toEmit: number
-      if (clipView.startPosition + clipView.length - this.readPosition < output.length) {
+      if (clipView.startPosition + clipView.length - this.readPosition < output.length - emitted) {
         toEmit = clipView.startPosition + clipView.length - this.readPosition
         clipView = this.clipViews[++this.readingClipViewIndex]
       } else {
@@ -169,6 +171,12 @@ class ReadingOfflineProcessor {
       this.bufferReadPosition += toEmit * this.channelCount
       emitted += toEmit
       this.readPosition += toEmit
+    }
+
+    if (emitted < output.length) {
+      for (let channel = 0; channel < this.channelCount; ++channel) {
+        this.outputBuffers[channel].fill(0, emitted)
+      }
     }
 
     for (let channel = 0; channel < this.channelCount; ++channel) {
@@ -190,11 +198,14 @@ class ReadingOfflineProcessor {
     let clipView = this.clipViews[this.writingClipViewIndex]
     while (this.bufferWritePosition < this.buffer.length && this.writingClipViewIndex < this.clipViews.length) {
       if (!this.clipViewFile) {
-        this.writePosition = Math.max(this.startPosition, clipView.startPosition)
+        this.writePosition = Math.max(this.startPosition, clipView.startPosition + this.writingClipInitialOffset)
+        this.writingClipInitialOffset = 0
         this.clipFileOffset = clipView.offset * Float32Array.BYTES_PER_ELEMENT * this.channelCount
         const file = await FileSystemUtils.getFileHandle(`${this.projectId}`, `${clipView.clip.id}`)
         this.clipViewFile = (await (file as any).createSyncAccessHandle()) as FileSystemSyncAccessHandle
       }
+      const bufferWriteStart = this.bufferWritePosition
+      const writeStart = this.writePosition
       const loaded = this.clipViewFile.read(
         new DataView(this.buffer.buffer, this.bufferWritePosition * Float32Array.BYTES_PER_ELEMENT),
         {
@@ -203,6 +214,7 @@ class ReadingOfflineProcessor {
             (this.writePosition - clipView.startPosition) * Float32Array.BYTES_PER_ELEMENT * this.channelCount,
         },
       )
+      await this.applyCrossfade(clipView, writeStart, loaded, bufferWriteStart)
       this.writePosition += loaded / Float32Array.BYTES_PER_ELEMENT / this.channelCount
       this.bufferWritePosition += loaded / Float32Array.BYTES_PER_ELEMENT
 
@@ -211,8 +223,67 @@ class ReadingOfflineProcessor {
           (this.writePosition - (clipView.length + clipView.startPosition)) * this.channelCount
         this.clipViewFile.close()
         this.clipViewFile = null
+        const nextClipView = this.clipViews[this.writingClipViewIndex + 1]
+        if (nextClipView != null) {
+          this.writingClipInitialOffset = Math.max(
+            0,
+            Math.min(nextClipView.length, clipView.startPosition + clipView.length - nextClipView.startPosition),
+          )
+        }
         clipView = this.clipViews[++this.writingClipViewIndex]
       }
+    }
+  }
+
+  private async applyCrossfade(clipView: ClipViewSubset, writeStart: number, loaded: number, bufferWriteStart: number) {
+    const nextClipView = this.clipViews[this.writingClipViewIndex + 1]
+    if (nextClipView == null) {
+      return
+    }
+
+    const overlapStart = nextClipView.startPosition
+    const overlapEnd = Math.min(
+      clipView.startPosition + clipView.length,
+      nextClipView.startPosition + nextClipView.length,
+    )
+    const overlapLength = overlapEnd - overlapStart
+    const loadedFrames = Math.min(
+      loaded / Float32Array.BYTES_PER_ELEMENT / this.channelCount,
+      clipView.startPosition + clipView.length - writeStart,
+    )
+    const crossfadeStart = Math.max(writeStart, overlapStart)
+    const crossfadeEnd = Math.min(writeStart + loadedFrames, overlapEnd)
+    if (overlapLength <= 0 || crossfadeStart >= crossfadeEnd) {
+      return
+    }
+
+    const crossfadeFrames = crossfadeEnd - crossfadeStart
+    const crossfadeBuffer = new Float32Array(crossfadeFrames * this.channelCount)
+    let crossfadeFile = this.clipViewFile
+    if (nextClipView.clip.id != clipView.clip.id) {
+      const file = await FileSystemUtils.getFileHandle(`${this.projectId}`, `${nextClipView.clip.id}`)
+      crossfadeFile = (await (file as any).createSyncAccessHandle()) as FileSystemSyncAccessHandle
+    }
+    crossfadeFile!.read(crossfadeBuffer.buffer, {
+      at:
+        (nextClipView.offset + crossfadeStart - nextClipView.startPosition) *
+        Float32Array.BYTES_PER_ELEMENT *
+        this.channelCount,
+    })
+
+    for (let frame = 0; frame < crossfadeFrames; ++frame) {
+      const progress = (crossfadeStart + frame - overlapStart) / overlapLength
+      const fadeOutGain = Math.cos((progress * Math.PI) / 2)
+      const fadeInGain = Math.sin((progress * Math.PI) / 2)
+      for (let channel = 0; channel < this.channelCount; ++channel) {
+        const bufferIndex = bufferWriteStart + (crossfadeStart - writeStart + frame) * this.channelCount + channel
+        const crossfadeIndex = frame * this.channelCount + channel
+        this.buffer[bufferIndex] = this.buffer[bufferIndex] * fadeOutGain + crossfadeBuffer[crossfadeIndex] * fadeInGain
+      }
+    }
+
+    if (crossfadeFile != this.clipViewFile) {
+      crossfadeFile!.close()
     }
   }
 }

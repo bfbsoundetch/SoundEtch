@@ -31,7 +31,6 @@ export function createRenderingArgument(
             },
           }
         }),
-        effects: track.getEffectRegions(),
         gain: track.getGain(),
         pan: track.getPan(),
       }
