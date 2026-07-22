@@ -71,17 +71,18 @@ export class Track extends DatabasePersisted implements Analyzable {
     if (newClipView.clip.getChannelCount() != this.channelCount) {
       return false
     }
-    for (let i = 0; i < this.clipViews.length; ++i) {
-      const clipView = this.clipViews[i]
-      if (clipView.startPosition <= newClipView.startPosition) {
-        if (clipView.startPosition + clipView.length > newClipView.startPosition) {
-          return false
-        }
-      } else {
-        if (clipView.startPosition < newClipView.startPosition + newClipView.length) {
-          return false
-        }
+
+    let latestOverlapEnd = -Infinity
+    for (const clipView of this.clipViews) {
+      const overlapStart = Math.max(clipView.startPosition, newClipView.startPosition)
+      const overlapEnd = Math.min(clipView.getEndPosition(), newClipView.getEndPosition())
+      if (overlapStart >= overlapEnd) {
+        continue
       }
+      if (overlapStart < latestOverlapEnd) {
+        return false
+      }
+      latestOverlapEnd = Math.max(latestOverlapEnd, overlapEnd)
     }
     return true
   }
@@ -97,16 +98,12 @@ export class Track extends DatabasePersisted implements Analyzable {
           this.channelCount,
       )
     }
+    if (!this.canAddClipView(newClipView)) {
+      throw Error('New clip would overlap two existing clips!')
+    }
     for (let i = 0; i < this.clipViews.length; ++i) {
       const clipView = this.clipViews[i]
-      if (clipView.startPosition <= newClipView.startPosition) {
-        if (clipView.startPosition + clipView.length > newClipView.startPosition) {
-          throw Error('New clip appears in the middle of an existing clip!')
-        }
-      } else {
-        if (clipView.startPosition < newClipView.startPosition + newClipView.length) {
-          throw Error('New clip appears in the middle of an existing clip!')
-        }
+      if (clipView.startPosition > newClipView.startPosition) {
         this.clipViews.splice(i, 0, newClipView)
         return
       }
@@ -137,67 +134,66 @@ export class Track extends DatabasePersisted implements Analyzable {
     if (start < 0 || start > end) {
       throw new Error('Must have 0 <= start <= end')
     }
-    let startIndex = this.findClipViewIndexAfterPosition(start)
-    if (startIndex >= this.clipViews.length) {
-      return []
-    }
-    const startClipView = this.clipViews[startIndex]
-    let endIndex = this.findClipViewIndexAfterPosition(end)
-    let endClipView = null
-    if (endIndex < this.clipViews.length) {
-      if (this.clipViews[endIndex].startPosition > end) {
-        --endIndex
+
+    const slice = this.clipViews.flatMap((clipView) => {
+      const sliceStart = Math.max(start, clipView.startPosition)
+      const sliceEnd = Math.min(end, clipView.getEndPosition())
+      if (sliceStart >= sliceEnd) {
+        return []
       }
-      endClipView = this.clipViews[endIndex]
+      return [
+        new ClipView(
+          clipView.clip,
+          clipView.offset + sliceStart - clipView.startPosition,
+          sliceStart,
+          sliceEnd - sliceStart,
+        ),
+      ]
+    })
+    if (!del || slice.length == 0) {
+      return slice
     }
 
-    let sliceStart: ClipView | null = null
-    const newClipViews = []
-    if (startClipView.startPosition < start) {
-      newClipViews.push(
-        new ClipView(
-          startClipView.clip,
-          startClipView.offset,
-          startClipView.startPosition,
-          start - startClipView.startPosition,
-        ),
-      )
-      sliceStart = new ClipView(
-        startClipView.clip,
-        startClipView.offset + start - startClipView.startPosition,
-        start,
-        Math.min(startClipView.getEndPosition() - start, end - start),
-      )
-    }
-    let sliceEnd: ClipView | null = null
-    if (endClipView != null && endClipView.getEndPosition() > end) {
-      newClipViews.push(
-        new ClipView(
-          endClipView.clip,
-          endClipView.offset + end - endClipView.startPosition,
-          end,
-          endClipView.getEndPosition() - end,
-        ),
-      )
-      if (endClipView != startClipView) {
-        sliceEnd = new ClipView(
-          endClipView.clip,
-          endClipView.offset,
-          endClipView.startPosition,
-          end - endClipView.startPosition,
+    const clipsCrossingStart = this.clipViews.filter(
+      (clipView) => clipView.startPosition < start && clipView.getEndPosition() > start,
+    )
+    const clipsCrossingEnd = this.clipViews.filter(
+      (clipView) => clipView.startPosition < end && clipView.getEndPosition() > end,
+    )
+    const keepLeft = clipsCrossingStart.reduce<ClipView | null>((longest, clipView) => {
+      return longest == null || clipView.startPosition < longest.startPosition ? clipView : longest
+    }, null)
+    const keepRight = clipsCrossingEnd.reduce<ClipView | null>((longest, clipView) => {
+      return longest == null || clipView.getEndPosition() > longest.getEndPosition() ? clipView : longest
+    }, null)
+
+    const remainingClipViews = this.clipViews.flatMap((clipView) => {
+      const fragments = new Array<ClipView>()
+      if (clipView.startPosition < start && (clipsCrossingStart.length < 2 || clipView == keepLeft)) {
+        fragments.push(
+          new ClipView(
+            clipView.clip,
+            clipView.offset,
+            clipView.startPosition,
+            Math.min(start, clipView.getEndPosition()) - clipView.startPosition,
+          ),
         )
       }
-    }
-    const slice = del
-      ? this.clipViews.splice(startIndex, endIndex - startIndex + 1, ...newClipViews)
-      : this.clipViews.slice(startIndex, endIndex + 1)
-
-    if (sliceStart != null) {
-      slice[0] = sliceStart
-    }
-    if (sliceEnd != null) {
-      slice[slice.length - 1] = sliceEnd
-    }
+      if (clipView.getEndPosition() > end && (clipsCrossingEnd.length < 2 || clipView == keepRight)) {
+        const fragmentStart = Math.max(end, clipView.startPosition)
+        fragments.push(
+          new ClipView(
+            clipView.clip,
+            clipView.offset + fragmentStart - clipView.startPosition,
+            fragmentStart,
+            clipView.getEndPosition() - fragmentStart,
+          ),
+        )
+      }
+      return fragments
+    })
+    remainingClipViews.sort((a, b) => a.startPosition - b.startPosition)
+    this.clipViews.splice(0, this.clipViews.length, ...remainingClipViews)
     return slice
   }
 
