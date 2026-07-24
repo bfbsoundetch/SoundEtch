@@ -4,9 +4,15 @@ import { WorkerController } from '../audiocontext/WorkerController'
 import { ClipViewSubset } from '../playback/AudioFileReader'
 import { ProjectManager } from '../project/ProjectManager'
 import { EncoderInfo } from '../encoders/EncoderType'
-import { RenderingEncodingInitMessage, RenderingWorkerStartMessage } from './RenderingWorkerProtocol'
+import {
+  RenderingEncodingInitMessage,
+  RenderingFileWritingInitMessage,
+  RenderingWorkerStartMessage,
+} from './RenderingWorkerProtocol'
 import { SelectedRegion } from 'playback/Player'
 import { createRenderingArgument } from './RenderingArgumentFactory'
+import { Clip } from '../project/Clip'
+import { cloneWithGetters } from '../global/ObjectUtils'
 
 export class Renderer {
   private static readingWorkerController: WorkerController | null = null
@@ -46,9 +52,46 @@ export class Renderer {
     ...tracks: Array<Track>
   ) {
     const argument = createRenderingArgument(project, outputChannelCount, startPosition, projectLength, tracks)
-
-    const renderingWorker = new Worker('./assets/renderingWorker.js', { type: 'module' })
     const encodingWorker = new Worker(new URL('./RenderingEncodingWorker.ts', import.meta.url), { type: 'module' })
+
+    const encodingInitMessage: Omit<RenderingEncodingInitMessage, 'encodingPort'> = {
+      type: 'init',
+      file,
+      encoderInfo,
+      channelCount: outputChannelCount,
+      length: projectLength,
+    }
+    await Renderer.runRender(argument, encodingWorker, encodingInitMessage)
+  }
+
+  static async renderToClip(
+    project: Project,
+    clip: Clip,
+    startPosition: number,
+    length: number,
+    ...tracks: Array<Track>
+  ) {
+    const channelCount = clip.getChannelCount()
+    const argument = createRenderingArgument(project, channelCount, startPosition, length, tracks)
+    const writingWorker = new Worker(new URL('./RenderingFileWritingWorker.ts', import.meta.url), { type: 'module' })
+    writingWorker.addEventListener('message', clip.summary.getWorkerMessageListener())
+    const writingInitMessage: Omit<RenderingFileWritingInitMessage, 'encodingPort'> = {
+      type: 'init',
+      dirname: project.directoryName,
+      clip: cloneWithGetters(clip),
+      channelCount,
+      length,
+    }
+    await Renderer.runRender(argument, writingWorker, writingInitMessage)
+  }
+
+  private static async runRender(
+    argument: ReturnType<typeof createRenderingArgument>,
+    outputWorker: Worker,
+    outputInitMessage:
+      Omit<RenderingEncodingInitMessage, 'encodingPort'> | Omit<RenderingFileWritingInitMessage, 'encodingPort'>,
+  ) {
+    const renderingWorker = new Worker('./assets/renderingWorker.js', { type: 'module' })
     const encodingChannel = new MessageChannel()
     Renderer.renderingWorker = renderingWorker
 
@@ -57,7 +100,7 @@ export class Renderer {
         Renderer.cancelRenderingCallback = null
         Renderer.renderingWorker = null
         renderingWorker.terminate()
-        encodingWorker.terminate()
+        outputWorker.terminate()
       }
 
       Renderer.cancelRenderingCallback = () => {
@@ -70,7 +113,7 @@ export class Renderer {
         reject(error)
       }
 
-      encodingWorker.onmessage = (e) => {
+      outputWorker.onmessage = (e) => {
         if (e.data.error) {
           rejectWithCleanup(new Error(String(e.data.error)))
           return
@@ -86,19 +129,15 @@ export class Renderer {
       }
 
       renderingWorker.onerror = (error) => rejectWithCleanup(error)
-      encodingWorker.onerror = (error) => rejectWithCleanup(error)
+      outputWorker.onerror = (error) => rejectWithCleanup(error)
       renderingWorker.onmessageerror = (error) => rejectWithCleanup(error)
-      encodingWorker.onmessageerror = (error) => rejectWithCleanup(error)
+      outputWorker.onmessageerror = (error) => rejectWithCleanup(error)
 
-      const encodingInitMessage: RenderingEncodingInitMessage = {
-        type: 'init',
-        file,
-        encoderInfo,
-        channelCount: outputChannelCount,
+      const encodingInitMessage = {
+        ...outputInitMessage,
         encodingPort: encodingChannel.port1,
-        length: projectLength,
       }
-      encodingWorker.postMessage(encodingInitMessage, [encodingChannel.port1])
+      outputWorker.postMessage(encodingInitMessage, [encodingChannel.port1])
 
       const renderingStartMessage: RenderingWorkerStartMessage = {
         argument,

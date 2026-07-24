@@ -1,5 +1,6 @@
 import { EncoderInfo } from '../encoders/EncoderType'
 import { ClipViewSubset } from '../playback/AudioFileReader'
+import { Clip } from '../project/Clip'
 
 export type RenderingWorkerStartMessage = {
   argument: RenderingArgument
@@ -10,6 +11,15 @@ export type RenderingEncodingInitMessage = {
   type: 'init'
   file: FileSystemFileHandle
   encoderInfo: EncoderInfo
+  channelCount: number
+  encodingPort: MessagePort
+  length: number
+}
+
+export type RenderingFileWritingInitMessage = {
+  type: 'init'
+  dirname: string
+  clip: Clip
   channelCount: number
   encodingPort: MessagePort
   length: number

@@ -20,6 +20,8 @@ import {
 } from '../undo/UndoableActions'
 import { Track } from '../../project/Track'
 import { TimelineRegionController } from './TimelineRegionController'
+import { Freezer } from '../../freezer/Freezer'
+import { NotificationsController } from '../NotificationsController'
 
 interface Selection {
   startSample: number
@@ -71,6 +73,7 @@ export class TrackListController {
 
   private readonly tracklistElement = document.getElementById('track-list')!
   private readonly tracklistInfoElement = document.getElementById('track-info-list')!
+  private readonly addTrackButton = document.createElement('button')
   private readonly infoWaveformPairs = new Map<
     string,
     { info: HTMLElement; waveform: HTMLElement; controller: Waveform }
@@ -83,6 +86,7 @@ export class TrackListController {
     new ContextMenuItem('Cut', () => this.sliceSelection(true)),
     new ContextMenuItem('Copy', () => this.sliceSelection(false)),
     new ContextMenuItem('Paste', (activeTrackIndex, startSample) => this.paste(activeTrackIndex, startSample)),
+    new ContextMenuItem('Freeze', () => this.freezeSelection()),
     new ContextMenuItem('Effect...', () => {}),
   )
 
@@ -141,6 +145,10 @@ export class TrackListController {
   }
 
   constructor() {
+    this.addTrackButton.className = 'add-track-button clickable'
+    this.addTrackButton.innerText = 'Add Track'
+    this.addTrackButton.addEventListener('click', () => void this.addTrack())
+
     this.history.addChangeListener(() => this.draw())
     KeyPressController.addKeyDownListener((event) => this.handleKeyDown(event))
 
@@ -222,12 +230,24 @@ export class TrackListController {
         waveformDivs.push(waveformDiv)
       }
       this.waveforms.splice(0, this.waveforms.length, ...nextWaveforms)
-      this.tracklistInfoElement.replaceChildren(...infoDivs)
+      this.tracklistInfoElement.replaceChildren(...infoDivs, this.addTrackButton)
       this.tracklistElement.replaceChildren(...waveformDivs)
       this.waveforms.forEach((waveform) => waveform.draw())
       this.selectionController.remove()
       this.pointerStateManager
     })
+  }
+
+  private async addTrack() {
+    this.addTrackButton.disabled = true
+    try {
+      const project = await ProjectManager.getActiveProject()
+      const track = new Track(`Track ${project.getTracks().length + 1}`, 2)
+      await ProjectManager.saveTrack(track)
+      await ProjectManager.addTrackToProject(track, project.getTracks().length)
+    } finally {
+      this.addTrackButton.disabled = false
+    }
   }
 
   selectTrack(waveform: Waveform) {
@@ -297,6 +317,26 @@ export class TrackListController {
     }
     if (undoCommands.length > 0) {
       await this.history.execute(new BatchCommand(undoCommands, 'paste'))
+    }
+  }
+
+  private async freezeSelection() {
+    if (!this.canEdit()) {
+      return
+    }
+    const selection = this.selectedRegion
+    if (!selection) {
+      return
+    }
+
+    ;(window as any).processingModalController?.show('Freezing selection...', () => Freezer.cancelFreeze())
+    try {
+      await Freezer.freezeSelection(selection)
+      this.clearSelection()
+    } catch (error) {
+      NotificationsController.showError(error as Error)
+    } finally {
+      ;(window as any).processingModalController?.hide()
     }
   }
 

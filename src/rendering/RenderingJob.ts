@@ -99,8 +99,6 @@ self.onmessage = async (e) => {
 class ReadingOfflineProcessor {
   private readingClipViewIndex = 0
   private writingClipViewIndex = 0
-  private clipView: ClipViewSubset
-
   private buffer = new Float32Array(1024 * 1024)
   private bufferReadPosition = 0
   private bufferWritePosition = 0
@@ -120,14 +118,17 @@ class ReadingOfflineProcessor {
     private readonly blockSize: number,
     private readonly startPosition: number,
   ) {
-    this.clipView = this.clipViews[0]
     this.readPosition = this.writePosition = startPosition
     this.outputBuffers = new Array<Float32Array>(channelCount)
     for (let i = 0; i < channelCount; ++i) {
       this.outputBuffers[i] = new Float32Array(blockSize)
     }
-    while (this.readPosition >= this.clipView.startPosition + this.clipView.length) {
-      this.clipView = this.clipViews[++this.readingClipViewIndex]
+    while (
+      this.readingClipViewIndex < this.clipViews.length &&
+      this.readPosition >=
+        this.clipViews[this.readingClipViewIndex].startPosition + this.clipViews[this.readingClipViewIndex].length
+    ) {
+      ++this.readingClipViewIndex
     }
     this.writingClipViewIndex = this.readingClipViewIndex
   }
