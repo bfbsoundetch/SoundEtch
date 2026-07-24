@@ -55,6 +55,10 @@ export class ContextMenuController {
     this.trackIndex = this.pointerStateManager.getActiveTrack()?.index ?? -1
     this.startingSample = this.pointerStateManager.getSampleForXValue(this.pointerStateManager.mouseXToSvgCoord(x))
   }
+
+  remove() {
+    this.menu.remove()
+  }
 }
 
 export class ContextMenuItem {

@@ -1115,6 +1115,22 @@ video {
   cursor: grab;
 }
 
+.crossfade-overlay {
+  fill: rgba(128, 40, 190, 0.3);
+  stroke: none;
+  cursor: default;
+  border: 10px solid black;
+}
+
+.waveform-path {
+  stroke-width: 1;
+  stroke: var(--waveform-stroke);
+  fill: none;
+  width: 100%;
+  pointer-events: none;
+  shape-rendering: crispEdges;
+}
+
 .track-effect-selector {
   border: 1px solid var(--color);
   background: var(--bg-color);
