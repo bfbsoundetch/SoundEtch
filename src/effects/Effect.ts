@@ -8,6 +8,10 @@ export interface EffectModule {
 
     getNode(audioContext: BaseAudioContext): Promise<AudioNode>
 
+    getState(): Promise<string>
+
+    setState(state: string): Promise<void>
+
 }
 
 export interface EffectMetadata {

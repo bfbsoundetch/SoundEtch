@@ -15,7 +15,7 @@ export class EffectIndex {
         let result: EffectModule | null = null
         switch(id) {
             case GainEffectMetadata.id:
-                result = new (await import('./gain/GainEffect')).GainEffect
+                result = new (await import('./gain/GainEffect')).GainEffect()
                 break
         }
         return result
