@@ -10,6 +10,7 @@ import { cloneEffectData, SetTrackEffectsCommand } from './SetTrackEffectsComman
 import { AutomationController } from '../../ui/timeline/AutomationController'
 import { EffectData } from '../../effects/EffectData'
 import { TrackListController } from 'ui/timeline/TrackListController'
+import { EffectMetadata } from 'effects/Effect'
 
 type PluginViewSession = {
   track: Track
@@ -36,7 +37,7 @@ export class EffectPanelController {
 
   private constructor() {}
 
-  async showPluginForTrack(plugin: Wam2PluginDescriptor, track: Track, effectIndex?: number) {
+  async showPluginForTrack(plugin: EffectMetadata, track: Track, effectIndex?: number) {
     const viewVersion = ++this.viewVersion
     await this.closePluginView(true)
     if (viewVersion != this.viewVersion) {

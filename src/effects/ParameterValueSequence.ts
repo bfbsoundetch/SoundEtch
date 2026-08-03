@@ -9,25 +9,28 @@ export class ParamValueTransition {
     public startSample: number,
   ) {}
 
-  generateSCurve(length = 32) {
+  static generateSCurve(length = 32) {
     const result = new Array<number>(length)
     for (let i = 1; i <= length; ++i) {
       result[i] = Math.cos((Math.PI * i) / length) / 2 + 0.5
     }
+    return result
   }
 
-  generateLogCurve(length = 32) {
+  static generateLogCurve(length = 32) {
     const result = new Array<number>(length)
     for (let i = 1; i <= length; ++i) {
       result[i] = Math.log10(1 + (9 * i) / length)
     }
+    return result
   }
 
-  generateExpCurve(length = 32) {
+  static generateExpCurve(length = 32) {
     const result = new Array<number>(length)
     for (let i = 1; i <= length; ++i) {
       result[i] = Math.exp((-5 * i) / length)
     }
+    return result
   }
 }
 

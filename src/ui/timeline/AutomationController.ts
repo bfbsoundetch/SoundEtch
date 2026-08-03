@@ -3,61 +3,43 @@ import { Track } from '../../project/Track'
 import { TrackListItemController } from './TrackListItemController'
 import { TrackListController } from './TrackListController'
 import { WamParameterInfo, WebAudioModule } from '@webaudiomodules/api'
-import { AutomationData } from '../../effects/EffectData'
+import { ParameterMetadata } from 'effects/ParameterMetadata'
 
 export class AutomationController extends TrackListItemController {
   private readonly svgPathElement: SVGPathElement
-  private readonly paramVals: Array<AutomationData>
+  private readonly paramVals: ParameterValueSequence
   private width: number
   private height: number
-  private rangeMin: number
-  private rangeMax: number
 
   constructor(
     trackListController: TrackListController,
     effectId: string,
     private readonly groupElement: SVGGElement,
     private readonly track: Track,
-    private readonly wamParameterInfo: WamParameterInfo,
+    private readonly parameterMetadata: ParameterMetadata,
     private readonly normalizedInitialValue: number,
   ) {
     super(trackListController)
     this.width = groupElement.parentElement!.clientWidth
     this.height = groupElement.parentElement!.clientHeight
-    console.error(this.width, this.height, normalizedInitialValue, JSON.stringify(wamParameterInfo))
+    console.error(this.width, this.height, normalizedInitialValue, JSON.stringify(parameterMetadata))
 
     this.svgPathElement = document.createElementNS('http://www.w3.org/2000/svg', 'path')
     this.svgPathElement.addEventListener('mousedown', () => {
       console.log('path down')
     })
     groupElement.appendChild(this.svgPathElement)
-    this.paramVals = track.effectRegions.find(e => e.id == effectId)!.values
-
-    switch (this.wamParameterInfo.type) {
-      case 'boolean':
-        this.rangeMax = 1
-        this.rangeMin = 0
-        break
-      case 'float':
-      case 'int':
-        this.rangeMax = this.wamParameterInfo.maxValue
-        this.rangeMin = this.wamParameterInfo.minValue
-        break
-      case 'choice':
-        this.rangeMax = this.wamParameterInfo.choices.length
-        this.rangeMin = 0
-        break
-    }
+    this.paramVals = track.effectRegions.find(e => e.id == effectId)!.params[parameterMetadata.name]
   }
 
   draw() {
-    if (this.paramVals.length == 0) {
+    if (this.paramVals.transitionSequence.length == 0) {
       this.svgPathElement.setAttribute('d', `M 0 ${this.normalizedInitialValue * this.height} L ${this.width} ${this.normalizedInitialValue * this.height}`)
       return
     }
     const pointCircles = new Array<SVGCircleElement>()
     const points = []
-    for (const point of this.paramVals) {
+    for (const point of this.paramVals.transitionSequence) {
       const pointX = this.getXValueForSample(point.startSample)
       const pointY = this.height * (1 - point.startValue)
       points.push({pointX, pointY})
@@ -80,9 +62,9 @@ export class AutomationController extends TrackListItemController {
     this.height = this.groupElement.clientHeight
   }
 
-  modifyPoint(point: AutomationData, x: number, y: number) {
+  modifyPoint(point: ParamValueTransition, x: number, y: number) {
     const position = this.getSampleForXValue(x)
-    const value = this.wamParameterInfo.denormalize((this.height - y) / this.height)
+    const value = this.parameterMetadata.denormalize((this.height - y) / this.height)
     point.startSample = position
     point.startValue = value
     this.draw()
@@ -90,17 +72,17 @@ export class AutomationController extends TrackListItemController {
 
   addNewPoint(x: number, y: number) {
     const position = this.getSampleForXValue(x)
-    const value = this.wamParameterInfo.denormalize((this.height - y) / this.height)
+    const value = this.parameterMetadata.denormalize((this.height - y) / this.height)
     let i = 0
-    for (; i < this.paramVals.length; ++i) {
-      if (this.paramVals[i].startSample > position) {
+    for (; i < this.paramVals.transitionSequence.length; ++i) {
+      if (this.paramVals.transitionSequence[i].startSample > position) {
         break
       }
     }
-    this.paramVals.splice(i, 0, {
+    this.paramVals.transitionSequence.splice(i, 0, {
       startSample: position,
       startValue: value,
-      skew: 0
+      type: 'linear'
     })
     this.draw()
   }
