@@ -56,14 +56,12 @@ export class Player {
         outputChannelCount: [track.getChannelCount()],
         channelCountMode: 'explicit',
       })
-      const effectGainNode = audioContext.createGain()
       const gainNode = audioContext.createGain()
       gainNode.gain.value = track.getGain()
       const pannerNode = audioContext.createStereoPanner()
       pannerNode.pan.value = track.getPan()
 
-      playerNode.connect(effectGainNode)
-      effectGainNode.connect(gainNode)
+      playerNode.connect(gainNode)
       gainNode.connect(pannerNode)
       pannerNode.connect(audioContext.destination)
 
@@ -76,7 +74,7 @@ export class Player {
         }),
         ringBufferArray: ringBufferArray,
       })
-      track.registerNewPlayback(playerNode, gainNode, pannerNode, [effectGainNode], () => {})
+      track.registerNewPlayback(playerNode, gainNode, pannerNode, [], () => {})
       playerNodes.push(playerNode)
     })
     if (playerNodes.length == 0) {

@@ -2,101 +2,106 @@ import { ParameterValueSequence, ParamValueTransition } from '../../effects/Para
 import { Track } from '../../project/Track'
 import { TrackListItemController } from './TrackListItemController'
 import { TrackListController } from './TrackListController'
+import { WamParameterInfo, WebAudioModule } from '@webaudiomodules/api'
+import { AutomationData } from '../../effects/EffectData'
 
 export class AutomationController extends TrackListItemController {
-  private readonly topSvgElement: SVGElement
   private readonly svgPathElement: SVGPathElement
-  private width = 0
-  private height = 0
+  private readonly paramVals: Array<AutomationData>
+  private width: number
+  private height: number
   private rangeMin: number
   private rangeMax: number
 
   constructor(
     trackListController: TrackListController,
-    private readonly div: HTMLDivElement,
+    effectId: string,
+    private readonly groupElement: SVGGElement,
     private readonly track: Track,
-    private readonly paramVals: ParameterValueSequence,
+    private readonly wamParameterInfo: WamParameterInfo,
+    private readonly normalizedInitialValue: number,
   ) {
     super(trackListController)
-    this.topSvgElement = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
-    this.topSvgElement.setAttribute('xmlns', 'http://www.w3.org/2000/svg')
-    this.topSvgElement.id = `automation-parent-${this.track.id}`
-    this.topSvgElement.style.height = '100%'
-    this.topSvgElement.style.width = '100%'
-    this.topSvgElement.style.display = 'block'
-    this.div.appendChild(this.topSvgElement)
-    this.topSvgElement.setAttribute('viewBox', `0 0 ${this.width} ${this.height}`)
+    this.width = groupElement.parentElement!.clientWidth
+    this.height = groupElement.parentElement!.clientHeight
+    console.error(this.width, this.height, normalizedInitialValue, JSON.stringify(wamParameterInfo))
 
     this.svgPathElement = document.createElementNS('http://www.w3.org/2000/svg', 'path')
     this.svgPathElement.addEventListener('mousedown', () => {
       console.log('path down')
     })
-    this.topSvgElement.appendChild(this.svgPathElement)
+    groupElement.appendChild(this.svgPathElement)
+    this.paramVals = track.effectRegions.find(e => e.id == effectId)!.values
 
-    switch (this.paramVals.param.type) {
+    switch (this.wamParameterInfo.type) {
       case 'boolean':
         this.rangeMax = 1
         this.rangeMin = 0
         break
       case 'float':
       case 'int':
-        this.rangeMax = this.paramVals.param.maxValue
-        this.rangeMin = this.paramVals.param.minValue
+        this.rangeMax = this.wamParameterInfo.maxValue
+        this.rangeMin = this.wamParameterInfo.minValue
         break
       case 'choice':
-        this.rangeMax = this.paramVals.param.choices.length
+        this.rangeMax = this.wamParameterInfo.choices.length
         this.rangeMin = 0
         break
     }
   }
 
   draw() {
-    const pointCircles = new Array<SVGCircleElement>()
-    let path = 'M '
-    for (const point of this.paramVals.transitionSequence) {
-      const pointX = this.getXValueForSample(point.position)
-      if (pointX >= 0 && pointX <= this.width) {
-        const pointY = this.height * (1 - (point.startValue - this.rangeMin) / (this.rangeMax - this.rangeMin))
-        path += ` ${pointX} ${pointY} L`
-
-        const circleElement = new SVGCircleElement()
-        circleElement.r.baseVal.value = 3
-        circleElement.cx.baseVal.value = pointX
-        circleElement.cy.baseVal.value = pointY
-        this.topSvgElement.appendChild(circleElement)
-
-        circleElement.addEventListener('mousedown', () => {
-          console.log('circle down')
-        })
-      }
+    if (this.paramVals.length == 0) {
+      this.svgPathElement.setAttribute('d', `M 0 ${this.normalizedInitialValue * this.height} L ${this.width} ${this.normalizedInitialValue * this.height}`)
+      return
     }
-    path = path.substring(0, path.length - 2)
-    this.svgPathElement.setAttribute('d', path)
+    const pointCircles = new Array<SVGCircleElement>()
+    const points = []
+    for (const point of this.paramVals) {
+      const pointX = this.getXValueForSample(point.startSample)
+      const pointY = this.height * (1 - point.startValue)
+      points.push({pointX, pointY})
+
+      const circleElement = new SVGCircleElement()
+      circleElement.r.baseVal.value = 3
+      circleElement.cx.baseVal.value = pointX
+      circleElement.cy.baseVal.value = pointY
+      this.groupElement.appendChild(circleElement)
+
+      circleElement.addEventListener('mousedown', () => {
+        console.log('circle down')
+      })
+    }
+    this.svgPathElement.setAttribute('d', 'M ' + points.map(p => `${p.pointX} ${p.pointY}`).join(' L '))
   }
 
   resize() {
-    this.width = this.div.clientWidth
-    this.height = this.div.clientHeight
-    this.topSvgElement.setAttribute('viewBox', `0 0 ${this.width} ${this.height}`)
+    this.width = this.groupElement.clientWidth
+    this.height = this.groupElement.clientHeight
   }
 
-  modifyPoint(point: ParamValueTransition, x: number, y: number) {
+  modifyPoint(point: AutomationData, x: number, y: number) {
     const position = this.getSampleForXValue(x)
-    const value = ((this.height - y) / this.height) * (this.rangeMax - this.rangeMin) + this.rangeMin
-    point.position = position
+    const value = this.wamParameterInfo.denormalize((this.height - y) / this.height)
+    point.startSample = position
     point.startValue = value
+    this.draw()
   }
 
   addNewPoint(x: number, y: number) {
     const position = this.getSampleForXValue(x)
-    const value = ((this.height - y) / this.height) * (this.rangeMax - this.rangeMin) + this.rangeMin
+    const value = this.wamParameterInfo.denormalize((this.height - y) / this.height)
     let i = 0
-    for (; i < this.paramVals.transitionSequence.length; ++i) {
-      if (this.paramVals.transitionSequence[i].position > position) {
+    for (; i < this.paramVals.length; ++i) {
+      if (this.paramVals[i].startSample > position) {
         break
       }
     }
-    this.paramVals.transitionSequence.splice(i, 0, new ParamValueTransition('linear', value, position))
+    this.paramVals.splice(i, 0, {
+      startSample: position,
+      startValue: value,
+      skew: 0
+    })
     this.draw()
   }
 }

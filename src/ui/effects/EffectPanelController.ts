@@ -1,7 +1,4 @@
-import { WebAudioModule } from '@webaudiomodules/api'
 import { AudioControl } from '../../audiocontext/AudioControl'
-import { WamManager } from '../../effects/WamManager'
-import { Wam2PluginDescriptor, WamPluginIndex } from '../../effects/WamPluginIndex'
 import { TimeUtils } from '../../global/TimeUtils'
 import { ProjectManager } from '../../project/ProjectManager'
 import { Track } from '../../project/Track'
@@ -10,12 +7,15 @@ import { NotificationsController } from '../NotificationsController'
 import { createArrowIcon, createSvgIcon } from '../SvgIcon'
 import { editorHistory } from '../undo/EditorHistory'
 import { cloneEffectData, SetTrackEffectsCommand } from './SetTrackEffectsCommand'
+import { AutomationController } from '../../ui/timeline/AutomationController'
+import { EffectData } from '../../effects/EffectData'
+import { TrackListController } from 'ui/timeline/TrackListController'
 
 type PluginViewSession = {
   track: Track
   effectInstanceId: string
   module: WebAudioModule
-  gui: Element
+  gui: Element | null
   ownsModule: boolean
   abortController: AbortController
   saveQueue: Promise<void>
@@ -29,7 +29,6 @@ export class EffectPanelController {
     return this.instance ?? (this.instance = new EffectPanelController())
   }
 
-  private readonly wamPluginIndex = new WamPluginIndex()
   private readonly bottomPanelController = BottomPanelController.getInstance()
   private activePluginView: PluginViewSession | null = null
   private viewVersion = 0
@@ -40,7 +39,6 @@ export class EffectPanelController {
   async showPluginForTrack(plugin: Wam2PluginDescriptor, track: Track, effectIndex?: number) {
     const viewVersion = ++this.viewVersion
     await this.closePluginView(true)
-    await this.ensureEffectInstanceIds(track)
     if (viewVersion != this.viewVersion) {
       return
     }
@@ -57,83 +55,50 @@ export class EffectPanelController {
     loadingElement.textContent = `Loading ${plugin.name}...`
     this.openSubview(plugin.name, track.name, loadingElement, track)
 
-    let module: WebAudioModule | undefined
-    const ownsModule = true
+    const pluginSession = await this.startPluginSession(track, plugin)
 
     try {
-      if (!module) {
-        const audioContext = await AudioControl.getOrCreateAudioContext()
-        module = await WamManager.getInstance().loadPlugin(plugin.path, audioContext, effectData.state)
-      }
-      if (viewVersion != this.viewVersion) {
-        if (ownsModule) {
-          this.destroyModule(module)
-        }
-        return
-      }
-
-      const gui = await module.createGui()
-      if (viewVersion != this.viewVersion) {
-        module.destroyGui(gui)
-        if (ownsModule) {
-          this.destroyModule(module)
-        }
-        return
-      }
-
-      const abortController = new AbortController()
-      const session: PluginViewSession = {
-        track,
-        effectInstanceId: effectData.instanceId,
-        module,
-        gui,
-        ownsModule,
-        abortController,
-        saveQueue: Promise.resolve(),
-        closed: false,
-      }
-      this.activePluginView = session
-
-      gui.addEventListener(
-        'pointerdown',
-        () => {
-          document.addEventListener('pointerup', () => this.queuePluginStateCapture(session), {
-            once: true,
-            signal: abortController.signal,
-          })
-        },
-        { signal: abortController.signal },
-      )
-      gui.addEventListener('change', () => this.queuePluginStateCapture(session), {
-        signal: abortController.signal,
-      })
-
-      const pluginBody = document.createElement('div')
-      pluginBody.className = 'effect-plugin-body'
-      pluginBody.style.userSelect = 'none'
-      pluginBody.appendChild(gui)
-      this.bottomPanelController.open({
-        title: module.name || plugin.name,
-        subtitle: track.name,
-        body: pluginBody,
-        onBack: () => this.showTrackEffectsList(track),
-        onClose: () => this.handlePanelClose(),
-      })
+      pluginSession.gui = await pluginSession.module.createGui()
     } catch (error) {
       console.error(`Failed to open plugin ${plugin.identifier}`, error)
-      if (module && ownsModule) {
-        this.destroyModule(module)
+      if (module && pluginSession.ownsModule) {
+        this.destroyModule(pluginSession.module)
       }
       if (viewVersion == this.viewVersion) {
         this.showMessage('Plugin failed to load', String(error), track)
       }
+      return
     }
+
+    const pluginBody = document.createElement('div')
+    pluginBody.className = 'effect-plugin-body'
+    pluginBody.style.userSelect = 'none'
+    pluginBody.appendChild(pluginSession.gui)
+    this.bottomPanelController.open({
+      title: pluginSession.module.name || plugin.name,
+      subtitle: track.name,
+      body: pluginBody,
+      onBack: () => this.showTrackEffectsList(track),
+      onClose: () => this.handlePanelClose(),
+    })
+    pluginSession.gui.addEventListener(
+      'pointerdown',
+      () => {
+        document.addEventListener('pointerup', () => this.queuePluginStateCapture(pluginSession), {
+          once: true,
+          signal: pluginSession.abortController.signal,
+        })
+      },
+      { signal: pluginSession.abortController.signal },
+    )
+    pluginSession.gui.addEventListener('change', () => this.queuePluginStateCapture(pluginSession), {
+      signal: pluginSession.abortController.signal,
+    })
   }
 
   async showTrackEffectsList(track: Track) {
     const viewVersion = ++this.viewVersion
     await this.closePluginView(true)
-    await this.ensureEffectInstanceIds(track)
     if (viewVersion != this.viewVersion) {
       return
     }
@@ -229,7 +194,30 @@ export class EffectPanelController {
     }
   }
 
-  private createPluginChainItem(track: Track, index: number, plugin?: Wam2PluginDescriptor) {
+  private async startPluginSession(track: Track, plugin: Wam2PluginDescriptor) {
+    const effectData = track.effectRegions.find(e => e.id == plugin.identifier)!
+    let module = track.getEffectModuleById(plugin.identifier)
+    const ownsModule = true
+
+    if (!module) {
+      const audioContext = await AudioControl.getOrCreateAudioContext()
+      module = await WamManager.getInstance().loadPlugin(plugin.path, audioContext, effectData.state)
+    }
+    const session: PluginViewSession = {
+      track,
+      effectInstanceId: effectData.instanceId,
+      module,
+      gui: null,
+      ownsModule,
+      abortController: new AbortController(),
+      saveQueue: Promise.resolve(),
+      closed: false,
+    }
+    this.activePluginView = session
+    return session
+  }
+
+  private createPluginChainItem(track: Track, index: number, effectData: EffectData) {
     const item = document.createElement('article')
     item.className = 'effect-list-item effect-chain-item effect-plugin-item'
     item.style.border = 'double'
@@ -262,8 +250,9 @@ export class EffectPanelController {
     const removeButton = this.createIconButton('Remove effect', 'trash')
     removeButton.classList.add('effect-chain-remove')
     removeButton.addEventListener('click', () => void this.removeEffect(track, index))
-    controls.append(moveLeftButton, moveRightButton, removeButton)
-
+    const automationButton = this.createIconButton('Automate', 'pencil')
+    automationButton.addEventListener('click', () => void this.openAutomationView(track, plugin!))
+    controls.append(moveLeftButton, moveRightButton, removeButton, automationButton)
     item.append(openButton, controls)
     return item
   }
@@ -314,7 +303,7 @@ export class EffectPanelController {
         instanceId: this.createInstanceId(),
         id: plugin.identifier,
         state: undefined,
-        automation: [],
+        values: [],
       })
       await editorHistory.execute(
         new SetTrackEffectsCommand(track, oldEffects, newEffects, `add ${plugin.name} effect`),
@@ -378,6 +367,26 @@ export class EffectPanelController {
     }
   }
 
+  private async openAutomationView(track: Track, plugin: Wam2PluginDescriptor) {
+    const session = await this.startPluginSession(track, plugin)
+    const paramInfo = await session.module.audioNode.getParameterInfo()
+    const trackListController = (window as any).trackListController as TrackListController
+    const waveformSvg = trackListController.waveforms.find(w => w.track == track)?.topGroupElement
+    if (!waveformSvg) {
+      return
+    }
+    const firstParam = Object.keys(paramInfo).map(key => 
+      paramInfo[key]).filter(info => info.type == 'float' || info.type == 'int').find(_ => true)
+    if (!firstParam) {
+      return
+    }
+    const paramData = await session.module.audioNode.getParameterValues(true, firstParam.id)
+    const state = await session.module.audioNode.getState()
+    console.error('pararam', JSON.stringify(paramData), JSON.stringify(state))
+    const automationController = new AutomationController(trackListController, plugin.identifier, waveformSvg, track, firstParam, paramData[firstParam.id].value)
+    automationController.draw()
+  }
+
   private queuePluginStateCapture(session: PluginViewSession) {
     if (session.closed) {
       return session.saveQueue
@@ -434,7 +443,9 @@ export class EffectPanelController {
     session.closed = true
     await session.saveQueue
     try {
-      session.module.destroyGui(session.gui)
+      if (session.gui) {
+        session.module.destroyGui(session.gui)
+      }
     } catch (error) {
       console.error('Failed to destroy plugin GUI', error)
     }
@@ -444,33 +455,12 @@ export class EffectPanelController {
   }
 
   private destroyModule(module: WebAudioModule) {
-    try {
-      module.audioNode.disconnect()
-      module.audioNode.destroy()
-    } catch (error) {
-      console.error('Failed to destroy plugin module', error)
-    }
-  }
-
-  private async ensureEffectInstanceIds(track: Track) {
-    let changed = false
-    for (const effect of track.effectRegions) {
-      if (!effect.wamPluginEffect) {
-        effect.wamPluginEffect = true
-        changed = true
-      }
-      if (!effect.instanceId) {
-        effect.instanceId = this.createInstanceId()
-        changed = true
-      }
-    }
-    if (changed) {
-      await ProjectManager.saveTrack(track)
-    }
+    module.audioNode.disconnect()
+    module.audioNode.destroy()
   }
 
   private createInstanceId() {
-    return globalThis.crypto?.randomUUID?.() ?? `${Date.now()}-${Math.random()}`
+    return globalThis.crypto.randomUUID()
   }
 
   private statesEqual(first: unknown, second: unknown) {

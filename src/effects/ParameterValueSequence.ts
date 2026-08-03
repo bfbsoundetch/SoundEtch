@@ -1,4 +1,4 @@
-import { WamParameterInfo } from '@webaudiomodules/api'
+import { ParameterMetadata } from "./ParameterMetadata"
 
 export type TransitionType = 'linear' | 'logarithmic' | 'exponential' | 'scurve'
 
@@ -6,7 +6,7 @@ export class ParamValueTransition {
   constructor(
     public type: TransitionType,
     public startValue: number,
-    public position: number,
+    public startSample: number,
   ) {}
 
   generateSCurve(length = 32) {
@@ -33,6 +33,4 @@ export class ParamValueTransition {
 
 export class ParameterValueSequence {
   readonly transitionSequence = new Array<ParamValueTransition>()
-
-  constructor(readonly param: WamParameterInfo) {}
 }

@@ -39,7 +39,7 @@ export class Waveform extends TrackListItemController {
   constructor(
     trackListController: TrackListController,
     readonly track: Track,
-    private readonly div: HTMLDivElement,
+    readonly div: HTMLDivElement,
     readonly index: number,
   ) {
     super(trackListController)

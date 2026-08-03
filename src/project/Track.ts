@@ -2,15 +2,15 @@ import { ClipView } from './ClipView'
 import { DatabasePersisted } from '../persistence/DatabasePersisted'
 import { Restorable } from '../persistence/Restoration'
 import { Analyzable } from '../analyzers/Analyzable'
-import { WebAudioModule } from '@webaudiomodules/api'
 import { EffectData } from 'effects/EffectData'
+import { EffectModule } from 'effects/Effect'
 
 class Playback {
   constructor(
     readonly playerNode: AudioWorkletNode,
     readonly gainNode: GainNode,
     readonly pannerNode: StereoPannerNode,
-    readonly effectNodes: Array<WebAudioModule>,
+    readonly effectNodes: Array<AudioNode>,
     readonly cleanup: (() => void) | null,
   ) {}
 }
@@ -201,7 +201,7 @@ export class Track extends DatabasePersisted implements Analyzable {
     playerNode: AudioWorkletNode,
     gainNode: GainNode,
     pannerNode: StereoPannerNode,
-    effectNodes: WebAudioModule[] = [],
+    effectNodes: AudioNode[] = [],
     cleanup: (() => void) | null = null,
   ) {
     this.playback = new Playback(playerNode, gainNode, pannerNode, effectNodes, cleanup)
@@ -210,12 +210,8 @@ export class Track extends DatabasePersisted implements Analyzable {
   stopPlayback() {
     this.playback?.cleanup?.()
     this.playback?.playerNode.disconnect()
-    this.playback?.effectNodes.forEach((node) => node.audioNode.disconnect())
+    this.playback?.effectNodes.forEach((node) => node.disconnect())
     this.playback = null
-  }
-
-  getEffectModuleById(id: string) {
-    return this.playback?.effectNodes.find(e => e.moduleId == id)
   }
 
   setEffectRegions(effectRegions: readonly EffectData[]) {
