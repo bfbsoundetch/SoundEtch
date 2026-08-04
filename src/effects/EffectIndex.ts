@@ -1,23 +1,30 @@
 import { GainEffectMetadata } from './BuiltinEffectMetadata'
-import { EffectModule } from './Effect'
+import { EffectMetadata, EffectModule } from './Effect'
 
 export class EffectIndex {
+  private static instance: EffectIndex | null = null
+  private readonly availableEffects: readonly EffectMetadata[] = [GainEffectMetadata]
 
-    private static instance: EffectIndex | null = null
+  static getInstance() {
+    return this.instance ?? (this.instance = new EffectIndex())
+  }
 
-    static getInstance() {
-        return this.instance ?? (this.instance = new EffectIndex())
+  private constructor() {}
+
+  getAvailableEffects() {
+    return this.availableEffects
+  }
+
+  getEffectMetadataById(id: string) {
+    return this.availableEffects.find((effect) => effect.id == id) ?? null
+  }
+
+  async getEffectById(id: string): Promise<EffectModule | null> {
+    switch (id) {
+      case GainEffectMetadata.id:
+        return new (await import('./gain/GainEffect')).GainEffect()
+      default:
+        return null
     }
-
-    private constructor() {}
-
-    async getEffectById(id: string) {
-        let result: EffectModule | null = null
-        switch(id) {
-            case GainEffectMetadata.id:
-                result = new (await import('./gain/GainEffect')).GainEffect()
-                break
-        }
-        return result
-    }
+  }
 }

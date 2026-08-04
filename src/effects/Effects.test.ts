@@ -1,120 +1,51 @@
-// import { Effect, EffectType, gainDbToLinear, replaceEffectRegion } from './Effects'
+import { GainEffectMetadata } from './BuiltinEffectMetadata'
+import { EffectIndex } from './EffectIndex'
+import { ParameterValueSequence, ParamValueTransition } from './ParameterValueSequence'
 
-// describe('replaceEffectRegion', () => {
-//   it('replaces overlapping gain regions with trimmed edges', () => {
-//     const existing: Effect[] = [
-//       {
-//         type: EffectType.GAIN,
-//         startPosition: 10,
-//         length: 20,
-//         gainDb: -6,
-//       },
-//       {
-//         type: EffectType.GAIN,
-//         startPosition: 40,
-//         length: 20,
-//         gainDb: 3,
-//       },
-//     ]
+describe('EffectIndex', () => {
+  test('lists and creates the built-in gain effect', async () => {
+    const effectIndex = EffectIndex.getInstance()
 
-//     const updated = replaceEffectRegion(existing, {
-//       type: EffectType.GAIN,
-//       startPosition: 20,
-//       length: 30,
-//       gainDb: 0,
-//     })
+    expect(effectIndex.getAvailableEffects()).toContain(GainEffectMetadata)
+    expect(effectIndex.getEffectMetadataById(GainEffectMetadata.id)).toBe(GainEffectMetadata)
+    expect((await effectIndex.getEffectById(GainEffectMetadata.id))?.metadata).toBe(GainEffectMetadata)
+  })
 
-//     expect(updated).toEqual([
-//       {
-//         type: EffectType.GAIN,
-//         startPosition: 10,
-//         length: 10,
-//         gainDb: -6,
-//       },
-//       {
-//         type: EffectType.GAIN,
-//         startPosition: 20,
-//         length: 30,
-//         gainDb: 0,
-//       },
-//       {
-//         type: EffectType.GAIN,
-//         startPosition: 50,
-//         length: 10,
-//         gainDb: 3,
-//       },
-//     ])
-//   })
+  test('returns null for an unknown effect', async () => {
+    const effectIndex = EffectIndex.getInstance()
 
-//   it('keeps non-overlapping regions untouched', () => {
-//     const existing: Effect[] = [
-//       {
-//         type: EffectType.GAIN,
-//         startPosition: 0,
-//         length: 10,
-//         gainDb: -3,
-//       },
-//     ]
+    expect(effectIndex.getEffectMetadataById('unknown')).toBeNull()
+    await expect(effectIndex.getEffectById('unknown')).resolves.toBeNull()
+  })
+})
 
-//     const updated = replaceEffectRegion(existing, {
-//       type: EffectType.GAIN,
-//       startPosition: 20,
-//       length: 5,
-//       gainDb: 6,
-//     })
+describe('effect parameters', () => {
+  test('stores a static value separately from automation points', () => {
+    const sequence = new ParameterValueSequence(1)
+    sequence.transitionSequence.push(new ParamValueTransition('linear', 2, 100))
 
-//     expect(updated).toEqual([
-//       {
-//         type: EffectType.GAIN,
-//         startPosition: 0,
-//         length: 10,
-//         gainDb: -3,
-//       },
-//       {
-//         type: EffectType.GAIN,
-//         startPosition: 20,
-//         length: 5,
-//         gainDb: 6,
-//       },
-//     ])
-//   })
+    expect(sequence.initialValue).toBe(1)
+    expect(sequence.transitionSequence).toEqual([{ type: 'linear', startValue: 2, startSample: 100 }])
+  })
 
-//   it('leaves other effect types untouched', () => {
-//     const existing: Effect[] = [
-//       {
-//         type: EffectType.EQ,
-//         startPosition: 10,
-//         length: 20,
-//         filters: [],
-//       },
-//     ]
+  test('gain normalization spans its complete metadata range', () => {
+    const gain = GainEffectMetadata.parameters[0]
 
-//     const updated = replaceEffectRegion(existing, {
-//       type: EffectType.GAIN,
-//       startPosition: 15,
-//       length: 5,
-//       gainDb: 6,
-//     })
+    expect(gain.normalize(gain.minValue)).toBeCloseTo(0)
+    expect(gain.normalize(gain.maxValue)).toBeCloseTo(1)
+    expect(gain.denormalize(gain.normalize(gain.defaultValue))).toBeCloseTo(gain.defaultValue)
+    expect(gain.displayValue(gain.defaultValue)).toBe('100%')
+  })
 
-//     expect(updated).toEqual([
-//       {
-//         type: EffectType.EQ,
-//         startPosition: 10,
-//         length: 20,
-//         filters: [],
-//       },
-//       {
-//         type: EffectType.GAIN,
-//         startPosition: 15,
-//         length: 5,
-//         gainDb: 6,
-//       },
-//     ])
-//   })
-
-//   it('converts gain dB to linear gain', () => {
-//     expect(gainDbToLinear(0)).toBeCloseTo(1)
-//     expect(gainDbToLinear(6)).toBeCloseTo(1.995262)
-//     expect(gainDbToLinear(-6)).toBeCloseTo(0.501187)
-//   })
-// })
+  test.each(
+    [
+      ParamValueTransition.generateSCurve(),
+      ParamValueTransition.generateLogCurve(),
+      ParamValueTransition.generateExpCurve(),
+    ].map((curve) => [curve]),
+  )('generated automation curve includes both endpoints', (curve) => {
+    expect(curve).toHaveLength(32)
+    expect(curve[0]).toBeCloseTo(0)
+    expect(curve.at(-1)).toBeCloseTo(1)
+  })
+})

@@ -5,12 +5,18 @@ import { Analyzable } from '../analyzers/Analyzable'
 import { EffectData } from 'effects/EffectData'
 import { EffectModule } from 'effects/Effect'
 
+export interface PlaybackEffect {
+  instanceId: string
+  module: EffectModule
+  node: AudioNode
+}
+
 class Playback {
   constructor(
     readonly playerNode: AudioWorkletNode,
     readonly gainNode: GainNode,
     readonly pannerNode: StereoPannerNode,
-    readonly effectNodes: Array<AudioNode>,
+    readonly effects: PlaybackEffect[],
     readonly cleanup: (() => void) | null,
   ) {}
 }
@@ -201,17 +207,37 @@ export class Track extends DatabasePersisted implements Analyzable {
     playerNode: AudioWorkletNode,
     gainNode: GainNode,
     pannerNode: StereoPannerNode,
-    effectNodes: AudioNode[] = [],
+    effects: PlaybackEffect[] = [],
     cleanup: (() => void) | null = null,
   ) {
-    this.playback = new Playback(playerNode, gainNode, pannerNode, effectNodes, cleanup)
+    this.playback = new Playback(playerNode, gainNode, pannerNode, effects, cleanup)
   }
 
   stopPlayback() {
     this.playback?.cleanup?.()
     this.playback?.playerNode.disconnect()
-    this.playback?.effectNodes.forEach((node) => node.disconnect())
+    this.playback?.effects.forEach((effect) => effect.node.disconnect())
     this.playback = null
+  }
+
+  getPlaybackEffectModule(instanceId: string) {
+    return this.playback?.effects.find((effect) => effect.instanceId == instanceId)?.module ?? null
+  }
+
+  async applyPlaybackEffectParameters() {
+    if (!this.playback) {
+      return
+    }
+    for (const effectData of this.effectRegions) {
+      const playbackEffect = this.playback.effects.find((effect) => effect.instanceId == effectData.instanceId)
+      if (!playbackEffect) {
+        continue
+      }
+      const parameters = await playbackEffect.module.getParameters(playbackEffect.node.context)
+      for (const [name, sequence] of Object.entries(effectData.params)) {
+        parameters[name]?.setValueAtTime(sequence.initialValue, playbackEffect.node.context.currentTime)
+      }
+    }
   }
 
   setEffectRegions(effectRegions: readonly EffectData[]) {

@@ -2,7 +2,6 @@ import { ParameterValueSequence, ParamValueTransition } from '../../effects/Para
 import { Track } from '../../project/Track'
 import { TrackListItemController } from './TrackListItemController'
 import { TrackListController } from './TrackListController'
-import { WamParameterInfo, WebAudioModule } from '@webaudiomodules/api'
 import { ParameterMetadata } from 'effects/ParameterMetadata'
 
 export class AutomationController extends TrackListItemController {
@@ -13,7 +12,7 @@ export class AutomationController extends TrackListItemController {
 
   constructor(
     trackListController: TrackListController,
-    effectId: string,
+    effectInstanceId: string,
     private readonly groupElement: SVGGElement,
     private readonly track: Track,
     private readonly parameterMetadata: ParameterMetadata,
@@ -22,39 +21,38 @@ export class AutomationController extends TrackListItemController {
     super(trackListController)
     this.width = groupElement.parentElement!.clientWidth
     this.height = groupElement.parentElement!.clientHeight
-    console.error(this.width, this.height, normalizedInitialValue, JSON.stringify(parameterMetadata))
-
     this.svgPathElement = document.createElementNS('http://www.w3.org/2000/svg', 'path')
+    this.svgPathElement.style.strokeWidth = '4'
     this.svgPathElement.addEventListener('mousedown', () => {
       console.log('path down')
     })
     groupElement.appendChild(this.svgPathElement)
-    this.paramVals = track.effectRegions.find(e => e.id == effectId)!.params[parameterMetadata.name]
+    const effectData = track.effectRegions.find((effect) => effect.instanceId == effectInstanceId)
+    if (!effectData?.params[parameterMetadata.id]) {
+      throw new Error(`Parameter ${parameterMetadata.id} is unavailable`)
+    }
+    this.paramVals = effectData.params[parameterMetadata.id]
   }
 
   draw() {
     if (this.paramVals.transitionSequence.length == 0) {
-      this.svgPathElement.setAttribute('d', `M 0 ${this.normalizedInitialValue * this.height} L ${this.width} ${this.normalizedInitialValue * this.height}`)
+      const y = (1 - this.normalizedInitialValue) * this.height
+      this.svgPathElement.setAttribute('d', `M 0 ${y} L ${this.width} ${y}`)
       return
     }
-    const pointCircles = new Array<SVGCircleElement>()
     const points = []
     for (const point of this.paramVals.transitionSequence) {
       const pointX = this.getXValueForSample(point.startSample)
-      const pointY = this.height * (1 - point.startValue)
-      points.push({pointX, pointY})
+      const pointY = this.height * (1 - this.parameterMetadata.normalize(point.startValue))
+      points.push({ pointX, pointY })
 
-      const circleElement = new SVGCircleElement()
+      const circleElement = document.createElementNS('http://www.w3.org/2000/svg', 'circle')
       circleElement.r.baseVal.value = 3
       circleElement.cx.baseVal.value = pointX
       circleElement.cy.baseVal.value = pointY
       this.groupElement.appendChild(circleElement)
-
-      circleElement.addEventListener('mousedown', () => {
-        console.log('circle down')
-      })
     }
-    this.svgPathElement.setAttribute('d', 'M ' + points.map(p => `${p.pointX} ${p.pointY}`).join(' L '))
+    this.svgPathElement.setAttribute('d', 'M ' + points.map((p) => `${p.pointX} ${p.pointY}`).join(' L '))
   }
 
   resize() {
@@ -82,7 +80,7 @@ export class AutomationController extends TrackListItemController {
     this.paramVals.transitionSequence.splice(i, 0, {
       startSample: position,
       startValue: value,
-      type: 'linear'
+      type: 'linear',
     })
     this.draw()
   }

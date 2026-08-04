@@ -1,9 +1,11 @@
 export interface ParameterMetadata {
-    name: string
-    minValue: number
-    maxValue: number
-    increment?: number
-    units: string
-    normalize: (_: number) => number
-    denormalize: (_: number) => number
+  id: string
+  displayName: string
+  defaultValue: number
+  minValue: number
+  maxValue: number
+  increment?: number
+  normalize: (_: number) => number
+  denormalize: (_: number) => number
+  displayValue: (_: number) => string
 }

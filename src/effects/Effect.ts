@@ -1,23 +1,15 @@
-import { ParameterMetadata } from "./ParameterMetadata"
+import { ParameterMetadata } from './ParameterMetadata'
 
 export interface EffectModule {
-
-    metadata: EffectMetadata
-
-    getUi(): Promise<Element>
-
-    getNode(audioContext: BaseAudioContext): Promise<AudioNode>
-
-    getState(): Promise<string>
-
-    setState(state: string): Promise<void>
-
+  readonly metadata: EffectMetadata
+  getNode(audioContext: BaseAudioContext): Promise<AudioNode>
+  getParameters(audioContext: BaseAudioContext): Promise<Record<string, AudioParam>>
 }
 
 export interface EffectMetadata {
-    id: string
-    name: string
-    description: string
-    categories: string[]
-    parameters: Array<ParameterMetadata>
+  id: string
+  name: string
+  description: string
+  categories: string[]
+  parameters: ParameterMetadata[]
 }

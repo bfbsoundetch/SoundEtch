@@ -1,5 +1,3 @@
-import { ParameterMetadata } from "./ParameterMetadata"
-
 export type TransitionType = 'linear' | 'logarithmic' | 'exponential' | 'scurve'
 
 export class ParamValueTransition {
@@ -11,29 +9,32 @@ export class ParamValueTransition {
 
   static generateSCurve(length = 32) {
     const result = new Array<number>(length)
-    for (let i = 1; i <= length; ++i) {
-      result[i] = Math.cos((Math.PI * i) / length) / 2 + 0.5
+    for (let i = 0; i < length; ++i) {
+      result[i] = (1 - Math.cos((Math.PI * i) / (length - 1))) / 2
     }
     return result
   }
 
   static generateLogCurve(length = 32) {
     const result = new Array<number>(length)
-    for (let i = 1; i <= length; ++i) {
-      result[i] = Math.log10(1 + (9 * i) / length)
+    for (let i = 0; i < length; ++i) {
+      result[i] = Math.log10(1 + (9 * i) / (length - 1))
     }
     return result
   }
 
   static generateExpCurve(length = 32) {
     const result = new Array<number>(length)
-    for (let i = 1; i <= length; ++i) {
-      result[i] = Math.exp((-5 * i) / length)
+    const denominator = Math.exp(5) - 1
+    for (let i = 0; i < length; ++i) {
+      result[i] = (Math.exp((5 * i) / (length - 1)) - 1) / denominator
     }
     return result
   }
 }
 
 export class ParameterValueSequence {
+  constructor(public initialValue: number) {}
+
   readonly transitionSequence = new Array<ParamValueTransition>()
 }

@@ -23,10 +23,12 @@ export class SetTrackEffectsCommand implements Undoable {
 
   async perform() {
     this.track.setEffectRegions(cloneEffectData(this.newEffects))
+    await this.track.applyPlaybackEffectParameters()
   }
 
   async undo() {
     this.track.setEffectRegions(cloneEffectData(this.oldEffects))
+    await this.track.applyPlaybackEffectParameters()
   }
 
   async save() {

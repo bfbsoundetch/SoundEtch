@@ -1,25 +1,29 @@
+import { PointerStateManager } from 'ui/PointerStateManager'
 import { AudioControl } from '../../audiocontext/AudioControl'
+import { EffectMetadata, EffectModule } from '../../effects/Effect'
+import { EffectData } from '../../effects/EffectData'
+import { EffectIndex } from '../../effects/EffectIndex'
+import { ParameterMetadata } from '../../effects/ParameterMetadata'
+import { ParameterValueSequence } from '../../effects/ParameterValueSequence'
 import { TimeUtils } from '../../global/TimeUtils'
-import { ProjectManager } from '../../project/ProjectManager'
 import { Track } from '../../project/Track'
 import { BottomPanelController } from '../BottomPanelController'
 import { NotificationsController } from '../NotificationsController'
 import { createArrowIcon, createSvgIcon } from '../SvgIcon'
+import { AutomationController } from '../timeline/AutomationController'
+import { TrackListController } from '../timeline/TrackListController'
 import { editorHistory } from '../undo/EditorHistory'
 import { cloneEffectData, SetTrackEffectsCommand } from './SetTrackEffectsCommand'
-import { AutomationController } from '../../ui/timeline/AutomationController'
-import { EffectData } from '../../effects/EffectData'
-import { TrackListController } from 'ui/timeline/TrackListController'
-import { EffectMetadata } from 'effects/Effect'
 
-type PluginViewSession = {
+type EffectViewSession = {
   track: Track
   effectInstanceId: string
-  module: WebAudioModule
-  gui: Element | null
+  module: EffectModule
+  node: AudioNode
+  parameters: Record<string, AudioParam>
+  audioContext: BaseAudioContext
   ownsModule: boolean
   abortController: AbortController
-  saveQueue: Promise<void>
   closed: boolean
 }
 
@@ -30,90 +34,59 @@ export class EffectPanelController {
     return this.instance ?? (this.instance = new EffectPanelController())
   }
 
+  private readonly effectIndex = EffectIndex.getInstance()
   private readonly bottomPanelController = BottomPanelController.getInstance()
-  private activePluginView: PluginViewSession | null = null
+  private activeEffectView: EffectViewSession | null = null
   private viewVersion = 0
   private chainChangePending = false
 
   private constructor() {}
 
-  async showPluginForTrack(plugin: EffectMetadata, track: Track, effectIndex?: number) {
+  async showEffectForTrack(metadata: EffectMetadata, track: Track, effectIndex?: number) {
     const viewVersion = ++this.viewVersion
-    await this.closePluginView(true)
+    await this.closeEffectView()
     if (viewVersion != this.viewVersion) {
       return
     }
 
-    const resolvedIndex = effectIndex ?? track.effectRegions.findIndex((effect) => effect.id == plugin.identifier)
+    const resolvedIndex = effectIndex ?? track.effectRegions.findIndex((effect) => effect.id == metadata.id)
     const effectData = track.effectRegions[resolvedIndex]
-    if (!effectData || effectData.id != plugin.identifier || !effectData.instanceId) {
-      this.showMessage('Plugin unavailable', 'This effect is no longer on the track.', track)
+    if (!effectData || effectData.id != metadata.id) {
+      this.showMessage('Effect unavailable', 'This effect is no longer on the track.', track)
       return
     }
 
     const loadingElement = document.createElement('div')
     loadingElement.className = 'effect-panel-message'
-    loadingElement.textContent = `Loading ${plugin.name}...`
-    this.openSubview(plugin.name, track.name, loadingElement, track)
-
-    const pluginSession = await this.startPluginSession(track, plugin)
+    loadingElement.textContent = `Loading ${metadata.name}...`
+    this.openSubview(metadata.name, track.name, loadingElement, track)
 
     try {
-      pluginSession.gui = await pluginSession.module.createGui()
+      const session = await this.startEffectSession(track, effectData)
+      if (viewVersion != this.viewVersion) {
+        this.destroyEffectSession(session)
+        return
+      }
+      this.activeEffectView = session
+      const body = this.createEffectEditor(metadata, session)
+      this.bottomPanelController.open({
+        title: metadata.name,
+        subtitle: track.name,
+        body,
+        onBack: () => this.showTrackEffectsList(track),
+        onClose: () => this.handlePanelClose(),
+      })
     } catch (error) {
-      console.error(`Failed to open plugin ${plugin.identifier}`, error)
-      if (module && pluginSession.ownsModule) {
-        this.destroyModule(pluginSession.module)
-      }
+      console.error(`Failed to open effect ${metadata.id}`, error)
       if (viewVersion == this.viewVersion) {
-        this.showMessage('Plugin failed to load', String(error), track)
+        this.showMessage('Effect failed to load', String(error), track)
       }
-      return
     }
-
-    const pluginBody = document.createElement('div')
-    pluginBody.className = 'effect-plugin-body'
-    pluginBody.style.userSelect = 'none'
-    pluginBody.appendChild(pluginSession.gui)
-    this.bottomPanelController.open({
-      title: pluginSession.module.name || plugin.name,
-      subtitle: track.name,
-      body: pluginBody,
-      onBack: () => this.showTrackEffectsList(track),
-      onClose: () => this.handlePanelClose(),
-    })
-    pluginSession.gui.addEventListener(
-      'pointerdown',
-      () => {
-        document.addEventListener('pointerup', () => this.queuePluginStateCapture(pluginSession), {
-          once: true,
-          signal: pluginSession.abortController.signal,
-        })
-      },
-      { signal: pluginSession.abortController.signal },
-    )
-    pluginSession.gui.addEventListener('change', () => this.queuePluginStateCapture(pluginSession), {
-      signal: pluginSession.abortController.signal,
-    })
   }
 
   async showTrackEffectsList(track: Track) {
     const viewVersion = ++this.viewVersion
-    await this.closePluginView(true)
-    if (viewVersion != this.viewVersion) {
-      return
-    }
-
-    const plugins = await Promise.all(
-      track.effectRegions.map(async (effect) => {
-        try {
-          return await this.wamPluginIndex.getPluginById(effect.id)
-        } catch (error) {
-          console.error(`Failed to find plugin ${effect.id}`, error)
-          return undefined
-        }
-      }),
-    )
+    await this.closeEffectView()
     if (viewVersion != this.viewVersion) {
       return
     }
@@ -122,21 +95,21 @@ export class EffectPanelController {
     bodyElement.className = 'effect-list-body'
     bodyElement.appendChild(this.createChainEndpoint('Track', track.name))
 
-    plugins.forEach((plugin, index) => {
+    track.effectRegions.forEach((effectData, index) => {
       bodyElement.appendChild(this.createChainArrow())
-      bodyElement.appendChild(this.createPluginChainItem(track, index, plugin))
+      bodyElement.appendChild(
+        this.createEffectChainItem(track, index, effectData, this.effectIndex.getEffectMetadataById(effectData.id)),
+      )
     })
 
     bodyElement.appendChild(this.createChainArrow())
-    const addNewPluginElement = document.createElement('button')
-    addNewPluginElement.type = 'button'
-    addNewPluginElement.className = 'effect-list-item effect-chain-item effect-chain-add clickable'
-    addNewPluginElement.append('Add New Effect', createSvgIcon('plus', { className: 'effect-chain-add-icon' }))
-    addNewPluginElement.style.fontWeight = 'bold'
-    addNewPluginElement.addEventListener('click', () => {
-      void this.showAvailableEffectsList(track)
-    })
-    bodyElement.appendChild(addNewPluginElement)
+    const addEffectElement = document.createElement('button')
+    addEffectElement.type = 'button'
+    addEffectElement.className = 'effect-list-item effect-chain-item effect-chain-add clickable'
+    addEffectElement.append('Add New Effect', createSvgIcon('plus', { className: 'effect-chain-add-icon' }))
+    addEffectElement.style.fontWeight = 'bold'
+    addEffectElement.addEventListener('click', () => void this.showAvailableEffectsList(track))
+    bodyElement.appendChild(addEffectElement)
 
     bodyElement.appendChild(this.createChainArrow())
     bodyElement.appendChild(this.createChainEndpoint('Output'))
@@ -150,77 +123,156 @@ export class EffectPanelController {
 
   async showAvailableEffectsList(track: Track) {
     const viewVersion = ++this.viewVersion
-    await this.closePluginView(true)
+    await this.closeEffectView()
     if (viewVersion != this.viewVersion) {
       return
     }
 
-    const loadingElement = document.createElement('div')
-    loadingElement.className = 'effect-panel-message'
-    loadingElement.textContent = 'Loading available effects...'
-    this.openSubview('Add Effect', track.name, loadingElement, track)
+    const bodyElement = document.createElement('div')
+    bodyElement.className = 'effect-list-body'
+    for (const metadata of this.effectIndex.getAvailableEffects()) {
+      const listItemElement = document.createElement('article')
+      listItemElement.className = 'effect-list-item effect-catalog-item'
 
-    try {
-      const plugins = await this.wamPluginIndex.getCommunityPluginsList()
-      if (viewVersion != this.viewVersion) {
-        return
-      }
-
-      const bodyElement = document.createElement('div')
-      bodyElement.className = 'effect-list-body'
-      for (const plugin of plugins) {
-        const listItemElement = document.createElement('article')
-        listItemElement.className = 'effect-list-item effect-catalog-item'
-
-        const addPluginButton = document.createElement('button')
-        addPluginButton.type = 'button'
-        addPluginButton.className = 'clickable effect-catalog-add'
-        addPluginButton.textContent = 'Add to track'
-        addPluginButton.addEventListener('click', () => {
-          addPluginButton.disabled = true
-          void this.addEffect(track, plugin).catch((error) => {
-            addPluginButton.disabled = false
-            console.error('Failed to add effect', error)
-          })
+      const addEffectButton = document.createElement('button')
+      addEffectButton.type = 'button'
+      addEffectButton.className = 'clickable effect-catalog-add'
+      addEffectButton.textContent = 'Add to track'
+      addEffectButton.addEventListener('click', () => {
+        addEffectButton.disabled = true
+        void this.addEffect(track, metadata).catch((error) => {
+          addEffectButton.disabled = false
+          console.error('Failed to add effect', error)
+          NotificationsController.showErrorMessage('Could not add the effect.')
         })
-        listItemElement.append(addPluginButton, this.getPluginDescriptionElement(plugin))
-        bodyElement.appendChild(listItemElement)
-      }
-      this.openSubview('Add Effect', track.name, bodyElement, track)
-    } catch (error) {
-      console.error('Failed to load available effects', error)
-      if (viewVersion == this.viewVersion) {
-        this.showMessage('Effects unavailable', String(error), track)
-      }
+      })
+      listItemElement.append(addEffectButton, this.getEffectDescriptionElement(metadata))
+      bodyElement.appendChild(listItemElement)
     }
+    this.openSubview('Add Effect', track.name, bodyElement, track)
   }
 
-  private async startPluginSession(track: Track, plugin: Wam2PluginDescriptor) {
-    const effectData = track.effectRegions.find(e => e.id == plugin.identifier)!
-    let module = track.getEffectModuleById(plugin.identifier)
-    const ownsModule = true
-
+  private async startEffectSession(track: Track, effectData: EffectData): Promise<EffectViewSession> {
+    const playbackModule = track.getPlaybackEffectModule(effectData.instanceId)
+    const module = playbackModule ?? (await this.effectIndex.getEffectById(effectData.id))
     if (!module) {
-      const audioContext = await AudioControl.getOrCreateAudioContext()
-      module = await WamManager.getInstance().loadPlugin(plugin.path, audioContext, effectData.state)
+      throw new Error(`Effect ${effectData.id} is unavailable`)
     }
-    const session: PluginViewSession = {
+    const audioContext = await AudioControl.getOrCreateAudioContext()
+    const node = await module.getNode(audioContext)
+    const parameters = await module.getParameters(audioContext)
+    for (const [name, sequence] of Object.entries(effectData.params)) {
+      const parameter = parameters[name]
+      if (parameter) {
+        parameter.setValueAtTime(sequence.initialValue, audioContext.currentTime)
+      }
+    }
+    return {
       track,
       effectInstanceId: effectData.instanceId,
       module,
-      gui: null,
-      ownsModule,
+      node,
+      parameters,
+      audioContext,
+      ownsModule: !playbackModule,
       abortController: new AbortController(),
-      saveQueue: Promise.resolve(),
       closed: false,
     }
-    this.activePluginView = session
-    return session
   }
 
-  private createPluginChainItem(track: Track, index: number, effectData: EffectData) {
+  private createEffectEditor(metadata: EffectMetadata, session: EffectViewSession) {
+    const body = document.createElement('form')
+    body.className = 'effect-editor-body effect-parameter-form'
+    body.addEventListener('submit', (event) => event.preventDefault())
+
+    if (metadata.parameters.length == 0) {
+      const message = document.createElement('p')
+      message.textContent = 'This effect has no adjustable parameters.'
+      body.appendChild(message)
+      return body
+    }
+
+    for (const parameterMetadata of metadata.parameters) {
+      const effectData = session.track.effectRegions.find((effect) => effect.instanceId == session.effectInstanceId)
+      const sequence = effectData?.params[parameterMetadata.id]
+      const audioParameter = session.parameters[parameterMetadata.id]
+      if (!sequence || !audioParameter) {
+        continue
+      }
+      body.appendChild(this.createParameterControl(session, parameterMetadata, sequence.initialValue, audioParameter))
+    }
+    return body
+  }
+
+  private createParameterControl(
+    session: EffectViewSession,
+    metadata: ParameterMetadata,
+    initialValue: number,
+    audioParameter: AudioParam,
+  ) {
+    const field = document.createElement('label')
+    field.className = 'effect-parameter-control'
+    const name = document.createElement('strong')
+    name.textContent = metadata.displayName
+
+    const range = document.createElement('input')
+    range.type = 'range'
+    range.min = '0'
+    range.max = '1'
+    range.step = '0.001'
+    range.value = String(this.clamp(metadata.normalize(initialValue), 0, 1))
+
+    const valueRow = document.createElement('span')
+    valueRow.className = 'effect-parameter-value'
+    const output = document.createElement('output')
+    output.textContent = metadata.displayValue(initialValue)
+    valueRow.appendChild(output)
+
+    const applyValue = (value: number) => {
+      const boundedValue = this.clamp(value, metadata.minValue, metadata.maxValue)
+      range.value = String(this.clamp(metadata.normalize(boundedValue), 0, 1))
+      output.textContent = metadata.displayValue(boundedValue)
+      audioParameter.setValueAtTime(boundedValue, session.audioContext.currentTime)
+      return boundedValue
+    }
+    range.addEventListener('input', () => applyValue(metadata.denormalize(Number(range.value))), {
+      signal: session.abortController.signal,
+    })
+    const commit = () => {
+      const value = metadata.denormalize(Number(range.value))
+      void this.commitParameterValue(session, metadata, applyValue(value))
+    }
+    range.addEventListener('change', commit, { signal: session.abortController.signal })
+
+    field.append(name, range, valueRow)
+    return field
+  }
+
+  private async commitParameterValue(session: EffectViewSession, metadata: ParameterMetadata, value: number) {
+    const effectIndex = session.track.effectRegions.findIndex((effect) => effect.instanceId == session.effectInstanceId)
+    if (effectIndex < 0) {
+      return
+    }
+    const currentValue = session.track.effectRegions[effectIndex].params[metadata.id]?.initialValue
+    if (currentValue == value) {
+      return
+    }
+    const oldEffects = cloneEffectData(session.track.effectRegions)
+    const newEffects = cloneEffectData(oldEffects)
+    newEffects[effectIndex].params[metadata.id].initialValue = value
+    try {
+      await editorHistory.execute(
+        new SetTrackEffectsCommand(session.track, oldEffects, newEffects, `change ${metadata.id}`),
+      )
+    } catch (error) {
+      console.error('Failed to save effect parameter', error)
+      NotificationsController.showErrorMessage('Could not persist the latest effect setting.')
+    }
+  }
+
+  private createEffectChainItem(track: Track, index: number, effectData: EffectData, metadata: EffectMetadata | null) {
     const item = document.createElement('article')
-    item.className = 'effect-list-item effect-chain-item effect-plugin-item'
+    item.className = 'effect-list-item effect-chain-item effect-chain-effect'
     item.style.border = 'double'
 
     const openButton = document.createElement('button')
@@ -229,15 +281,13 @@ export class EffectPanelController {
     const typeElement = document.createElement('strong')
     typeElement.textContent = 'Effect'
     const nameElement = document.createElement('span')
-    nameElement.textContent = plugin?.name ?? track.effectRegions[index].id
+    nameElement.textContent = metadata?.name ?? effectData.id
     openButton.append(typeElement, nameElement)
-    openButton.disabled = !plugin
-    if (plugin) {
-      openButton.addEventListener('click', () => {
-        void this.showPluginForTrack(plugin, track, index)
-      })
+    openButton.disabled = !metadata
+    if (metadata) {
+      openButton.addEventListener('click', () => void this.showEffectForTrack(metadata, track, index))
     } else {
-      openButton.title = 'Plugin metadata could not be loaded'
+      openButton.title = 'Effect metadata could not be loaded'
     }
 
     const controls = document.createElement('div')
@@ -252,7 +302,10 @@ export class EffectPanelController {
     removeButton.classList.add('effect-chain-remove')
     removeButton.addEventListener('click', () => void this.removeEffect(track, index))
     const automationButton = this.createIconButton('Automate', 'pencil')
-    automationButton.addEventListener('click', () => void this.openAutomationView(track, plugin!))
+    automationButton.disabled = !metadata?.parameters.length
+    if (metadata?.parameters.length) {
+      automationButton.addEventListener('click', () => this.openAutomationView(track, effectData, metadata))
+    }
     controls.append(moveLeftButton, moveRightButton, removeButton, automationButton)
     item.append(openButton, controls)
     return item
@@ -290,7 +343,7 @@ export class EffectPanelController {
     return button
   }
 
-  private async addEffect(track: Track, plugin: Wam2PluginDescriptor) {
+  private async addEffect(track: Track, metadata: EffectMetadata) {
     if (this.chainChangePending) {
       return
     }
@@ -299,15 +352,12 @@ export class EffectPanelController {
     try {
       const oldEffects = cloneEffectData(track.effectRegions)
       const newEffects = cloneEffectData(oldEffects)
-      newEffects.push({
-        wamPluginEffect: true,
-        instanceId: this.createInstanceId(),
-        id: plugin.identifier,
-        state: undefined,
-        values: [],
-      })
+      const params = Object.fromEntries(
+        metadata.parameters.map((parameter) => [parameter.id, new ParameterValueSequence(parameter.defaultValue)]),
+      )
+      newEffects.push({ instanceId: this.createInstanceId(), id: metadata.id, params })
       await editorHistory.execute(
-        new SetTrackEffectsCommand(track, oldEffects, newEffects, `add ${plugin.name} effect`),
+        new SetTrackEffectsCommand(track, oldEffects, newEffects, `add ${metadata.name} effect`),
       )
       if (viewVersion == this.viewVersion) {
         await this.showTrackEffectsList(track)
@@ -318,10 +368,8 @@ export class EffectPanelController {
   }
 
   private async moveEffect(track: Track, fromIndex: number, toIndex: number) {
-    if (this.chainChangePending) {
-      return
-    }
     if (
+      this.chainChangePending ||
       fromIndex == toIndex ||
       fromIndex < 0 ||
       toIndex < 0 ||
@@ -347,10 +395,7 @@ export class EffectPanelController {
   }
 
   private async removeEffect(track: Track, index: number) {
-    if (this.chainChangePending) {
-      return
-    }
-    if (index < 0 || index >= track.effectRegions.length) {
+    if (this.chainChangePending || index < 0 || index >= track.effectRegions.length) {
       return
     }
     this.chainChangePending = true
@@ -368,138 +413,49 @@ export class EffectPanelController {
     }
   }
 
-  private async openAutomationView(track: Track, plugin: Wam2PluginDescriptor) {
-    const session = await this.startPluginSession(track, plugin)
-    const paramInfo = await session.module.audioNode.getParameterInfo()
+  private openAutomationView(track: Track, effectData: EffectData, metadata: EffectMetadata) {
     const trackListController = (window as any).trackListController as TrackListController
-    const waveformSvg = trackListController.waveforms.find(w => w.track == track)?.topGroupElement
-    if (!waveformSvg) {
+    const waveformSvg = trackListController.waveforms.find((waveform) => waveform.track == track)?.topGroupElement
+    const parameterMetadata = metadata.parameters[0]
+    const sequence = effectData.params[parameterMetadata.id]
+    if (!waveformSvg || !sequence) {
       return
     }
-    const firstParam = Object.keys(paramInfo).map(key => 
-      paramInfo[key]).filter(info => info.type == 'float' || info.type == 'int').find(_ => true)
-    if (!firstParam) {
-      return
-    }
-    const paramData = await session.module.audioNode.getParameterValues(true, firstParam.id)
-    const state = await session.module.audioNode.getState()
-    console.error('pararam', JSON.stringify(paramData), JSON.stringify(state))
-    const automationController = new AutomationController(trackListController, plugin.identifier, waveformSvg, track, firstParam, paramData[firstParam.id].value)
+    const automationController = new AutomationController(
+      trackListController,
+      effectData.instanceId,
+      waveformSvg,
+      track,
+      parameterMetadata,
+      parameterMetadata.normalize(sequence.initialValue),
+    )
+    ;((window as any).trackListController as TrackListController).pointerStateManager.startAutomating()
     automationController.draw()
   }
 
-  private queuePluginStateCapture(session: PluginViewSession) {
-    if (session.closed) {
-      return session.saveQueue
-    }
-    let capturedState: unknown
-    let hasCapturedState = false
-    const statePromise = session.module.audioNode.getState().then((state) => {
-      capturedState = structuredClone(state) as unknown
-      hasCapturedState = true
-      return capturedState
-    })
-    session.saveQueue = session.saveQueue
-      .then(async () => {
-        const state = await statePromise
-        const effectIndex = session.track.effectRegions.findIndex(
-          (effect) => effect.instanceId == session.effectInstanceId,
-        )
-        if (effectIndex < 0 || this.statesEqual(session.track.effectRegions[effectIndex].state, state)) {
-          return
-        }
-
-        const oldEffects = cloneEffectData(session.track.effectRegions)
-        const newEffects = cloneEffectData(oldEffects)
-        newEffects[effectIndex].state = state
-        await editorHistory.execute(
-          new SetTrackEffectsCommand(session.track, oldEffects, newEffects, 'change effect settings'),
-        )
-      })
-      .catch((error) => {
-        if (hasCapturedState) {
-          const effect = session.track.effectRegions.find(
-            (item) => item.instanceId == session.effectInstanceId,
-          )
-          if (effect) {
-            effect.state = capturedState
-          }
-        }
-        console.error('Failed to save plugin state', error)
-        NotificationsController.showErrorMessage('Could not persist the latest plugin settings.')
-      })
-    return session.saveQueue
-  }
-
-  private async closePluginView(saveState: boolean) {
-    const session = this.activePluginView
+  private async closeEffectView() {
+    const session = this.activeEffectView
     if (!session || session.closed) {
       return
     }
-    this.activePluginView = null
-    session.abortController.abort()
-    if (saveState) {
-      await this.queuePluginStateCapture(session)
-    }
-    session.closed = true
-    await session.saveQueue
-    try {
-      if (session.gui) {
-        session.module.destroyGui(session.gui)
-      }
-    } catch (error) {
-      console.error('Failed to destroy plugin GUI', error)
-    }
-    if (session.ownsModule) {
-      this.destroyModule(session.module)
-    }
+    this.activeEffectView = null
+    this.destroyEffectSession(session)
   }
 
-  private destroyModule(module: WebAudioModule) {
-    module.audioNode.disconnect()
-    module.audioNode.destroy()
+  private destroyEffectSession(session: EffectViewSession) {
+    session.abortController.abort()
+    session.closed = true
+    if (session.ownsModule) {
+      session.node.disconnect()
+    }
   }
 
   private createInstanceId() {
     return globalThis.crypto.randomUUID()
   }
 
-  private statesEqual(first: unknown, second: unknown) {
-    if (Object.is(first, second)) {
-      return true
-    }
-    if (this.containsNonJsonState(first) || this.containsNonJsonState(second)) {
-      return false
-    }
-    try {
-      return JSON.stringify(first) == JSON.stringify(second)
-    } catch {
-      return false
-    }
-  }
-
-  private containsNonJsonState(value: unknown, seen = new WeakSet<object>()): boolean {
-    if (!value || typeof value != 'object') {
-      return false
-    }
-    if (
-      value instanceof ArrayBuffer ||
-      ArrayBuffer.isView(value) ||
-      value instanceof Blob ||
-      value instanceof Map ||
-      value instanceof Set
-    ) {
-      return true
-    }
-    const prototype = Object.getPrototypeOf(value)
-    if (prototype != Object.prototype && prototype != Array.prototype && !(value instanceof Date)) {
-      return true
-    }
-    if (seen.has(value)) {
-      return true
-    }
-    seen.add(value)
-    return Object.values(value).some((child) => this.containsNonJsonState(child, seen))
+  private clamp(value: number, minimum: number, maximum: number) {
+    return Math.min(maximum, Math.max(minimum, value))
   }
 
   private openSubview(title: string, subtitle: string, body: HTMLElement, track: Track) {
@@ -514,7 +470,7 @@ export class EffectPanelController {
 
   private async handlePanelClose() {
     ++this.viewVersion
-    await this.closePluginView(true)
+    await this.closeEffectView()
   }
 
   private showMessage(title: string, message: string, track: Track) {
@@ -524,31 +480,25 @@ export class EffectPanelController {
     this.openSubview(title, track.name, body, track)
   }
 
-  private getPluginDescriptionElement(plugin: Wam2PluginDescriptor) {
+  private getEffectDescriptionElement(metadata: EffectMetadata) {
     const parentElement = document.createElement('div')
-    parentElement.className = 'effect-plugin-description'
+    parentElement.className = 'effect-description'
 
-    const listItemLabelElement = document.createElement('p')
-    listItemLabelElement.className = 'effect-plugin-name'
-    listItemLabelElement.textContent = plugin.name
-    parentElement.appendChild(listItemLabelElement)
+    const nameElement = document.createElement('p')
+    nameElement.className = 'effect-name'
+    nameElement.textContent = metadata.name
+    parentElement.appendChild(nameElement)
 
-    if (plugin.thumbnail) {
-      const listItemThumbnailElement = document.createElement('img')
-      listItemThumbnailElement.src = WamPluginIndex.COMMUNITY_WAM_URL + plugin.thumbnail
-      listItemThumbnailElement.alt = ''
-      parentElement.appendChild(listItemThumbnailElement)
+    if (metadata.categories.length) {
+      const categoryElement = document.createElement('p')
+      categoryElement.className = 'effect-category'
+      categoryElement.textContent = metadata.categories.join(', ')
+      parentElement.appendChild(categoryElement)
     }
 
-    const listItemCategoryElement = document.createElement('p')
-    listItemCategoryElement.className = 'effect-plugin-category'
-    listItemCategoryElement.textContent = plugin.category.join(', ')
-    parentElement.appendChild(listItemCategoryElement)
-
-    const listItemDescriptionElement = document.createElement('p')
-    listItemDescriptionElement.textContent = plugin.description
-    parentElement.appendChild(listItemDescriptionElement)
-
+    const descriptionElement = document.createElement('p')
+    descriptionElement.textContent = metadata.description
+    parentElement.appendChild(descriptionElement)
     return parentElement
   }
 }
