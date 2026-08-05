@@ -230,6 +230,10 @@ export class PointerStateManager extends TrackListItemController {
     this.changeState(State.AUTOMATING)
   }
 
+  stopAutomating() {
+    this.changeState(State.DEFAULT)
+  }
+
   setPointedOverClipView(controller: ClipViewController) {
     if (this.state == State.MOVING_CLIPVIEW || this.state == State.RESIZING_CLIPVIEW) {
       return

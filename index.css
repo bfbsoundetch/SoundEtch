@@ -1407,7 +1407,7 @@ video {
   place-items: center;
   min-width: 0;
   height: 2.5rem;
-  padding: 0.55rem;
+  padding: 0.2rem;
   border: 0;
   border-right: 1px solid currentColor;
   color: inherit;
@@ -1495,13 +1495,13 @@ video {
   display: grid;
   align-content: start;
   gap: 1rem;
-  padding: 1.25rem;
+  padding: 3rem;
   box-sizing: border-box;
 }
 
 .effect-parameter-control {
   display: grid;
-  grid-template-columns: minmax(7rem, auto) minmax(12rem, 1fr) auto;
+  grid-template-columns: minmax(7rem, auto) auto minmax(12rem, 1fr);
   align-items: center;
   gap: 1rem;
 }

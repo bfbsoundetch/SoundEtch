@@ -244,7 +244,7 @@ export class EffectPanelController {
     }
     range.addEventListener('change', commit, { signal: session.abortController.signal })
 
-    field.append(name, range, valueRow)
+    field.append(name, valueRow, range)
     return field
   }
 
@@ -301,7 +301,7 @@ export class EffectPanelController {
     const removeButton = this.createIconButton('Remove effect', 'trash')
     removeButton.classList.add('effect-chain-remove')
     removeButton.addEventListener('click', () => void this.removeEffect(track, index))
-    const automationButton = this.createIconButton('Automate', 'pencil')
+    const automationButton = this.createIconButton('Automate', 'automation')
     automationButton.disabled = !metadata?.parameters.length
     if (metadata?.parameters.length) {
       automationButton.addEventListener('click', () => this.openAutomationView(track, effectData, metadata))
