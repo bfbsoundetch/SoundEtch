@@ -1005,6 +1005,122 @@ video {
   user-select: none;
 }
 
+.automation-dimmed {
+  position: relative;
+  pointer-events: none;
+}
+
+.automation-dimmed::after {
+  content: '';
+  position: absolute;
+  inset: 0;
+  z-index: 20;
+  background: rgb(96 100 104 / 58%);
+}
+
+.automation-active-waveform {
+  cursor: crosshair;
+}
+
+.automation-track-info {
+  grid-area: 1 / 1 / -1 / -1;
+  align-self: stretch;
+  display: grid;
+  grid-template-rows: auto minmax(5rem, 1fr) auto;
+  gap: 0.65rem;
+  width: 100%;
+  min-height: 0;
+  padding: 0.35rem;
+  box-sizing: border-box;
+  background: var(--alt-background);
+}
+
+.automation-track-heading {
+  display: grid;
+  gap: 0.15rem;
+  overflow-wrap: anywhere;
+}
+
+.automation-track-heading strong {
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  font-size: 0.72rem;
+  opacity: 0.72;
+}
+
+.automation-context-row {
+  display: grid;
+  grid-template-columns: 4rem minmax(0, 1fr);
+  gap: 0.35rem;
+}
+
+.automation-context-row small {
+  opacity: 0.65;
+}
+
+.automation-parameter-name {
+  font-weight: bold;
+}
+
+.automation-scale {
+  position: relative;
+  min-height: 5rem;
+  margin-left: 0.35rem;
+  border-left: 1px solid currentColor;
+}
+
+.automation-scale-tick {
+  position: absolute;
+  left: 0;
+  width: calc(100% - 0.2rem);
+  padding-left: 0.65rem;
+  box-sizing: border-box;
+  transform: translateY(-50%);
+  font-size: 0.72rem;
+  line-height: 1;
+  opacity: 0.8;
+}
+
+.automation-scale-tick::before {
+  content: '';
+  position: absolute;
+  left: 0;
+  top: 50%;
+  width: 0.45rem;
+  border-top: 1px solid currentColor;
+}
+
+.automation-exit-button {
+  width: 100%;
+  padding: 0.4rem;
+  border: 1px solid currentColor;
+  color: inherit;
+  font: inherit;
+}
+
+.automation-layer {
+  color: var(--color);
+}
+
+.automation-hit-area {
+  fill: transparent;
+  pointer-events: all;
+}
+
+.automation-path {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 3;
+  pointer-events: none;
+}
+
+.automation-point {
+  fill: var(--background);
+  stroke: currentColor;
+  stroke-width: 3;
+  cursor: move;
+}
+
 .audio-source-label {
   display: inline-block;
   vertical-align: middle;

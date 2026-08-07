@@ -10,7 +10,6 @@ import { Track } from '../../project/Track'
 import { BottomPanelController } from '../BottomPanelController'
 import { NotificationsController } from '../NotificationsController'
 import { createArrowIcon, createSvgIcon } from '../SvgIcon'
-import { AutomationController } from '../timeline/AutomationController'
 import { TrackListController } from '../timeline/TrackListController'
 import { editorHistory } from '../undo/EditorHistory'
 import { cloneEffectData, SetTrackEffectsCommand } from './SetTrackEffectsCommand'
@@ -415,22 +414,13 @@ export class EffectPanelController {
 
   private openAutomationView(track: Track, effectData: EffectData, metadata: EffectMetadata) {
     const trackListController = (window as any).trackListController as TrackListController
-    const waveformSvg = trackListController.waveforms.find((waveform) => waveform.track == track)?.topGroupElement
     const parameterMetadata = metadata.parameters[0]
     const sequence = effectData.params[parameterMetadata.id]
-    if (!waveformSvg || !sequence) {
+    if (!sequence) {
       return
     }
-    const automationController = new AutomationController(
-      trackListController,
-      effectData.instanceId,
-      waveformSvg,
-      track,
-      parameterMetadata,
-      parameterMetadata.normalize(sequence.initialValue),
-    )
-    ;((window as any).trackListController as TrackListController).pointerStateManager.startAutomating()
-    automationController.draw()
+    this.bottomPanelController.close()
+    trackListController.enterAutomationMode(track, effectData.instanceId, parameterMetadata)
   }
 
   private async closeEffectView() {

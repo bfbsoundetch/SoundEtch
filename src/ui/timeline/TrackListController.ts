@@ -22,11 +22,19 @@ import { Track } from '../../project/Track'
 import { TimelineRegionController } from './TimelineRegionController'
 import { Freezer } from '../../freezer/Freezer'
 import { NotificationsController } from '../NotificationsController'
+import { ParameterMetadata } from '../../effects/ParameterMetadata'
+import { AutomationController } from './AutomationController'
 
 interface Selection {
   startSample: number
   endSample: number
   waveforms: Set<Waveform>
+}
+
+interface AutomationMode {
+  controller: AutomationController
+  infoElement: HTMLElement
+  originalInfoElements: Node[]
 }
 
 export class TrackListController {
@@ -79,6 +87,7 @@ export class TrackListController {
     { info: HTMLElement; waveform: HTMLElement; controller: Waveform }
   >()
   private renderedProjectId: number | undefined = undefined
+  private automationMode: AutomationMode | null = null
 
   readonly timelineSelectionContextMenu = new ContextMenuController(
     'timeline-selection-contextmenu',
@@ -87,7 +96,6 @@ export class TrackListController {
     new ContextMenuItem('Copy', () => this.sliceSelection(false)),
     new ContextMenuItem('Paste', (activeTrackIndex, startSample) => this.paste(activeTrackIndex, startSample)),
     new ContextMenuItem('Freeze', () => this.freezeSelection()),
-    new ContextMenuItem('Effect...', () => {}),
   )
 
   private readonly timelineUnselectionContextMenu = new ContextMenuController(
@@ -155,6 +163,7 @@ export class TrackListController {
     new ResizeObserver(async (_) => {
       this.timelineController.resize()
       this.waveforms.forEach((w) => w.resize())
+      this.automationMode?.controller.resize()
       this.positionMarkerController.resize()
       if (!Number.isFinite(this.msPerUnit)) {
         const project = await ProjectManager.getActiveProject()
@@ -167,6 +176,9 @@ export class TrackListController {
     }).observe(this.tracklistElement)
 
     AudioControl.addAudioControlListener((state) => {
+      if (this.automationMode && state != AudioState.STOPPED && state != AudioState.MONITORING) {
+        this.exitAutomationMode()
+      }
       switch (state) {
         case AudioState.PLAYING:
         case AudioState.RECORDING:
@@ -190,6 +202,12 @@ export class TrackListController {
       const waveformDivs = new Array<Node>()
       const nextWaveforms = new Array<Waveform>()
       const trackIds = new Set(project.getTracks().map((track) => `${track.id}`))
+      if (
+        this.automationMode &&
+        !project.getTracks().some((track) => `${track.id}` == this.automationMode!.infoElement.dataset.trackId)
+      ) {
+        this.exitAutomationMode()
+      }
       for (const trackId of this.infoWaveformPairs.keys()) {
         if (!trackIds.has(trackId)) {
           this.infoWaveformPairs.delete(trackId)
@@ -207,6 +225,7 @@ export class TrackListController {
         }
 
         const trackInfoDiv = document.createElement('div')
+        trackInfoDiv.dataset.trackId = `${track.id}`
         trackInfoDiv.style.height = `${7 * track.getChannelCount() + 1.5}rem`
         const trackListInfo = new TrackListInfo(track, trackInfoDiv, this.history)
 
@@ -251,15 +270,118 @@ export class TrackListController {
   }
 
   selectTrack(waveform: Waveform) {
+    if (this.automationMode) {
+      return
+    }
     this.selectionController.setSelection(0, waveform.track.length, new Set([waveform]))
   }
 
   selectClipView(clipView: ClipView, waveform: Waveform) {
+    if (this.automationMode) {
+      return
+    }
     this.selectionController.setSelection(clipView.startPosition, clipView.getEndPosition(), new Set([waveform]))
   }
 
   clearSelection() {
     this.selectionController.remove()
+  }
+
+  enterAutomationMode(track: Track, effectInstanceId: string, parameterMetadata: ParameterMetadata) {
+    this.exitAutomationMode()
+    const pair = this.infoWaveformPairs.get(`${track.id}`)
+    if (!pair) {
+      return
+    }
+
+    this.clearSelection()
+    this.pointerStateManager.startAutomating()
+    this.addTrackButton.disabled = true
+    this.addTrackButton.hidden = true
+
+    for (const [trackId, candidate] of this.infoWaveformPairs) {
+      const isActive = trackId == `${track.id}`
+      candidate.info.classList.toggle('automation-dimmed', !isActive)
+      candidate.waveform.classList.toggle('automation-dimmed', !isActive)
+      candidate.waveform.classList.toggle('automation-active-waveform', isActive)
+    }
+
+    const originalInfoElements = Array.from(pair.info.childNodes)
+    const modeInfoElement = this.createAutomationModeInfo(track, parameterMetadata)
+    pair.info.replaceChildren(modeInfoElement)
+
+    const controller = new AutomationController(
+      this,
+      effectInstanceId,
+      pair.controller.topSvgElement,
+      track,
+      parameterMetadata,
+    )
+    this.automationMode = { controller, infoElement: pair.info, originalInfoElements }
+    controller.draw()
+  }
+
+  exitAutomationMode() {
+    const mode = this.automationMode
+    if (!mode) {
+      return
+    }
+    mode.controller.remove()
+    mode.infoElement.replaceChildren(...mode.originalInfoElements)
+    for (const pair of this.infoWaveformPairs.values()) {
+      pair.info.classList.remove('automation-dimmed')
+      pair.waveform.classList.remove('automation-dimmed', 'automation-active-waveform')
+    }
+    this.addTrackButton.disabled = false
+    this.addTrackButton.hidden = false
+    this.automationMode = null
+    this.pointerStateManager.stopAutomating()
+  }
+
+  private createAutomationModeInfo(track: Track, parameterMetadata: ParameterMetadata) {
+    const panel = document.createElement('section')
+    panel.className = 'automation-track-info'
+
+    const heading = document.createElement('div')
+    heading.className = 'automation-track-heading'
+    const modeLabel = document.createElement('strong')
+    modeLabel.textContent = 'Automation'
+    const trackRow = document.createElement('span')
+    trackRow.className = 'automation-context-row'
+    const trackLabel = document.createElement('small')
+    trackLabel.textContent = 'Track'
+    const trackName = document.createElement('span')
+    trackName.textContent = track.name
+    trackRow.append(trackLabel, trackName)
+    const parameterRow = document.createElement('span')
+    parameterRow.className = 'automation-context-row'
+    const parameterLabel = document.createElement('small')
+    parameterLabel.textContent = 'Parameter'
+    const parameterName = document.createElement('span')
+    parameterName.className = 'automation-parameter-name'
+    parameterName.textContent = parameterMetadata.displayName
+    parameterRow.append(parameterLabel, parameterName)
+    heading.append(modeLabel, trackRow, parameterRow)
+
+    const scale = document.createElement('div')
+    scale.className = 'automation-scale'
+    scale.setAttribute('aria-label', `${parameterMetadata.displayName} scale`)
+    const scaleValues = [...parameterMetadata.scaleValues].sort((a, b) => b - a)
+    for (const value of scaleValues) {
+      const tick = document.createElement('span')
+      tick.className = 'automation-scale-tick'
+      tick.style.top = `${(1 - parameterMetadata.normalize(value)) * 100}%`
+      tick.textContent = parameterMetadata.displayValue(value)
+      scale.appendChild(tick)
+    }
+
+    const exitButton = document.createElement('button')
+    exitButton.type = 'button'
+    exitButton.className = 'clickable automation-exit-button'
+    exitButton.textContent = 'Back to track'
+    exitButton.addEventListener('click', () => this.exitAutomationMode())
+    panel.append(heading, scale, exitButton)
+    return panel
   }
 
   async transferClipViewBetweenTracks(clipViewController: ClipViewController, newWaveform: Waveform, shift: number) {
@@ -278,8 +400,10 @@ export class TrackListController {
     const newClipboard: typeof Clipboard.copiedClipViews = []
     const undoCommands: SetTrackClipViewsCommand[] = []
     const selection = this.selectionController.selectedRegion
-    if (!selection) { return }
-    selection?.tracks.forEach(track => {
+    if (!selection) {
+      return
+    }
+    selection?.tracks.forEach((track) => {
       const oldClipViews = track.clipViews.slice()
       newClipboard.push(track.slice(selection.startSample, selection.endSample, del))
       if (del && !this.clipViewArraysEqual(oldClipViews, track.clipViews)) {
@@ -343,6 +467,7 @@ export class TrackListController {
   draw() {
     this.timelineController.draw()
     this.waveforms.forEach((waveform) => waveform.draw())
+    this.automationMode?.controller.draw()
     this.selectionController.draw()
     this.positionMarkerController.draw()
   }
@@ -397,7 +522,10 @@ export class TrackListController {
   }
 
   private canEdit() {
-    return AudioControl.getState() == AudioState.STOPPED || AudioControl.getState() == AudioState.MONITORING
+    return (
+      !this.automationMode &&
+      (AudioControl.getState() == AudioState.STOPPED || AudioControl.getState() == AudioState.MONITORING)
+    )
   }
 
   private shouldIgnoreKeyboardShortcut(target: EventTarget | null) {

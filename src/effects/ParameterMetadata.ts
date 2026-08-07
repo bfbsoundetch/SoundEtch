@@ -8,4 +8,5 @@ export interface ParameterMetadata {
   normalize: (_: number) => number
   denormalize: (_: number) => number
   displayValue: (_: number) => string
+  scaleValues: number[]
 }

@@ -221,7 +221,13 @@ export class ProjectManager {
 
     const clipView = new ClipView(clip, 0, startPosition, 2 ** 31)
 
-    const track = new Track(`${source}: ${name} ${activeProject.getTracks().length}`, channelCount)
+    let i = activeProject.getTracks().length + 1
+    const titles = activeProject.getTracks().map(t => t.name)
+    let trackTitle = `Track ${++i}`
+    while (titles.find(t => t == trackTitle)) {
+      trackTitle = `Track ${++i}`
+    }
+    const track = new Track(trackTitle, channelCount)
     track.addClipView(clipView)
 
     await ProjectManager.saveTrack(track)

@@ -55,7 +55,7 @@ export class ClipManagerController {
     const deleteButton = document.createElement('button')
     deleteButton.className = 'menu-item clickable clip-manager-delete-button'
     deleteButton.innerText = 'Delete clip'
-    deleteButton.onclick = async () => {
+    deleteButton.addEventListener('click', async () => {
       if (!globalThis.confirm(`Delete \"${clip.name}\"? This removes all uses from every track.`)) {
         return
       }
@@ -63,7 +63,7 @@ export class ClipManagerController {
       editorHistory.clear()
       await ProjectManager.deleteClip(clip)
       await this.refresh()
-    }
+    })
 
     row.append(nameElement, sizeElement, usageElement, deleteButton)
     return row

@@ -35,6 +35,7 @@ describe('effect parameters', () => {
     expect(gain.normalize(gain.maxValue)).toBeCloseTo(1)
     expect(gain.denormalize(gain.normalize(gain.defaultValue))).toBeCloseTo(gain.defaultValue)
     expect(gain.displayValue(gain.defaultValue)).toBe('100%')
+    expect(gain.scaleValues).toEqual([0, 1, 2, 4, 8, 16, 32, 64])
   })
 
   test.each(

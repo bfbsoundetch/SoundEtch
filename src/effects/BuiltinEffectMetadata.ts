@@ -16,6 +16,7 @@ export const GainEffectMetadata: EffectMetadata = {
       normalize: (gain) => Math.log2(gain + 1) / Math.log2(65),
       denormalize: (value) => 2 ** (value * Math.log2(65)) - 1,
       displayValue: (gain) => `${(gain * 100).toFixed(0)}%`,
+      scaleValues: [0, 1, 2, 4, 8, 16, 32, 64],
     },
   ],
 }

@@ -203,6 +203,9 @@ export class PointerStateManager extends TrackListItemController {
   }
 
   startMovingMark() {
+    if (this.state == State.AUTOMATING) {
+      return
+    }
     this.changeState(State.MARKING)
   }
 
@@ -231,7 +234,13 @@ export class PointerStateManager extends TrackListItemController {
   }
 
   stopAutomating() {
-    this.changeState(State.DEFAULT)
+    if (this.state == State.AUTOMATING) {
+      this.changeState(State.DEFAULT)
+    }
+  }
+
+  isAutomating() {
+    return this.state == State.AUTOMATING
   }
 
   setPointedOverClipView(controller: ClipViewController) {
@@ -302,7 +311,7 @@ export class PointerStateManager extends TrackListItemController {
       case State.MOVING_CLIPVIEW:
       case State.RESIZING_CLIPVIEW:
       case State.AUTOMATING:
-        if (newState == State.MOVING_CLIPVIEW) {
+        if (newState != State.DEFAULT && newState != State.READ_ONLY) {
           return false
         }
         break

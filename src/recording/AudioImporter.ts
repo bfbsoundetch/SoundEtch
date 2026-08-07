@@ -4,7 +4,7 @@ import { AudioControl } from '../audiocontext/AudioControl'
 import { Track } from '../project/Track'
 import { cloneWithGetters } from '../global/ObjectUtils'
 
-const DEMUXER_WASM_PATH = 'https://localhost:8443/soundetch_gh/web-demuxer.wasm'
+const DEMUXER_WASM_PATH = new URL('web-demuxer.wasm', document.baseURI).href
 const INTERLEAVE_RESAMPLE_BATCH_SIZE_SAMPLES = 1024 * 1024
 
 interface ImportFileOptions {
@@ -28,6 +28,7 @@ export class AudioImporter {
       throwIfAborted(signal)
       const [decoderConfig, mediaInfo] = await Promise.all([demuxer.getDecoderConfig('audio'), demuxer.getMediaInfo()])
 
+      console.error(JSON.stringify(mediaInfo.streams[0]))
       track = await ProjectManager.addClipWithTrack(
         file.name,
         decoderConfig.numberOfChannels,
