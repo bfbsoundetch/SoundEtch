@@ -1824,6 +1824,24 @@ video {
   font-size: 2rem;
 }
 
+#clip-manager-header {
+  display: flex;
+  align-items: center;
+  gap: 1rem;
+}
+
+#clip-manager-delete-unused-button {
+  width: auto;
+  margin-left: auto;
+  padding: 0.5rem 0.75rem;
+  font-size: 1rem;
+  text-align: center;
+}
+
+#clip-manager-delete-unused-button:disabled {
+  opacity: 0.55;
+}
+
 #clip-metadata-modal-content {
   display: flex;
   flex-direction: column;
@@ -2047,6 +2065,15 @@ video {
 }
 
 @media (max-width: 34rem) {
+  #clip-manager-header {
+    align-items: stretch;
+    flex-direction: column;
+  }
+
+  #clip-manager-delete-unused-button {
+    margin-left: 0;
+  }
+
   .clip-manager-row {
     grid-template-columns: minmax(0, 1fr);
     grid-template-areas:

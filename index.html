@@ -553,7 +553,12 @@
         </svg>
       </div>
       <div id="clip-manager-modal-content" class="overlay-content" onclick="event.stopPropagation()">
-        <h1>Manage Clips</h1>
+        <div id="clip-manager-header">
+          <h1>Manage Clips</h1>
+          <button id="clip-manager-delete-unused-button" class="menu-item clickable" type="button">
+            Delete unused clips
+          </button>
+        </div>
         <div id="clip-manager-list"></div>
       </div>
     </dialog>

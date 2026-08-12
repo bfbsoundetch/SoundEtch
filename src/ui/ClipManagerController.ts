@@ -9,6 +9,7 @@ export class ClipManagerController {
   private readonly dialog = document.getElementById('clip-manager-modal') as HTMLDialogElement
   private readonly openButton = document.getElementById('open-clip-manager-modal-button') as HTMLButtonElement
   private readonly listContainer = document.getElementById('clip-manager-list') as HTMLDivElement
+  private readonly deleteUnusedButton = document.getElementById('clip-manager-delete-unused-button') as HTMLButtonElement
   private readonly metadataDialog = document.getElementById('clip-metadata-modal') as HTMLDialogElement
   private readonly metadataTitle = document.getElementById('clip-metadata-title') as HTMLHeadingElement
   private readonly metadataList = document.getElementById('clip-metadata-list') as HTMLDListElement
@@ -19,6 +20,7 @@ export class ClipManagerController {
 
   constructor() {
     this.openButton.onclick = () => this.open()
+    this.deleteUnusedButton.onclick = () => void this.deleteUnusedClips()
     this.metadataBackButton.onclick = () => void this.hideMetadata()
     this.metadataTitle.addEventListener('dblclick', () => this.makeTitleEditable())
     this.metadataTitle.addEventListener('blur', () => void this.saveTitleChanges())
@@ -33,6 +35,9 @@ export class ClipManagerController {
   private async refresh() {
     const project = await ProjectManager.getActiveProject()
     const clips = project.getClips()
+    const unusedClipCount = this.getUnusedClips(project).length
+    this.deleteUnusedButton.disabled = unusedClipCount === 0
+    this.deleteUnusedButton.innerText = `Delete unused clips${unusedClipCount > 0 ? ` (${unusedClipCount})` : ''}`
     this.listContainer.replaceChildren()
 
     if (clips.length === 0) {
@@ -44,6 +49,31 @@ export class ClipManagerController {
 
     const clipRows = await Promise.all(clips.map((clip) => this.createClipRow(project, clip)))
     clipRows.forEach((row) => this.listContainer.appendChild(row))
+  }
+
+  private async deleteUnusedClips() {
+    const project = await ProjectManager.getActiveProject()
+    const unusedClips = this.getUnusedClips(project)
+    if (unusedClips.length === 0) {
+      await this.refresh()
+      return
+    }
+    const noun = unusedClips.length === 1 ? 'clip' : 'clips'
+    if (!globalThis.confirm(`Delete ${unusedClips.length} unused ${noun}? This cannot be undone.`)) {
+      return
+    }
+
+    this.deleteUnusedButton.disabled = true
+    editorHistory.clear()
+    try {
+      for (const clip of unusedClips) {
+        await ProjectManager.deleteClip(clip)
+      }
+    } catch (error) {
+      NotificationsController.showError(error instanceof Error ? error : new Error(String(error)))
+    } finally {
+      await this.refresh()
+    }
   }
 
   private async createClipRow(project: Project, clip: Clip): Promise<HTMLDivElement> {
@@ -185,5 +215,10 @@ export class ClipManagerController {
 
   private countTracksUsingClip(project: Project, clip: Clip): number {
     return project.getTracks().filter((track) => track.clipViews.some((clipView) => clipView.clip === clip)).length
+  }
+
+  private getUnusedClips(project: Project): Clip[] {
+    const usedClips = new Set(project.getTracks().flatMap((track) => track.clipViews.map((clipView) => clipView.clip)))
+    return project.getClips().filter((clip) => !usedClips.has(clip))
   }
 }
