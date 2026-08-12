@@ -3,6 +3,7 @@ import { Project } from '../project/Project'
 import { ProjectManager } from '../project/ProjectManager'
 import { getClipDiskUsage, humanizeBytes } from './DiskUsage'
 import { editorHistory } from './undo/EditorHistory'
+import { NotificationsController } from './NotificationsController'
 
 export class ClipManagerController {
   private readonly dialog = document.getElementById('clip-manager-modal') as HTMLDialogElement
@@ -12,10 +13,15 @@ export class ClipManagerController {
   private readonly metadataTitle = document.getElementById('clip-metadata-title') as HTMLHeadingElement
   private readonly metadataList = document.getElementById('clip-metadata-list') as HTMLDListElement
   private readonly metadataBackButton = document.getElementById('clip-metadata-back-button') as HTMLButtonElement
+  private displayedClip: Clip | null = null
+  private titleEditClip: Clip | null = null
+  private titleEditStart = ''
 
   constructor() {
     this.openButton.onclick = () => this.open()
     this.metadataBackButton.onclick = () => void this.hideMetadata()
+    this.metadataTitle.addEventListener('dblclick', () => this.makeTitleEditable())
+    this.metadataTitle.addEventListener('blur', () => void this.saveTitleChanges())
   }
 
   async open() {
@@ -87,6 +93,7 @@ export class ClipManagerController {
 
   openClipInfo(clip: Clip) {
     this.metadataTitle.innerText = clip.name
+    this.displayedClip = clip
     this.metadataList.replaceChildren()
     this.appendMetadata('Created', this.formatDate(clip.dateCreated))
 
@@ -103,8 +110,59 @@ export class ClipManagerController {
   }
 
   private async hideMetadata() {
-    await this.open()
     this.metadataDialog.close()
+    await this.open()
+  }
+
+  private makeTitleEditable() {
+    if (!this.displayedClip || this.metadataTitle.isContentEditable) {
+      return
+    }
+    this.titleEditClip = this.displayedClip
+    this.titleEditStart = this.displayedClip.name
+    this.metadataTitle.contentEditable = 'true'
+    this.metadataTitle.classList.add('clip-metadata-title-editing')
+    this.metadataTitle.focus()
+    this.metadataTitle.onkeydown = (event) => {
+      if (event.key == 'Enter') {
+        event.preventDefault()
+        this.metadataTitle.blur()
+      }
+      if (event.key == 'Escape') {
+        event.preventDefault()
+        this.metadataTitle.innerText = this.titleEditStart
+        this.metadataTitle.blur()
+      }
+    }
+  }
+
+  private async saveTitleChanges() {
+    if (!this.metadataTitle.isContentEditable || !this.titleEditClip) {
+      return
+    }
+    const clip = this.titleEditClip
+    const oldName = this.titleEditStart
+    const newName = this.metadataTitle.innerText.trim()
+    this.metadataTitle.contentEditable = 'false'
+    this.metadataTitle.classList.remove('clip-metadata-title-editing')
+    this.metadataTitle.onkeydown = null
+    this.titleEditClip = null
+
+    if (!newName || newName == oldName) {
+      this.metadataTitle.innerText = oldName
+      return
+    }
+
+    clip.name = newName
+    this.metadataTitle.innerText = newName
+    try {
+      await ProjectManager.saveClip(clip)
+      ;(window as any).trackListController?.draw?.()
+    } catch (error) {
+      clip.name = oldName
+      this.metadataTitle.innerText = oldName
+      NotificationsController.showError(error instanceof Error ? error : new Error(String(error)))
+    }
   }
 
   private appendMetadata(name: string, value: string) {

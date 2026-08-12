@@ -12,7 +12,7 @@ export class Clip extends DatabasePersisted {
   readonly sourceFilename: string | null
 
   constructor(
-    readonly name: string,
+    public name: string,
     private readonly channelCount: number,
     length = 0,
     tags: Record<string, string> = {},

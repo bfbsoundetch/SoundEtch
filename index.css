@@ -1842,6 +1842,12 @@ video {
   overflow-wrap: anywhere;
 }
 
+#clip-metadata-title.clip-metadata-title-editing {
+  outline: 1px solid currentColor;
+  outline-offset: 0.2rem;
+  cursor: text;
+}
+
 #clip-metadata-header {
   display: flex;
   align-items: center;

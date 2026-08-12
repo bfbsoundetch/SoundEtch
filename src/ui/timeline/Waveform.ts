@@ -218,6 +218,7 @@ export class ClipViewController extends TrackListItemController {
   readonly leftHandle = document.createElementNS('http://www.w3.org/2000/svg', 'line') as unknown as SVGLineElement
   readonly rightHandle = document.createElementNS('http://www.w3.org/2000/svg', 'line') as unknown as SVGLineElement
   private readonly fullClipGrayFilter = document.createElementNS('http://www.w3.org/2000/svg', 'rect')
+  private readonly headerTitleDivElement = document.createElement('div')
 
   private readonly waveformContextMenu: ContextMenuController
   private readonly waveformHeight: number
@@ -240,13 +241,12 @@ export class ClipViewController extends TrackListItemController {
     super(trackListController)
     this.waveformHeight = this.waveform.getHeight()
 
-    const headerTitleDivElement = document.createElement('div')
-    headerTitleDivElement.innerText = this.clipView.clip.name
-    this.headerTitleElement.appendChild(headerTitleDivElement)
-    headerTitleDivElement.style.overflow = 'hidden'
-    headerTitleDivElement.style.textOverflow = 'clip'
-    headerTitleDivElement.style.whiteSpace = 'nowrap'
-    headerTitleDivElement.style.color = 'var(--waveform-header-text)'
+    this.headerTitleDivElement.innerText = this.clipView.clip.name
+    this.headerTitleElement.appendChild(this.headerTitleDivElement)
+    this.headerTitleDivElement.style.overflow = 'hidden'
+    this.headerTitleDivElement.style.textOverflow = 'clip'
+    this.headerTitleDivElement.style.whiteSpace = 'nowrap'
+    this.headerTitleDivElement.style.color = 'var(--waveform-header-text)'
 
     this.waveform.clipViewGroupElement.appendChild(this.rectElement)
     this.waveform.clipViewGroupElement.appendChild(this.headerElement)
@@ -392,6 +392,7 @@ export class ClipViewController extends TrackListItemController {
   }
 
   drawBoundingBox(startSample: number, endSample: number) {
+    this.headerTitleDivElement.innerText = this.clipView.clip.name
     // for some reason this breaks down when zooming in too much, so limit to +/-10000
     const xStart = Math.max(this.getXValueForSample(this.clipView.startPosition + this.startCrossFadeDuration), -10000)
     const startCrossFadeLength = this.startCrossFadeDuration / this.samplesPerUnit

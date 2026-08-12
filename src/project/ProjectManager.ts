@@ -204,6 +204,7 @@ export class ProjectManager {
 
   static async saveClip(clip: Clip) {
     await DatabasePersister.save(clip)
+    ProjectManager.clipListeners.get((clip as any).id)?.forEach((listener) => listener(clip))
   }
 
   static async addClipWithTrack(
