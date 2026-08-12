@@ -15,7 +15,7 @@ export class ClipManagerController {
 
   constructor() {
     this.openButton.onclick = () => this.open()
-    this.metadataBackButton.onclick = () => this.hideMetadata()
+    this.metadataBackButton.onclick = () => void this.hideMetadata()
   }
 
   async open() {
@@ -64,7 +64,7 @@ export class ClipManagerController {
     metadataButton.className = 'menu-item clickable clip-manager-action-button'
     metadataButton.type = 'button'
     metadataButton.innerText = 'View details'
-    metadataButton.addEventListener('click', () => this.showMetadata(clip))
+    metadataButton.addEventListener('click', () => this.openClipInfo(clip))
 
     const deleteButton = document.createElement('button')
     deleteButton.className = 'menu-item clickable clip-manager-action-button clip-manager-delete-button'
@@ -85,7 +85,7 @@ export class ClipManagerController {
     return row
   }
 
-  private showMetadata(clip: Clip) {
+  openClipInfo(clip: Clip) {
     this.metadataTitle.innerText = clip.name
     this.metadataList.replaceChildren()
     this.appendMetadata('Created', this.formatDate(clip.dateCreated))
@@ -96,13 +96,15 @@ export class ClipManagerController {
     for (const [name, value] of Object.entries(clip.tags ?? {}).sort(([a], [b]) => a.localeCompare(b))) {
       this.appendMetadata(name, value)
     }
-    this.dialog.close()
+    if (this.dialog.open) {
+      this.dialog.close()
+    }
     this.metadataDialog.showModal()
   }
 
-  private hideMetadata() {
+  private async hideMetadata() {
+    await this.open()
     this.metadataDialog.close()
-    this.dialog.showModal()
   }
 
   private appendMetadata(name: string, value: string) {

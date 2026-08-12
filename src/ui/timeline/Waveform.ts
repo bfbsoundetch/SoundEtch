@@ -6,6 +6,7 @@ import { ContextMenuController, ContextMenuItem } from '../../ui/ContextMenuCont
 import { SummaryGenerator } from '../../project/SummaryGenerator'
 import { ReplaceClipViewCommand, SetTrackClipViewsCommand, clipViewsEqual } from '../undo/UndoableActions'
 import { TimelineRegionController } from './TimelineRegionController'
+import { createSvgIcon } from '../SvgIcon'
 
 /** Handles displaying a track's waveform. */
 export class Waveform extends TrackListItemController {
@@ -191,12 +192,14 @@ export class Waveform extends TrackListItemController {
     clipViewController.svgPathElement.remove()
     clipViewController.headerElement.remove()
     clipViewController.headerTitleElement.remove()
+    clipViewController.headerInfoElement.remove()
     this.clipViewGroupElement.appendChild(clipViewController.rectElement)
     this.aboveClipViewGroupElement.appendChild(clipViewController.leftHandle)
     this.aboveClipViewGroupElement.appendChild(clipViewController.rightHandle)
     this.clipViewGroupElement.appendChild(clipViewController.svgPathElement)
     this.clipViewGroupElement.appendChild(clipViewController.headerElement)
     this.clipViewGroupElement.appendChild(clipViewController.headerTitleElement)
+    this.clipViewGroupElement.appendChild(clipViewController.headerInfoElement)
   }
 }
 
@@ -208,6 +211,7 @@ export class ClipViewController extends TrackListItemController {
   readonly rectElement = document.createElementNS('http://www.w3.org/2000/svg', 'rect')
   readonly headerElement = document.createElementNS('http://www.w3.org/2000/svg', 'rect')
   readonly headerTitleElement = document.createElementNS('http://www.w3.org/2000/svg', 'foreignObject')
+  readonly headerInfoElement = document.createElementNS('http://www.w3.org/2000/svg', 'foreignObject')
   readonly startCrossFadePathElement = document.createElementNS('http://www.w3.org/2000/svg', 'path') as unknown as SVGPathElement
   readonly svgPathElement = document.createElementNS('http://www.w3.org/2000/svg', 'path') as unknown as SVGPathElement
   readonly endCrossFadePathElement = document.createElementNS('http://www.w3.org/2000/svg', 'path') as unknown as SVGPathElement
@@ -247,6 +251,7 @@ export class ClipViewController extends TrackListItemController {
     this.waveform.clipViewGroupElement.appendChild(this.rectElement)
     this.waveform.clipViewGroupElement.appendChild(this.headerElement)
     this.waveform.clipViewGroupElement.appendChild(this.headerTitleElement)
+    this.waveform.clipViewGroupElement.appendChild(this.headerInfoElement)
     this.waveform.clipViewGroupElement.appendChild(this.fullClipGrayFilter)
     this.rectElement.setAttribute('y', `${Waveform.HEADER_HEIGHT}`)
     this.rectElement.setAttribute('height', `${this.waveformHeight}`)
@@ -266,6 +271,21 @@ export class ClipViewController extends TrackListItemController {
     this.headerTitleElement.y.baseVal.value = 0
     this.headerTitleElement.height.baseVal.value = Waveform.HEADER_HEIGHT
     this.headerTitleElement.style.fill = 'none'
+
+    const infoButton = document.createElement('button')
+    infoButton.type = 'button'
+    infoButton.className = 'clip-view-info-button clickable'
+    infoButton.title = 'Clip info'
+    infoButton.setAttribute('aria-label', `View info for ${this.clipView.clip.name}`)
+    infoButton.appendChild(createSvgIcon('three-dots'))
+    infoButton.addEventListener('mousedown', (event) => event.stopPropagation())
+    infoButton.addEventListener('click', (event) => {
+      event.stopPropagation()
+      ;(window as any).clipManagerController?.openClipInfo?.(this.clipView.clip)
+    })
+    this.headerInfoElement.appendChild(infoButton)
+    this.headerInfoElement.y.baseVal.value = 0
+    this.headerInfoElement.height.baseVal.value = Waveform.HEADER_HEIGHT
 
     this.waveform.aboveClipViewGroupElement.appendChild(this.leftHandle)
     this.leftHandle.setAttribute('y1', '0')
@@ -301,7 +321,7 @@ export class ClipViewController extends TrackListItemController {
       this.trackListController.pointerStateManager,
       new ContextMenuItem('Split', (_, sample) => this.splitThisClipView(sample)),
       new ContextMenuItem('Clip info...', () => {
-        console.error(clipViewIndex)
+        ;(window as any).clipManagerController?.openClipInfo?.(this.clipView.clip)
       }),
       new ContextMenuItem('______', () => {}, false),
       new ContextMenuItem('Delete', () => {
@@ -379,7 +399,6 @@ export class ClipViewController extends TrackListItemController {
     this.headerElement.x.baseVal.value = xStart
     this.leftHandle.x1.baseVal.value = xStart - startCrossFadeLength
     this.leftHandle.x2.baseVal.value = xStart - startCrossFadeLength
-    this.headerTitleElement.x.baseVal.value = xStart
 
     const xEnd = Math.min(this.getXValueForSample(this.clipView.getEndPosition() - this.endCrossFadeDuration), 10000)
     const endCrossFadeLength = this.endCrossFadeDuration / this.samplesPerUnit
@@ -388,7 +407,14 @@ export class ClipViewController extends TrackListItemController {
 
     this.rectElement.width.baseVal.value = Math.ceil(xEnd - xStart)
     this.headerElement.width.baseVal.value = Math.ceil(xEnd - xStart)
-    this.headerTitleElement.width.baseVal.value = Math.ceil(xEnd - xStart)
+    this.layoutHeader(xStart, Math.max(0, Math.ceil(xEnd - xStart)))
+  }
+
+  private layoutHeader(x: number, width: number) {
+    this.headerTitleElement.x.baseVal.value = x
+    this.headerTitleElement.width.baseVal.value = Math.max(0, width - Waveform.HEADER_HEIGHT)
+    this.headerInfoElement.x.baseVal.value = x + this.headerTitleElement.clientWidth
+    this.headerInfoElement.width.baseVal.value = Math.min(Waveform.HEADER_HEIGHT, width)
   }
 
   async draw(startSample: number, endSample: number) {
@@ -493,6 +519,7 @@ export class ClipViewController extends TrackListItemController {
     this.waveform.clipViewGroupElement.appendChild(this.rectElement)
     this.waveform.clipViewGroupElement.appendChild(this.headerElement)
     this.waveform.clipViewGroupElement.appendChild(this.headerTitleElement)
+    this.waveform.clipViewGroupElement.appendChild(this.headerInfoElement)
     this.waveform.clipViewGroupElement.appendChild(this.svgPathElement)
     this.waveform.clipViewGroupElement.appendChild(this.startCrossFadePathElement)
     this.waveform.clipViewGroupElement.appendChild(this.endCrossFadePathElement)
@@ -502,6 +529,7 @@ export class ClipViewController extends TrackListItemController {
     this.rectElement.setAttribute('transform', '')
     this.headerElement.setAttribute('transform', '')
     this.headerTitleElement.setAttribute('transform', '')
+    this.headerInfoElement.setAttribute('transform', '')
     this.svgPathElement.setAttribute('transform', '')
     this.startCrossFadePathElement.setAttribute('transform', '')
     this.endCrossFadePathElement.setAttribute('transform', '')
@@ -515,6 +543,7 @@ export class ClipViewController extends TrackListItemController {
     this.rectElement.remove()
     this.headerElement.remove()
     this.headerTitleElement.remove()
+    this.headerInfoElement.remove()
     this.svgPathElement.remove()
     this.startCrossFadePathElement.remove()
     this.endCrossFadePathElement.remove()
@@ -540,6 +569,7 @@ export class ClipViewController extends TrackListItemController {
     this.rectElement.setAttribute('transform', `translate(${shift}, 0)`)
     this.headerElement.setAttribute('transform', `translate(${shift}, 0)`)
     this.headerTitleElement.setAttribute('transform', `translate(${shift}, 0)`)
+    this.headerInfoElement.setAttribute('transform', `translate(${shift}, 0)`)
     this.leftHandle.setAttribute('transform', `translate(${shift}, 0)`)
     this.rightHandle.setAttribute('transform', `translate(${shift}, 0)`)
     this.svgPathElement.setAttribute('transform', `translate(${this.pathElementTranslation + shift}, 0)`)
@@ -558,11 +588,10 @@ export class ClipViewController extends TrackListItemController {
         this.fullClipGrayFilter.width.baseVal.value = maxLeftShift + shift
         this.headerElement.x.baseVal.value = this.resizeInfo.oldStartX + shift
         this.headerElement.width.baseVal.value = this.resizeInfo.oldWidth - shift
-        this.headerTitleElement.width.baseVal.value = this.resizeInfo.oldWidth - shift
         this.rectElement.x.baseVal.value = this.resizeInfo.oldStartX + shift
         this.rectElement.width.baseVal.value = this.resizeInfo.oldWidth - shift
 
-        this.headerTitleElement.x.baseVal.value = this.resizeInfo.oldStartX + shift
+        this.layoutHeader(this.resizeInfo.oldStartX + shift, this.resizeInfo.oldWidth - shift)
         break
       case 'right':
         const maxRightShift =
@@ -574,8 +603,8 @@ export class ClipViewController extends TrackListItemController {
         this.fullClipGrayFilter.width.baseVal.value = maxRightShift - shift
         this.fullClipGrayFilter.x.baseVal.value = this.resizeInfo.oldStartX + this.resizeInfo.oldWidth + shift
         this.headerElement.width.baseVal.value = this.resizeInfo.oldWidth + shift
-        this.headerTitleElement.width.baseVal.value = this.resizeInfo.oldWidth + shift
         this.rectElement.width.baseVal.value = this.resizeInfo.oldWidth + shift
+        this.layoutHeader(this.resizeInfo.oldStartX, this.resizeInfo.oldWidth + shift)
         break
     }
   }
