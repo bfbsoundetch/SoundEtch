@@ -9,17 +9,20 @@ export class Clip extends DatabasePersisted {
   readonly transcription = new Array<TranscribedRange>()
   importedMetadata: Record<string, unknown> | null = null
   readonly tags: Record<string, string>
+  readonly sourceFilename: string | null
 
   constructor(
     readonly name: string,
     private readonly channelCount: number,
     length = 0,
     tags: Record<string, string> = {},
+    sourceFilename: string | null = null,
   ) {
     super(['summary'])
     this.summary = new Summary(this.channelCount)
     this.length = length
     this.tags = { ...tags }
+    this.sourceFilename = sourceFilename
   }
 
   get length(): number {

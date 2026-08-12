@@ -1809,6 +1809,63 @@ video {
   font-size: 2rem;
 }
 
+#clip-metadata-modal-content {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 1rem;
+  padding: 3.5rem 1rem 1rem;
+  box-sizing: border-box;
+  width: min(90vw, 38rem);
+  height: auto;
+  max-height: 85vh;
+}
+
+#clip-metadata-title {
+  margin: 0;
+  font-size: 1.75rem;
+  overflow-wrap: anywhere;
+}
+
+#clip-metadata-header {
+  display: flex;
+  align-items: center;
+  gap: 0.75rem;
+}
+
+#clip-metadata-back-button {
+  display: grid;
+  flex: none;
+  place-items: center;
+  width: 2.75rem;
+  height: 2.75rem;
+}
+
+.clip-metadata-back-icon {
+  width: 1.5rem;
+  height: 1.5rem;
+  transform: rotate(180deg);
+}
+
+#clip-metadata-list {
+  display: grid;
+  grid-template-columns: minmax(7rem, auto) minmax(0, 1fr);
+  gap: 0.65rem 1rem;
+  margin: 0;
+  overflow: auto;
+}
+
+#clip-metadata-list dt {
+  font-weight: bold;
+  overflow-wrap: anywhere;
+}
+
+#clip-metadata-list dd {
+  margin: 0;
+  overflow-wrap: anywhere;
+  white-space: pre-wrap;
+}
+
 #project-manager-modal-content {
   display: flex;
   flex-direction: column;
@@ -1932,9 +1989,9 @@ video {
   display: grid;
   grid-template-columns: minmax(0, 1fr) auto;
   grid-template-areas:
-    'name button'
-    'size button'
-    'usage button';
+    'name actions'
+    'size actions'
+    'usage actions';
   gap: 0.35rem 0.75rem;
   padding: 0.75rem;
   background-color: var(--alt-background);
@@ -1954,12 +2011,43 @@ video {
   opacity: 0.9;
 }
 
-.clip-manager-delete-button {
-  grid-area: button;
+.clip-manager-actions {
+  grid-area: actions;
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
   align-self: center;
+}
+
+.clip-manager-action-button {
   width: auto;
   font-size: 1rem;
   padding: 0.5rem 0.75rem;
+}
+
+@media (max-width: 34rem) {
+  .clip-manager-row {
+    grid-template-columns: minmax(0, 1fr);
+    grid-template-areas:
+      'name'
+      'size'
+      'usage'
+      'actions';
+  }
+
+  .clip-manager-actions {
+    flex-direction: row;
+    flex-wrap: wrap;
+  }
+
+  #clip-metadata-list {
+    grid-template-columns: minmax(0, 1fr);
+    gap: 0.2rem;
+  }
+
+  #clip-metadata-list dd:not(:last-child) {
+    margin-bottom: 0.65rem;
+  }
 }
 
 #logs-modal-toolbar {

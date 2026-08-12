@@ -13,6 +13,6 @@ describe('importedClipName', () => {
   })
 
   test('uses the filename when the title is blank or unavailable', () => {
-    expect(importedClipName('recording.flac', { artist: 'Artist', title: '  ' })).toBe('recording.flac')
+    expect(importedClipName('recording.flac', { artist: 'Artist', title: '  ' })).toBe('File: recording.flac')
   })
 })

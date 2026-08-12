@@ -8,9 +8,14 @@ export class ClipManagerController {
   private readonly dialog = document.getElementById('clip-manager-modal') as HTMLDialogElement
   private readonly openButton = document.getElementById('open-clip-manager-modal-button') as HTMLButtonElement
   private readonly listContainer = document.getElementById('clip-manager-list') as HTMLDivElement
+  private readonly metadataDialog = document.getElementById('clip-metadata-modal') as HTMLDialogElement
+  private readonly metadataTitle = document.getElementById('clip-metadata-title') as HTMLHeadingElement
+  private readonly metadataList = document.getElementById('clip-metadata-list') as HTMLDListElement
+  private readonly metadataBackButton = document.getElementById('clip-metadata-back-button') as HTMLButtonElement
 
   constructor() {
     this.openButton.onclick = () => this.open()
+    this.metadataBackButton.onclick = () => this.hideMetadata()
   }
 
   async open() {
@@ -52,8 +57,18 @@ export class ClipManagerController {
     usageElement.className = 'clip-manager-meta'
     usageElement.innerText = `used in ${usedTrackCount} track${usedTrackCount == 1 ? '' : 's'}`
 
+    const actionsElement = document.createElement('div')
+    actionsElement.className = 'clip-manager-actions'
+
+    const metadataButton = document.createElement('button')
+    metadataButton.className = 'menu-item clickable clip-manager-action-button'
+    metadataButton.type = 'button'
+    metadataButton.innerText = 'View details'
+    metadataButton.addEventListener('click', () => this.showMetadata(clip))
+
     const deleteButton = document.createElement('button')
-    deleteButton.className = 'menu-item clickable clip-manager-delete-button'
+    deleteButton.className = 'menu-item clickable clip-manager-action-button clip-manager-delete-button'
+    deleteButton.type = 'button'
     deleteButton.innerText = 'Delete clip'
     deleteButton.addEventListener('click', async () => {
       if (!globalThis.confirm(`Delete \"${clip.name}\"? This removes all uses from every track.`)) {
@@ -65,8 +80,47 @@ export class ClipManagerController {
       await this.refresh()
     })
 
-    row.append(nameElement, sizeElement, usageElement, deleteButton)
+    actionsElement.append(metadataButton, deleteButton)
+    row.append(nameElement, sizeElement, usageElement, actionsElement)
     return row
+  }
+
+  private showMetadata(clip: Clip) {
+    this.metadataTitle.innerText = clip.name
+    this.metadataList.replaceChildren()
+    this.appendMetadata('Created', this.formatDate(clip.dateCreated))
+
+    if (clip.sourceFilename) {
+      this.appendMetadata('Filename', clip.sourceFilename)
+    }
+    for (const [name, value] of Object.entries(clip.tags ?? {}).sort(([a], [b]) => a.localeCompare(b))) {
+      this.appendMetadata(name, value)
+    }
+    this.dialog.close()
+    this.metadataDialog.showModal()
+  }
+
+  private hideMetadata() {
+    this.metadataDialog.close()
+    this.dialog.showModal()
+  }
+
+  private appendMetadata(name: string, value: string) {
+    const label = document.createElement('dt')
+    label.innerText = name
+    const content = document.createElement('dd')
+    content.innerText = value
+    this.metadataList.append(label, content)
+  }
+
+  private formatDate(timestamp: number | undefined): string {
+    if (!timestamp) {
+      return '-'
+    }
+    return new Intl.DateTimeFormat(undefined, {
+      dateStyle: 'medium',
+      timeStyle: 'short',
+    }).format(new Date(timestamp))
   }
 
   private countTracksUsingClip(project: Project, clip: Clip): number {

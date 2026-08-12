@@ -557,6 +557,26 @@
         <div id="clip-manager-list"></div>
       </div>
     </dialog>
+    <dialog id="clip-metadata-modal" class="overlay">
+      <div id="clip-metadata-modal-content" class="overlay-content" onclick="event.stopPropagation()">
+        <div id="clip-metadata-header">
+          <button id="clip-metadata-back-button" class="clickable" type="button" aria-label="Back" title="Back">
+            <svg class="clip-metadata-back-icon" viewBox="0 0 500 500" aria-hidden="true">
+              <use xlink:href="#arrow-right" />
+            </svg>
+          </button>
+          <h1 id="clip-metadata-title"></h1>
+        </div>
+        <dl id="clip-metadata-list"></dl>
+      </div>
+      <form method="dialog">
+        <button class="overlay-close-button clickable" aria-label="Close" title="Close">
+          <svg class="meeting-icon" viewBox="0 0 500 500" aria-hidden="true">
+            <use xlink:href="#menu-close" />
+          </svg>
+        </button>
+      </form>
+    </dialog>
     <dialog id="export-project-modal" class="overlay">
       <div class="overlay-close-button clickable" onclick="closeOverlay()">
         <svg class="meeting-icon" viewBox="0 0 500 500">

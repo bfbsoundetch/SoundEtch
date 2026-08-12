@@ -36,6 +36,7 @@ export class AudioImporter {
         AudioControl.startPosition,
         null,
         mediaInfo.tags,
+        file.name,
       )
       ;(window as any).trackListController.draw()
       const clipView = track.clipViews[0]!
