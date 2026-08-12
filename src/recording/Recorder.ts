@@ -30,11 +30,10 @@ export class Recorder {
     const audioWorkletNodes = []
     for (const audioInput of audioInputs) {
       const track = await ProjectManager.addClipWithTrack(
-        audioInput.name,
+        'Recording: ' + audioInput.name,
         audioInput.channelCount,
         0,
         AudioControl.startPosition,
-        'Recording',
         inputs.length,
       )
       const clipView = track.clipViews[0]!

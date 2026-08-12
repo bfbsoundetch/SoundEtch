@@ -211,12 +211,12 @@ export class ProjectManager {
     channelCount: number,
     length: number,
     startPosition: number,
-    source: 'Recording' | 'File',
     index: number | null = null,
+    tags: Record<string, string> = {},
   ): Promise<Track> {
     const activeProject = await this.getActiveProject()
-    const clipName = `${source}: ${name} ${activeProject.getClips().length}`
-    const clip = new Clip(clipName, channelCount, length)
+    const clipName = `${name}`
+    const clip = new Clip(clipName, channelCount, length, tags)
     await ProjectManager.addNewClip(clip)
 
     const clipView = new ClipView(clip, 0, startPosition, 2 ** 31)

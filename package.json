@@ -1,5 +1,6 @@
 {
   "dependencies": {
+    "@bfbsoundetch/web-demuxer": "^4.0.1",
     "@descript/web-audio-js": "^0.15.3-patched.6",
     "@huggingface/transformers": "^3.8.0",
     "@mediabunny/aac-encoder": "^1.45.4",
@@ -8,7 +9,6 @@
     "peerjs": "^1.5.5",
     "ringbuf.js": "^0.4.0",
     "wasm-audio-resampler": "^2.0.0",
-    "web-demuxer": "^4.0.0",
     "websocket": "^1.0.35",
     "weq8": "^0.2.2",
     "ws": "^8.18.0",

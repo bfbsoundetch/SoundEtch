@@ -1,8 +1,9 @@
-import { WebDemuxer } from 'web-demuxer'
+import { WebDemuxer } from '@bfbsoundetch/web-demuxer'
 import { ProjectManager } from '../project/ProjectManager'
 import { AudioControl } from '../audiocontext/AudioControl'
 import { Track } from '../project/Track'
 import { cloneWithGetters } from '../global/ObjectUtils'
+import { importedClipName } from './ImportMetadata'
 
 const DEMUXER_WASM_PATH = new URL('web-demuxer.wasm', document.baseURI).href
 const INTERLEAVE_RESAMPLE_BATCH_SIZE_SAMPLES = 1024 * 1024
@@ -28,13 +29,13 @@ export class AudioImporter {
       throwIfAborted(signal)
       const [decoderConfig, mediaInfo] = await Promise.all([demuxer.getDecoderConfig('audio'), demuxer.getMediaInfo()])
 
-      console.error(JSON.stringify(mediaInfo.streams[0]))
       track = await ProjectManager.addClipWithTrack(
-        file.name,
+        importedClipName(file.name, mediaInfo.tags),
         decoderConfig.numberOfChannels,
         0, // to be overwritten
         AudioControl.startPosition,
-        'File',
+        null,
+        mediaInfo.tags,
       )
       ;(window as any).trackListController.draw()
       const clipView = track.clipViews[0]!
