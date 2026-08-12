@@ -43,11 +43,6 @@ button:focus {
   }
 }
 
-.overlay-content::backdrop {
-  backdrop-filter: blur(12px);
-  pointer-events: all;
-}
-
 .slider-value {
   position: absolute;
   top: -1.5rem;
@@ -440,18 +435,11 @@ dialog.overlay[open] {
   position: absolute;
 }
 
-.overlay-box {
-  letter-spacing: 0.1rem;
-  font-size: xx-large;
-  border: 2px solid rgba(255, 255, 255, 0.5);
-  padding: 1em;
-  min-width: 75%;
-  min-height: 30%;
-  display: grid;
-  place-items: center;
-}
-
-#add-clip-modal-content {
+#add-clip-modal-content,
+#clip-manager-modal-content,
+#clip-metadata-modal-content,
+#project-manager-modal-content,
+#export-project-modal .overlay-content {
   display: flex;
   flex-direction: column;
   align-items: stretch;
@@ -461,6 +449,21 @@ dialog.overlay[open] {
   width: min(90vw, 42rem);
   height: auto;
   max-height: 85vh;
+}
+
+#clip-metadata-modal-content {
+  gap: 1rem;
+  width: min(90vw, 38rem);
+}
+
+#project-manager-modal-content {
+  width: min(94vw, 58rem);
+}
+
+#export-project-modal .overlay-content {
+  gap: 1rem;
+  padding: 3.5rem 1.5rem 1.5rem;
+  overflow: auto;
 }
 
 #add-clip-modal-content h1 {
@@ -506,11 +509,23 @@ dialog.overlay[open] {
   max-height: min(50vh, 24rem);
 }
 
-#add-clip-existing-list {
+#add-clip-existing-list,
+#project-manager-list,
+#clip-manager-list {
   display: flex;
   flex-direction: column;
-  gap: 0.5rem;
+  gap: 0.75rem;
   overflow: auto;
+}
+
+.add-clip-existing-row,
+.project-manager-row,
+.clip-manager-row,
+.export-option-row {
+  box-sizing: border-box;
+  padding: 0.75rem;
+  background-color: var(--alt-background);
+  border: 1px solid var(--color);
 }
 
 .add-clip-existing-row {
@@ -518,8 +533,6 @@ dialog.overlay[open] {
   flex-direction: column;
   align-items: stretch;
   gap: 0.25rem;
-  padding: 0.75rem;
-  background-color: var(--alt-background);
   font-size: 1rem;
 }
 
@@ -539,9 +552,21 @@ dialog.overlay[open] {
   margin: 0;
 }
 
-.add-clip-manager-button {
+.add-clip-manager-button,
+.export-project-button,
+#clip-manager-delete-unused-button,
+#project-manager-new-button,
+.project-manager-action-button,
+.clip-manager-action-button,
+.logs-modal-button {
+  width: auto;
   font-size: 1rem;
   padding: 0.5rem 0.75rem;
+}
+
+.add-clip-manager-button,
+#clip-manager-delete-unused-button,
+.project-manager-action-button {
   text-align: center;
 }
 
@@ -565,17 +590,6 @@ dialog.overlay[open] {
 #about-modal-content h1 {
   margin: 0 0 0.25rem;
   text-align: center;
-}
-
-#about-modal-content p {
-  margin: 0;
-  line-height: 1.45;
-}
-
-.about-modal-actions {
-  display: flex;
-  justify-content: end;
-  margin-top: 0.5rem;
 }
 
 svg {
@@ -1661,18 +1675,7 @@ video {
     grid-column: 1 / -1;
     grid-row: 2;
   }
-}
 
-.effect-panel-message {
-  display: grid;
-  place-items: center;
-  height: 100%;
-  padding: 2rem;
-  box-sizing: border-box;
-  text-align: center;
-}
-
-@media (max-width: 600px) {
   .bottom-panel {
     height: 60vh;
   }
@@ -1686,21 +1689,18 @@ video {
   }
 }
 
-#export-project-modal .overlay-content {
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: 1rem;
-  padding: 3.5rem 1.5rem 1.5rem;
+.effect-panel-message {
+  display: grid;
+  place-items: center;
+  height: 100%;
+  padding: 2rem;
   box-sizing: border-box;
-  max-width: 42rem;
-  width: min(90vw, 42rem);
-  height: auto;
-  max-height: 85vh;
-  overflow: auto;
+  text-align: center;
 }
 
-#export-project-modal h1 {
+#export-project-modal h1,
+#clip-manager-modal-content h1,
+#project-manager-header h1 {
   margin: 0;
   font-size: 2rem;
 }
@@ -1747,21 +1747,11 @@ video {
   margin-bottom: 0.75rem;
 }
 
-.export-project-button {
-  width: auto;
-  font-size: 1rem;
-  padding: 0.5rem 0.75rem;
-}
-
 .export-option-row {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
-  padding: 0.75rem;
   width: 100%;
-  box-sizing: border-box;
-  background-color: var(--alt-background);
-  border: 1px solid var(--color);
   position: relative;
 }
 
@@ -1807,51 +1797,21 @@ video {
   box-sizing: border-box;
 }
 
-#clip-manager-modal-content {
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: 0.75rem;
-  padding: 3.5rem 1rem 1rem;
-  box-sizing: border-box;
-  width: min(90vw, 42rem);
-  height: auto;
-  max-height: 85vh;
-}
-
-#clip-manager-modal-content h1 {
-  margin: 0;
-  font-size: 2rem;
-}
-
-#clip-manager-header {
+#clip-manager-header,
+#project-manager-header {
   display: flex;
   align-items: center;
   gap: 1rem;
 }
 
 #clip-manager-delete-unused-button {
-  width: auto;
   margin-left: auto;
-  padding: 0.5rem 0.75rem;
-  font-size: 1rem;
-  text-align: center;
 }
 
-#clip-manager-delete-unused-button:disabled {
+#clip-manager-delete-unused-button:disabled,
+.project-manager-action-button:disabled,
+.clip-manager-action-button:disabled {
   opacity: 0.55;
-}
-
-#clip-metadata-modal-content {
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: 1rem;
-  padding: 3.5rem 1rem 1rem;
-  box-sizing: border-box;
-  width: min(90vw, 38rem);
-  height: auto;
-  max-height: 85vh;
 }
 
 #clip-metadata-title {
@@ -1905,57 +1865,32 @@ video {
   white-space: pre-wrap;
 }
 
-#project-manager-modal-content {
-  display: flex;
-  flex-direction: column;
-  align-items: stretch;
-  gap: 0.75rem;
-  padding: 3.5rem 1rem 1rem;
-  box-sizing: border-box;
-  width: min(94vw, 58rem);
-  height: auto;
-  max-height: 85vh;
-}
-
-#project-manager-header {
-  display: flex;
-  align-items: center;
-  gap: 1rem;
-}
-
-#project-manager-header h1 {
-  margin: 0;
-  font-size: 2rem;
-}
-
 #project-manager-new-button {
-  width: auto;
   margin-left: auto;
-  font-size: 1rem;
-  padding: 0.5rem 0.75rem;
 }
 
-#project-manager-list {
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-  overflow: auto;
+.project-manager-row,
+.clip-manager-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
 }
 
 .project-manager-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
   grid-template-areas:
     'name actions'
     'meta actions';
   gap: 0.6rem 1rem;
-  padding: 0.75rem;
-  background-color: var(--alt-background);
-  border: 1px solid var(--color);
 }
 
 .project-manager-row-active {
   box-shadow: inset 0 0 0 2px var(--color);
+}
+
+.project-manager-name,
+.clip-manager-name {
+  text-overflow: ellipsis;
+  overflow: hidden;
+  white-space: nowrap;
 }
 
 .project-manager-name {
@@ -1965,9 +1900,6 @@ video {
   gap: 0.5rem;
   min-width: 0;
   font-size: 1.15rem;
-  text-overflow: ellipsis;
-  overflow: hidden;
-  white-space: nowrap;
 }
 
 .project-manager-active-label {
@@ -1997,59 +1929,7 @@ video {
   opacity: 0.75;
 }
 
-.project-manager-actions {
-  grid-area: actions;
-  display: flex;
-  flex-direction: column;
-  gap: 0.5rem;
-  align-self: center;
-  min-width: 8rem;
-}
-
-.project-manager-action-button {
-  width: auto;
-  font-size: 1rem;
-  padding: 0.5rem 0.75rem;
-  text-align: center;
-}
-
-.project-manager-action-button:disabled {
-  opacity: 0.55;
-}
-
-#clip-manager-list {
-  display: flex;
-  flex-direction: column;
-  gap: 0.75rem;
-  overflow: auto;
-}
-
-.clip-manager-row {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr) auto;
-  grid-template-areas:
-    'name actions'
-    'size actions'
-    'usage actions';
-  gap: 0.35rem 0.75rem;
-  padding: 0.75rem;
-  background-color: var(--alt-background);
-  border: 1px solid var(--color);
-}
-
-.clip-manager-name {
-  grid-area: name;
-  font-size: 1.1rem;
-  text-overflow: ellipsis;
-  overflow: hidden;
-  white-space: nowrap;
-}
-
-.clip-manager-meta {
-  font-size: 0.95rem;
-  opacity: 0.9;
-}
-
+.project-manager-actions,
 .clip-manager-actions {
   grid-area: actions;
   display: flex;
@@ -2058,19 +1938,37 @@ video {
   align-self: center;
 }
 
-.clip-manager-action-button {
-  width: auto;
-  font-size: 1rem;
-  padding: 0.5rem 0.75rem;
+.project-manager-actions {
+  min-width: 8rem;
 }
 
-@media (max-width: 34rem) {
-  #clip-manager-header {
+.clip-manager-row {
+  grid-template-areas:
+    'name actions'
+    'size actions'
+    'usage actions';
+  gap: 0.35rem 0.75rem;
+}
+
+.clip-manager-name {
+  grid-area: name;
+  font-size: 1.1rem;
+}
+
+.clip-manager-meta {
+  font-size: 0.95rem;
+  opacity: 0.9;
+}
+
+@media (max-width: 40rem) {
+  #clip-manager-header,
+  #project-manager-header {
     align-items: stretch;
     flex-direction: column;
   }
 
-  #clip-manager-delete-unused-button {
+  #clip-manager-delete-unused-button,
+  #project-manager-new-button {
     margin-left: 0;
   }
 
@@ -2083,7 +1981,8 @@ video {
       'actions';
   }
 
-  .clip-manager-actions {
+  .clip-manager-actions,
+  .project-manager-actions {
     flex-direction: row;
     flex-wrap: wrap;
   }
@@ -2095,29 +1994,6 @@ video {
 
   #clip-metadata-list dd:not(:last-child) {
     margin-bottom: 0.65rem;
-  }
-}
-
-#logs-modal-toolbar {
-  display: flex;
-  gap: 0.5rem;
-  width: 100%;
-}
-
-.logs-modal-button {
-  width: auto;
-  font-size: 1rem;
-  padding: 0.5rem 0.75rem;
-}
-
-@media (max-width: 650px) {
-  #project-manager-header {
-    align-items: stretch;
-    flex-direction: column;
-  }
-
-  #project-manager-new-button {
-    margin-left: 0;
   }
 
   .project-manager-row {
@@ -2133,10 +2009,14 @@ video {
   }
 
   .project-manager-actions {
-    flex-direction: row;
-    flex-wrap: wrap;
     min-width: 0;
   }
+}
+
+#logs-modal-toolbar {
+  display: flex;
+  gap: 0.5rem;
+  width: 100%;
 }
 
 #logs-modal-download-button {

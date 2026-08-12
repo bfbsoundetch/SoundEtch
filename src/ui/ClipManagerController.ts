@@ -140,8 +140,8 @@ export class ClipManagerController {
   }
 
   private async hideMetadata() {
-    this.metadataDialog.close()
     await this.open()
+    this.metadataDialog.close()
   }
 
   private makeTitleEditable() {
