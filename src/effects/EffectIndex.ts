@@ -1,9 +1,9 @@
-import { GainEffectMetadata } from './BuiltinEffectMetadata'
+import { FadeEffectMetadata, BoostEffectMetadata } from './BuiltinEffectMetadata'
 import { EffectMetadata, EffectModule } from './Effect'
 
 export class EffectIndex {
   private static instance: EffectIndex | null = null
-  private readonly availableEffects: readonly EffectMetadata[] = [GainEffectMetadata]
+  private readonly availableEffects: readonly EffectMetadata[] = [FadeEffectMetadata, BoostEffectMetadata]
 
   static getInstance() {
     return this.instance ?? (this.instance = new EffectIndex())
@@ -21,8 +21,10 @@ export class EffectIndex {
 
   async getEffectById(id: string): Promise<EffectModule | null> {
     switch (id) {
-      case GainEffectMetadata.id:
-        return new (await import('./gain/GainEffect')).GainEffect()
+      case FadeEffectMetadata.id:
+        return new (await import('./gain/GainEffects')).FadeEffect()
+      case BoostEffectMetadata.id:
+        return new (await import('./gain/GainEffects')).BoostEffect()
       default:
         return null
     }

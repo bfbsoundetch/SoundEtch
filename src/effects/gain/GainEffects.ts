@@ -1,9 +1,8 @@
-import { GainEffectMetadata } from '../BuiltinEffectMetadata'
+import { BoostEffectMetadata } from '../BuiltinEffectMetadata'
 import { EffectModule } from '../Effect'
 
-export class GainEffect implements EffectModule {
+abstract class GainEffect {
   private gainNode: GainNode | null = null
-  readonly metadata = GainEffectMetadata
 
   async getNode(audioContext: BaseAudioContext): Promise<AudioNode> {
     if (audioContext != this.gainNode?.context) {
@@ -16,4 +15,12 @@ export class GainEffect implements EffectModule {
     await this.getNode(audioContext)
     return { gain: this.gainNode!.gain }
   }
+}
+
+export class FadeEffect extends GainEffect implements EffectModule {
+  readonly metadata = BoostEffectMetadata
+}
+
+export class BoostEffect extends GainEffect implements EffectModule {
+  readonly metadata = BoostEffectMetadata
 }

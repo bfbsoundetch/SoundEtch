@@ -3,7 +3,7 @@ import { ProjectManager } from '../project/ProjectManager'
 import { AudioControl } from '../audiocontext/AudioControl'
 import { Track } from '../project/Track'
 import { cloneWithGetters } from '../global/ObjectUtils'
-import { importedClipName } from './ImportMetadata'
+import { importedClipName, importedTags } from './ImportMetadata'
 
 const DEMUXER_WASM_PATH = new URL('web-demuxer.wasm', document.baseURI).href
 const INTERLEAVE_RESAMPLE_BATCH_SIZE_SAMPLES = 1024 * 1024
@@ -28,14 +28,15 @@ export class AudioImporter {
       await demuxer.load(file)
       throwIfAborted(signal)
       const [decoderConfig, mediaInfo] = await Promise.all([demuxer.getDecoderConfig('audio'), demuxer.getMediaInfo()])
+      const tags = importedTags(mediaInfo.tags, mediaInfo.streams)
 
       track = await ProjectManager.addClipWithTrack(
-        importedClipName(file.name, mediaInfo.tags),
+        importedClipName(file.name, tags),
         decoderConfig.numberOfChannels,
         0, // to be overwritten
         AudioControl.startPosition,
         null,
-        mediaInfo.tags,
+        tags,
         file.name,
       )
       ;(window as any).trackListController.draw()

@@ -246,6 +246,7 @@ export class ClipViewController extends TrackListItemController {
     this.headerTitleDivElement.style.overflow = 'hidden'
     this.headerTitleDivElement.style.textOverflow = 'clip'
     this.headerTitleDivElement.style.whiteSpace = 'nowrap'
+    this.headerTitleDivElement.style.marginLeft = '.1rem'
     this.headerTitleDivElement.style.color = 'var(--waveform-header-text)'
 
     this.waveform.clipViewGroupElement.appendChild(this.rectElement)
@@ -332,6 +333,9 @@ export class ClipViewController extends TrackListItemController {
       if (event.button == 0 && event.buttons == 1) {
         this.startClipViewMove(this, event)
       }
+    })
+    this.headerElement.addEventListener('contextmenu', (event) => {
+      event.stopPropagation()
     })
     this.headerElement.style.cursor = 'grab'
     this.headerTitleElement.style.pointerEvents = 'none'
