@@ -56,15 +56,14 @@ export class PositionMarkerController extends TrackListItemController {
     }
 
     const realPosition = positionOverride ?? position
-    this.x = this.getXValueForSample(realPosition)
+    this.x = this.getXValueForSample(realPosition) + 14 * this.trackListController.rootFontSize
 
     this.positionLineSvg.x1.baseVal.value = this.x
     this.positionLineSvg.x2.baseVal.value = this.x
 
     this.positionLineSvg.style.visibility = 'visible'
     this.positionTimeText.style.visibility = 'visible'
-    this.positionTimeText.style.fontWeight = 'bold'
-    this.positionTimeText.style.fontSize = '18px'
+
     const time = TimeUtils.positionToString(realPosition, this.trackListController.sampleRate, true)
     this.positionTimeText.innerHTML = time
     this.positionTimeText.setAttribute('x', `${this.x}`)

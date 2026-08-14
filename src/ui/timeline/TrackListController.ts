@@ -66,6 +66,7 @@ export class TrackListController {
     return this.selectionController.selectedRegion
   }
 
+  rootFontSize = parseFloat(getComputedStyle(document.documentElement).fontSize)
   readonly waveforms = new Array<Waveform>()
   readonly timelineController = new TimelineController(this)
   readonly inputListController = new InputListController()
@@ -114,10 +115,9 @@ export class TrackListController {
   mouseXToSvgCoord(x: number): number {
     this.cursorPoint.x = x
     this.cursorPoint.y = 1
-    const result = this.cursorPoint.matrixTransform(
+    return this.cursorPoint.matrixTransform(
       this.positionMarkerController.positionMarkerSvg.getScreenCTM()!.inverse(),
-    ).x
-    return result
+    ).x 
   }
 
   private zoom(wheelEvent: WheelEvent) {
@@ -172,6 +172,7 @@ export class TrackListController {
         this.msPerUnit = (length * 1.1 * 1000) / this.sampleRate / this.width
       }
       this.selectionController.resize()
+      this.rootFontSize = parseFloat(getComputedStyle(document.documentElement).fontSize)
       this.draw()
     }).observe(this.tracklistElement)
 
@@ -378,7 +379,7 @@ export class TrackListController {
     const exitButton = document.createElement('button')
     exitButton.type = 'button'
     exitButton.className = 'clickable automation-exit-button'
-    exitButton.textContent = 'Back to track'
+    exitButton.textContent = 'Back'
     exitButton.addEventListener('click', () => this.exitAutomationMode())
     panel.append(heading, scale, exitButton)
     return panel

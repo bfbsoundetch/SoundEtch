@@ -4,6 +4,7 @@ import { TrackListController } from './TrackListController'
 import { TrackListItemController } from './TrackListItemController'
 
 export class TimelineController extends TrackListItemController {
+  private readonly LABEL_FONT_SIZE = 17
   private readonly TICK_MARKS = [
     new TickMarkBucket(1, 1),
     new TickMarkBucket(10, 10),
@@ -17,9 +18,9 @@ export class TimelineController extends TrackListItemController {
     new TickMarkBucket(10 * 60_000, 10),
     new TickMarkBucket(30 * 60_000, 3),
     new TickMarkBucket(60 * 60_000, 4),
+    new TickMarkBucket(120 * 60_000, 4),
   ]
 
-  private rootFontSize = parseFloat(getComputedStyle(document.documentElement).fontSize)
   readonly svg = document.getElementById('timeline-svg') as unknown as SVGSVGElement
   private readonly majorTicks = document.getElementById('timeline-major-ticks') as unknown as SVGPathElement
   private readonly minorTicks = document.getElementById('timeline-minor-ticks') as unknown as SVGPathElement
@@ -56,7 +57,6 @@ export class TimelineController extends TrackListItemController {
     this.height = this.svg.parentElement!.clientHeight
     this.mainLine.setAttribute('x2', `${this.width}`)
     this.svg.parentElement!.setAttribute('viewBox', `0 0 ${this.width} ${this.height}`)
-    this.rootFontSize = parseFloat(getComputedStyle(document.documentElement).fontSize)
   }
 
   getWidth() {
@@ -71,10 +71,10 @@ export class TimelineController extends TrackListItemController {
     if (!this.msPerUnit) {
       return
     }
-    const bucket = this.getTickMarkBucket(this.tickLabels[0]?.getBoundingClientRect()?.width)
+    const bucket = this.getTickMarkBucket(this.LABEL_FONT_SIZE * .6 * 14)
     const increment = bucket.majorIntervalMs / this.msPerUnit
 
-    const timelineOffset = 14 * this.rootFontSize // width of 'info' column
+    const timelineOffset = 14 * this.trackListController.rootFontSize // width of 'info' column
     const offset = timelineOffset - this.translation % increment
     const timelineOffsetTicks = Math.ceil(offset / increment)
     const tickMarkTime = this.getTickMarkForPosition(this.translation * this.msPerUnit, bucket)
@@ -92,7 +92,7 @@ export class TimelineController extends TrackListItemController {
         tickText = document.createElementNS('http://www.w3.org/2000/svg', 'text')
         tickText.setAttribute('y', `${this.height / 2}`)
         tickText.style.fontFamily = "'Courier New', Courier, monospace"
-        tickText.style.fontSize = '17px'
+        tickText.style.fontSize = this.LABEL_FONT_SIZE + 'px'
         tickText.style.dominantBaseline = 'middle'
         tickText.style.textAnchor = 'middle'
         tickText.style.stroke = 'none'
@@ -185,8 +185,8 @@ export class TimelineController extends TrackListItemController {
         this.selectionElements.rightLabel,
       )
     }
-    const startX = this.getXValueForSample(lowSample) + 14 * this.rootFontSize
-    const endX = this.getXValueForSample(highSample) + 14 * this.rootFontSize
+    const startX = this.getXValueForSample(lowSample) + 14 * this.trackListController.rootFontSize
+    const endX = this.getXValueForSample(highSample) + 14 * this.trackListController.rootFontSize
     this.selectionElements.lines.setAttribute(
       'd',
       `M ${startX} 30 L ${startX} ${this.height} M ${endX} 30 L ${endX} ${this.height}`,
@@ -231,12 +231,11 @@ export class TimelineController extends TrackListItemController {
     this.selectionElements = null
   }
 
-  private getTickMarkBucket(labelWidth: number | undefined): TickMarkBucket {
-    labelWidth = labelWidth ?? 100
+  private getTickMarkBucket(labelWidth: number): TickMarkBucket {
     return (
       this.TICK_MARKS.find(
         (bucket) => 
-            labelWidth && bucket.majorIntervalMs / this.msPerUnit / 1.2 > labelWidth
+            labelWidth && bucket.majorIntervalMs / this.msPerUnit > labelWidth
         ) ?? this.TICK_MARKS[this.TICK_MARKS.length - 1]
     )
   }

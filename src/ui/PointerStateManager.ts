@@ -36,7 +36,7 @@ export class PointerStateManager extends TrackListItemController {
     })
 
     const mouseMoveListener = async (mouseEvent: MouseEvent) => {
-      if (Math.abs(mouseEvent.offsetX - this.trackListController.positionMarkerController.x) < 2) {
+      if (Math.abs(mouseEvent.x - this.trackListController.positionMarkerController.x) < 2) {
         this.timelineAreaElement.style.cursor = 'col-resize'
       } else if (this.state !== State.MARKING) {
         this.timelineAreaElement.style.cursor = 'crosshair'
@@ -58,7 +58,7 @@ export class PointerStateManager extends TrackListItemController {
             trackListController.positionMarkerController.hidePositionMarker()
             // TODO: can be undefined
             this.timelineRegionController!.updateSelection(
-              this.getSampleForXValue(this.mouseEventToSvgCoord(mouseEvent).x),
+              this.sampleForMouseEvent(mouseEvent),
               this.activeWaveform,
               true,
             )
@@ -82,7 +82,7 @@ export class PointerStateManager extends TrackListItemController {
       }
     }
     const mouseDownListener = async (mouseEvent: MouseEvent) => {
-      if (Math.abs(mouseEvent.offsetX - this.trackListController.positionMarkerController.x) < 2) {
+      if (Math.abs(mouseEvent.x - this.trackListController.positionMarkerController.x) < 2) {
         this.startMovingMark()
         return
       }
@@ -94,7 +94,7 @@ export class PointerStateManager extends TrackListItemController {
               this.markPointerDown(mouseEvent)
               this.timelineRegionController = this.trackListController.selectionController
               this.timelineRegionController.updateSelection(
-                this.getSampleForXValue(this.mouseEventToSvgCoord(mouseEvent).x),
+                this.sampleForMouseEvent(mouseEvent),
                 this.activeWaveform,
                 false,
               )
@@ -280,7 +280,7 @@ export class PointerStateManager extends TrackListItemController {
   }
 
   private markPointerDown(mouseEvent: MouseEvent) {
-    AudioControl.startPosition = Math.round(this.getSampleForXValue(this.mouseEventToSvgCoord(mouseEvent).x))
+    AudioControl.startPosition = Math.round(this.sampleForMouseEvent(mouseEvent))
     this.trackListController.positionMarkerController.draw()
     this.trackListController.clearSelection()
     this.timelineAreaElement.style.cursor = 'col-resize'
@@ -293,6 +293,10 @@ export class PointerStateManager extends TrackListItemController {
     this.clipViewMoveInfo = null
     this.mouseDownPoint = null
     this.timelineRegionController = null
+  }
+
+  private sampleForMouseEvent(mouseEvent: MouseEvent) {
+    return this.getSampleForXValue(this.mouseEventToSvgCoord(mouseEvent).x - 14 * this.trackListController.rootFontSize)
   }
 
   private changeState(newState: State) {

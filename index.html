@@ -244,32 +244,32 @@
           <div id="track-info-list"></div>
         </div>
         <div id="timeline-area">
-          <svg
-            id="position-marker"
-            style="
-              position: absolute;
-              width: calc(100% - 14rem);
-              right: 0;
-              top: 4rem;
-              pointer-events: none;
-              user-select: none;
-            "
-            xmlns="http://www.w3.org/2000/svg"
-          >
-            <line id="position-line" x1="150" y1="30" x2="150" y2="600" stroke-width="4"></line>
-            <text
-              id="pointer-position-text"
-              stroke="none"
-              x="0"
-              y="15"
-              dominant-baseline="middle"
-              text-anchor="middle"
-              style="font-family: 'Courier New', Courier, monospace"
-            ></text>
-          </svg>
           <div id="input-list"></div>
           <div id="track-list"></div>
         </div>
+        <svg
+          id="position-marker"
+          style="
+            position: absolute;
+            width: 100%;
+            right: 0;
+            top: 4rem;
+            pointer-events: none;
+            user-select: none;
+          "
+          xmlns="http://www.w3.org/2000/svg"
+        >
+          <line id="position-line" x1="150" y1="30" x2="150" y2="600" stroke-width="4"></line>
+          <text
+            id="pointer-position-text"
+            stroke="none"
+            x="0"
+            y="15"
+            dominant-baseline="middle"
+            text-anchor="middle"
+            style="font-family: 'Courier New', Courier, monospace; font-size: 18px; font-weight: bold; color:var(--color);"
+          ></text>
+        </svg>
       </div>
     </div>
     <dialog id="add-clip-modal" class="overlay">

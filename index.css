@@ -902,6 +902,7 @@ video {
   display: flex;
   flex-direction: column;
   grid-area: info;
+  z-index: 3;
 }
 
 #audio-input-buttons {
@@ -1110,6 +1111,8 @@ video {
   border: 1px solid currentColor;
   color: inherit;
   font: inherit;
+  box-sizing: border-box;
+  text-align: center;
 }
 
 .automation-layer {
