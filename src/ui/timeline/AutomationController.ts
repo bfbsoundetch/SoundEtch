@@ -61,15 +61,19 @@ export class AutomationController extends TrackListItemController {
     this.pointElements.forEach((element) => element.remove())
     this.pointElements.splice(0)
 
+    const initialPoint = {
+      pointX: 0,
+      pointY: this.getYValue(this.paramVals.initialValue),
+    }
+    const transitionPoints = this.paramVals.transitionSequence.map((point) => ({
+      pointX: this.getXValueForSample(point.startSample),
+      pointY: this.getYValue(point.startValue),
+    }))
+    const lastPoint = transitionPoints.at(-1) ?? initialPoint
     const points = [
-      {
-        pointX: 0,
-        pointY: this.getYValue(this.paramVals.initialValue),
-      },
-      ...this.paramVals.transitionSequence.map((point) => ({
-        pointX: this.getXValueForSample(point.startSample),
-        pointY: this.getYValue(point.startValue),
-      })),
+      initialPoint,
+      ...transitionPoints,
+      { pointX: Math.max(this.width, lastPoint.pointX), pointY: lastPoint.pointY },
     ]
     this.svgPathElement.setAttribute('d', 'M ' + points.map((point) => `${point.pointX} ${point.pointY}`).join(' L '))
 

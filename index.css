@@ -1129,7 +1129,8 @@ video {
 }
 
 .automation-hit-area {
-  fill: transparent;
+  fill: var(--bg-color);
+  opacity: 0.72;
   pointer-events: all;
 }
 
@@ -1137,11 +1138,12 @@ video {
   fill: none;
   stroke: currentColor;
   stroke-width: 3;
+  stroke-linecap: round;
   pointer-events: none;
 }
 
 .automation-point {
-  fill: var(--background);
+  fill: var(--bg-color);
   stroke: currentColor;
   stroke-width: 3;
   cursor: move;
