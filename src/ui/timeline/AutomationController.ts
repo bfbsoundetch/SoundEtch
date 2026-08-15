@@ -20,6 +20,7 @@ export class AutomationController extends TrackListItemController {
     private readonly svgElement: SVGSVGElement,
     private readonly track: Track,
     private readonly parameterMetadata: ParameterMetadata,
+    private readonly topOffset: number,
   ) {
     super(trackListController)
     this.width = svgElement.viewBox.baseVal.width || svgElement.clientWidth
@@ -32,9 +33,9 @@ export class AutomationController extends TrackListItemController {
 
     this.groupElement.classList.add('automation-layer')
     this.blockerElement.setAttribute('x', '0')
-    this.blockerElement.setAttribute('y', '0')
+    this.blockerElement.setAttribute('y', `${this.topOffset}`)
     this.blockerElement.setAttribute('width', '100%')
-    this.blockerElement.setAttribute('height', '100%')
+    this.blockerElement.setAttribute('height', `${Math.max(0, this.height - this.topOffset)}`)
     this.blockerElement.classList.add('automation-hit-area')
     for (const eventName of ['mousedown', 'click', 'contextmenu']) {
       this.blockerElement.addEventListener(eventName, (event) => {
@@ -63,11 +64,11 @@ export class AutomationController extends TrackListItemController {
     const points = [
       {
         pointX: 0,
-        pointY: this.height * (1 - this.parameterMetadata.normalize(this.paramVals.initialValue)),
+        pointY: this.getYValue(this.paramVals.initialValue),
       },
       ...this.paramVals.transitionSequence.map((point) => ({
         pointX: this.getXValueForSample(point.startSample),
-        pointY: this.height * (1 - this.parameterMetadata.normalize(point.startValue)),
+        pointY: this.getYValue(point.startValue),
       })),
     ]
     this.svgPathElement.setAttribute('d', 'M ' + points.map((point) => `${point.pointX} ${point.pointY}`).join(' L '))
@@ -77,7 +78,7 @@ export class AutomationController extends TrackListItemController {
       circleElement.classList.add('automation-point')
       circleElement.setAttribute('r', '5')
       circleElement.setAttribute('cx', String(this.getXValueForSample(point.startSample)))
-      circleElement.setAttribute('cy', String(this.height * (1 - this.parameterMetadata.normalize(point.startValue))))
+      circleElement.setAttribute('cy', String(this.getYValue(point.startValue)))
       circleElement.addEventListener('mousedown', (event) => this.startMovingPoint(event, point))
       this.groupElement.appendChild(circleElement)
       this.pointElements.push(circleElement)
@@ -87,6 +88,7 @@ export class AutomationController extends TrackListItemController {
   resize() {
     this.width = this.svgElement.viewBox.baseVal.width || this.svgElement.clientWidth
     this.height = this.svgElement.viewBox.baseVal.height || this.svgElement.clientHeight
+    this.blockerElement.setAttribute('height', `${Math.max(0, this.height - this.topOffset)}`)
     this.draw()
   }
 
@@ -96,14 +98,14 @@ export class AutomationController extends TrackListItemController {
 
   modifyPoint(point: ParamValueTransition, x: number, y: number) {
     point.startSample = Math.max(0, this.getSampleForXValue(this.clamp(x, 0, this.width)))
-    point.startValue = this.parameterMetadata.denormalize(1 - this.clamp(y, 0, this.height) / this.height)
+    point.startValue = this.getValueForY(y)
     this.paramVals.transitionSequence.sort((first, second) => first.startSample - second.startSample)
     this.draw()
   }
 
   addNewPoint(x: number, y: number) {
     const position = Math.max(0, this.getSampleForXValue(this.clamp(x, 0, this.width)))
-    const value = this.parameterMetadata.denormalize(1 - this.clamp(y, 0, this.height) / this.height)
+    const value = this.getValueForY(y)
     let i = 0
     for (; i < this.paramVals.transitionSequence.length; ++i) {
       if (this.paramVals.transitionSequence[i].startSample > position) {
@@ -116,6 +118,17 @@ export class AutomationController extends TrackListItemController {
       type: 'linear',
     })
     this.draw()
+  }
+
+  private getYValue(value: number) {
+    return this.topOffset + (this.height - this.topOffset) * (1 - this.parameterMetadata.normalize(value))
+  }
+
+  private getValueForY(y: number) {
+    const automationHeight = Math.max(1, this.height - this.topOffset)
+    return this.parameterMetadata.denormalize(
+      1 - this.clamp(y - this.topOffset, 0, automationHeight) / automationHeight,
+    )
   }
 
   private startMovingPoint(event: MouseEvent, point: ParamValueTransition) {

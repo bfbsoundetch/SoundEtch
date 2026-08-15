@@ -414,13 +414,12 @@ export class EffectPanelController {
 
   private openAutomationView(track: Track, effectData: EffectData, metadata: EffectMetadata) {
     const trackListController = (window as any).trackListController as TrackListController
-    const parameterMetadata = metadata.parameters[0]
-    const sequence = effectData.params[parameterMetadata.id]
-    if (!sequence) {
+    const parameters = metadata.parameters.filter((parameter) => effectData.params[parameter.id])
+    if (parameters.length == 0) {
       return
     }
     this.bottomPanelController.close()
-    trackListController.enterAutomationMode(track, effectData.instanceId, parameterMetadata)
+    trackListController.enterAutomationMode(track, effectData.instanceId, parameters)
   }
 
   private async closeEffectView() {

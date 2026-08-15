@@ -35,6 +35,7 @@ interface AutomationMode {
   controller: AutomationController
   infoElement: HTMLElement
   originalInfoElements: Node[]
+  scaleElement: HTMLElement
 }
 
 export class TrackListController {
@@ -288,10 +289,11 @@ export class TrackListController {
     this.selectionController.remove()
   }
 
-  enterAutomationMode(track: Track, effectInstanceId: string, parameterMetadata: ParameterMetadata) {
+  enterAutomationMode(track: Track, effectInstanceId: string, parameters: ParameterMetadata[]) {
     this.exitAutomationMode()
     const pair = this.infoWaveformPairs.get(`${track.id}`)
-    if (!pair) {
+    const parameterMetadata = parameters[0]
+    if (!pair || !parameterMetadata) {
       return
     }
 
@@ -308,17 +310,39 @@ export class TrackListController {
     }
 
     const originalInfoElements = Array.from(pair.info.childNodes)
-    const modeInfoElement = this.createAutomationModeInfo(track, parameterMetadata)
+    const selectParameter = (selectedParameter: ParameterMetadata) => {
+      const mode = this.automationMode
+      if (!mode) {
+        return
+      }
+      mode.controller.remove()
+      const scaleElement = this.createAutomationScale(selectedParameter)
+      mode.scaleElement.replaceWith(scaleElement)
+      mode.scaleElement = scaleElement
+      mode.controller = new AutomationController(
+        this,
+        effectInstanceId,
+        pair.controller.topSvgElement,
+        track,
+        selectedParameter,
+        Waveform.HEADER_HEIGHT,
+      )
+      mode.controller.draw()
+    }
+    const modeInfoElement = this.createAutomationModeInfo(track, parameters, parameterMetadata, selectParameter)
     pair.info.replaceChildren(modeInfoElement)
 
+    const scaleElement = this.createAutomationScale(parameterMetadata)
+    pair.waveform.appendChild(scaleElement)
     const controller = new AutomationController(
       this,
       effectInstanceId,
       pair.controller.topSvgElement,
       track,
       parameterMetadata,
+      Waveform.HEADER_HEIGHT,
     )
-    this.automationMode = { controller, infoElement: pair.info, originalInfoElements }
+    this.automationMode = { controller, infoElement: pair.info, originalInfoElements, scaleElement }
     controller.draw()
   }
 
@@ -328,6 +352,7 @@ export class TrackListController {
       return
     }
     mode.controller.remove()
+    mode.scaleElement.remove()
     mode.infoElement.replaceChildren(...mode.originalInfoElements)
     for (const pair of this.infoWaveformPairs.values()) {
       pair.info.classList.remove('automation-dimmed')
@@ -339,7 +364,12 @@ export class TrackListController {
     this.pointerStateManager.stopAutomating()
   }
 
-  private createAutomationModeInfo(track: Track, parameterMetadata: ParameterMetadata) {
+  private createAutomationModeInfo(
+    track: Track,
+    parameters: ParameterMetadata[],
+    parameterMetadata: ParameterMetadata,
+    selectParameter: (parameter: ParameterMetadata) => void,
+  ) {
     const panel = document.createElement('section')
     panel.className = 'automation-track-info'
 
@@ -358,14 +388,38 @@ export class TrackListController {
     parameterRow.className = 'automation-context-row'
     const parameterLabel = document.createElement('small')
     parameterLabel.textContent = 'Parameter'
-    const parameterName = document.createElement('span')
-    parameterName.className = 'automation-parameter-name'
-    parameterName.textContent = parameterMetadata.displayName
-    parameterRow.append(parameterLabel, parameterName)
+    const parameterSelect = document.createElement('select')
+    parameterSelect.className = 'automation-parameter-select'
+    parameterSelect.setAttribute('aria-label', 'Automation parameter')
+    for (const parameter of parameters) {
+      const option = document.createElement('option')
+      option.value = parameter.id
+      option.textContent = parameter.displayName
+      parameterSelect.appendChild(option)
+    }
+    parameterSelect.value = parameterMetadata.id
+    parameterSelect.addEventListener('change', () => {
+      const selectedParameter = parameters.find((parameter) => parameter.id == parameterSelect.value)
+      if (selectedParameter) {
+        selectParameter(selectedParameter)
+      }
+    })
+    parameterRow.append(parameterLabel, parameterSelect)
     heading.append(modeLabel, trackRow, parameterRow)
 
+    const exitButton = document.createElement('button')
+    exitButton.type = 'button'
+    exitButton.className = 'clickable automation-exit-button'
+    exitButton.textContent = 'Back'
+    exitButton.addEventListener('click', () => this.exitAutomationMode())
+    panel.append(heading, exitButton)
+    return panel
+  }
+
+  private createAutomationScale(parameterMetadata: ParameterMetadata) {
     const scale = document.createElement('div')
     scale.className = 'automation-scale'
+    scale.style.top = `${Waveform.HEADER_HEIGHT}px`
     scale.setAttribute('aria-label', `${parameterMetadata.displayName} scale`)
     const scaleValues = [...parameterMetadata.scaleValues].sort((a, b) => b - a)
     for (const value of scaleValues) {
@@ -375,14 +429,7 @@ export class TrackListController {
       tick.textContent = parameterMetadata.displayValue(value)
       scale.appendChild(tick)
     }
-
-    const exitButton = document.createElement('button')
-    exitButton.type = 'button'
-    exitButton.className = 'clickable automation-exit-button'
-    exitButton.textContent = 'Back'
-    exitButton.addEventListener('click', () => this.exitAutomationMode())
-    panel.append(heading, scale, exitButton)
-    return panel
+    return scale
   }
 
   async transferClipViewBetweenTracks(clipViewController: ClipViewController, newWaveform: Waveform, shift: number) {

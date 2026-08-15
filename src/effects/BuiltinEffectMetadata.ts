@@ -37,7 +37,7 @@ export const BoostEffectMetadata: EffectMetadata = {
       normalize: (gain) => Math.log2(gain) / 6,
       denormalize: (value) => 2 ** (value * 6),
       displayValue: (gain) => `${(gain).toFixed(2)}x`,
-      scaleValues: [0, 1, 2, 4, 8, 16, 32, 64],
+      scaleValues: [1, 2, 4, 8, 16, 32, 64],
     },
   ],
 }
