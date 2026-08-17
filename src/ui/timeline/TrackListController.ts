@@ -136,7 +136,7 @@ export class TrackListController {
     // sn = (s-1)(t+x)
     // n = (t + x)(s - 1) / s
     this.translationUnits -=
-      ((this.translationUnits + this.mouseEventToSvgCoord(wheelEvent).x) * (scaling - 1)) / scaling
+      ((this.translationUnits + this.mouseEventToSvgCoord(wheelEvent).x - 14 * this.rootFontSize) * (scaling - 1)) / scaling
 
     this.translationUnits = Math.max(this.translationUnits, 0)
     this.draw()

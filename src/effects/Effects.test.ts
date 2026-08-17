@@ -1,14 +1,15 @@
-import { GainEffectMetadata } from './BuiltinEffectMetadata'
+import { BoostEffectMetadata, NoiseReductionEffectMetadata } from './BuiltinEffectMetadata'
 import { EffectIndex } from './EffectIndex'
 import { ParameterValueSequence, ParamValueTransition } from './ParameterValueSequence'
 
 describe('EffectIndex', () => {
-  test('lists and creates the built-in gain effect', async () => {
+  test('lists and creates built-in effects', async () => {
     const effectIndex = EffectIndex.getInstance()
 
-    expect(effectIndex.getAvailableEffects()).toContain(GainEffectMetadata)
-    expect(effectIndex.getEffectMetadataById(GainEffectMetadata.id)).toBe(GainEffectMetadata)
-    expect((await effectIndex.getEffectById(GainEffectMetadata.id))?.metadata).toBe(GainEffectMetadata)
+    expect(effectIndex.getAvailableEffects()).toContain(BoostEffectMetadata)
+    expect(effectIndex.getAvailableEffects()).toContain(NoiseReductionEffectMetadata)
+    expect(effectIndex.getEffectMetadataById(BoostEffectMetadata.id)).toBe(BoostEffectMetadata)
+    expect((await effectIndex.getEffectById(BoostEffectMetadata.id))?.metadata).toBe(BoostEffectMetadata)
   })
 
   test('returns null for an unknown effect', async () => {
@@ -29,13 +30,13 @@ describe('effect parameters', () => {
   })
 
   test('gain normalization spans its complete metadata range', () => {
-    const gain = GainEffectMetadata.parameters[0]
+    const gain = BoostEffectMetadata.parameters[0]
 
     expect(gain.normalize(gain.minValue)).toBeCloseTo(0)
     expect(gain.normalize(gain.maxValue)).toBeCloseTo(1)
     expect(gain.denormalize(gain.normalize(gain.defaultValue))).toBeCloseTo(gain.defaultValue)
-    expect(gain.displayValue(gain.defaultValue)).toBe('100%')
-    expect(gain.scaleValues).toEqual([0, 1, 2, 4, 8, 16, 32, 64])
+    expect(gain.displayValue(gain.defaultValue)).toBe('1.00x')
+    expect(gain.scaleValues).toEqual([1, 2, 4, 8, 16, 32, 64])
   })
 
   test.each(

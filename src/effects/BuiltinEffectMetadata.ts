@@ -41,3 +41,11 @@ export const BoostEffectMetadata: EffectMetadata = {
     },
   ],
 }
+
+export const NoiseReductionEffectMetadata: EffectMetadata = {
+  id: 'soundetch.noise-reduction',
+  name: 'Noise Reduction',
+  description: 'Reduce steady background noise',
+  categories: ['Restoration'],
+  parameters: [],
+}

@@ -4,7 +4,7 @@ export class NoiseReducer {
   private worker: Worker | null = null
   noiseReducerNode: AudioWorkletNode | null = null
 
-  private async prepareWorker(
+  async start(
     audioContext: BaseAudioContext,
     rawSab: SharedArrayBuffer,
     denoisedSab: SharedArrayBuffer,
@@ -46,7 +46,8 @@ export class NoiseReducer {
     audioContext.addEventListener('statechange', () => {
       switch (audioContext.state) {
         case 'closed': {
-          this.worker?.postMessage({ type: 'stop' })
+          this.worker?.terminate()
+          this.worker = null
           break
         }
         case 'suspended': {
@@ -66,7 +67,7 @@ export class NoiseReducer {
     return true
   }
 
-  private async getNoiseReducerNode(
+  async getNoiseReducerNode(
     audioContext: BaseAudioContext,
     rawSab: SharedArrayBuffer,
     denoisedSab: SharedArrayBuffer,
@@ -89,13 +90,13 @@ export class NoiseReducer {
       channelCountMode: 'explicit',
     })
 
-    return result
+    return (this.noiseReducerNode = result)
   }
 
   async reduceNoiseFrom(source: AudioNode): Promise<boolean> {
     const rawSab = RingBuffer.getStorageForCapacity(32 * 1024, Float32Array)
     const denoisedSab = RingBuffer.getStorageForCapacity(32 * 1024, Float32Array)
-    if (!(await this.prepareWorker(source.context, rawSab, denoisedSab))) {
+    if (!(await this.start(source.context, rawSab, denoisedSab))) {
       return false
     }
     this.noiseReducerNode = await this.getNoiseReducerNode(source.context, rawSab, denoisedSab)

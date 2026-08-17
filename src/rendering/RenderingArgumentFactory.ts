@@ -33,6 +33,7 @@ export function createRenderingArgument(
         }),
         gain: track.getGain(),
         pan: track.getPan(),
+        effects: structuredClone(track.effectRegions),
       }
     }),
   }

@@ -1,6 +1,7 @@
 import { EncoderInfo } from '../encoders/EncoderType'
 import { ClipViewSubset } from '../playback/AudioFileReader'
 import { Clip } from '../project/Clip'
+import { EffectData } from '../effects/EffectData'
 
 export type RenderingWorkerStartMessage = {
   argument: RenderingArgument
@@ -42,6 +43,7 @@ export type TrackSubset = {
   clipViews: Array<ClipViewSubset>
   gain: number
   pan: number
+  effects: Array<EffectData>
 }
 
 export type RenderingArgument = {

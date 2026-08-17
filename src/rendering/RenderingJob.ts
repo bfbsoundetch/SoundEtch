@@ -3,6 +3,11 @@ import { RawDataAudioContext } from '@descript/web-audio-js'
 import { FileSystemUtils } from '../filesystem/FileSystemUtils'
 import { FileSystemSyncAccessHandle } from '../filesystem/FileSystemSyncAccessHandle'
 import { RenderingWorkerStartMessage } from './RenderingWorkerProtocol'
+import { scheduleParameterValues } from '../effects/ParameterScheduling'
+import { BoostEffectMetadata, FadeEffectMetadata, NoiseReductionEffectMetadata } from '../effects/BuiltinEffectMetadata'
+import { BoostEffect, FadeEffect } from '../effects/gain/GainEffects'
+import { NoiseReductionEffect } from '../effects/noisereduction/NoiseReductionEffect'
+import { EffectModule } from '../effects/Effect'
 
 const BLOCK_SIZE = 1024
 const RENDER_CHUNK_SAMPLE_CAPACITY = 1024 * 1024
@@ -21,7 +26,7 @@ self.onmessage = async (e) => {
 
   const processors = new Array<ReadingOfflineProcessor>()
 
-  argument.trackSubsets.forEach((track) => {
+  for (const track of argument.trackSubsets) {
     const readingProcessorNode = audioContext.createScriptProcessor(BLOCK_SIZE, 0, track.channelCount)
     const processor = new ReadingOfflineProcessor(
       argument.projectId,
@@ -33,13 +38,33 @@ self.onmessage = async (e) => {
     processors.push(processor)
     readingProcessorNode.onaudioprocess = (e: AudioProcessingEvent) => processor.process(e)
 
+    let chainOutput = readingProcessorNode
+    for (const effectData of track.effects) {
+      const effectModule = getRenderingEffect(effectData.id)
+      if (!effectModule) {
+        console.error(`Effect ${effectData.id} is unavailable`)
+        continue
+      }
+      const context = audioContext as unknown as BaseAudioContext
+      const effectNode = await effectModule.getNode(context)
+      const parameters = await effectModule.getParameters(context)
+      for (const [name, sequence] of Object.entries(effectData.params)) {
+        const parameter = parameters[name]
+        if (parameter) {
+          scheduleParameterValues(parameter, sequence, context, argument.startPosition)
+        }
+      }
+      chainOutput.connect(effectNode as any, 0, 0)
+      chainOutput = effectNode as any
+    }
+
     const gainNode = audioContext.createGain()
     gainNode.channelCount = argument.channelCount
     gainNode.channelCountMode = 'explicit'
     gainNode.channelInterpretation = 'speakers'
     gainNode.gain.value = track.gain
 
-    readingProcessorNode.connect(gainNode, 0, 0)
+    chainOutput.connect(gainNode, 0, 0)
     if (argument.channelCount == 1) {
       gainNode.connect(audioContext.destination, 0, 0)
     } else {
@@ -48,7 +73,7 @@ self.onmessage = async (e) => {
       gainNode.connect(pannerNode, 0, 0)
       pannerNode.connect(audioContext.destination, 0, 0)
     }
-  })
+  }
 
   const output = new Array<Float32Array>(argument.channelCount)
   for (let i = 0; i < argument.channelCount; ++i) {
@@ -94,6 +119,19 @@ self.onmessage = async (e) => {
 
   flushPendingChunk()
   encodingPort.postMessage({ type: 'stop' })
+}
+
+function getRenderingEffect(id: string): EffectModule | null {
+  switch (id) {
+    case FadeEffectMetadata.id:
+      return new FadeEffect()
+    case BoostEffectMetadata.id:
+      return new BoostEffect()
+    case NoiseReductionEffectMetadata.id:
+      return new NoiseReductionEffect()
+    default:
+      return null
+  }
 }
 
 class ReadingOfflineProcessor {
