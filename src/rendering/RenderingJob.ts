@@ -4,10 +4,11 @@ import { FileSystemUtils } from '../filesystem/FileSystemUtils'
 import { FileSystemSyncAccessHandle } from '../filesystem/FileSystemSyncAccessHandle'
 import { RenderingWorkerStartMessage } from './RenderingWorkerProtocol'
 import { scheduleParameterValues } from '../effects/ParameterScheduling'
-import { BoostEffectMetadata, FadeEffectMetadata, NoiseReductionEffectMetadata } from '../effects/BuiltinEffectMetadata'
+import { BoostEffectMetadata, CompressionEffectMetadata, FadeEffectMetadata, NoiseReductionEffectMetadata } from '../effects/BuiltinEffectMetadata'
 import { BoostEffect, FadeEffect } from '../effects/gain/GainEffects'
 import { NoiseReductionEffect } from '../effects/noisereduction/NoiseReductionEffect'
 import { EffectModule } from '../effects/Effect'
+import { CompressionEffect } from '../effects/compression/CompressionEffect'
 
 const BLOCK_SIZE = 1024
 const RENDER_CHUNK_SAMPLE_CAPACITY = 1024 * 1024
@@ -129,6 +130,8 @@ function getRenderingEffect(id: string): EffectModule | null {
       return new BoostEffect()
     case NoiseReductionEffectMetadata.id:
       return new NoiseReductionEffect()
+    case CompressionEffectMetadata.id:
+      return new CompressionEffect()
     default:
       return null
   }

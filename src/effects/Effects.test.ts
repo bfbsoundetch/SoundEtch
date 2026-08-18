@@ -1,4 +1,4 @@
-import { BoostEffectMetadata, NoiseReductionEffectMetadata } from './BuiltinEffectMetadata'
+import { BoostEffectMetadata, CompressionEffectMetadata, NoiseReductionEffectMetadata } from './BuiltinEffectMetadata'
 import { EffectIndex } from './EffectIndex'
 import { ParameterValueSequence, ParamValueTransition } from './ParameterValueSequence'
 
@@ -8,8 +8,10 @@ describe('EffectIndex', () => {
 
     expect(effectIndex.getAvailableEffects()).toContain(BoostEffectMetadata)
     expect(effectIndex.getAvailableEffects()).toContain(NoiseReductionEffectMetadata)
+    expect(effectIndex.getAvailableEffects()).toContain(CompressionEffectMetadata)
     expect(effectIndex.getEffectMetadataById(BoostEffectMetadata.id)).toBe(BoostEffectMetadata)
     expect((await effectIndex.getEffectById(BoostEffectMetadata.id))?.metadata).toBe(BoostEffectMetadata)
+    expect((await effectIndex.getEffectById(CompressionEffectMetadata.id))?.metadata).toBe(CompressionEffectMetadata)
   })
 
   test('returns null for an unknown effect', async () => {
@@ -38,6 +40,15 @@ describe('effect parameters', () => {
     expect(gain.displayValue(gain.defaultValue)).toBe('1.00x')
     expect(gain.scaleValues).toEqual([1, 2, 4, 8, 16, 32, 64])
   })
+
+  test.each(CompressionEffectMetadata.parameters)(
+    '$displayName normalization spans its metadata range',
+    (parameter) => {
+      expect(parameter.normalize(parameter.minValue)).toBeCloseTo(0)
+      expect(parameter.normalize(parameter.maxValue)).toBeCloseTo(1)
+      expect(parameter.denormalize(parameter.normalize(parameter.defaultValue))).toBeCloseTo(parameter.defaultValue)
+    },
+  )
 
   test.each(
     [

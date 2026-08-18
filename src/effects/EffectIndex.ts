@@ -1,4 +1,9 @@
-import { FadeEffectMetadata, BoostEffectMetadata, NoiseReductionEffectMetadata } from './BuiltinEffectMetadata'
+import {
+  FadeEffectMetadata,
+  BoostEffectMetadata,
+  NoiseReductionEffectMetadata,
+  CompressionEffectMetadata,
+} from './BuiltinEffectMetadata'
 import { EffectMetadata, EffectModule } from './Effect'
 
 export class EffectIndex {
@@ -7,6 +12,7 @@ export class EffectIndex {
     FadeEffectMetadata,
     BoostEffectMetadata,
     NoiseReductionEffectMetadata,
+    CompressionEffectMetadata,
   ]
 
   static getInstance() {
@@ -31,6 +37,8 @@ export class EffectIndex {
         return new (await import('./gain/GainEffects')).BoostEffect()
       case NoiseReductionEffectMetadata.id:
         return new (await import('./noisereduction/NoiseReductionEffect')).NoiseReductionEffect()
+      case CompressionEffectMetadata.id:
+        return new (await import('./compression/CompressionEffect')).CompressionEffect()
       default:
         return null
     }
