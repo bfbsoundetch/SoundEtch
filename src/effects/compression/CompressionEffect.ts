@@ -6,21 +6,32 @@ export class CompressionEffect implements EffectModule {
 
   private compressorNode: DynamicsCompressorNode | null = null
 
-  async getNode(audioContext: BaseAudioContext): Promise<AudioNode> {
+  async connect(audioContext: BaseAudioContext, destination: AudioNode): Promise<AudioNode> {
+    const compressorNode = this.getNode(audioContext)
+    compressorNode.connect(destination)
+    return compressorNode
+  }
+
+  disconnect() {
+    this.compressorNode?.disconnect()
+  }
+
+  private getNode(audioContext: BaseAudioContext) {
     if (audioContext != this.compressorNode?.context) {
+      this.disconnect()
       this.compressorNode = audioContext.createDynamicsCompressor()
     }
     return this.compressorNode
   }
 
   async getParameters(audioContext: BaseAudioContext) {
-    await this.getNode(audioContext)
+    const compressorNode = this.getNode(audioContext)
     return {
-      threshold: this.compressorNode!.threshold,
-      knee: this.compressorNode!.knee,
-      ratio: this.compressorNode!.ratio,
-      attack: this.compressorNode!.attack,
-      release: this.compressorNode!.release,
+      threshold: compressorNode.threshold,
+      knee: compressorNode.knee,
+      ratio: compressorNode.ratio,
+      attack: compressorNode.attack,
+      release: compressorNode.release,
     }
   }
 }

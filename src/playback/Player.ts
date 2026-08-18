@@ -64,14 +64,12 @@ export class Player {
       pannerNode.pan.value = track.getPan()
 
       const playbackEffects = []
-      let chainOutput: AudioNode = playerNode
       for (const effectData of track.effectRegions) {
         const effectModule = await EffectIndex.getInstance().getEffectById(effectData.id)
         if (!effectModule) {
           console.error(`Effect ${effectData.id} is unavailable`)
           continue
         }
-        const effectNode = await effectModule.getNode(audioContext)
         const parameters = await effectModule.getParameters(audioContext)
         for (const [name, sequence] of Object.entries(effectData.params)) {
           const parameter = parameters[name]
@@ -79,12 +77,14 @@ export class Player {
             scheduleParameterValues(parameter, sequence, audioContext, startSample)
           }
         }
-        chainOutput.connect(effectNode)
-        chainOutput = effectNode
-        playbackEffects.push({ instanceId: effectData.instanceId, module: effectModule, node: effectNode })
+        playbackEffects.push({ instanceId: effectData.instanceId, module: effectModule, audioContext })
       }
 
-      chainOutput.connect(gainNode)
+      let chainInput: AudioNode = gainNode
+      for (const effect of playbackEffects.toReversed()) {
+        chainInput = await effect.module.connect(audioContext, chainInput)
+      }
+      playerNode.connect(chainInput)
       gainNode.connect(pannerNode)
       pannerNode.connect(audioContext.destination)
 

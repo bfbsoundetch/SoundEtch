@@ -8,7 +8,7 @@ import { EffectModule } from 'effects/Effect'
 export interface PlaybackEffect {
   instanceId: string
   module: EffectModule
-  node: AudioNode
+  audioContext: BaseAudioContext
 }
 
 class Playback {
@@ -216,7 +216,7 @@ export class Track extends DatabasePersisted implements Analyzable {
   stopPlayback() {
     this.playback?.cleanup?.()
     this.playback?.playerNode.disconnect()
-    this.playback?.effects.forEach((effect) => effect.node.disconnect())
+    this.playback?.effects.forEach((effect) => effect.module.disconnect())
     this.playback = null
   }
 
@@ -233,9 +233,9 @@ export class Track extends DatabasePersisted implements Analyzable {
       if (!playbackEffect) {
         continue
       }
-      const parameters = await playbackEffect.module.getParameters(playbackEffect.node.context)
+      const parameters = await playbackEffect.module.getParameters(playbackEffect.audioContext)
       for (const [name, sequence] of Object.entries(effectData.params)) {
-        parameters[name]?.setValueAtTime(sequence.initialValue, playbackEffect.node.context.currentTime)
+        parameters[name]?.setValueAtTime(sequence.initialValue, playbackEffect.audioContext.currentTime)
       }
     }
   }

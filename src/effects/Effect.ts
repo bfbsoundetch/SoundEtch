@@ -2,7 +2,8 @@ import { ParameterMetadata } from './ParameterMetadata'
 
 export interface EffectModule {
   readonly metadata: EffectMetadata
-  getNode(audioContext: BaseAudioContext): Promise<AudioNode>
+  connect(audioContext: BaseAudioContext, destination: AudioNode): Promise<AudioNode>
+  disconnect(): void
   getParameters(audioContext: BaseAudioContext): Promise<Record<string, AudioParam>>
 }
 

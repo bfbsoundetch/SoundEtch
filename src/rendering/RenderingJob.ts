@@ -4,7 +4,12 @@ import { FileSystemUtils } from '../filesystem/FileSystemUtils'
 import { FileSystemSyncAccessHandle } from '../filesystem/FileSystemSyncAccessHandle'
 import { RenderingWorkerStartMessage } from './RenderingWorkerProtocol'
 import { scheduleParameterValues } from '../effects/ParameterScheduling'
-import { BoostEffectMetadata, CompressionEffectMetadata, FadeEffectMetadata, NoiseReductionEffectMetadata } from '../effects/BuiltinEffectMetadata'
+import {
+  BoostEffectMetadata,
+  CompressionEffectMetadata,
+  FadeEffectMetadata,
+  NoiseReductionEffectMetadata,
+} from '../effects/BuiltinEffectMetadata'
 import { BoostEffect, FadeEffect } from '../effects/gain/GainEffects'
 import { NoiseReductionEffect } from '../effects/noisereduction/NoiseReductionEffect'
 import { EffectModule } from '../effects/Effect'
@@ -26,6 +31,7 @@ self.onmessage = async (e) => {
   audioContext.resume()
 
   const processors = new Array<ReadingOfflineProcessor>()
+  const connectedEffectModules = new Array<EffectModule>()
 
   for (const track of argument.trackSubsets) {
     const readingProcessorNode = audioContext.createScriptProcessor(BLOCK_SIZE, 0, track.channelCount)
@@ -39,7 +45,7 @@ self.onmessage = async (e) => {
     processors.push(processor)
     readingProcessorNode.onaudioprocess = (e: AudioProcessingEvent) => processor.process(e)
 
-    let chainOutput = readingProcessorNode
+    const effectModules = new Array<EffectModule>()
     for (const effectData of track.effects) {
       const effectModule = getRenderingEffect(effectData.id)
       if (!effectModule) {
@@ -47,7 +53,6 @@ self.onmessage = async (e) => {
         continue
       }
       const context = audioContext as unknown as BaseAudioContext
-      const effectNode = await effectModule.getNode(context)
       const parameters = await effectModule.getParameters(context)
       for (const [name, sequence] of Object.entries(effectData.params)) {
         const parameter = parameters[name]
@@ -55,8 +60,7 @@ self.onmessage = async (e) => {
           scheduleParameterValues(parameter, sequence, context, argument.startPosition)
         }
       }
-      chainOutput.connect(effectNode as any, 0, 0)
-      chainOutput = effectNode as any
+      effectModules.push(effectModule)
     }
 
     const gainNode = audioContext.createGain()
@@ -65,7 +69,12 @@ self.onmessage = async (e) => {
     gainNode.channelInterpretation = 'speakers'
     gainNode.gain.value = track.gain
 
-    chainOutput.connect(gainNode, 0, 0)
+    let chainInput: AudioNode = gainNode as unknown as AudioNode
+    for (const effectModule of effectModules.toReversed()) {
+      chainInput = await effectModule.connect(audioContext as unknown as BaseAudioContext, chainInput)
+      connectedEffectModules.push(effectModule)
+    }
+    readingProcessorNode.connect(chainInput as any, 0, 0)
     if (argument.channelCount == 1) {
       gainNode.connect(audioContext.destination, 0, 0)
     } else {
@@ -118,6 +127,7 @@ self.onmessage = async (e) => {
     }
   }
 
+  connectedEffectModules.forEach((effectModule) => effectModule.disconnect())
   flushPendingChunk()
   encodingPort.postMessage({ type: 'stop' })
 }

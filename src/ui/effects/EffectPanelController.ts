@@ -18,7 +18,6 @@ type EffectViewSession = {
   track: Track
   effectInstanceId: string
   module: EffectModule
-  node: AudioNode
   parameters: Record<string, AudioParam>
   audioContext: BaseAudioContext
   ownsModule: boolean
@@ -158,7 +157,6 @@ export class EffectPanelController {
       throw new Error(`Effect ${effectData.id} is unavailable`)
     }
     const audioContext = await AudioControl.getOrCreateAudioContext()
-    const node = await module.getNode(audioContext)
     const parameters = await module.getParameters(audioContext)
     for (const [name, sequence] of Object.entries(effectData.params)) {
       const parameter = parameters[name]
@@ -170,7 +168,6 @@ export class EffectPanelController {
       track,
       effectInstanceId: effectData.instanceId,
       module,
-      node,
       parameters,
       audioContext,
       ownsModule: !playbackModule,
@@ -435,7 +432,7 @@ export class EffectPanelController {
     session.abortController.abort()
     session.closed = true
     if (session.ownsModule) {
-      session.node.disconnect()
+      session.module.disconnect()
     }
   }
 

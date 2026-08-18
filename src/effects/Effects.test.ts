@@ -1,6 +1,7 @@
 import { BoostEffectMetadata, CompressionEffectMetadata, NoiseReductionEffectMetadata } from './BuiltinEffectMetadata'
 import { EffectIndex } from './EffectIndex'
 import { ParameterValueSequence, ParamValueTransition } from './ParameterValueSequence'
+import { BoostEffect } from './gain/GainEffects'
 
 describe('EffectIndex', () => {
   test('lists and creates built-in effects', async () => {
@@ -60,5 +61,32 @@ describe('effect parameters', () => {
     expect(curve).toHaveLength(32)
     expect(curve[0]).toBeCloseTo(0)
     expect(curve.at(-1)).toBeCloseTo(1)
+  })
+})
+
+describe('effect module connections', () => {
+  test('connects its output, returns its input, and disconnects explicitly', async () => {
+    const gainNode = {
+      context: null as unknown as BaseAudioContext,
+      gain: {},
+      connect: jest.fn(),
+      disconnect: jest.fn(),
+    }
+    const audioContext = {
+      createGain: jest.fn(() => gainNode),
+    } as unknown as BaseAudioContext
+    gainNode.context = audioContext
+    const destination = {} as AudioNode
+    const effect = new BoostEffect()
+
+    const input = await effect.connect(audioContext, destination)
+    const parameters = await effect.getParameters(audioContext)
+    effect.disconnect()
+
+    expect(input).toBe(gainNode)
+    expect(gainNode.connect).toHaveBeenCalledWith(destination)
+    expect(parameters.gain).toBe(gainNode.gain)
+    expect(audioContext.createGain).toHaveBeenCalledTimes(1)
+    expect(gainNode.disconnect).toHaveBeenCalledTimes(1)
   })
 })

@@ -11,13 +11,26 @@ export class NoiseReductionEffect implements EffectModule {
   private node: AudioNode | null = null
   private noiseReducer: NoiseReducer | null = null
 
-  async getNode(audioContext: BaseAudioContext): Promise<AudioNode> {
+  async connect(audioContext: BaseAudioContext, destination: AudioNode): Promise<AudioNode> {
+    const node = await this.getNode(audioContext)
+    node.connect(destination)
+    return node
+  }
+
+  disconnect() {
+    this.node?.disconnect()
+    this.noiseReducer?.disconnect()
+  }
+
+  private async getNode(audioContext: BaseAudioContext): Promise<AudioNode> {
     if (this.audioContext == audioContext && this.node) {
       return this.node
     }
 
+    this.disconnect()
     this.audioContext = audioContext
     if ('process' in audioContext) {
+      this.noiseReducer = null
       this.node = await createSynchronousNoiseReductionNode(audioContext)
       return this.node
     }
