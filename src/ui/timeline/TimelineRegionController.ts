@@ -6,11 +6,14 @@ import { Waveform } from './Waveform'
 export class TimelineRegionController extends TrackListItemController {
   private firstPosition = 0
   private secondPosition = 0
-  private readonly waveformElements = new Map<Waveform, {
-    rect: SVGRectElement
-    leftExpand: SVGLineElement
-    rightExpand: SVGLineElement
-  }>()
+  private readonly waveformElements = new Map<
+    Waveform,
+    {
+      rect: SVGRectElement
+      leftExpand: SVGLineElement
+      rightExpand: SVGLineElement
+    }
+  >()
 
   private draggedFirstWaveform: Waveform | null = null
 
@@ -87,8 +90,8 @@ export class TimelineRegionController extends TrackListItemController {
     this.remove()
     this.firstPosition = startSample
     this.secondPosition = endSample
-    waveforms.forEach(w => this.setUpElementsForWaveform(w))
-      this.trackListController.pointerStateManager.startSelecting()
+    waveforms.forEach((w) => this.setUpElementsForWaveform(w))
+    this.trackListController.pointerStateManager.startSelecting()
     this.draw()
   }
 
@@ -111,7 +114,7 @@ export class TimelineRegionController extends TrackListItemController {
 
   draw(isActive = true) {
     if (this.firstPosition == this.secondPosition) {
-      this.waveformElements.values().forEach(v => {
+      this.waveformElements.values().forEach((v) => {
         v.rect.setAttribute('width', '0')
 
         v.leftExpand.setAttribute('x1', `-1`)
@@ -130,7 +133,7 @@ export class TimelineRegionController extends TrackListItemController {
     const lowX = this.getXValueForSample(lowSample)
     const highX = this.getXValueForSample(highSample)
 
-    this.waveformElements.values().forEach(v => {
+    this.waveformElements.values().forEach((v) => {
       v.rect.setAttribute('x', `${lowX}`)
       v.rect.setAttribute('width', `${highX - lowX}`)
 
@@ -156,7 +159,7 @@ export class TimelineRegionController extends TrackListItemController {
   }
 
   remove() {
-    this.waveformElements.values().forEach(v => {
+    this.waveformElements.values().forEach((v) => {
       v.rect.remove()
       v.leftExpand.remove()
       v.rightExpand.remove()
@@ -165,7 +168,7 @@ export class TimelineRegionController extends TrackListItemController {
     this.firstPosition = 0
     this.secondPosition = 0
     this.draggedFirstWaveform = null
-      this.trackListController.timelineController.removeSelection()
+    this.trackListController.timelineController.removeSelection()
   }
 
   isInRegion(waveform: Waveform) {
@@ -223,6 +226,6 @@ export class TimelineRegionController extends TrackListItemController {
         event.stopPropagation()
       }
     })
-    this.waveformElements.set(waveform, {rect, leftExpand, rightExpand})
+    this.waveformElements.set(waveform, { rect, leftExpand, rightExpand })
   }
 }

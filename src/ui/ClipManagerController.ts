@@ -9,7 +9,9 @@ export class ClipManagerController {
   private readonly dialog = document.getElementById('clip-manager-modal') as HTMLDialogElement
   private readonly openButton = document.getElementById('open-clip-manager-modal-button') as HTMLButtonElement
   private readonly listContainer = document.getElementById('clip-manager-list') as HTMLDivElement
-  private readonly deleteUnusedButton = document.getElementById('clip-manager-delete-unused-button') as HTMLButtonElement
+  private readonly deleteUnusedButton = document.getElementById(
+    'clip-manager-delete-unused-button',
+  ) as HTMLButtonElement
   private readonly metadataDialog = document.getElementById('clip-metadata-modal') as HTMLDialogElement
   private readonly metadataTitle = document.getElementById('clip-metadata-title') as HTMLHeadingElement
   private readonly metadataList = document.getElementById('clip-metadata-list') as HTMLDListElement

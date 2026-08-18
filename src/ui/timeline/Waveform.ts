@@ -165,14 +165,19 @@ export class Waveform extends TrackListItemController {
         } else {
           clipViewController.clipViewIndex = clipViewIndex
         }
-        let startCrossFadeDuration = 0, endCrossFadeDuration = 0
+        let startCrossFadeDuration = 0,
+          endCrossFadeDuration = 0
         if (clipViewIndex > 0) {
-          startCrossFadeDuration = Math.max(0, 
-            waveform.track.clipViews[clipViewIndex - 1].getEndPosition() - currentClipView.startPosition)
+          startCrossFadeDuration = Math.max(
+            0,
+            waveform.track.clipViews[clipViewIndex - 1].getEndPosition() - currentClipView.startPosition,
+          )
         }
         if (clipViewIndex < waveform.track.clipViews.length - 1) {
-          endCrossFadeDuration = Math.max(0, 
-            currentClipView.getEndPosition() - waveform.track.clipViews[clipViewIndex + 1].startPosition)
+          endCrossFadeDuration = Math.max(
+            0,
+            currentClipView.getEndPosition() - waveform.track.clipViews[clipViewIndex + 1].startPosition,
+          )
         }
         clipViewController.updateCrossFades(startCrossFadeDuration, endCrossFadeDuration)
         clipViewController.draw(startSample, endSample)
@@ -204,7 +209,6 @@ export class Waveform extends TrackListItemController {
 }
 
 export class ClipViewController extends TrackListItemController {
-
   private startCrossFadeDuration = 0
   private endCrossFadeDuration = 0
 
@@ -212,9 +216,15 @@ export class ClipViewController extends TrackListItemController {
   readonly headerElement = document.createElementNS('http://www.w3.org/2000/svg', 'rect')
   readonly headerTitleElement = document.createElementNS('http://www.w3.org/2000/svg', 'foreignObject')
   readonly headerInfoElement = document.createElementNS('http://www.w3.org/2000/svg', 'foreignObject')
-  readonly startCrossFadePathElement = document.createElementNS('http://www.w3.org/2000/svg', 'path') as unknown as SVGPathElement
+  readonly startCrossFadePathElement = document.createElementNS(
+    'http://www.w3.org/2000/svg',
+    'path',
+  ) as unknown as SVGPathElement
   readonly svgPathElement = document.createElementNS('http://www.w3.org/2000/svg', 'path') as unknown as SVGPathElement
-  readonly endCrossFadePathElement = document.createElementNS('http://www.w3.org/2000/svg', 'path') as unknown as SVGPathElement
+  readonly endCrossFadePathElement = document.createElementNS(
+    'http://www.w3.org/2000/svg',
+    'path',
+  ) as unknown as SVGPathElement
   readonly leftHandle = document.createElementNS('http://www.w3.org/2000/svg', 'line') as unknown as SVGLineElement
   readonly rightHandle = document.createElementNS('http://www.w3.org/2000/svg', 'line') as unknown as SVGLineElement
   private readonly fullClipGrayFilter = document.createElementNS('http://www.w3.org/2000/svg', 'rect')
@@ -452,7 +462,6 @@ export class ClipViewController extends TrackListItemController {
     this.svgPathElement.setAttribute('transform', `translate(${this.pathElementTranslation}, 0)`)
     this.endCrossFadePathElement.setAttribute('transform', `translate(${this.pathElementTranslation}, 0)`)
 
-
     const summary = await SummaryGenerator.summarizeClipChannel(
       this.clipView.clip,
       realStart,
@@ -485,7 +494,7 @@ export class ClipViewController extends TrackListItemController {
             ++maximum
           }
         }
-        const position = i / 2 * xIncrement
+        const position = (i / 2) * xIncrement
         const pathSegment = `${this.samplesPerUnit > 2 ? 'L' : 'M'} ${position} ${maximum.toFixed(0)} L ${position} ${minimum.toFixed(0)}`
         if (position + this.pathElementTranslation < crossFadeStartLastX) {
           startCrossFadeSegments.push(pathSegment)

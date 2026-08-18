@@ -33,10 +33,9 @@ describe('importedTags', () => {
 
   test('container tags override stream tags case-insensitively', () => {
     expect(
-      importedTags(
-        { artist: 'Container artist', album: 'Album' },
-        [{ codec_type_string: 'audio', tags: { ARTIST: 'Stream artist', TITLE: 'Title' } }],
-      ),
+      importedTags({ artist: 'Container artist', album: 'Album' }, [
+        { codec_type_string: 'audio', tags: { ARTIST: 'Stream artist', TITLE: 'Title' } },
+      ]),
     ).toEqual({ artist: 'Container artist', album: 'Album', TITLE: 'Title' })
   })
 })

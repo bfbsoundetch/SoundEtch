@@ -42,7 +42,7 @@ export class ProjectManager {
     if (!project) {
       project = await ProjectManager.getActiveProject()
     }
-    if (project != await ProjectManager.activeProject) {
+    if (project != (await ProjectManager.activeProject)) {
       ProjectManager.activeProject = Promise.resolve(project)
     }
     await DatabasePersister.save(project)
@@ -65,22 +65,12 @@ export class ProjectManager {
       if (result) {
         await this.populateSummaries(result)
       } else {
-        result = await DatabasePersister.save(
-          new Project(ProjectManager.DEFAULT_PROJECT_TITLE, 48000),
-        )
-        await DatabasePersister.setGlobalProperty(
-          ProjectManager.ACTIVE_PROJECT_PROPERTY_NAME,
-          result.id,
-        )
+        result = await DatabasePersister.save(new Project(ProjectManager.DEFAULT_PROJECT_TITLE, 48000))
+        await DatabasePersister.setGlobalProperty(ProjectManager.ACTIVE_PROJECT_PROPERTY_NAME, result.id)
       }
     } else {
-      result = await DatabasePersister.save(
-        new Project(ProjectManager.DEFAULT_PROJECT_TITLE, 48000),
-      )
-      await DatabasePersister.setGlobalProperty(
-        ProjectManager.ACTIVE_PROJECT_PROPERTY_NAME,
-        result.id,
-      )
+      result = await DatabasePersister.save(new Project(ProjectManager.DEFAULT_PROJECT_TITLE, 48000))
+      await DatabasePersister.setGlobalProperty(ProjectManager.ACTIVE_PROJECT_PROPERTY_NAME, result.id)
     }
     return result
   }
@@ -224,9 +214,9 @@ export class ProjectManager {
     const clipView = new ClipView(clip, 0, startPosition, 2 ** 31)
 
     let i = activeProject.getTracks().length + 1
-    const titles = activeProject.getTracks().map(t => t.name)
+    const titles = activeProject.getTracks().map((t) => t.name)
     let trackTitle = `Track ${++i}`
-    while (titles.find(t => t == trackTitle)) {
+    while (titles.find((t) => t == trackTitle)) {
       trackTitle = `Track ${++i}`
     }
     const track = new Track(trackTitle, channelCount)

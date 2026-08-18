@@ -74,10 +74,7 @@ export class AudioInputs {
     return result
   }
 
-  static addRemoteAudioSource(
-    username: string,
-    isScreenShare: boolean,
-  ) {
+  static addRemoteAudioSource(username: string, isScreenShare: boolean) {
     const newInput = new MediaStreamInput(
       `${username.replaceAll(' ', '.')}-${isScreenShare ? 'screen' : ''}`,
       username,
@@ -124,11 +121,7 @@ export class AudioInputs {
           if (trackEvent.track.kind == 'audio') {
             let input = this.remoteStreams.get(member.peerId)
             if (!input) {
-              input = new MediaStreamInput(
-                  member.peerId,
-                  member.username,
-                  false,
-                )
+              input = new MediaStreamInput(member.peerId, member.username, false)
               this.remoteStreams.set(member.peerId, input)
             }
             input.updateMediaStreamTrack(trackEvent.track)
@@ -141,7 +134,7 @@ export class AudioInputs {
           }
         })
       }
-      ourMembers.forEach(id => {
+      ourMembers.forEach((id) => {
         this.remoteStreams.get(id)?.stop()
         this.remoteStreams.delete(id)
       })

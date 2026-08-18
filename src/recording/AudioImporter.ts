@@ -79,7 +79,8 @@ export class AudioImporter {
 
       const postAudioForWriting = (audioBuffer: ArrayBuffer) => {
         const interleaved = new Float32Array(audioBuffer)
-        progressMs += interleaved.length / decoderConfig.sampleRate / decoderConfig.numberOfChannels / mediaInfo.duration
+        progressMs +=
+          interleaved.length / decoderConfig.sampleRate / decoderConfig.numberOfChannels / mediaInfo.duration
         writingWorker.postMessage({ type: 'audio', audio: interleaved.buffer }, [interleaved.buffer])
         onProgress?.(progressMs)
       }

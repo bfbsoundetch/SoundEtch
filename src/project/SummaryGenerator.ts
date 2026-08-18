@@ -69,7 +69,9 @@ class ClipSummarizer {
       const startPoint = Math.max(Math.round((twiceMidPoint - diskReadSamples) / 2), 0)
       const endPoint = startPoint + diskReadSamples
       this.fileCache = new Float32Array(
-        await (await this.getFile())
+        await (
+          await this.getFile()
+        )
           .slice(this.samplePositionToFilePosition(startPoint), this.samplePositionToFilePosition(endPoint))
           .arrayBuffer(),
       )

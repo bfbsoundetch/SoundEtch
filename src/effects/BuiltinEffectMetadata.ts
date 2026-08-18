@@ -16,7 +16,7 @@ export const FadeEffectMetadata: EffectMetadata = {
       normalize: (gain) => gain,
       denormalize: (value) => value,
       displayValue: (gain) => `${(gain * 100).toFixed(0)}%`,
-      scaleValues: [0, .5, 1],
+      scaleValues: [0, 0.5, 1],
     },
   ],
 }
@@ -36,7 +36,7 @@ export const BoostEffectMetadata: EffectMetadata = {
       increment: 0.01,
       normalize: (gain) => Math.log2(gain) / 6,
       denormalize: (value) => 2 ** (value * 6),
-      displayValue: (gain) => `${(gain).toFixed(2)}x`,
+      displayValue: (gain) => `${gain.toFixed(2)}x`,
       scaleValues: [1, 2, 4, 8, 16, 32, 64],
     },
   ],

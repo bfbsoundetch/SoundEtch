@@ -71,11 +71,11 @@ export class TimelineController extends TrackListItemController {
     if (!this.msPerUnit) {
       return
     }
-    const bucket = this.getTickMarkBucket(this.LABEL_FONT_SIZE * .6 * 14)
+    const bucket = this.getTickMarkBucket(this.LABEL_FONT_SIZE * 0.6 * 14)
     const increment = bucket.majorIntervalMs / this.msPerUnit
 
     const timelineOffset = 14 * this.trackListController.rootFontSize // width of 'info' column
-    const offset = timelineOffset - this.translation % increment
+    const offset = timelineOffset - (this.translation % increment)
     const timelineOffsetTicks = Math.ceil(offset / increment)
     const tickMarkTime = this.getTickMarkForPosition(this.translation * this.msPerUnit, bucket)
 
@@ -164,7 +164,9 @@ export class TimelineController extends TrackListItemController {
       this.selectionElements.leftExpand.addEventListener('mousedown', (event) => {
         if (event.buttons == 1 && event.button == 0) {
           this.trackListController.selectionController.updateSelectionStartSample(true)
-          this.trackListController.pointerStateManager.startResizingSelection(this.trackListController.selectionController)
+          this.trackListController.pointerStateManager.startResizingSelection(
+            this.trackListController.selectionController,
+          )
           event.stopPropagation()
         }
       })
@@ -172,7 +174,9 @@ export class TimelineController extends TrackListItemController {
       this.selectionElements.rightExpand.addEventListener('mousedown', (event) => {
         if (event.buttons == 1 && event.button == 0) {
           this.trackListController.selectionController.updateSelectionStartSample(false)
-          this.trackListController.pointerStateManager.startResizingSelection(this.trackListController.selectionController)
+          this.trackListController.pointerStateManager.startResizingSelection(
+            this.trackListController.selectionController,
+          )
           event.stopPropagation()
         }
       })
@@ -233,10 +237,8 @@ export class TimelineController extends TrackListItemController {
 
   private getTickMarkBucket(labelWidth: number): TickMarkBucket {
     return (
-      this.TICK_MARKS.find(
-        (bucket) => 
-            labelWidth && bucket.majorIntervalMs / this.msPerUnit > labelWidth
-        ) ?? this.TICK_MARKS[this.TICK_MARKS.length - 1]
+      this.TICK_MARKS.find((bucket) => labelWidth && bucket.majorIntervalMs / this.msPerUnit > labelWidth) ??
+      this.TICK_MARKS[this.TICK_MARKS.length - 1]
     )
   }
 
