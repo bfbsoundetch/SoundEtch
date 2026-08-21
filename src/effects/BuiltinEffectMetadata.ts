@@ -118,3 +118,36 @@ export const CompressionEffectMetadata: EffectMetadata = {
     },
   ],
 }
+
+export const LimiterEffectMetadata: EffectMetadata = {
+  id: 'soundetch.limiter',
+  name: 'Limiter',
+  description: 'Prevent peaks from exceeding a ceiling with 5 ms lookahead',
+  categories: ['Dynamics'],
+  parameters: [
+    {
+      id: 'ceiling',
+      displayName: 'Ceiling',
+      defaultValue: -0.3,
+      minValue: -20,
+      maxValue: 0,
+      increment: 0.1,
+      normalize: (value) => (value + 20) / 20,
+      denormalize: (value) => value * 20 - 20,
+      displayValue: (value) => `${value.toFixed(1)} dB`,
+      scaleValues: [-20, -12, -6, -3, -1, 0],
+    },
+    {
+      id: 'release',
+      displayName: 'Release',
+      defaultValue: 50,
+      minValue: 1,
+      maxValue: 1000,
+      increment: 1,
+      normalize: (value) => Math.log10(value) / 3,
+      denormalize: (value) => 10 ** (value * 3),
+      displayValue: (value) => `${value.toFixed(0)} ms`,
+      scaleValues: [1, 10, 50, 100, 500, 1000],
+    },
+  ],
+}

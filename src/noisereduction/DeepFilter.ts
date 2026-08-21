@@ -44,11 +44,7 @@ export class DeepFilter {
     )
   }
 
-  process(input: Float32Array, output: Float32Array) {
-    if (input.length != this.frameLength || output.length != this.frameLength) {
-      throw new Error(`DeepFilter frames must contain ${this.frameLength} samples`)
-    }
-
+  process() {
     wasm_bindgen.df_process_frame2(this.state, this.inputPointer, this.outputPointer)
   }
 }

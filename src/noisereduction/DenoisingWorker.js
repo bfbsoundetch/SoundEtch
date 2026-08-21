@@ -15,7 +15,7 @@ function readFromQueue() {
     }
     const samples_read = audio_reader.dequeue(input)
 
-    deep_filter.process(input, output)
+    deep_filter.process()
 
     if (audio_writer.enqueue(output) !== frame_length) {
       console.log("worker underrun: the audioworklet doesn't dequeue fast enough!")

@@ -1,7 +1,14 @@
-import { BoostEffectMetadata, CompressionEffectMetadata, NoiseReductionEffectMetadata } from './BuiltinEffectMetadata'
+import {
+  BoostEffectMetadata,
+  CompressionEffectMetadata,
+  LimiterEffectMetadata,
+  NoiseReductionEffectMetadata,
+} from './BuiltinEffectMetadata'
 import { EffectIndex } from './EffectIndex'
 import { ParameterValueSequence, ParamValueTransition } from './ParameterValueSequence'
 import { BoostEffect } from './gain/GainEffects'
+import { LimiterEffect } from './limiter/LimiterEffect'
+import { RawDataAudioContext } from '@descript/web-audio-js'
 
 describe('EffectIndex', () => {
   test('lists and creates built-in effects', async () => {
@@ -10,9 +17,11 @@ describe('EffectIndex', () => {
     expect(effectIndex.getAvailableEffects()).toContain(BoostEffectMetadata)
     expect(effectIndex.getAvailableEffects()).toContain(NoiseReductionEffectMetadata)
     expect(effectIndex.getAvailableEffects()).toContain(CompressionEffectMetadata)
+    expect(effectIndex.getAvailableEffects()).toContain(LimiterEffectMetadata)
     expect(effectIndex.getEffectMetadataById(BoostEffectMetadata.id)).toBe(BoostEffectMetadata)
     expect((await effectIndex.getEffectById(BoostEffectMetadata.id))?.metadata).toBe(BoostEffectMetadata)
     expect((await effectIndex.getEffectById(CompressionEffectMetadata.id))?.metadata).toBe(CompressionEffectMetadata)
+    expect((await effectIndex.getEffectById(LimiterEffectMetadata.id))?.metadata).toBe(LimiterEffectMetadata)
   })
 
   test('returns null for an unknown effect', async () => {
@@ -51,6 +60,12 @@ describe('effect parameters', () => {
     },
   )
 
+  test.each(LimiterEffectMetadata.parameters)('$displayName normalization spans its metadata range', (parameter) => {
+    expect(parameter.normalize(parameter.minValue)).toBeCloseTo(0)
+    expect(parameter.normalize(parameter.maxValue)).toBeCloseTo(1)
+    expect(parameter.denormalize(parameter.normalize(parameter.defaultValue))).toBeCloseTo(parameter.defaultValue)
+  })
+
   test.each(
     [
       ParamValueTransition.generateSCurve(),
@@ -88,5 +103,21 @@ describe('effect module connections', () => {
     expect(parameters.gain).toBe(gainNode.gain)
     expect(audioContext.createGain).toHaveBeenCalledTimes(1)
     expect(gainNode.disconnect).toHaveBeenCalledTimes(1)
+  })
+
+  test('advances limiter parameters when rendering offline', async () => {
+    const audioContext = new RawDataAudioContext({ sampleRate: 48000, blockSize: 128, numberOfChannels: 2 })
+    const context = audioContext as unknown as BaseAudioContext
+    const effect = new LimiterEffect()
+    const parameters = await effect.getParameters(context)
+    parameters.ceiling.setValueAtTime(-6, context.currentTime)
+    parameters.release.setValueAtTime(250, context.currentTime)
+    await effect.connect(context, context.destination)
+    audioContext.resume()
+
+    audioContext.process([new Float32Array(128), new Float32Array(128)])
+
+    expect(parameters.ceiling.value).toBe(-6)
+    expect(parameters.release.value).toBe(250)
   })
 })

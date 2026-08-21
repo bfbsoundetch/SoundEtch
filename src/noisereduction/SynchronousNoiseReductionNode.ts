@@ -18,7 +18,7 @@ export async function createSynchronousNoiseReductionNode(audioContext: BaseAudi
     for (const sample of input) {
       inputFrame[inputLength++] = sample
       if (inputLength == inputFrame.length) {
-        deepFilter.process(inputFrame, outputFrame)
+        deepFilter.process()
         outputQueue.set(outputFrame, outputWritePosition)
         outputWritePosition += outputFrame.length
         inputLength = 0
