@@ -10,12 +10,14 @@ import {
   FadeEffectMetadata,
   NoiseReductionEffectMetadata,
   LimiterEffectMetadata,
+  GateEffectMetadata,
 } from '../effects/BuiltinEffectMetadata'
 import { BoostEffect, FadeEffect } from '../effects/gain/GainEffects'
 import { NoiseReductionEffect } from '../effects/noisereduction/NoiseReductionEffect'
 import { EffectModule } from '../effects/Effect'
 import { CompressionEffect } from '../effects/compression/CompressionEffect'
 import { LimiterEffect } from '../effects/limiter/LimiterEffect'
+import { GateEffect } from '../effects/gate/GateEffect'
 
 const BLOCK_SIZE = 1024
 const RENDER_CHUNK_SAMPLE_CAPACITY = 1024 * 1024
@@ -146,6 +148,8 @@ function getRenderingEffect(id: string): EffectModule | null {
       return new CompressionEffect()
     case LimiterEffectMetadata.id:
       return new LimiterEffect()
+    case GateEffectMetadata.id:
+      return new GateEffect()
     default:
       return null
   }

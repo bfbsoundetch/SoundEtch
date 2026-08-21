@@ -4,6 +4,7 @@ import {
   NoiseReductionEffectMetadata,
   CompressionEffectMetadata,
   LimiterEffectMetadata,
+  GateEffectMetadata,
 } from './BuiltinEffectMetadata'
 import { EffectMetadata, EffectModule } from './Effect'
 
@@ -15,6 +16,7 @@ export class EffectIndex {
     NoiseReductionEffectMetadata,
     CompressionEffectMetadata,
     LimiterEffectMetadata,
+    GateEffectMetadata,
   ]
 
   static getInstance() {
@@ -43,6 +45,8 @@ export class EffectIndex {
         return new (await import('./compression/CompressionEffect')).CompressionEffect()
       case LimiterEffectMetadata.id:
         return new (await import('./limiter/LimiterEffect')).LimiterEffect()
+      case GateEffectMetadata.id:
+        return new (await import('./gate/GateEffect')).GateEffect()
       default:
         return null
     }

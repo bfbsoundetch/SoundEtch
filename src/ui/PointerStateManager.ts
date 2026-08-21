@@ -118,6 +118,7 @@ export class PointerStateManager extends TrackListItemController {
               )
             } else {
               trackListController.clearSelection()
+              this.timelineRegionController = null
               this.changeState(State.DEFAULT)
             }
           }
@@ -140,7 +141,6 @@ export class PointerStateManager extends TrackListItemController {
         case State.SELECTING:
           this.changeState(State.DEFAULT)
           this.timelineRegionController!.updateListener()
-          this.timelineRegionController = null
           break
         case State.MOVING_CLIPVIEW:
           this.changeState(State.DEFAULT)
@@ -283,6 +283,7 @@ export class PointerStateManager extends TrackListItemController {
     AudioControl.startPosition = Math.round(this.sampleForMouseEvent(mouseEvent))
     this.trackListController.positionMarkerController.draw()
     this.trackListController.clearSelection()
+    this.timelineRegionController = null
     this.timelineAreaElement.style.cursor = 'col-resize'
   }
 
@@ -307,6 +308,7 @@ export class PointerStateManager extends TrackListItemController {
       case State.SELECTING:
         if (newState != State.DEFAULT && newState != State.READ_ONLY) {
           this.trackListController.clearSelection()
+          this.timelineRegionController = null
           this.trackListController.positionMarkerController.hidePositionMarker()
         }
         break
