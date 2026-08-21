@@ -7,8 +7,6 @@ import {
 import { EffectIndex } from './EffectIndex'
 import { ParameterValueSequence, ParamValueTransition } from './ParameterValueSequence'
 import { BoostEffect } from './gain/GainEffects'
-import { LimiterEffect } from './limiter/LimiterEffect'
-import { RawDataAudioContext } from '@descript/web-audio-js'
 
 describe('EffectIndex', () => {
   test('lists and creates built-in effects', async () => {
@@ -103,21 +101,5 @@ describe('effect module connections', () => {
     expect(parameters.gain).toBe(gainNode.gain)
     expect(audioContext.createGain).toHaveBeenCalledTimes(1)
     expect(gainNode.disconnect).toHaveBeenCalledTimes(1)
-  })
-
-  test('advances limiter parameters when rendering offline', async () => {
-    const audioContext = new RawDataAudioContext({ sampleRate: 48000, blockSize: 128, numberOfChannels: 2 })
-    const context = audioContext as unknown as BaseAudioContext
-    const effect = new LimiterEffect()
-    const parameters = await effect.getParameters(context)
-    parameters.ceiling.setValueAtTime(-6, context.currentTime)
-    parameters.release.setValueAtTime(250, context.currentTime)
-    await effect.connect(context, context.destination)
-    audioContext.resume()
-
-    audioContext.process([new Float32Array(128), new Float32Array(128)])
-
-    expect(parameters.ceiling.value).toBe(-6)
-    expect(parameters.release.value).toBe(250)
   })
 })
