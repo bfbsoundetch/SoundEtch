@@ -86,7 +86,8 @@ export class Player {
       }
       playerNode.connect(chainInput)
       gainNode.connect(pannerNode)
-      pannerNode.connect(audioContext.destination)
+      const analyzerOutput = await track.attachAnalyzer(pannerNode)
+      analyzerOutput.connect(audioContext.destination)
 
       playbackInfos.push({
         clipViews: track.clipViews.map((c) => {

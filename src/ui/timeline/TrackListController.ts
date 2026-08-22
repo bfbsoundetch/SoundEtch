@@ -86,7 +86,7 @@ export class TrackListController {
   private readonly addTrackButton = document.createElement('button')
   private readonly infoWaveformPairs = new Map<
     string,
-    { info: HTMLElement; waveform: HTMLElement; controller: Waveform }
+    { info: HTMLElement; waveform: HTMLElement; controller: Waveform; infoController: TrackListInfo }
   >()
   private renderedProjectId: number | undefined = undefined
   private automationMode: AutomationMode | null = null
@@ -195,6 +195,7 @@ export class TrackListController {
         this.msPerUnit = Infinity
         this.translationUnits = 0
         this.waveforms.splice(0)
+        this.infoWaveformPairs.forEach((pair) => pair.infoController.remove())
         this.infoWaveformPairs.clear()
         this.clearSelection()
       }
@@ -211,6 +212,7 @@ export class TrackListController {
       }
       for (const trackId of this.infoWaveformPairs.keys()) {
         if (!trackIds.has(trackId)) {
+          this.infoWaveformPairs.get(trackId)?.infoController.remove()
           this.infoWaveformPairs.delete(trackId)
         }
       }
@@ -224,6 +226,7 @@ export class TrackListController {
           nextWaveforms.push(existing.controller)
           continue
         }
+        existing?.infoController.remove()
 
         const trackInfoDiv = document.createElement('div')
         trackInfoDiv.dataset.trackId = `${track.id}`
@@ -240,11 +243,14 @@ export class TrackListController {
         this.tracklistInfoElement.appendChild(trackInfoDiv)
         this.tracklistElement.appendChild(waveformDiv)
 
-        // const trackPeakMeterController = new PeakMeterController(trackPeakMeterDiv)
-
         const waveform = new Waveform(this, track, waveformDiv, i)
         nextWaveforms.push(waveform)
-        this.infoWaveformPairs.set(`${track.id}`, { info: trackInfoDiv, waveform: waveformDiv, controller: waveform })
+        this.infoWaveformPairs.set(`${track.id}`, {
+          info: trackInfoDiv,
+          waveform: waveformDiv,
+          controller: waveform,
+          infoController: trackListInfo,
+        })
 
         infoDivs.push(trackInfoDiv)
         waveformDivs.push(waveformDiv)

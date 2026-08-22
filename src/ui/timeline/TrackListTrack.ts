@@ -3,8 +3,11 @@ import { ProjectManager } from '../../project/ProjectManager'
 import { Track } from '../../project/Track'
 import { EditorHistory } from '../undo/EditorHistory'
 import { SetTrackPropertyCommand, TrackProperty } from '../undo/UndoableActions'
+import { PeakMeterController } from '../PeakMeterController'
 
 export class TrackListTrack {
+  private readonly peakMeter: PeakMeterController
+
   constructor(
     track: Track,
     private readonly trackInfoDiv: HTMLDivElement,
@@ -171,10 +174,11 @@ export class TrackListTrack {
     panSliderParent.appendChild(panOutput)
 
     const peakMeterDiv = document.createElement('div')
+    peakMeterDiv.className = 'track-peak-meter'
     peakMeterDiv.style.gridArea = 'peak'
-    peakMeterDiv.style.height = '100%'
-    peakMeterDiv.style.width = '100%'
     this.trackInfoDiv.appendChild(peakMeterDiv)
+    this.peakMeter = new PeakMeterController(peakMeterDiv, track)
+    this.peakMeter.draw(this.peakMeter)
 
     void ProjectManager.addTrackListener(track, () => {
       if (!trackTitle.isContentEditable) {
@@ -194,6 +198,10 @@ export class TrackListTrack {
       event.stopPropagation()
       event.preventDefault()
     }
+  }
+
+  remove() {
+    this.peakMeter.stop()
   }
 
   private makeEditable(div: HTMLDivElement) {

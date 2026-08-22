@@ -4,6 +4,7 @@ import { Restorable } from '../persistence/Restoration'
 import { Analyzable } from '../analyzers/Analyzable'
 import { EffectData } from 'effects/EffectData'
 import { EffectModule } from 'effects/Effect'
+import { SimpleAnalyzer } from '../analyzers/SimpleAnalyzer'
 
 export interface PlaybackEffect {
   instanceId: string
@@ -26,6 +27,7 @@ export class Track extends DatabasePersisted implements Analyzable {
   readonly clipViews: ClipView[] = []
   readonly effectRegions = new Array<EffectData>()
   private playback: Playback | null = null
+  private readonly analyzer = new SimpleAnalyzer()
   private pan: number = 0
   private gain: number = 1
 
@@ -33,7 +35,7 @@ export class Track extends DatabasePersisted implements Analyzable {
     public name: string,
     private readonly channelCount: number,
   ) {
-    super(['playback'])
+    super(['playback', 'analyzer'])
   }
 
   getChannelCount(): number {
@@ -213,6 +215,10 @@ export class Track extends DatabasePersisted implements Analyzable {
     this.playback = new Playback(playerNode, gainNode, pannerNode, effects, cleanup)
   }
 
+  attachAnalyzer(inputNode: AudioNode) {
+    return this.analyzer.attachAnalyzer(inputNode)
+  }
+
   stopPlayback() {
     this.playback?.cleanup?.()
     this.playback?.playerNode.disconnect()
@@ -267,15 +273,15 @@ export class Track extends DatabasePersisted implements Analyzable {
   }
 
   getLevel(): number {
-    throw new Error('Method not implemented.')
+    return this.analyzer.getLevel()
   }
 
   getPeak(): number {
-    throw new Error('Method not implemented.')
+    return this.analyzer.getPeak()
   }
 
   getHeldPeak(): number {
-    throw new Error('Method not implemented.')
+    return this.analyzer.getHeldPeak()
   }
 
   get length(): number {
