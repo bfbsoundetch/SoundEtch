@@ -994,7 +994,7 @@ video {
     'pan pan peak'
     '. . peak';
   grid-template-rows: auto auto auto auto 1fr;
-  grid-template-columns: 2rem minmax(0, 1fr) 1rem;
+  grid-template-columns: 2rem minmax(0, 1fr) 1.5rem;
   align-content: start;
   row-gap: 0.25rem;
   column-gap: 0.25rem;
@@ -1013,6 +1013,7 @@ video {
   height: 100%;
   width: 100%;
   min-height: 0;
+  overflow: hidden;
 }
 
 .track-peak-meter > svg {

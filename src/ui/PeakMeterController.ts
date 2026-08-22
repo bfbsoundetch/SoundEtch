@@ -54,6 +54,7 @@ export class PeakMeterController {
     this.peakRect.style.color = 'rgba(255,255,255,.5)'
     this.peakRect.setAttribute(this.horizontal ? 'y' : 'x', `${PeakMeterController.SHORT / 2}`)
     this.peakRect.setAttribute(this.horizontal ? 'x' : 'y', `${PeakMeterController.OFFSET}`)
+    this.peakRect.style.transform = `translate${this.horizontal ? 'X' : 'Y'}(100%)`
     this.peakRect.style.transition = 'transform 90ms'
     this.svg.appendChild(this.peakRect)
 
@@ -66,6 +67,7 @@ export class PeakMeterController {
     this.levelRect.classList.add('levelRect')
     this.levelRect.setAttribute(this.horizontal ? 'y' : 'x', `${PeakMeterController.SHORT / 2}`)
     this.levelRect.setAttribute(this.horizontal ? 'x' : 'y', `${PeakMeterController.OFFSET}`)
+    this.levelRect.style.transform = `translate${this.horizontal ? 'X' : 'Y'}(100%)`
     this.levelRect.style.transition = 'transform 90ms'
     this.svg.appendChild(this.levelRect)
 
@@ -75,6 +77,7 @@ export class PeakMeterController {
     this.peakLine.setAttribute(this.horizontal ? 'y1' : 'x1', `${PeakMeterController.SHORT / 2}`)
     this.peakLine.setAttribute(this.horizontal ? 'y2' : 'x2', `${PeakMeterController.SHORT}`)
     this.peakLine.classList.add('peakLine')
+    this.peakLine.style.transform = `translate${this.horizontal ? 'X' : 'Y'}(100%)`
     this.svg.appendChild(this.peakLine)
   }
 
