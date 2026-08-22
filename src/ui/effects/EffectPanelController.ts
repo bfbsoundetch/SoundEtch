@@ -127,7 +127,7 @@ export class EffectPanelController {
     }
 
     const bodyElement = document.createElement('div')
-    bodyElement.className = 'effect-list-body'
+    bodyElement.className = 'effect-list-body effect-catalog-body'
     for (const metadata of this.effectIndex.getAvailableEffects()) {
       const listItemElement = document.createElement('article')
       listItemElement.className = 'effect-list-item effect-catalog-item'
@@ -144,7 +144,8 @@ export class EffectPanelController {
           NotificationsController.showErrorMessage('Could not add the effect.')
         })
       })
-      listItemElement.append(addEffectButton, this.getEffectDescriptionElement(metadata))
+      const [nameElement, categoryElement, descriptionElement] = this.getEffectDescriptionElements(metadata)
+      listItemElement.append(nameElement, addEffectButton, categoryElement, descriptionElement)
       bodyElement.appendChild(listItemElement)
     }
     this.openSubview('Add Effect', track.name, bodyElement, track)
@@ -466,26 +467,19 @@ export class EffectPanelController {
     this.openSubview(title, track.name, body, track)
   }
 
-  private getEffectDescriptionElement(metadata: EffectMetadata) {
-    const parentElement = document.createElement('div')
-    parentElement.className = 'effect-description'
-
+  private getEffectDescriptionElements(metadata: EffectMetadata) {
     const nameElement = document.createElement('p')
     nameElement.className = 'effect-name'
     nameElement.textContent = metadata.name
-    parentElement.appendChild(nameElement)
 
-    if (metadata.categories.length) {
-      const categoryElement = document.createElement('p')
-      categoryElement.className = 'effect-category'
-      categoryElement.textContent = metadata.categories.join(', ')
-      parentElement.appendChild(categoryElement)
-    }
+    const categoryElement = document.createElement('p')
+    categoryElement.className = 'effect-category'
+    categoryElement.textContent = metadata.categories.join(', ')
 
     const descriptionElement = document.createElement('p')
+    descriptionElement.className = 'effect-description'
     descriptionElement.textContent = metadata.description
-    parentElement.appendChild(descriptionElement)
-    return parentElement
+    return [nameElement, categoryElement, descriptionElement]
   }
 }
 

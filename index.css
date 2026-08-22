@@ -1537,8 +1537,8 @@ video {
   height: 100%;
   min-width: 0;
   padding: 0.5rem;
-  border: 0;
-  background: transparent;
+  border: 1px solid currentColor;
+  background: var(--alt-background);
   color: inherit;
   font: inherit;
   overflow-wrap: anywhere;
@@ -1567,8 +1567,9 @@ video {
   min-width: 0;
   height: 2.5rem;
   padding: 0.2rem;
-  border: 0;
+  border: 1px solid currentColor;
   border-right: 1px solid currentColor;
+  background: var(--alt-background);
   color: inherit;
 }
 
@@ -1616,32 +1617,69 @@ video {
   object-fit: contain;
 }
 
-.effect-catalog-item {
-  display: flex;
+.effect-catalog-body {
   flex-direction: column;
   gap: 0.75rem;
-  padding: 0.75rem;
+  overflow-x: hidden;
+  overflow-y: auto;
+  overscroll-behavior-y: contain;
+  padding: 1rem;
   box-sizing: border-box;
 }
 
+.effect-catalog-item {
+  display: grid;
+  grid-template-columns: minmax(8rem, 1fr) auto minmax(8rem, 0.8fr) minmax(14rem, 2fr);
+  grid-template-areas: 'name add category description';
+  align-items: center;
+  gap: 1rem;
+  flex: 0 0 auto;
+  width: 100%;
+  height: auto;
+  margin: 0;
+  padding: 0.75rem;
+  border-bottom: 1px solid currentColor;
+  box-sizing: border-box;
+  overflow: visible;
+}
+
 .effect-catalog-add {
+  grid-area: add;
   flex: 0 0 auto;
   padding: 0.6rem;
+  border: 1px solid currentColor;
+  background: var(--alt-background);
   font: inherit;
-}
-
-.effect-description p {
-  margin: 0.75rem 0;
-}
-
-.effect-name {
-  font-weight: bold;
   text-align: center;
 }
 
+.effect-catalog-item p {
+  margin: 0;
+}
+
+.effect-name {
+  grid-area: name;
+  font-weight: bold;
+}
+
 .effect-category {
+  grid-area: category;
   font-size: 0.85rem;
   opacity: 0.8;
+}
+
+.effect-description {
+  grid-area: description;
+}
+
+@media (max-width: 48rem) {
+  .effect-catalog-item {
+    grid-template-columns: minmax(0, 1fr) auto;
+    grid-template-areas:
+      'name add'
+      'category category'
+      'description description';
+  }
 }
 
 .effect-editor-body {

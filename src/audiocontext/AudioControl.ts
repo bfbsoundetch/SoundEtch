@@ -26,6 +26,10 @@ export function isActiveTimelineState(state: AudioState) {
   return state == AudioState.PLAYING || state == AudioState.RECORDING
 }
 
+export function isStoppedOrMonitoring() {
+  
+}
+
 export class AudioControl {
   static audioControlListeners = new Array<AudioControlListener>()
   static audioContext: EnhancedAudioContext | null = null
