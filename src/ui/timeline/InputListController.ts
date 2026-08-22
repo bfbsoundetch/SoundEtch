@@ -141,7 +141,7 @@ class AudioInputController {
     this.inputInfoDiv.appendChild(muteButton)
     this.inputInfoDiv.appendChild(peakMeterDiv)
 
-    this.peakMeter = new PeakMeterController(peakMeterDiv, audioInput, true)
+    this.peakMeter = new PeakMeterController(peakMeterDiv, audioInput, true, audioInput.channelCount)
     this.peakMeter.draw(this.peakMeter)
   }
 }

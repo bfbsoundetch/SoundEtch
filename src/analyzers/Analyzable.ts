@@ -1,6 +1,6 @@
 export interface Analyzable {
-  getLevel(): number
-  getPeak(): number
-  getHeldPeak(): number
+  getLevel(channel?: number): number
+  getPeak(channel?: number): number
+  getHeldPeak(channel?: number): number
   name: string
 }

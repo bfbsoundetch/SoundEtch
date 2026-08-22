@@ -272,16 +272,16 @@ export class Track extends DatabasePersisted implements Analyzable {
     return this.gain
   }
 
-  getLevel(): number {
-    return this.analyzer.getLevel()
+  getLevel(channel = 0): number {
+    return this.analyzer.getLevel(channel)
   }
 
-  getPeak(): number {
-    return this.analyzer.getPeak()
+  getPeak(channel = 0): number {
+    return this.analyzer.getPeak(channel)
   }
 
-  getHeldPeak(): number {
-    return this.analyzer.getHeldPeak()
+  getHeldPeak(channel = 0): number {
+    return this.analyzer.getHeldPeak(channel)
   }
 
   get length(): number {

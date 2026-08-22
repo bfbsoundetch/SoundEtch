@@ -6,15 +6,16 @@ export class PeakMeterController {
   private static OFFSET = 10
 
   readonly svg: SVGSVGElement
-  private readonly levelRect: SVGRectElement
-  private readonly peakRect: SVGRectElement
-  private readonly peakLine: SVGLineElement
+  private readonly levelRects = new Array<SVGRectElement>()
+  private readonly peakRects = new Array<SVGRectElement>()
+  private readonly peakLines = new Array<SVGLineElement>()
   private stopped = false
 
   constructor(
     parentDiv: HTMLDivElement,
     private analyzable: Analyzable,
     private readonly horizontal: boolean = false,
+    private readonly channelCount: number = 1,
     private max: number = 6,
     private min: number = -90,
     showScale = false,
@@ -44,41 +45,25 @@ export class PeakMeterController {
     zeroLine.style.stroke = 'currentColor'
     zeroLine.style.strokeWidth = '1'
 
-    this.peakRect = document.createElementNS('http://www.w3.org/2000/svg', 'rect')
-    this.peakRect.setAttribute(this.horizontal ? 'height' : 'width', `${PeakMeterController.SHORT / 2}`)
-    this.peakRect.setAttribute(
-      this.horizontal ? 'width' : 'height',
-      `${PeakMeterController.LONG - 2 * PeakMeterController.OFFSET}`,
-    )
-    this.peakRect.classList.add('peakRect')
-    this.peakRect.style.color = 'rgba(255,255,255,.5)'
-    this.peakRect.setAttribute(this.horizontal ? 'y' : 'x', `${PeakMeterController.SHORT / 2}`)
-    this.peakRect.setAttribute(this.horizontal ? 'x' : 'y', `${PeakMeterController.OFFSET}`)
-    this.peakRect.style.transform = `translate${this.horizontal ? 'X' : 'Y'}(100%)`
-    this.peakRect.style.transition = 'transform 90ms'
-    this.svg.appendChild(this.peakRect)
+    const laneSize = PeakMeterController.SHORT / 2 / this.channelCount
+    for (let channel = 0; channel < this.channelCount; ++channel) {
+      const lanePosition = PeakMeterController.SHORT / 2 + channel * laneSize
+      const peakRect = this.createBar('peakRect', lanePosition, laneSize)
+      peakRect.style.color = 'rgba(255,255,255,.5)'
+      this.peakRects.push(peakRect)
 
-    this.levelRect = document.createElementNS('http://www.w3.org/2000/svg', 'rect')
-    this.levelRect.setAttribute(this.horizontal ? 'height' : 'width', `${PeakMeterController.SHORT / 2}`)
-    this.levelRect.setAttribute(
-      this.horizontal ? 'width' : 'height',
-      `${PeakMeterController.LONG - 2 * PeakMeterController.OFFSET}`,
-    )
-    this.levelRect.classList.add('levelRect')
-    this.levelRect.setAttribute(this.horizontal ? 'y' : 'x', `${PeakMeterController.SHORT / 2}`)
-    this.levelRect.setAttribute(this.horizontal ? 'x' : 'y', `${PeakMeterController.OFFSET}`)
-    this.levelRect.style.transform = `translate${this.horizontal ? 'X' : 'Y'}(100%)`
-    this.levelRect.style.transition = 'transform 90ms'
-    this.svg.appendChild(this.levelRect)
+      this.levelRects.push(this.createBar('levelRect', lanePosition, laneSize))
 
-    this.peakLine = document.createElementNS('http://www.w3.org/2000/svg', 'line')
-    this.peakLine.setAttribute(this.horizontal ? 'x1' : 'y1', `${PeakMeterController.OFFSET}`)
-    this.peakLine.setAttribute(this.horizontal ? 'x2' : 'y2', `${PeakMeterController.OFFSET}`)
-    this.peakLine.setAttribute(this.horizontal ? 'y1' : 'x1', `${PeakMeterController.SHORT / 2}`)
-    this.peakLine.setAttribute(this.horizontal ? 'y2' : 'x2', `${PeakMeterController.SHORT}`)
-    this.peakLine.classList.add('peakLine')
-    this.peakLine.style.transform = `translate${this.horizontal ? 'X' : 'Y'}(100%)`
-    this.svg.appendChild(this.peakLine)
+      const peakLine = document.createElementNS('http://www.w3.org/2000/svg', 'line')
+      peakLine.setAttribute(this.horizontal ? 'x1' : 'y1', `${PeakMeterController.OFFSET}`)
+      peakLine.setAttribute(this.horizontal ? 'x2' : 'y2', `${PeakMeterController.OFFSET}`)
+      peakLine.setAttribute(this.horizontal ? 'y1' : 'x1', `${lanePosition}`)
+      peakLine.setAttribute(this.horizontal ? 'y2' : 'x2', `${lanePosition + laneSize}`)
+      peakLine.classList.add('peakLine')
+      peakLine.style.transform = `translate${this.horizontal ? 'X' : 'Y'}(100%)`
+      this.svg.appendChild(peakLine)
+      this.peakLines.push(peakLine)
+    }
   }
 
   drawScale() {
@@ -120,18 +105,20 @@ export class PeakMeterController {
     if (this.stopped) {
       return
     }
-    const level = self.analyzable.getLevel()
-    const peak = self.analyzable.getPeak()
-    const heldPeak = self.analyzable.getHeldPeak()
+    for (let channel = 0; channel < this.channelCount; ++channel) {
+      const level = self.analyzable.getLevel(channel)
+      const peak = self.analyzable.getPeak(channel)
+      const heldPeak = self.analyzable.getHeldPeak(channel)
 
-    const levelScale = this.scaledValue(level)
-    this.levelRect.style.transform = `translate${this.horizontal ? 'X' : 'Y'}(${(1 - levelScale) * 100}%)`
-    const peakScale = this.scaledValue(peak)
-    this.peakRect.style.transform = `translate${this.horizontal ? 'X' : 'Y'}(${(1 - peakScale) * 100}%)`
-    this.peakRect.style.color = peak > 0.0 ? 'rgba(255,0,0,.5)' : 'rgba(255,255,255,.5)'
-    this.peakLine.style.color = heldPeak > 0.0 ? 'rgb(255,0,0)' : 'rgb(255,255,255)'
-    const heldPeakScale = this.scaledValue(heldPeak)
-    this.peakLine.style.transform = `translate${this.horizontal ? 'X' : 'Y'}(${(1 - heldPeakScale) * 100}%)`
+      const levelScale = this.scaledValue(level)
+      this.levelRects[channel].style.transform = `translate${this.horizontal ? 'X' : 'Y'}(${(1 - levelScale) * 100}%)`
+      const peakScale = this.scaledValue(peak)
+      this.peakRects[channel].style.transform = `translate${this.horizontal ? 'X' : 'Y'}(${(1 - peakScale) * 100}%)`
+      this.peakRects[channel].style.color = peak > 0.0 ? 'rgba(255,0,0,.5)' : 'rgba(255,255,255,.5)'
+      this.peakLines[channel].style.color = heldPeak > 0.0 ? 'rgb(255,0,0)' : 'rgb(255,255,255)'
+      const heldPeakScale = this.scaledValue(heldPeak)
+      this.peakLines[channel].style.transform = `translate${this.horizontal ? 'X' : 'Y'}(${(1 - heldPeakScale) * 100}%)`
+    }
     requestAnimationFrame((_) => self.draw(self))
   }
 
@@ -141,6 +128,22 @@ export class PeakMeterController {
 
   remove() {
     this.svg.remove()
+  }
+
+  private createBar(className: string, lanePosition: number, laneSize: number) {
+    const rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect')
+    rect.setAttribute(this.horizontal ? 'height' : 'width', `${laneSize}`)
+    rect.setAttribute(
+      this.horizontal ? 'width' : 'height',
+      `${PeakMeterController.LONG - 2 * PeakMeterController.OFFSET}`,
+    )
+    rect.classList.add(className)
+    rect.setAttribute(this.horizontal ? 'y' : 'x', `${lanePosition}`)
+    rect.setAttribute(this.horizontal ? 'x' : 'y', `${PeakMeterController.OFFSET}`)
+    rect.style.transform = `translate${this.horizontal ? 'X' : 'Y'}(100%)`
+    rect.style.transition = 'transform 90ms'
+    this.svg.appendChild(rect)
+    return rect
   }
 
   private scaledValue(n: number) {

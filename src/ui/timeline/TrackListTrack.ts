@@ -177,7 +177,7 @@ export class TrackListTrack {
     peakMeterDiv.className = 'track-peak-meter'
     peakMeterDiv.style.gridArea = 'peak'
     this.trackInfoDiv.appendChild(peakMeterDiv)
-    this.peakMeter = new PeakMeterController(peakMeterDiv, track)
+    this.peakMeter = new PeakMeterController(peakMeterDiv, track, false, track.getChannelCount())
     this.peakMeter.svg.setAttribute('preserveAspectRatio', 'none')
     this.peakMeter.draw(this.peakMeter)
 

@@ -41,3 +41,35 @@ test('tracks peak hold and rms in one pass', () => {
   expect(instantaneousPeakOutput[0]).toBeCloseTo(0.2)
   expect(heldPeakOutput[0]).toBeCloseTo(0.2)
 })
+
+test('tracks stereo channels independently', () => {
+  global.sampleRate = 1000
+
+  const instantaneousPeakOutput = new Float32Array(2)
+  const heldPeakOutput = new Float32Array(2)
+  const rmsOutput = new Float32Array(2)
+  const processor = new SimpleAnalyzerProcessor({
+    processorOptions: {
+      instantaneousPeakOutput,
+      heldPeakOutput,
+      rmsOutput,
+      updateSampleCount: 2,
+      holdSampleCount: 2,
+      rmsWindow: 2,
+    },
+  })
+
+  const input = [new Float32Array([0.5, -0.25]), new Float32Array([0.1, -0.2])]
+  const output = [new Float32Array(2), new Float32Array(2)]
+  processor.process([input], [output])
+
+  expect(Array.from(output[0])).toEqual([0.5, -0.25])
+  expect(output[1][0]).toBeCloseTo(0.1)
+  expect(output[1][1]).toBeCloseTo(-0.2)
+  expect(instantaneousPeakOutput[0]).toBeCloseTo(0.5)
+  expect(instantaneousPeakOutput[1]).toBeCloseTo(0.2)
+  expect(heldPeakOutput[0]).toBeCloseTo(0.5)
+  expect(heldPeakOutput[1]).toBeCloseTo(0.2)
+  expect(rmsOutput[0]).toBeCloseTo(Math.sqrt((0.25 + 0.0625) / 2))
+  expect(rmsOutput[1]).toBeCloseTo(Math.sqrt((0.01 + 0.04) / 2))
+})

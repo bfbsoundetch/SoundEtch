@@ -18,14 +18,14 @@ export class MediaStreamInput implements AudioInput {
     this.analyzer = new SimpleAnalyzer()
   }
 
-  getLevel(): number {
-    return this.analyzer.getLevel()
+  getLevel(channel = 0): number {
+    return this.analyzer.getLevel(channel)
   }
-  getPeak(): number {
-    return this.analyzer.getPeak()
+  getPeak(channel = 0): number {
+    return this.analyzer.getPeak(channel)
   }
-  getHeldPeak(): number {
-    return this.analyzer.getHeldPeak()
+  getHeldPeak(channel = 0): number {
+    return this.analyzer.getHeldPeak(channel)
   }
 
   async init(context: AudioContext) {

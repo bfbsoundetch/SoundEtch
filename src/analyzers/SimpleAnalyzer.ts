@@ -6,16 +6,16 @@ export class SimpleAnalyzer {
 
   constructor(private readonly forkOutput = true) {}
 
-  getLevel(): number {
-    return SimpleAnalyzer.linearToDb(this.rmsLevel?.[0] ?? 0)
+  getLevel(channel = 0): number {
+    return SimpleAnalyzer.linearToDb(this.rmsLevel?.[channel] ?? 0)
   }
 
-  getPeak(): number {
-    return SimpleAnalyzer.linearToDb(this.instantaneousPeak?.[0] ?? 0)
+  getPeak(channel = 0): number {
+    return SimpleAnalyzer.linearToDb(this.instantaneousPeak?.[channel] ?? 0)
   }
 
-  getHeldPeak(): number {
-    return SimpleAnalyzer.linearToDb(this.heldPeak?.[0] ?? 0)
+  getHeldPeak(channel = 0): number {
+    return SimpleAnalyzer.linearToDb(this.heldPeak?.[channel] ?? 0)
   }
 
   async sendOutputTo(destination: AudioNode) {
@@ -34,9 +34,10 @@ export class SimpleAnalyzer {
 
     await inputNode.context.audioWorklet.addModule(new URL('./SimpleAnalyzerProcessor.js', import.meta.url))
 
-    this.instantaneousPeak = new Float32Array(new SharedArrayBuffer(Float32Array.BYTES_PER_ELEMENT))
-    this.heldPeak = new Float32Array(new SharedArrayBuffer(Float32Array.BYTES_PER_ELEMENT))
-    this.rmsLevel = new Float32Array(new SharedArrayBuffer(Float32Array.BYTES_PER_ELEMENT))
+    const outputByteLength = inputNode.channelCount * Float32Array.BYTES_PER_ELEMENT
+    this.instantaneousPeak = new Float32Array(new SharedArrayBuffer(outputByteLength))
+    this.heldPeak = new Float32Array(new SharedArrayBuffer(outputByteLength))
+    this.rmsLevel = new Float32Array(new SharedArrayBuffer(outputByteLength))
 
     const nodeOptions: AudioWorkletNodeOptions = {
       channelCount: inputNode.channelCount,
