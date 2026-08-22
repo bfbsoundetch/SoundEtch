@@ -1,5 +1,5 @@
 import { TimeUtils } from '../../global/TimeUtils'
-import { AudioState, AudioControl, isPausedState } from '../../audiocontext/AudioControl'
+import { AudioState, AudioControl } from '../../audiocontext/AudioControl'
 import { TrackListController } from './TrackListController'
 import { TrackListItemController } from './TrackListItemController'
 
@@ -43,7 +43,11 @@ export class PositionMarkerController extends TrackListItemController {
 
   draw(positionOverride: number | null = null) {
     let position
-    if (AudioControl.getState() == AudioState.STOPPED || AudioControl.getState() == AudioState.MONITORING) {
+    if (
+      AudioControl.getState() == AudioState.STOPPED ||
+      AudioControl.getState() == AudioState.MONITORING ||
+      AudioControl.getState() == AudioState.MONITORING_PAUSED
+    ) {
       if (AudioControl.startPosition == 0) {
         this.hidePositionMarker()
         return

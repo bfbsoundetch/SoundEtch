@@ -29,6 +29,7 @@ export class PointerStateManager extends TrackListItemController {
           this.changeState(State.READ_ONLY)
           break
         case AudioState.MONITORING:
+        case AudioState.MONITORING_PAUSED:
         case AudioState.STOPPED:
           this.changeState(State.DEFAULT)
           break
@@ -56,8 +57,10 @@ export class PointerStateManager extends TrackListItemController {
             Math.abs(mouseEvent.clientX - this.mouseDownPoint!.x) >= 2
           ) {
             trackListController.positionMarkerController.hidePositionMarker()
-            // TODO: can be undefined
-            this.timelineRegionController!.updateSelection(
+            if (!this.timelineRegionController) {
+              this.timelineRegionController = this.trackListController.selectionController
+            }
+            this.timelineRegionController.updateSelection(
               this.sampleForMouseEvent(mouseEvent),
               this.activeWaveform,
               true,
@@ -90,7 +93,11 @@ export class PointerStateManager extends TrackListItemController {
       switch (this.state) {
         case State.DEFAULT:
           if (mouseEvent.buttons == 1 && mouseEvent.button == 0) {
-            if (AudioControl.getState() == AudioState.STOPPED || AudioControl.getState() == AudioState.MONITORING) {
+            if (
+              AudioControl.getState() == AudioState.STOPPED ||
+              AudioControl.getState() == AudioState.MONITORING ||
+              AudioControl.getState() == AudioState.MONITORING_PAUSED
+            ) {
               this.markPointerDown(mouseEvent)
               this.timelineRegionController = this.trackListController.selectionController
               this.timelineRegionController.updateSelection(

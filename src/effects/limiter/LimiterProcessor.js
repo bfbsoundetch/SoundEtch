@@ -5,7 +5,6 @@ const ProcessorBase = globalThis.AudioWorkletProcessor ?? class {}
 
 // Lookahead brickwall limiter using a monotonic deque for O(1) peak lookup.
 export class LimiterProcessor extends ProcessorBase {
-
   static get parameterDescriptors() {
     return [
       {
@@ -57,7 +56,7 @@ export class LimiterProcessor extends ProcessorBase {
     const ceilingValues = parameters.ceiling
     const releaseValues = parameters.release
     const windowSize = this.peakValues.length
-    
+
     for (let frame = 0; frame < frameCount; ++frame) {
       let peak = 0
       for (let channel = 0; channel < input.length; ++channel) {
