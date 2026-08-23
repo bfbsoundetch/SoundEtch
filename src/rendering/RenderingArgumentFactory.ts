@@ -31,7 +31,7 @@ export function createRenderingArgument(
             },
           }
         }),
-        gain: track.getGain(),
+        gain: project.isTrackAudible(track) ? track.getGain() : 0,
         pan: track.getPan(),
         effects: structuredClone(track.effectRegions),
       }

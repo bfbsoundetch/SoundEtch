@@ -28,6 +28,9 @@ button:focus {
   --waveform-5: hsla(300, 100%, 90%, 1);
   --record-button-red: hsla(0, 100%, 25%, 0.9);
   --play-button-green: hsla(147, 74%, 20%, 0.9);
+  --track-mute-active: #b96c00;
+  --track-solo-active: #28794b;
+  --track-mix-active-text: #ffffff;
 }
 
 @media (prefers-color-scheme: dark) {
@@ -40,6 +43,9 @@ button:focus {
     --alt-background: #565b5d;
     --record-button-red: hsla(0, 100%, 45%, 0.9);
     --play-button-green: hsla(147, 74%, 45%, 0.9);
+    --track-mute-active: #f0a020;
+    --track-solo-active: #4fce86;
+    --track-mix-active-text: #171717;
   }
 }
 
@@ -991,10 +997,11 @@ video {
   grid-template-areas:
     'title title peak'
     'delete effects peak'
+    'mix mix peak'
     'gain gain peak'
     'pan pan peak'
     '. . peak';
-  grid-template-rows: auto auto auto auto 1fr;
+  grid-template-rows: auto auto auto auto auto 1fr;
   grid-template-columns: 2rem minmax(0, 1fr) 1.5rem;
   align-content: start;
   row-gap: 0.25rem;
@@ -1004,6 +1011,34 @@ video {
   vertical-align: top;
   background-color: var(--alt-background);
   overflow: hidden;
+}
+
+.track-mix-controls {
+  grid-area: mix;
+  display: grid;
+  grid-template-columns: 1fr 1fr;
+  gap: 0.25rem;
+}
+
+.track-mix-button {
+  display: grid;
+  min-height: 1.5rem;
+  place-items: center;
+  border: 1px solid var(--color);
+  background: var(--bg-color);
+  color: var(--color);
+  box-sizing: border-box;
+  user-select: none;
+}
+
+.track-mute-button[aria-pressed='true'] {
+  background: var(--track-mute-active);
+  color: var(--track-mix-active-text);
+}
+
+.track-solo-button[aria-pressed='true'] {
+  background: var(--track-solo-active);
+  color: var(--track-mix-active-text);
 }
 
 .track-info > *,

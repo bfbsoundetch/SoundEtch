@@ -19,6 +19,7 @@ class Playback {
     readonly pannerNode: StereoPannerNode,
     readonly effects: PlaybackEffect[],
     readonly cleanup: (() => void) | null,
+    public audible: boolean,
   ) {}
 }
 
@@ -30,6 +31,8 @@ export class Track extends DatabasePersisted implements Analyzable {
   private readonly analyzer = new SimpleAnalyzer()
   private pan: number = 0
   private gain: number = 1
+  private muted = false
+  private soloed = false
 
   constructor(
     public name: string,
@@ -211,8 +214,10 @@ export class Track extends DatabasePersisted implements Analyzable {
     pannerNode: StereoPannerNode,
     effects: PlaybackEffect[] = [],
     cleanup: (() => void) | null = null,
+    audible = true,
   ) {
-    this.playback = new Playback(playerNode, gainNode, pannerNode, effects, cleanup)
+    this.playback = new Playback(playerNode, gainNode, pannerNode, effects, cleanup, audible)
+    gainNode.gain.value = audible ? this.gain : 0
   }
 
   attachAnalyzer(inputNode: AudioNode) {
@@ -263,13 +268,37 @@ export class Track extends DatabasePersisted implements Analyzable {
 
   setGain(gain: number) {
     if (this.playback) {
-      this.playback.gainNode.gain.value = gain
+      this.playback.gainNode.gain.value = this.playback.audible ? gain : 0
     }
     this.gain = gain
   }
 
   getGain(): number {
     return this.gain
+  }
+
+  setMuted(muted: boolean) {
+    this.muted = muted
+  }
+
+  isMuted(): boolean {
+    return this.muted
+  }
+
+  setSoloed(soloed: boolean) {
+    this.soloed = soloed
+  }
+
+  isSoloed(): boolean {
+    return this.soloed
+  }
+
+  setPlaybackAudible(audible: boolean) {
+    if (!this.playback) {
+      return
+    }
+    this.playback.audible = audible
+    this.playback.gainNode.gain.value = audible ? this.gain : 0
   }
 
   getLevel(channel = 0): number {

@@ -232,7 +232,7 @@ export class VideoRenderer {
           samplesPerColumn,
         )
         const startColumn = Math.floor((visibleStart - startPosition) / samplesPerColumn)
-        const trackGain = Math.max(0, track.getGain())
+        const trackGain = project.isTrackAudible(track) ? Math.max(0, track.getGain()) : 0
 
         for (let channel = 0; channel < summary.length; ++channel) {
           const channelSummary = summary[channel]

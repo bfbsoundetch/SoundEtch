@@ -98,7 +98,14 @@ export class Player {
         }),
         ringBufferArray: ringBufferArray,
       })
-      track.registerNewPlayback(playerNode, gainNode, pannerNode, playbackEffects, () => {})
+      track.registerNewPlayback(
+        playerNode,
+        gainNode,
+        pannerNode,
+        playbackEffects,
+        () => {},
+        project.isTrackAudible(track),
+      )
       playerNodes.push(playerNode)
     }
     if (playerNodes.length == 0) {

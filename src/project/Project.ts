@@ -31,6 +31,7 @@ export class Project extends DatabasePersisted {
 
   addTrack(track: Track, index: number = this.tracks.length) {
     this.tracks.splice(index, 0, track)
+    this.updateTrackAudibility()
   }
 
   addClip(clip: Clip) {
@@ -46,7 +47,30 @@ export class Project extends DatabasePersisted {
 
   deleteTrack(track: Track) {
     const index = this.tracks.indexOf(track)
+    if (index < 0) {
+      return
+    }
     this.tracks.splice(index, 1)
+    track.stopPlayback()
+    this.updateTrackAudibility()
+  }
+
+  setTrackMuted(track: Track, muted: boolean) {
+    track.setMuted(muted)
+    this.updateTrackAudibility()
+  }
+
+  setTrackSoloed(track: Track, soloed: boolean) {
+    track.setSoloed(soloed)
+    this.updateTrackAudibility()
+  }
+
+  isTrackAudible(track: Track): boolean {
+    return !track.isMuted() && (!this.tracks.some((candidate) => candidate.isSoloed()) || track.isSoloed())
+  }
+
+  private updateTrackAudibility() {
+    this.tracks.forEach((track) => track.setPlaybackAudible(this.isTrackAudible(track)))
   }
 
   getLength() {

@@ -231,7 +231,7 @@ export class TrackListController {
         const trackInfoDiv = document.createElement('div')
         trackInfoDiv.dataset.trackId = `${track.id}`
         trackInfoDiv.style.height = `${7 * track.getChannelCount() + 1.5}rem`
-        const trackListInfo = new TrackListInfo(track, trackInfoDiv, this.history)
+        const trackListInfo = new TrackListInfo(project, track, trackInfoDiv, this.history)
 
         const waveformDiv = document.createElement('div')
         waveformDiv.addEventListener('contextmenu', (mouseEvent) => {

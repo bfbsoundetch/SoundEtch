@@ -4,11 +4,13 @@ import { Track } from '../../project/Track'
 import { EditorHistory } from '../undo/EditorHistory'
 import { SetTrackPropertyCommand, TrackProperty } from '../undo/UndoableActions'
 import { PeakMeterController } from '../PeakMeterController'
+import { Project } from '../../project/Project'
 
 export class TrackListTrack {
   private readonly peakMeter: PeakMeterController
 
   constructor(
+    private readonly project: Project,
     track: Track,
     private readonly trackInfoDiv: HTMLDivElement,
     private readonly history: EditorHistory,
@@ -65,6 +67,28 @@ export class TrackListTrack {
       EffectPanelController.getInstance().showTrackEffectsList(track)
     })
     this.trackInfoDiv.appendChild(effectButton)
+
+    const mixControls = document.createElement('div')
+    mixControls.className = 'track-mix-controls'
+    const muteButton = this.createMixButton('Mute', `Mute ${track.name}`, 'track-mute-button')
+    const soloButton = this.createMixButton('Solo', `Solo ${track.name}`, 'track-solo-button')
+    const updateMixButtons = () => {
+      muteButton.setAttribute('aria-pressed', `${track.isMuted()}`)
+      soloButton.setAttribute('aria-pressed', `${track.isSoloed()}`)
+    }
+    muteButton.addEventListener('click', () => {
+      this.project.setTrackMuted(track, !track.isMuted())
+      updateMixButtons()
+      void ProjectManager.saveTrack(track)
+    })
+    soloButton.addEventListener('click', () => {
+      this.project.setTrackSoloed(track, !track.isSoloed())
+      updateMixButtons()
+      void ProjectManager.saveTrack(track)
+    })
+    updateMixButtons()
+    mixControls.append(muteButton, soloButton)
+    this.trackInfoDiv.appendChild(mixControls)
 
     const gainSliderParent = document.createElement('div')
     gainSliderParent.style.width = '100%'
@@ -185,6 +209,11 @@ export class TrackListTrack {
       if (!trackTitle.isContentEditable) {
         trackTitle.innerText = track.name
       }
+      muteButton.title = `Mute ${track.name}`
+      muteButton.setAttribute('aria-label', `Mute ${track.name}`)
+      soloButton.title = `Solo ${track.name}`
+      soloButton.setAttribute('aria-label', `Solo ${track.name}`)
+      updateMixButtons()
       const gainNumber = 20 * Math.log10(track.getGain())
       gainSlider.value = `${gainNumber}`
       this.updateGainOutput(gainOutput, gainNumber)
@@ -219,6 +248,16 @@ export class TrackListTrack {
         div.blur()
       }
     }
+  }
+
+  private createMixButton(label: string, title: string, className: string) {
+    const button = document.createElement('button')
+    button.type = 'button'
+    button.className = `clickable track-mix-button ${className}`
+    button.textContent = label
+    button.title = title
+    button.setAttribute('aria-label', title)
+    return button
   }
 
   private async saveChanges(div: HTMLDivElement, track: Track, oldName: string) {
