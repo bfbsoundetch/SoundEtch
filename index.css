@@ -986,6 +986,7 @@ video {
 }
 
 .track-info {
+  position: relative;
   display: grid;
   grid-template-areas:
     'title title peak'
@@ -1002,6 +1003,7 @@ video {
   padding: 0.25rem;
   vertical-align: top;
   background-color: var(--alt-background);
+  overflow: hidden;
 }
 
 .track-info > *,
@@ -1026,6 +1028,33 @@ video {
   position: relative;
   overflow-x: hidden;
   user-select: none;
+}
+
+.track-resize-handle {
+  position: absolute;
+  z-index: 10;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 0.5rem;
+  cursor: row-resize;
+  touch-action: none;
+}
+
+.track-resize-handle::after {
+  position: absolute;
+  right: 0;
+  bottom: 0;
+  left: 0;
+  height: 2px;
+  background: currentColor;
+  content: '';
+  opacity: 0;
+}
+
+.track-resize-handle:hover::after,
+.track-resize-handle-active::after {
+  opacity: 0.65;
 }
 
 .automation-dimmed {

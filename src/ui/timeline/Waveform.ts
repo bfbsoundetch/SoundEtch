@@ -231,7 +231,6 @@ export class ClipViewController extends TrackListItemController {
   private readonly headerTitleDivElement = document.createElement('div')
 
   private readonly waveformContextMenu: ContextMenuController
-  private readonly waveformHeight: number
   private pathElementTranslation = 0
   private resizeInfo: {
     side: 'left' | 'right'
@@ -249,7 +248,6 @@ export class ClipViewController extends TrackListItemController {
     color: string,
   ) {
     super(trackListController)
-    this.waveformHeight = this.waveform.getHeight()
 
     this.headerTitleDivElement.innerText = this.clipView.clip.name
     this.headerTitleElement.appendChild(this.headerTitleDivElement)
@@ -407,6 +405,10 @@ export class ClipViewController extends TrackListItemController {
 
   drawBoundingBox(startSample: number, endSample: number) {
     this.headerTitleDivElement.innerText = this.clipView.clip.name
+    this.rectElement.height.baseVal.value = this.waveformHeight
+    this.leftHandle.y2.baseVal.value = this.waveform.fullHeight
+    this.rightHandle.y2.baseVal.value = this.waveform.fullHeight
+    this.fullClipGrayFilter.height.baseVal.value = this.waveformHeight
     // for some reason this breaks down when zooming in too much, so limit to +/-10000
     const xStart = Math.max(this.getXValueForSample(this.clipView.startPosition + this.startCrossFadeDuration), -10000)
     const startCrossFadeLength = this.startCrossFadeDuration / this.samplesPerUnit
@@ -569,6 +571,10 @@ export class ClipViewController extends TrackListItemController {
 
   resize() {
     /*handled by parent*/
+  }
+
+  private get waveformHeight() {
+    return this.waveform.getHeight()
   }
 
   updateCrossFades(startCrossFadeDuration: number, endCrossFadeDuration: number) {

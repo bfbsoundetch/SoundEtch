@@ -244,6 +244,7 @@ export class TrackListController {
         this.tracklistElement.appendChild(waveformDiv)
 
         const waveform = new Waveform(this, track, waveformDiv, i)
+        this.addTrackResizeHandles(trackInfoDiv, waveformDiv)
         nextWaveforms.push(waveform)
         this.infoWaveformPairs.set(`${track.id}`, {
           info: trackInfoDiv,
@@ -262,6 +263,53 @@ export class TrackListController {
       this.selectionController.remove()
       this.pointerStateManager
     })
+  }
+
+  private addTrackResizeHandles(trackInfoDiv: HTMLDivElement, waveformDiv: HTMLDivElement) {
+    const startResize = (event: PointerEvent) => {
+      if (event.button != 0) {
+        return
+      }
+      event.preventDefault()
+      event.stopPropagation()
+
+      const handle = event.currentTarget as HTMLDivElement
+      const pointerId = event.pointerId
+      const startY = event.clientY
+      const startHeight = waveformDiv.getBoundingClientRect().height
+      const minimumHeight = 6 * this.rootFontSize
+
+      handle.setPointerCapture(pointerId)
+      handle.classList.add('track-resize-handle-active')
+
+      const resize = (moveEvent: PointerEvent) => {
+        const height = Math.max(minimumHeight, startHeight + moveEvent.clientY - startY)
+        trackInfoDiv.style.height = `${height}px`
+        waveformDiv.style.height = `${height}px`
+      }
+      const stopResize = () => {
+        handle.classList.remove('track-resize-handle-active')
+        handle.removeEventListener('pointermove', resize)
+        handle.removeEventListener('pointerup', stopResize)
+        handle.removeEventListener('pointercancel', stopResize)
+        handle.removeEventListener('lostpointercapture', stopResize)
+      }
+
+      handle.addEventListener('pointermove', resize)
+      handle.addEventListener('pointerup', stopResize)
+      handle.addEventListener('pointercancel', stopResize)
+      handle.addEventListener('lostpointercapture', stopResize)
+    }
+
+    for (const parent of [trackInfoDiv, waveformDiv]) {
+      const handle = document.createElement('div')
+      handle.className = 'track-resize-handle'
+      handle.title = 'Change track height'
+      handle.addEventListener('pointerdown', startResize)
+      handle.addEventListener('click', (event) => event.stopPropagation())
+      handle.addEventListener('dblclick', (event) => event.stopPropagation())
+      parent.appendChild(handle)
+    }
   }
 
   private async addTrack() {
@@ -336,6 +384,12 @@ export class TrackListController {
     }
     const modeInfoElement = this.createAutomationModeInfo(track, parameters, parameterMetadata, selectParameter)
     pair.info.replaceChildren(modeInfoElement)
+    const infoResizeHandle = originalInfoElements.find(
+      (element) => element instanceof HTMLElement && element.classList.contains('track-resize-handle'),
+    )
+    if (infoResizeHandle) {
+      pair.info.appendChild(infoResizeHandle)
+    }
 
     const scaleElement = this.createAutomationScale(parameterMetadata)
     pair.waveform.appendChild(scaleElement)

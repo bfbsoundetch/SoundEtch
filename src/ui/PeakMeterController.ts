@@ -61,6 +61,8 @@ export class PeakMeterController {
       peakLine.setAttribute(this.horizontal ? 'y2' : 'x2', `${lanePosition + laneSize}`)
       peakLine.classList.add('peakLine')
       peakLine.style.transform = `translate${this.horizontal ? 'X' : 'Y'}(100%)`
+      peakRect.style.opacity = '.5'
+      peakLine.style.opacity = '.75'
       this.svg.appendChild(peakLine)
       this.peakLines.push(peakLine)
     }
@@ -114,8 +116,8 @@ export class PeakMeterController {
       this.levelRects[channel].style.transform = `translate${this.horizontal ? 'X' : 'Y'}(${(1 - levelScale) * 100}%)`
       const peakScale = this.scaledValue(peak)
       this.peakRects[channel].style.transform = `translate${this.horizontal ? 'X' : 'Y'}(${(1 - peakScale) * 100}%)`
-      this.peakRects[channel].style.color = peak > 0.0 ? 'rgba(255,0,0,.5)' : 'rgba(255,255,255,.5)'
-      this.peakLines[channel].style.color = heldPeak > 0.0 ? 'rgb(255,0,0)' : 'rgb(255,255,255)'
+      this.peakRects[channel].style.color = peak > 0.0 ? 'rgb(255,0,0)' : 'var(--color)'
+      this.peakLines[channel].style.color = heldPeak > 0.0 ? 'rgb(255,0,0)' : 'var(--color)'
       const heldPeakScale = this.scaledValue(heldPeak)
       this.peakLines[channel].style.transform = `translate${this.horizontal ? 'X' : 'Y'}(${(1 - heldPeakScale) * 100}%)`
     }
@@ -141,7 +143,7 @@ export class PeakMeterController {
     rect.setAttribute(this.horizontal ? 'y' : 'x', `${lanePosition}`)
     rect.setAttribute(this.horizontal ? 'x' : 'y', `${PeakMeterController.OFFSET}`)
     rect.style.transform = `translate${this.horizontal ? 'X' : 'Y'}(100%)`
-    rect.style.transition = 'transform 90ms'
+    rect.style.transition = 'transform 40ms'
     this.svg.appendChild(rect)
     return rect
   }
