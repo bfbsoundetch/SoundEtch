@@ -143,7 +143,7 @@ export class PeakMeterController {
     rect.setAttribute(this.horizontal ? 'y' : 'x', `${lanePosition}`)
     rect.setAttribute(this.horizontal ? 'x' : 'y', `${PeakMeterController.OFFSET}`)
     rect.style.transform = `translate${this.horizontal ? 'X' : 'Y'}(100%)`
-    rect.style.transition = 'transform 40ms'
+    rect.style.transition = 'transform 90ms'
     this.svg.appendChild(rect)
     return rect
   }

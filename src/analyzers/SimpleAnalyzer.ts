@@ -7,15 +7,15 @@ export class SimpleAnalyzer {
   constructor(private readonly forkOutput = true) {}
 
   getLevel(channel = 0): number {
-    return SimpleAnalyzer.linearToDb(this.rmsLevel?.[channel] ?? 0)
+    return this.hasInput() ? SimpleAnalyzer.linearToDb(this.rmsLevel?.[channel] ?? 0) : Number.NEGATIVE_INFINITY
   }
 
   getPeak(channel = 0): number {
-    return SimpleAnalyzer.linearToDb(this.instantaneousPeak?.[channel] ?? 0)
+    return this.hasInput() ? SimpleAnalyzer.linearToDb(this.instantaneousPeak?.[channel] ?? 0) : Number.NEGATIVE_INFINITY
   }
 
   getHeldPeak(channel = 0): number {
-    return SimpleAnalyzer.linearToDb(this.heldPeak?.[channel] ?? 0)
+    return this.hasInput() ? SimpleAnalyzer.linearToDb(this.heldPeak?.[channel] ?? 0) : Number.NEGATIVE_INFINITY
   }
 
   async sendOutputTo(destination: AudioNode) {
@@ -24,11 +24,13 @@ export class SimpleAnalyzer {
     }
   }
 
+  hasInput() {
+    return this.analyzerNode ? this.analyzerNode.context.state == 'running' && this.analyzerNode.numberOfInputs > 0 : false
+  }
+
   async attachAnalyzer(inputNode: AudioNode) {
     if (this.analyzerNode?.context == inputNode.context) {
-      console.error('b4', this.analyzerNode.numberOfInputs)
       inputNode.connect(this.analyzerNode)
-      console.error('after', this.analyzerNode.numberOfInputs)
       return this.forkOutput ? this.analyzerNode : inputNode
     }
 
