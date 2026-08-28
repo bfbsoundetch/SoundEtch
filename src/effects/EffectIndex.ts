@@ -6,6 +6,7 @@ import {
   LimiterEffectMetadata,
   GateEffectMetadata,
 } from './BuiltinEffectMetadata'
+import { EqualizerEffectMetadata } from './equalizer/EqualizerMetadata'
 import { EffectMetadata, EffectModule } from './Effect'
 
 export class EffectIndex {
@@ -17,6 +18,7 @@ export class EffectIndex {
     CompressionEffectMetadata,
     LimiterEffectMetadata,
     GateEffectMetadata,
+    EqualizerEffectMetadata,
   ]
 
   static getInstance() {
@@ -47,6 +49,8 @@ export class EffectIndex {
         return new (await import('./limiter/LimiterEffect')).LimiterEffect()
       case GateEffectMetadata.id:
         return new (await import('./gate/GateEffect')).GateEffect()
+      case EqualizerEffectMetadata.id:
+        return new (await import('./equalizer/EqualizerEffect')).EqualizerEffect()
       default:
         return null
     }

@@ -1767,6 +1767,15 @@ video {
   box-sizing: border-box;
 }
 
+.equalizer-editor {
+  padding: 1rem;
+  box-sizing: border-box;
+}
+
+.equalizer-editor weq8-ui {
+  min-height: 100%;
+}
+
 .effect-parameter-control {
   display: grid;
   grid-template-columns: minmax(7rem, auto) auto minmax(12rem, 1fr);

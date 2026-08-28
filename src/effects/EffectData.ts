@@ -5,4 +5,5 @@ export interface EffectData {
   instanceId: string
   id: string
   params: Record<string, ParameterValueSequence>
+  state?: unknown
 }

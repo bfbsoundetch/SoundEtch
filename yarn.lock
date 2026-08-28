@@ -357,6 +357,14 @@
   resolved "https://registry.yarnpkg.com/@bfbsoundetch/web-demuxer/-/web-demuxer-4.0.1.tgz#8cd34cd0c5ae7240f3a3f4be588672ee2e1009fb"
   integrity sha512-B9/aJOpoYbp2nVFBPCynopkmG0P14umd+20zlVs9DNWNi6CgQbt+pj94dnXwuBGg9Am8SHqsBARMW+bCE2JXHw==
 
+"@bfbsoundetch/weq8@^0.3.1":
+  version "0.3.1"
+  resolved "https://registry.yarnpkg.com/@bfbsoundetch/weq8/-/weq8-0.3.1.tgz#15a4dad0feec0d57efbde6604483dab6d5e09956"
+  integrity sha512-1WdqrjKCZFBNlPDYWJ0jPhp+177k2dB7WV2Glpf8qW7TRge1+ehhOaNroA25E7wT01f+S35XEmf8gmJy9Ly9Qg==
+  dependencies:
+    lit "^2.4.0"
+    nanoevents "^7.0.1"
+
 "@cspotcode/source-map-support@^0.8.0":
   version "0.8.1"
   resolved "https://registry.yarnpkg.com/@cspotcode/source-map-support/-/source-map-support-0.8.1.tgz#00629c35a688e05a88b1cda684fb9d5e73f000a1"
@@ -6568,14 +6576,6 @@ websocket@^1.0.35:
     typedarray-to-buffer "^3.1.5"
     utf-8-validate "^5.0.2"
     yaeti "^0.0.6"
-
-weq8@^0.2.2:
-  version "0.2.2"
-  resolved "https://registry.yarnpkg.com/weq8/-/weq8-0.2.2.tgz#96c5b6e4863118219a4c2731b2ac659bf0be120e"
-  integrity sha512-sGKzxrElDbzpItdV0TKi2aH+e7+8k4kVUlo1RdKxFqMr9ynlqTT+DvgWRB1OBW/9YgIzUxN7WdZyEBSYDdVLAQ==
-  dependencies:
-    lit "^2.4.0"
-    nanoevents "^7.0.1"
 
 which-boxed-primitive@^1.1.0, which-boxed-primitive@^1.1.1:
   version "1.1.1"

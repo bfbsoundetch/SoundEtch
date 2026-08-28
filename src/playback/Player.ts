@@ -70,6 +70,7 @@ export class Player {
           console.error(`Effect ${effectData.id} is unavailable`)
           continue
         }
+        effectModule.setState?.(effectData.state)
         const parameters = await effectModule.getParameters(audioContext)
         for (const [name, sequence] of Object.entries(effectData.params)) {
           const parameter = parameters[name]

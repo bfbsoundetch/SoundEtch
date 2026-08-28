@@ -12,10 +12,12 @@ import {
   LimiterEffectMetadata,
   GateEffectMetadata,
 } from '../effects/BuiltinEffectMetadata'
+import { EqualizerEffectMetadata } from '../effects/equalizer/EqualizerMetadata'
 import { BoostEffect, FadeEffect } from '../effects/gain/GainEffects'
 import { NoiseReductionEffect } from '../effects/noisereduction/NoiseReductionEffect'
 import { EffectModule } from '../effects/Effect'
 import { CompressionEffect } from '../effects/compression/CompressionEffect'
+import { EqualizerEffect } from '../effects/equalizer/EqualizerEffect'
 import { LimiterEffect } from '../effects/limiter/LimiterEffect'
 import { GateEffect } from '../effects/gate/GateEffect'
 
@@ -57,6 +59,7 @@ self.onmessage = async (e) => {
         continue
       }
       const context = audioContext as unknown as BaseAudioContext
+      effectModule.setState?.(effectData.state)
       const parameters = await effectModule.getParameters(context)
       for (const [name, sequence] of Object.entries(effectData.params)) {
         const parameter = parameters[name]
@@ -150,6 +153,8 @@ function getRenderingEffect(id: string): EffectModule | null {
       return new LimiterEffect()
     case GateEffectMetadata.id:
       return new GateEffect()
+    case EqualizerEffectMetadata.id:
+      return new EqualizerEffect()
     default:
       return null
   }

@@ -5,12 +5,15 @@ import { Analyzable } from '../analyzers/Analyzable'
 import { EffectData } from 'effects/EffectData'
 import { EffectModule } from 'effects/Effect'
 import { SimpleAnalyzer } from '../analyzers/SimpleAnalyzer'
+import { scheduleParameterValues } from '../effects/ParameterScheduling'
 
 export interface PlaybackEffect {
   instanceId: string
   module: EffectModule
   audioContext: BaseAudioContext
 }
+
+type PlaybackChangeListener = () => void
 
 class Playback {
   constructor(
@@ -28,6 +31,7 @@ export class Track extends DatabasePersisted implements Analyzable {
   readonly clipViews: ClipView[] = []
   readonly effectRegions = new Array<EffectData>()
   private playback: Playback | null = null
+  private readonly playbackChangeListeners = new Set<PlaybackChangeListener>()
   private readonly analyzer = new SimpleAnalyzer()
   private pan: number = 0
   private gain: number = 1
@@ -216,8 +220,20 @@ export class Track extends DatabasePersisted implements Analyzable {
     cleanup: (() => void) | null = null,
     audible = true,
   ) {
-    this.playback = new Playback(playerNode, gainNode, pannerNode, effects, cleanup, audible)
+    const audioContext = playerNode.context
+    const handleContextStateChange = () => {
+      if (audioContext.state == 'closed' && this.playback?.playerNode == playerNode) {
+        this.stopPlayback()
+      }
+    }
+    audioContext.addEventListener('statechange', handleContextStateChange)
+    const playbackCleanup = () => {
+      audioContext.removeEventListener('statechange', handleContextStateChange)
+      cleanup?.()
+    }
+    this.playback = new Playback(playerNode, gainNode, pannerNode, effects, playbackCleanup, audible)
     gainNode.gain.value = audible ? this.gain : 0
+    this.notifyPlaybackChange()
   }
 
   attachAnalyzer(inputNode: AudioNode) {
@@ -225,14 +241,33 @@ export class Track extends DatabasePersisted implements Analyzable {
   }
 
   stopPlayback() {
-    this.playback?.cleanup?.()
-    this.playback?.playerNode.disconnect()
-    this.playback?.effects.forEach((effect) => effect.module.disconnect())
+    const playback = this.playback
+    if (!playback) {
+      return
+    }
     this.playback = null
+    playback.cleanup?.()
+    playback.playerNode.disconnect()
+    playback.effects.forEach((effect) => effect.module.disconnect())
+    this.notifyPlaybackChange()
+  }
+
+  getPlaybackEffect(instanceId: string) {
+    const effect = this.playback?.effects.find((effect) => effect.instanceId == instanceId)
+    return effect && effect.audioContext.state != 'closed' ? effect : null
   }
 
   getPlaybackEffectModule(instanceId: string) {
-    return this.playback?.effects.find((effect) => effect.instanceId == instanceId)?.module ?? null
+    return this.getPlaybackEffect(instanceId)?.module ?? null
+  }
+
+  addPlaybackChangeListener(listener: PlaybackChangeListener) {
+    this.playbackChangeListeners.add(listener)
+    return () => this.playbackChangeListeners.delete(listener)
+  }
+
+  private notifyPlaybackChange() {
+    this.playbackChangeListeners.forEach((listener) => listener())
   }
 
   async applyPlaybackEffectParameters() {
@@ -244,9 +279,20 @@ export class Track extends DatabasePersisted implements Analyzable {
       if (!playbackEffect) {
         continue
       }
+      playbackEffect.module.setState?.(effectData.state)
       const parameters = await playbackEffect.module.getParameters(playbackEffect.audioContext)
+      const position =
+        'getPosition' in playbackEffect.audioContext ? (playbackEffect.audioContext.getPosition as () => number)() : 0
       for (const [name, sequence] of Object.entries(effectData.params)) {
-        parameters[name]?.setValueAtTime(sequence.initialValue, playbackEffect.audioContext.currentTime)
+        const parameter = parameters[name]
+        if (!parameter) {
+          continue
+        }
+        if (sequence.transitionSequence.length > 0) {
+          scheduleParameterValues(parameter, sequence, playbackEffect.audioContext, position)
+        } else {
+          parameter.setValueAtTime(sequence.initialValue, playbackEffect.audioContext.currentTime)
+        }
       }
     }
   }

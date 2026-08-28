@@ -22,6 +22,8 @@ type EffectViewSession = {
   audioContext: BaseAudioContext
   ownsModule: boolean
   abortController: AbortController
+  commitQueue: Promise<void>
+  unsubscribePlaybackChange: () => void
   closed: boolean
 }
 
@@ -37,8 +39,12 @@ export class EffectPanelController {
   private activeEffectView: EffectViewSession | null = null
   private viewVersion = 0
   private chainChangePending = false
+  private effectViewRebindRequested = false
+  private effectViewRebindRunning = false
 
-  private constructor() {}
+  private constructor() {
+    editorHistory.addChangeListener(() => this.refreshOwnedEffectView())
+  }
 
   async showEffectForTrack(metadata: EffectMetadata, track: Track, effectIndex?: number) {
     const viewVersion = ++this.viewVersion
@@ -66,7 +72,22 @@ export class EffectPanelController {
         return
       }
       this.activeEffectView = session
-      const body = this.createEffectEditor(metadata, session)
+      const unsubscribePlaybackChange = session.track.addPlaybackChangeListener(() => this.requestEffectViewRebind())
+      const handleContextStateChange = () => {
+        if (session.audioContext.state == 'closed') {
+          this.requestEffectViewRebind()
+        }
+      }
+      session.audioContext.addEventListener('statechange', handleContextStateChange)
+      session.unsubscribePlaybackChange = () => {
+        unsubscribePlaybackChange()
+        session.audioContext.removeEventListener('statechange', handleContextStateChange)
+      }
+      const body = await this.resolveEffectEditor(metadata, session)
+      if (viewVersion != this.viewVersion) {
+        this.destroyEffectSession(session)
+        return
+      }
       this.bottomPanelController.open({
         title: metadata.name,
         subtitle: track.name,
@@ -74,6 +95,9 @@ export class EffectPanelController {
         onBack: () => this.showTrackEffectsList(track),
         onClose: () => this.handlePanelClose(),
       })
+      if (!this.effectViewMatchesPlayback()) {
+        this.requestEffectViewRebind()
+      }
     } catch (error) {
       console.error(`Failed to open effect ${metadata.id}`, error)
       if (viewVersion == this.viewVersion) {
@@ -152,17 +176,20 @@ export class EffectPanelController {
   }
 
   private async startEffectSession(track: Track, effectData: EffectData): Promise<EffectViewSession> {
-    const playbackModule = track.getPlaybackEffectModule(effectData.instanceId)
-    const module = playbackModule ?? (await this.effectIndex.getEffectById(effectData.id))
+    const playbackEffect = track.getPlaybackEffect(effectData.instanceId)
+    const module = playbackEffect?.module ?? (await this.effectIndex.getEffectById(effectData.id))
     if (!module) {
       throw new Error(`Effect ${effectData.id} is unavailable`)
     }
-    const audioContext = await AudioControl.getOrCreateAudioContext()
+    const audioContext = playbackEffect?.audioContext ?? (await AudioControl.getOrCreateAudioContext())
+    module.setState?.(effectData.state)
     const parameters = await module.getParameters(audioContext)
-    for (const [name, sequence] of Object.entries(effectData.params)) {
-      const parameter = parameters[name]
-      if (parameter) {
-        parameter.setValueAtTime(sequence.initialValue, audioContext.currentTime)
+    if (!playbackEffect) {
+      for (const [name, sequence] of Object.entries(effectData.params)) {
+        const parameter = parameters[name]
+        if (parameter) {
+          parameter.setValueAtTime(sequence.initialValue, audioContext.currentTime)
+        }
       }
     }
     return {
@@ -171,13 +198,32 @@ export class EffectPanelController {
       module,
       parameters,
       audioContext,
-      ownsModule: !playbackModule,
+      ownsModule: !playbackEffect,
       abortController: new AbortController(),
+      commitQueue: Promise.resolve(),
+      unsubscribePlaybackChange: () => {},
       closed: false,
     }
   }
 
-  private createEffectEditor(metadata: EffectMetadata, session: EffectViewSession) {
+  private async resolveEffectEditor(metadata: EffectMetadata, session: EffectViewSession) {
+    if (session.module.createEditor) {
+      try {
+        const editor = await session.module.createEditor({
+          signal: session.abortController.signal,
+          commit: (parameters, state, description) => this.commitEffectValues(session, parameters, state, description),
+        })
+        if (editor) {
+          return editor
+        }
+      } catch (error) {
+        console.error(`Failed to create custom editor for ${metadata.id}; using generic controls`, error)
+      }
+    }
+    return this.createGenericEffectEditor(metadata, session)
+  }
+
+  private createGenericEffectEditor(metadata: EffectMetadata, session: EffectViewSession) {
     const body = document.createElement('form')
     body.className = 'effect-editor-body effect-parameter-form'
     body.addEventListener('submit', (event) => event.preventDefault())
@@ -246,25 +292,116 @@ export class EffectPanelController {
   }
 
   private async commitParameterValue(session: EffectViewSession, metadata: ParameterMetadata, value: number) {
-    const effectIndex = session.track.effectRegions.findIndex((effect) => effect.instanceId == session.effectInstanceId)
-    if (effectIndex < 0) {
+    const state = session.track.effectRegions.find((effect) => effect.instanceId == session.effectInstanceId)?.state
+    await this.commitEffectValues(session, { [metadata.id]: value }, state, `change ${metadata.id}`)
+  }
+
+  private commitEffectValues(
+    session: EffectViewSession,
+    parameters: Readonly<Record<string, number>>,
+    state: unknown,
+    description: string,
+  ) {
+    const commit = async () => {
+      try {
+        const effectIndex = session.track.effectRegions.findIndex(
+          (effect) => effect.instanceId == session.effectInstanceId,
+        )
+        if (effectIndex < 0) {
+          return
+        }
+        const oldEffects = cloneEffectData(session.track.effectRegions)
+        const newEffects = cloneEffectData(oldEffects)
+        const effect = newEffects[effectIndex]
+        let changed = JSON.stringify(effect.state) != JSON.stringify(state)
+        effect.state = structuredClone(state)
+        for (const [parameterId, value] of Object.entries(parameters)) {
+          const sequence = effect.params[parameterId]
+          if (!sequence) {
+            continue
+          }
+          changed ||= sequence.initialValue != value
+          sequence.initialValue = value
+        }
+        if (!changed) {
+          return
+        }
+        await editorHistory.execute(new SetTrackEffectsCommand(session.track, oldEffects, newEffects, description))
+      } catch (error) {
+        await this.refreshOwnedEffectView()
+        console.error('Failed to save effect settings', error)
+        NotificationsController.showErrorMessage('Could not persist the latest effect setting.')
+      }
+    }
+    const result = session.commitQueue.then(commit)
+    session.commitQueue = result.catch(() => {})
+    return result
+  }
+
+  private async refreshOwnedEffectView() {
+    const session = this.activeEffectView
+    if (!session || session.closed || !session.ownsModule) {
       return
     }
-    const currentValue = session.track.effectRegions[effectIndex].params[metadata.id]?.initialValue
-    if (currentValue == value) {
+    const effectData = session.track.effectRegions.find((effect) => effect.instanceId == session.effectInstanceId)
+    if (!effectData) {
       return
     }
-    const oldEffects = cloneEffectData(session.track.effectRegions)
-    const newEffects = cloneEffectData(oldEffects)
-    newEffects[effectIndex].params[metadata.id].initialValue = value
+    session.module.setState?.(effectData.state)
+    for (const [name, sequence] of Object.entries(effectData.params)) {
+      session.parameters[name]?.setValueAtTime(sequence.initialValue, session.audioContext.currentTime)
+    }
+  }
+
+  private requestEffectViewRebind() {
+    this.effectViewRebindRequested = true
+    if (!this.effectViewRebindRunning) {
+      void this.processEffectViewRebinds()
+    }
+  }
+
+  private async processEffectViewRebinds() {
+    this.effectViewRebindRunning = true
     try {
-      await editorHistory.execute(
-        new SetTrackEffectsCommand(session.track, oldEffects, newEffects, `change ${metadata.id}`),
-      )
-    } catch (error) {
-      console.error('Failed to save effect parameter', error)
-      NotificationsController.showErrorMessage('Could not persist the latest effect setting.')
+      while (this.effectViewRebindRequested) {
+        this.effectViewRebindRequested = false
+        await this.rebindEffectView()
+        if (!this.effectViewMatchesPlayback()) {
+          this.effectViewRebindRequested = true
+        }
+      }
+    } finally {
+      this.effectViewRebindRunning = false
+      if (this.effectViewRebindRequested) {
+        void this.processEffectViewRebinds()
+      }
     }
+  }
+
+  private effectViewMatchesPlayback() {
+    const session = this.activeEffectView
+    if (!session || session.closed) {
+      return true
+    }
+    const playbackEffect = session.track.getPlaybackEffect(session.effectInstanceId)
+    return playbackEffect
+      ? playbackEffect.module == session.module && playbackEffect.audioContext == session.audioContext
+      : session.ownsModule && session.audioContext.state != 'closed'
+  }
+
+  private async rebindEffectView() {
+    const session = this.activeEffectView
+    if (!session || session.closed || this.effectViewMatchesPlayback()) {
+      return
+    }
+    const effectIndex = session.track.effectRegions.findIndex((effect) => effect.instanceId == session.effectInstanceId)
+    const metadata =
+      effectIndex >= 0 ? this.effectIndex.getEffectMetadataById(session.track.effectRegions[effectIndex].id) : null
+    if (!metadata) {
+      return
+    }
+
+    await this.showEffectForTrack(metadata, session.track, effectIndex)
   }
 
   private createEffectChainItem(track: Track, index: number, effectData: EffectData, metadata: EffectMetadata | null) {
@@ -352,7 +489,12 @@ export class EffectPanelController {
       const params = Object.fromEntries(
         metadata.parameters.map((parameter) => [parameter.id, new ParameterValueSequence(parameter.defaultValue)]),
       )
-      newEffects.push({ instanceId: this.createInstanceId(), id: metadata.id, params })
+      newEffects.push({
+        instanceId: this.createInstanceId(),
+        id: metadata.id,
+        params,
+        state: metadata.createDefaultState?.(),
+      })
       await editorHistory.execute(
         new SetTrackEffectsCommand(track, oldEffects, newEffects, `add ${metadata.name} effect`),
       )
@@ -427,9 +569,11 @@ export class EffectPanelController {
     }
     this.activeEffectView = null
     this.destroyEffectSession(session)
+    await session.commitQueue
   }
 
   private destroyEffectSession(session: EffectViewSession) {
+    session.unsubscribePlaybackChange()
     session.abortController.abort()
     session.closed = true
     if (session.ownsModule) {

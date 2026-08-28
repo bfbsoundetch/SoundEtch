@@ -34,6 +34,7 @@ export class AudioControl {
   static audioControlListeners = new Array<AudioControlListener>()
   static audioContext: EnhancedAudioContext | null = null
   static startPosition = 0
+  private static contextOperationQueue: Promise<unknown> = Promise.resolve()
   private static contextListener = (_: any) => {
     const state = this.getState()
     this.audioControlListeners.forEach((l) => l(state))
@@ -91,14 +92,16 @@ export class AudioControl {
   }
 
   static async getOrCreateAudioContext(mode: ActiveAudioState | null = null): Promise<EnhancedAudioContext> {
-    if (
-      AudioControl.audioContext &&
-      (!mode || mode == AudioControl.audioContext.mode) &&
-      AudioControl.audioContext.state != 'closed'
-    ) {
-      return AudioControl.audioContext!
-    }
-    return AudioControl.createNewAudioContext(mode ?? AudioState.MONITORING)
+    return AudioControl.runContextOperation(async () => {
+      if (
+        AudioControl.audioContext &&
+        (!mode || mode == AudioControl.audioContext.mode) &&
+        AudioControl.audioContext.state != 'closed'
+      ) {
+        return AudioControl.audioContext
+      }
+      return AudioControl.replaceAudioContext(mode ?? AudioState.MONITORING)
+    })
   }
 
   static async createNewAudioContext(
@@ -106,18 +109,38 @@ export class AudioControl {
     position = AudioControl.startPosition,
     loopEnd: number = 0,
   ): Promise<EnhancedAudioContext> {
-    AudioControl.audioContext?.removeEventListener('statechange', this.contextListener)
-    await AudioControl.closeAndRemoveAudioContext()
-    AudioControl.audioContext = await EnhancedAudioContext.create(mode, position, loopEnd)
-    await AudioControl.audioContext.suspend()
-    AudioControl.audioContext.addEventListener('statechange', this.contextListener)
-    return AudioControl.audioContext!
+    return AudioControl.runContextOperation(() => AudioControl.replaceAudioContext(mode, position, loopEnd))
   }
 
   static async closeAndRemoveAudioContext() {
-    if (AudioControl.audioContext && AudioControl.audioContext.state != 'closed') {
-      await AudioControl.audioContext!.close()
-    }
+    await AudioControl.runContextOperation(() => AudioControl.closeCurrentAudioContext())
+  }
+
+  private static async closeCurrentAudioContext() {
+    const audioContext = AudioControl.audioContext
     AudioControl.audioContext = null
+    if (audioContext && audioContext.state != 'closed') {
+      await audioContext.close()
+    }
+  }
+
+  private static async replaceAudioContext(
+    mode: ActiveAudioState,
+    position = AudioControl.startPosition,
+    loopEnd: number = 0,
+  ) {
+    AudioControl.audioContext?.removeEventListener('statechange', this.contextListener)
+    await AudioControl.closeCurrentAudioContext()
+    const audioContext = await EnhancedAudioContext.create(mode, position, loopEnd)
+    await audioContext.suspend()
+    audioContext.addEventListener('statechange', this.contextListener)
+    AudioControl.audioContext = audioContext
+    return audioContext
+  }
+
+  private static runContextOperation<T>(operation: () => Promise<T>) {
+    const result = AudioControl.contextOperationQueue.then(operation)
+    AudioControl.contextOperationQueue = result
+    return result
   }
 }

@@ -8,6 +8,9 @@ import {
 import { EffectIndex } from './EffectIndex'
 import { ParameterValueSequence, ParamValueTransition } from './ParameterValueSequence'
 import { BoostEffect } from './gain/GainEffects'
+import { EqualizerEffectMetadata } from './equalizer/EqualizerMetadata'
+import { EqualizerEffect } from './equalizer/EqualizerEffect'
+import { RawDataAudioContext } from '@descript/web-audio-js'
 
 describe('EffectIndex', () => {
   test('lists and creates built-in effects', async () => {
@@ -18,11 +21,18 @@ describe('EffectIndex', () => {
     expect(effectIndex.getAvailableEffects()).toContain(CompressionEffectMetadata)
     expect(effectIndex.getAvailableEffects()).toContain(LimiterEffectMetadata)
     expect(effectIndex.getAvailableEffects()).toContain(GateEffectMetadata)
+    expect(effectIndex.getAvailableEffects()).toContain(EqualizerEffectMetadata)
     expect(effectIndex.getEffectMetadataById(BoostEffectMetadata.id)).toBe(BoostEffectMetadata)
     expect((await effectIndex.getEffectById(BoostEffectMetadata.id))?.metadata).toBe(BoostEffectMetadata)
     expect((await effectIndex.getEffectById(CompressionEffectMetadata.id))?.metadata).toBe(CompressionEffectMetadata)
     expect((await effectIndex.getEffectById(LimiterEffectMetadata.id))?.metadata).toBe(LimiterEffectMetadata)
     expect((await effectIndex.getEffectById(GateEffectMetadata.id))?.metadata).toBe(GateEffectMetadata)
+  })
+
+  test('creates the equalizer effect', async () => {
+    expect((await EffectIndex.getInstance().getEffectById(EqualizerEffectMetadata.id))?.metadata).toBe(
+      EqualizerEffectMetadata,
+    )
   })
 
   test('returns null for an unknown effect', async () => {
@@ -73,6 +83,21 @@ describe('effect parameters', () => {
     expect(parameter.denormalize(parameter.normalize(parameter.defaultValue))).toBeCloseTo(parameter.defaultValue)
   })
 
+  test.each(EqualizerEffectMetadata.parameters)('$displayName normalization spans its metadata range', (parameter) => {
+    expect(parameter.normalize(parameter.minValue)).toBeCloseTo(0)
+    expect(parameter.normalize(parameter.maxValue)).toBeCloseTo(1)
+    expect(parameter.denormalize(parameter.normalize(parameter.defaultValue))).toBeCloseTo(parameter.defaultValue)
+  })
+
+  test('equalizer default state is cloned for each effect instance', () => {
+    const first = EqualizerEffectMetadata.createDefaultState?.() as Array<{ frequency: number }>
+    const second = EqualizerEffectMetadata.createDefaultState?.() as Array<{ frequency: number }>
+
+    first[0].frequency = 1234
+
+    expect(second[0].frequency).not.toBe(1234)
+  })
+
   test.each(
     [
       ParamValueTransition.generateSCurve(),
@@ -110,5 +135,35 @@ describe('effect module connections', () => {
     expect(parameters.gain).toBe(gainNode.gain)
     expect(audioContext.createGain).toHaveBeenCalledTimes(1)
     expect(gainNode.disconnect).toHaveBeenCalledTimes(1)
+  })
+
+  test('equalizer exposes stable parameters while its filter graph changes', async () => {
+    const audioContext = new RawDataAudioContext({ sampleRate: 48000, blockSize: 128, numberOfChannels: 2 })
+    const context = audioContext as unknown as BaseAudioContext
+    const effect = new EqualizerEffect()
+    const firstParameters = await effect.getParameters(context)
+    const state = EqualizerEffectMetadata.createDefaultState?.() as Array<{
+      type: string
+      frequency: number
+      gain: number
+      Q: number
+      bypass: boolean
+    }>
+
+    firstParameters['band1.frequency'].value = 4321
+    state[0].frequency = 1234
+    state[0].type = 'noop'
+    state[1].bypass = true
+    effect.setState(state)
+    const secondParameters = await effect.getParameters(context)
+    const destination = audioContext.createGain()
+    const input = await effect.connect(context, destination as unknown as AudioNode)
+
+    expect(Object.keys(firstParameters)).toHaveLength(24)
+    expect(secondParameters['band1.frequency']).toBe(firstParameters['band1.frequency'])
+    expect(secondParameters['band1.frequency'].value).toBe(4321)
+    expect(secondParameters['band8.q']).toBe(firstParameters['band8.q'])
+    expect(input.context).toBe(context)
+    effect.disconnect()
   })
 })
