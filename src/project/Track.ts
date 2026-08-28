@@ -42,7 +42,7 @@ export class Track extends DatabasePersisted implements Analyzable {
     public name: string,
     private readonly channelCount: number,
   ) {
-    super(['playback', 'analyzer'])
+    super(['playback', 'analyzer', 'playbackChangeListeners'])
   }
 
   getChannelCount(): number {

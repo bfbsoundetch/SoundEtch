@@ -194,12 +194,12 @@ export class PointerStateManager extends TrackListItemController {
     document.getElementById('timeline')!.addEventListener('wheel', scrollListener, { passive: false })
 
     timelineAreaElement.addEventListener('mousedown', mouseDownListener)
-    timelineAreaElement.addEventListener('mouseup', mouseUpListener)
     timelineAreaElement.addEventListener('mousemove', mouseMoveListener)
 
     timelineElement.addEventListener('mousedown', mouseDownListener)
-    timelineElement.addEventListener('mouseup', mouseUpListener)
     timelineElement.addEventListener('mousemove', mouseMoveListener)
+
+    document.addEventListener('mouseup', mouseUpListener)
   }
 
   startResizingSelection(timelineRegionController: TimelineRegionController) {
