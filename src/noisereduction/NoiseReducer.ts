@@ -1,23 +1,30 @@
 import { RingBuffer } from 'ringbuf.js'
+import type { DeepFilterParameters } from './DeepFilterParameters'
 
 export class NoiseReducer {
   private worker: Worker | null = null
+  private audioContext: BaseAudioContext | null = null
+  private stateChangeListener: (() => void) | null = null
   noiseReducerNode: AudioWorkletNode | null = null
 
   async start(
     audioContext: BaseAudioContext,
     rawSab: SharedArrayBuffer,
     denoisedSab: SharedArrayBuffer,
+    parameters: Partial<DeepFilterParameters> = {},
   ): Promise<boolean> {
     if (!this.worker) {
-      const initPromise = Promise.withResolvers()
-      const startPromise = Promise.withResolvers()
-      this.worker = new Worker(new URL('DenoisingWorker.js', import.meta.url), { type: 'module' })
-      this.worker.postMessage({
+      const initPromise = Promise.withResolvers<boolean>()
+      const startPromise = Promise.withResolvers<boolean>()
+      void startPromise.promise.catch(() => {})
+      const worker = new Worker(new URL('DenoisingWorker.js', import.meta.url), { type: 'module' })
+      this.worker = worker
+      worker.postMessage({
         type: 'init',
+        parameters,
       })
 
-      this.worker.onmessage = (e) => {
+      worker.onmessage = (e) => {
         switch (e.data.type) {
           case 'initialized':
             initPromise.resolve(true)
@@ -26,16 +33,20 @@ export class NoiseReducer {
             startPromise.resolve(true)
             break
           case 'error':
-            //TODO: do something with the node
             startPromise.reject(e)
             initPromise.reject(e)
-            this.disconnect()
+            this.dispose()
             break
         }
       }
+      worker.onerror = (event) => {
+        initPromise.reject(event.error ?? new Error(event.message))
+        startPromise.reject(event.error ?? new Error(event.message))
+        this.dispose()
+      }
 
       await initPromise.promise
-      this.worker.postMessage({
+      worker.postMessage({
         type: 'start',
         rawSab: rawSab,
         denoisedSab: denoisedSab,
@@ -43,11 +54,14 @@ export class NoiseReducer {
       await startPromise.promise
     }
 
-    audioContext.addEventListener('statechange', () => {
+    if (this.audioContext && this.stateChangeListener) {
+      this.audioContext.removeEventListener('statechange', this.stateChangeListener)
+    }
+    this.audioContext = audioContext
+    this.stateChangeListener = () => {
       switch (audioContext.state) {
         case 'closed': {
-          this.worker?.terminate()
-          this.worker = null
+          this.dispose()
           break
         }
         case 'suspended': {
@@ -62,7 +76,8 @@ export class NoiseReducer {
           })
           break
       }
-    })
+    }
+    audioContext.addEventListener('statechange', this.stateChangeListener)
 
     return true
   }
@@ -93,10 +108,10 @@ export class NoiseReducer {
     return (this.noiseReducerNode = result)
   }
 
-  async reduceNoiseFrom(source: AudioNode): Promise<boolean> {
+  async reduceNoiseFrom(source: AudioNode, parameters: Partial<DeepFilterParameters> = {}): Promise<boolean> {
     const rawSab = RingBuffer.getStorageForCapacity(32 * 1024, Float32Array)
     const denoisedSab = RingBuffer.getStorageForCapacity(32 * 1024, Float32Array)
-    if (!(await this.start(source.context, rawSab, denoisedSab))) {
+    if (!(await this.start(source.context, rawSab, denoisedSab, parameters))) {
       return false
     }
     this.noiseReducerNode = await this.getNoiseReducerNode(source.context, rawSab, denoisedSab)
@@ -105,18 +120,27 @@ export class NoiseReducer {
   }
 
   disconnect() {
+    if (this.audioContext && this.stateChangeListener) {
+      this.audioContext.removeEventListener('statechange', this.stateChangeListener)
+    }
+    this.audioContext = null
+    this.stateChangeListener = null
     this.worker?.postMessage({ type: 'stop' })
     this.noiseReducerNode?.disconnect()
   }
 
-  private async getCachedOrFetch(url: string) {
-    const cache = await caches.open('soundetch-cache')
-    const cached = await cache.match(url)
-    if (cached) {
-      return cached.arrayBuffer()
+  setParameters(parameters: DeepFilterParameters) {
+    this.worker?.postMessage({ type: 'configure', parameters })
+  }
+
+  dispose() {
+    this.disconnect()
+    if (this.worker) {
+      this.worker.onmessage = null
+      this.worker.onerror = null
+      this.worker.terminate()
     }
-    const fetchResponse = await fetch(url)
-    await cache.put(url, fetchResponse.clone())
-    return fetchResponse.arrayBuffer()
+    this.worker = null
+    this.noiseReducerNode = null
   }
 }

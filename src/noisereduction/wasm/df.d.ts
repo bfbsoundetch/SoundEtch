@@ -1,81 +1,142 @@
 /* tslint:disable */
 /* eslint-disable */
 /**
- * Create a DeepFilterNet Model
- *
- * Args:
- *     - path: File path to a DeepFilterNet tar.gz onnx model
- *     - atten_lim: Attenuation limit in dB.
- *
- * Returns:
- *     - DF state doing the full processing: stft, DNN noise reduction, istft.
- * @param {Uint8Array} model_bytes
- * @param {number} atten_lim
- * @returns {number}
- */
-export function df_create(model_bytes: Uint8Array, atten_lim: number): number
+*/
+export class DFRuntimeParams {
+  free(): void;
 /**
- * Get DeepFilterNet frame size in samples.
- * @param {number} st
- * @returns {number}
- */
-export function df_get_frame_length(st: number): number
+*/
+  constructor();
 /**
- * Set DeepFilterNet attenuation limit.
- *
- * Args:
- *     - lim_db: New attenuation limit in dB.
- * @param {number} st
- * @param {number} lim_db
- */
-export function df_set_atten_lim(st: number, lim_db: number): void
+* Maximum local SNR threshold for running the DF decoder in dB.
+*/
+  max_db_df_thresh: number;
 /**
- * Set DeepFilterNet post filter beta. A beta of 0 disables the post filter.
- *
- * Args:
- *     - beta: Post filter attenuation. Suitable range between 0.05 and 0;
- * @param {number} st
- * @param {number} beta
- */
-export function df_set_post_filter_beta(st: number, beta: number): void
+* Maximum local SNR threshold for running the ERB decoder in dB.
+*/
+  max_db_erb_thresh: number;
 /**
- * Processes a chunk of samples.
- *
- * Args:
- *     - df_state: Created via df_create()
- *     - input: Input buffer of length df_get_frame_length()
- *     - output: Output buffer of length df_get_frame_length()
- *
- * Returns:
- *     - Local SNR of the current frame.
- * @param {number} st
- * @param {Float32Array} input
- * @returns {Float32Array}
- */
-export function df_process_frame(st: number, input: Float32Array): Float32Array
+* Minimum local SNR threshold in dB.
+*/
+  min_db_thresh: number;
 /**
- * Processes a chunk of samples.
- *
- * Args:
- *     - df_state: Created via df_create()
- *     - input: Input buffer of length df_get_frame_length()
- *     - output: Output buffer of length df_get_frame_length()
- *
- * Returns:
- *     - Local SNR of the current frame.
- * @param {number} st
- * @param {number} input
- * @param {number} output
- * @returns {number}
- */
-export function df_process_frame2(st: number, input: number, output: number): number
-/**
- * @param {number} size
- * @returns {number}
- */
-export function df_create_frame_buffer(size: number): number
-/**
- */
-export class DFState {
-  free(): void
+* Post-filter attenuation. A value of 0 disables the post-filter.
+*/
+  post_filter_beta: number;
 }
+/**
+* DeepFilterNet state with stable, reusable frame buffers.
+*
+* `input_ptr` and `output_ptr` are offsets into WebAssembly linear memory.
+* Create `Float32Array` views over those offsets after constructing the state,
+* and recreate the views whenever `WebAssembly.Memory.buffer` changes.
+*/
+export class DFState {
+  free(): void;
+/**
+* Offset of the reusable output frame in WebAssembly linear memory.
+* @returns {number}
+*/
+  output_ptr(): number;
+/**
+* Process the current input frame into the reusable output frame.
+*
+* Returns the local SNR estimate for the frame.
+* @returns {number}
+*/
+  process_frame(): number;
+/**
+* Set the attenuation limit in dB.
+* @param {number} lim_db
+*/
+  set_atten_lim(lim_db: number): void;
+/**
+* Set the minimum local SNR threshold in dB.
+* @param {number} min_db_thresh
+*/
+  set_min_db_thresh(min_db_thresh: number): void;
+/**
+* Set the maximum local SNR threshold for running the DF decoder in dB.
+* @param {number} max_db_df_thresh
+*/
+  set_max_db_df_thresh(max_db_df_thresh: number): void;
+/**
+* Set post-filter attenuation. A value of 0 disables the post-filter.
+* @param {number} beta
+*/
+  set_post_filter_beta(beta: number): void;
+/**
+* Set the maximum local SNR threshold for running the ERB decoder in dB.
+* @param {number} max_db_erb_thresh
+*/
+  set_max_db_erb_thresh(max_db_erb_thresh: number): void;
+/**
+* Create a mono DeepFilterNet runtime from tar.gz ONNX model bytes.
+* @param {Uint8Array} model_bytes
+* @param {number} atten_lim
+* @param {DFRuntimeParams} params
+*/
+  constructor(model_bytes: Uint8Array, atten_lim: number, params: DFRuntimeParams);
+/**
+* Offset of the reusable input frame in WebAssembly linear memory.
+* @returns {number}
+*/
+  input_ptr(): number;
+/**
+* Frame length in samples.
+*/
+  readonly frame_length: number;
+}
+
+export type InitInput = RequestInfo | URL | Response | BufferSource | WebAssembly.Module;
+
+export interface InitOutput {
+  readonly memory: WebAssembly.Memory;
+  readonly __wbg_dfruntimeparams_free: (a: number) => void;
+  readonly __wbg_dfstate_free: (a: number) => void;
+  readonly __wbg_get_dfruntimeparams_max_db_df_thresh: (a: number) => number;
+  readonly __wbg_get_dfruntimeparams_max_db_erb_thresh: (a: number) => number;
+  readonly __wbg_get_dfruntimeparams_min_db_thresh: (a: number) => number;
+  readonly __wbg_get_dfruntimeparams_post_filter_beta: (a: number) => number;
+  readonly __wbg_set_dfruntimeparams_max_db_df_thresh: (a: number, b: number) => void;
+  readonly __wbg_set_dfruntimeparams_max_db_erb_thresh: (a: number, b: number) => void;
+  readonly __wbg_set_dfruntimeparams_min_db_thresh: (a: number, b: number) => void;
+  readonly __wbg_set_dfruntimeparams_post_filter_beta: (a: number, b: number) => void;
+  readonly dfruntimeparams_new: () => number;
+  readonly dfstate_frame_length: (a: number) => number;
+  readonly dfstate_input_ptr: (a: number) => number;
+  readonly dfstate_new: (a: number, b: number, c: number, d: number, e: number) => void;
+  readonly dfstate_output_ptr: (a: number) => number;
+  readonly dfstate_process_frame: (a: number, b: number) => void;
+  readonly dfstate_set_atten_lim: (a: number, b: number) => void;
+  readonly dfstate_set_max_db_df_thresh: (a: number, b: number) => void;
+  readonly dfstate_set_max_db_erb_thresh: (a: number, b: number) => void;
+  readonly dfstate_set_min_db_thresh: (a: number, b: number) => void;
+  readonly dfstate_set_post_filter_beta: (a: number, b: number) => void;
+  readonly __wbindgen_add_to_stack_pointer: (a: number) => number;
+  readonly __wbindgen_export_0: (a: number, b: number) => number;
+  readonly __wbindgen_export_1: (a: number, b: number, c: number) => void;
+  readonly __wbindgen_export_2: (a: number, b: number, c: number, d: number) => number;
+  readonly __wbindgen_export_3: (a: number) => void;
+}
+
+export type SyncInitInput = BufferSource | WebAssembly.Module;
+/**
+* Instantiates the given `module`, which can either be bytes or
+* a precompiled `WebAssembly.Module`.
+*
+* @param {SyncInitInput} module
+*
+* @returns {InitOutput}
+*/
+export function initSync(module: SyncInitInput): InitOutput;
+
+/**
+* If `module_or_path` is {RequestInfo} or {URL}, makes a request and
+* for everything else, calls `WebAssembly.instantiate` directly.
+*
+* @param {InitInput | Promise<InitInput>} module_or_path
+*
+* @returns {Promise<InitOutput>}
+*/
+export default function __wbg_init (module_or_path: InitInput | Promise<InitInput>): Promise<InitOutput>;

@@ -5,19 +5,17 @@ let frame_length
 let deep_filter
 let audio_reader
 let audio_writer
-let input
-let output
 
 function readFromQueue() {
   try {
     if (audio_reader.available_read() < frame_length) {
       return 0
     }
-    const samples_read = audio_reader.dequeue(input)
+    const samples_read = audio_reader.dequeue(deep_filter.getInputBuffer())
 
     deep_filter.process()
 
-    if (audio_writer.enqueue(output) !== frame_length) {
+    if (audio_writer.enqueue(deep_filter.getOutputBuffer()) !== frame_length) {
       console.log("worker underrun: the audioworklet doesn't dequeue fast enough!")
     }
     return samples_read
@@ -32,11 +30,9 @@ async function handleMessage(e) {
   console.log('denoiser handling: ' + e.data.type)
   switch (e.data.type) {
     case 'init': {
-      deep_filter = await DeepFilter.create()
+      deep_filter = await DeepFilter.create(e.data.parameters)
       frame_length = deep_filter.frameLength
 
-      input = deep_filter.getInputBuffer()
-      output = deep_filter.getOutputBuffer()
       self.interval = setInterval(() => {}, 0)
       postMessage({ type: 'initialized' })
       break
@@ -52,6 +48,10 @@ async function handleMessage(e) {
     }
     case 'stop': {
       clearInterval(self.interval)
+      break
+    }
+    case 'configure': {
+      deep_filter.setParameters(e.data.parameters)
       break
     }
     case 'resume': {

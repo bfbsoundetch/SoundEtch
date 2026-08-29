@@ -1,4 +1,5 @@
 import { EffectMetadata } from './Effect'
+import { defaultDeepFilterParameters } from '../noisereduction/DeepFilterParameters'
 
 export const FadeEffectMetadata: EffectMetadata = {
   id: 'soundetch.fade',
@@ -48,6 +49,7 @@ export const NoiseReductionEffectMetadata: EffectMetadata = {
   description: 'Reduce steady background noise',
   categories: ['Restoration'],
   parameters: [],
+  createDefaultState: () => ({ ...defaultDeepFilterParameters }),
 }
 
 export const CompressionEffectMetadata: EffectMetadata = {

@@ -98,6 +98,16 @@ describe('effect parameters', () => {
     expect(second[0].frequency).not.toBe(1234)
   })
 
+  test('noise reduction default state is cloned for each effect instance', () => {
+    const first = NoiseReductionEffectMetadata.createDefaultState?.() as { attenuationLimit: number }
+    const second = NoiseReductionEffectMetadata.createDefaultState?.() as { attenuationLimit: number }
+
+    first.attenuationLimit = 10
+
+    expect(second.attenuationLimit).toBe(100)
+    expect(NoiseReductionEffectMetadata.parameters).toEqual([])
+  })
+
   test.each(
     [
       ParamValueTransition.generateSCurve(),

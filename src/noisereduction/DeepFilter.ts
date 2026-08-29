@@ -1,51 +1,96 @@
-import * as wasm_bindgen from './wasm/df_bg.js'
+import init, { DFRuntimeParams, DFState as WasmDFState } from './wasm/df.js'
+import type { InitOutput } from './wasm/df.js'
+import { defaultDeepFilterParameters } from './DeepFilterParameters'
+import type { DeepFilterParameters } from './DeepFilterParameters'
 
-type DeepFilterWasm = WebAssembly.Exports & {
-  memory: WebAssembly.Memory
-}
+export { defaultDeepFilterParameters, readDeepFilterParameters } from './DeepFilterParameters'
+export type { DeepFilterParameters } from './DeepFilterParameters'
 
-let initialization: Promise<{ wasm: DeepFilterWasm; modelBytes: Uint8Array }> | null = null
+let initialization: Promise<{ wasm: InitOutput; modelBytes: Uint8Array }> | null = null
 
 export class DeepFilter {
   readonly frameLength: number
 
+  private memoryBuffer: ArrayBuffer | null = null
+  private inputBuffer: Float32Array | null = null
+  private outputBuffer: Float32Array | null = null
+  private disposed = false
+
   private constructor(
-    private readonly wasm: DeepFilterWasm,
-    private readonly state: number,
-    private readonly inputPointer: number,
-    private readonly outputPointer: number,
+    private readonly wasm: InitOutput,
+    private readonly state: WasmDFState,
+    private parameters: DeepFilterParameters,
   ) {
-    this.frameLength = wasm_bindgen.df_get_frame_length(state)
+    this.frameLength = state.frame_length
   }
 
-  static async create() {
+  static async create(parameters: Partial<DeepFilterParameters> = {}) {
     const { wasm, modelBytes } = await (initialization ??= initialize())
-    const state = wasm_bindgen.df_create(modelBytes, 100)
-    const frameLength = wasm_bindgen.df_get_frame_length(state)
-    return new DeepFilter(
-      wasm,
-      state,
-      wasm_bindgen.df_create_frame_buffer(frameLength),
-      wasm_bindgen.df_create_frame_buffer(frameLength),
-    )
+    const values = { ...defaultDeepFilterParameters, ...parameters }
+    const runtimeParameters = new DFRuntimeParams()
+    runtimeParameters.min_db_thresh = values.minDbThreshold
+    runtimeParameters.max_db_erb_thresh = values.maxDbErbThreshold
+    runtimeParameters.max_db_df_thresh = values.maxDbDfThreshold
+    runtimeParameters.post_filter_beta = values.postFilterBeta
+    try {
+      return new DeepFilter(wasm, new WasmDFState(modelBytes, values.attenuationLimit, runtimeParameters), values)
+    } finally {
+      runtimeParameters.free()
+    }
   }
 
   getInputBuffer() {
-    return new Float32Array(this.wasm.memory.buffer).subarray(
-      this.inputPointer / Float32Array.BYTES_PER_ELEMENT,
-      this.inputPointer / Float32Array.BYTES_PER_ELEMENT + this.frameLength,
-    )
+    this.refreshViews()
+    return this.inputBuffer!
   }
 
   getOutputBuffer() {
-    return new Float32Array(this.wasm.memory.buffer).subarray(
-      this.outputPointer / Float32Array.BYTES_PER_ELEMENT,
-      this.outputPointer / Float32Array.BYTES_PER_ELEMENT + this.frameLength,
-    )
+    this.refreshViews()
+    return this.outputBuffer!
   }
 
   process() {
-    wasm_bindgen.df_process_frame2(this.state, this.inputPointer, this.outputPointer)
+    this.assertActive()
+    const localSnr = this.state.process_frame()
+    this.refreshViews()
+    return localSnr
+  }
+
+  setParameters(parameters: Partial<DeepFilterParameters>) {
+    this.assertActive()
+    this.parameters = { ...this.parameters, ...parameters }
+    this.state.set_atten_lim(this.parameters.attenuationLimit)
+    this.state.set_min_db_thresh(this.parameters.minDbThreshold)
+    this.state.set_max_db_erb_thresh(this.parameters.maxDbErbThreshold)
+    this.state.set_max_db_df_thresh(this.parameters.maxDbDfThreshold)
+    this.state.set_post_filter_beta(this.parameters.postFilterBeta)
+  }
+
+  dispose() {
+    if (this.disposed) {
+      return
+    }
+    this.disposed = true
+    this.inputBuffer = null
+    this.outputBuffer = null
+    this.memoryBuffer = null
+    this.state.free()
+  }
+
+  private refreshViews() {
+    this.assertActive()
+    if (this.memoryBuffer == this.wasm.memory.buffer) {
+      return
+    }
+    this.memoryBuffer = this.wasm.memory.buffer
+    this.inputBuffer = new Float32Array(this.memoryBuffer, this.state.input_ptr(), this.frameLength)
+    this.outputBuffer = new Float32Array(this.memoryBuffer, this.state.output_ptr(), this.frameLength)
+  }
+
+  private assertActive() {
+    if (this.disposed) {
+      throw new Error('DeepFilter has been disposed')
+    }
   }
 }
 
@@ -54,15 +99,17 @@ async function initialize() {
     getCachedOrFetch(resourceUrl('df_bg.wasm')),
     getCachedOrFetch(resourceUrl('DeepFilterNet3_onnx.tar.gz')),
   ])
-  const instance = await WebAssembly.instantiate(wasmBytes, { './df_bg.js': wasm_bindgen })
-  const wasm = instance.instance.exports as DeepFilterWasm
-  wasm_bindgen.__wbg_set_wasm(wasm)
+  const wasm = await init(wasmBytes)
   return { wasm, modelBytes: new Uint8Array(modelBytes) }
 }
 
 function resourceUrl(filename: string) {
   const env = (import.meta as ImportMeta & { env?: { BASE_URL?: string } }).env
-  return new URL(`${env?.BASE_URL ?? ''}/noisereduction/${filename}`, globalThis.location.origin).href
+  const url = new URL(`${env?.BASE_URL ?? ''}/noisereduction/${filename}`, globalThis.location.origin)
+  if (filename == 'df_bg.wasm') {
+    url.searchParams.set('v', 'dfstate-api')
+  }
+  return url.href
 }
 
 async function getCachedOrFetch(url: string) {
