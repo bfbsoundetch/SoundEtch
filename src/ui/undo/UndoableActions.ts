@@ -1,4 +1,5 @@
 import { ClipView } from '../../project/ClipView'
+import { Project } from '../../project/Project'
 import { ProjectManager } from '../../project/ProjectManager'
 import { Track } from '../../project/Track'
 import { Undoable } from './Undoable'
@@ -8,6 +9,7 @@ export type UndoableAction =
   | RemoveClipViewCommand
   | ReplaceClipViewCommand
   | MoveClipViewBetweenTracksCommand
+  | MoveClipViewToNewTrackCommand
   | SetTrackClipViewsCommand
   | SetTrackPropertyCommand
   | BatchCommand
@@ -128,11 +130,11 @@ export class MoveClipViewBetweenTracksCommand implements Undoable {
   ) {}
 
   async perform() {
-    this.move(this.oldTrack, this.newTrack, this.oldClipView, this.newClipView)
+    moveClipView(this.oldTrack, this.newTrack, this.oldClipView, this.newClipView)
   }
 
   async undo() {
-    this.move(this.newTrack, this.oldTrack, this.newClipView, this.oldClipView)
+    moveClipView(this.newTrack, this.oldTrack, this.newClipView, this.oldClipView)
   }
 
   async save() {
@@ -142,15 +144,45 @@ export class MoveClipViewBetweenTracksCommand implements Undoable {
   toString() {
     return 'move clip view between tracks'
   }
+}
 
-  private move(fromTrack: Track, toTrack: Track, fromClipView: ClipView, toClipView: ClipView) {
-    removeClipViewByReference(fromTrack, fromClipView)
-    try {
-      toTrack.addClipView(toClipView)
-    } catch (error) {
-      fromTrack.addClipView(fromClipView)
-      throw error
+export class MoveClipViewToNewTrackCommand implements Undoable {
+  private newTrackIsActive = false
+
+  constructor(
+    private readonly project: Project,
+    private readonly oldTrack: Track,
+    private readonly newTrack: Track,
+    private readonly oldClipView: ClipView,
+    private readonly newClipView: ClipView,
+    private readonly newTrackIndex: number,
+  ) {}
+
+  async perform() {
+    moveClipView(this.oldTrack, this.newTrack, this.oldClipView, this.newClipView)
+    this.project.addTrack(this.newTrack, this.newTrackIndex)
+    this.newTrackIsActive = true
+  }
+
+  async undo() {
+    this.project.deleteTrack(this.newTrack)
+    moveClipView(this.newTrack, this.oldTrack, this.newClipView, this.oldClipView)
+    this.newTrackIsActive = false
+  }
+
+  async save() {
+    if (this.newTrackIsActive) {
+      await saveTracks(this.oldTrack, this.newTrack)
+      await ProjectManager.saveProject(this.project)
+      return
     }
+
+    await ProjectManager.saveTrack(this.oldTrack)
+    await ProjectManager.deleteTrack(this.newTrack)
+  }
+
+  toString() {
+    return 'move clip view to new track'
   }
 }
 
@@ -227,6 +259,16 @@ export function clipViewsEqual(a: ClipView, b: ClipView) {
   return (
     a.clip === b.clip && a.offset === b.offset && a.startPosition === b.startPosition && a.viewLength === b.viewLength
   )
+}
+
+function moveClipView(fromTrack: Track, toTrack: Track, fromClipView: ClipView, toClipView: ClipView) {
+  removeClipViewByReference(fromTrack, fromClipView)
+  try {
+    toTrack.addClipView(toClipView)
+  } catch (error) {
+    fromTrack.addClipView(fromClipView)
+    throw error
+  }
 }
 
 function removeClipViewByReference(track: Track, clipView: ClipView) {

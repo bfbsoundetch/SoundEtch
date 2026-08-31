@@ -149,23 +149,33 @@ export class PointerStateManager extends TrackListItemController {
           this.changeState(State.DEFAULT)
           this.timelineRegionController!.updateListener()
           break
-        case State.MOVING_CLIPVIEW:
+        case State.MOVING_CLIPVIEW: {
+          const droppedOnNewTrack = this.trackListController.isPointInNewTrackDropRegion(
+            mouseEvent.clientX,
+            mouseEvent.clientY,
+          )
           this.changeState(State.DEFAULT)
           let xShift = mouseEvent.clientX - this.mouseDownPoint!.x
           if (Math.abs(xShift + this.clipViewMoveInfo!.clipViewController.rectElement.x.baseVal.value) < 5) {
             xShift = -this.clipViewMoveInfo!.clipViewController.rectElement.x.baseVal.value
           }
           const shift = Math.round(xShift * this.samplesPerUnit)
-          if (!this.activeWaveform || this.clipViewMoveInfo!.clipViewController.waveform == this.activeWaveform) {
+          if (droppedOnNewTrack) {
+            await this.trackListController.transferClipViewToNewTrack(this.clipViewMoveInfo!.clipViewController, shift)
+          } else if (
+            !this.activeWaveform ||
+            this.clipViewMoveInfo!.clipViewController.waveform == this.activeWaveform
+          ) {
             await this.clipViewMoveInfo!.clipViewController.moveThisClipView(shift)
           } else {
             await this.trackListController.transferClipViewBetweenTracks(
               this.clipViewMoveInfo!.clipViewController,
-              this.activeWaveform!,
+              this.activeWaveform,
               shift,
             )
           }
           break
+        }
         case State.RESIZING_CLIPVIEW: {
           const shift = mouseEvent.clientX - this.mouseDownPoint!.x
           await this.activeClipViewController!.finishClipViewResize(shift)
@@ -229,6 +239,7 @@ export class PointerStateManager extends TrackListItemController {
     }
     this.clipViewMoveInfo = { clipViewController: controller }
     this.mouseDownPoint = { x: mouseDownX, y: 0 }
+    this.trackListController.showNewTrackDropRegion(controller.clipView.clip.getChannelCount())
   }
 
   startSelecting() {
@@ -328,6 +339,9 @@ export class PointerStateManager extends TrackListItemController {
           return false
         }
         break
+    }
+    if (this.state == State.MOVING_CLIPVIEW && newState != State.MOVING_CLIPVIEW) {
+      this.trackListController.hideNewTrackDropRegion()
     }
     this.state = newState
     return true

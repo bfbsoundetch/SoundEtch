@@ -150,7 +150,6 @@ export class RemoteMediaClient3 {
       if (added) {
         this.remotePeerStates.forEach((remotePeerState, key) => {
           remotePeerState.withRtcPeerConnection((value) => {
-            console.error('add track to ', key)
             value.addTrack(track, LocalMediaStreams.localAVDeviceMediaStream)
           })
         })

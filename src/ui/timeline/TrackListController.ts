@@ -16,6 +16,7 @@ import {
   AddClipViewCommand,
   BatchCommand,
   MoveClipViewBetweenTracksCommand,
+  MoveClipViewToNewTrackCommand,
   SetTrackClipViewsCommand,
 } from '../undo/UndoableActions'
 import { Track } from '../../project/Track'
@@ -83,7 +84,7 @@ export class TrackListController {
 
   private readonly tracklistElement = document.getElementById('track-list')!
   private readonly tracklistInfoElement = document.getElementById('track-info-list')!
-  private readonly addTrackButton = document.createElement('button')
+  private readonly newTrackDropRegion = document.createElement('div')
   private readonly infoWaveformPairs = new Map<
     string,
     { info: HTMLElement; waveform: HTMLElement; controller: Waveform; infoController: TrackListInfo }
@@ -153,9 +154,11 @@ export class TrackListController {
   }
 
   constructor() {
-    this.addTrackButton.className = 'add-track-button clickable'
-    this.addTrackButton.innerText = 'Add Track'
-    this.addTrackButton.addEventListener('click', () => void this.addTrack())
+    this.newTrackDropRegion.className = 'new-track-drop-region clickable'
+    this.newTrackDropRegion.textContent = '+ new track'
+    this.newTrackDropRegion.setAttribute('aria-label', 'Drop clip to create a new track')
+    this.newTrackDropRegion.hidden = true
+    this.tracklistElement.appendChild(this.newTrackDropRegion)
 
     this.history.addChangeListener(() => this.draw())
     KeyPressController.addKeyDownListener((event) => this.handleKeyDown(event))
@@ -257,8 +260,8 @@ export class TrackListController {
         waveformDivs.push(waveformDiv)
       }
       this.waveforms.splice(0, this.waveforms.length, ...nextWaveforms)
-      this.tracklistInfoElement.replaceChildren(...infoDivs, this.addTrackButton)
-      this.tracklistElement.replaceChildren(...waveformDivs)
+      this.tracklistInfoElement.replaceChildren(...infoDivs)
+      this.tracklistElement.replaceChildren(...waveformDivs, this.newTrackDropRegion)
       this.waveforms.forEach((waveform) => waveform.draw())
       this.selectionController.remove()
       this.pointerStateManager
@@ -312,16 +315,21 @@ export class TrackListController {
     }
   }
 
-  private async addTrack() {
-    this.addTrackButton.disabled = true
-    try {
-      const project = await ProjectManager.getActiveProject()
-      const track = new Track(`Track ${project.getTracks().length + 1}`, 2)
-      await ProjectManager.saveTrack(track)
-      await ProjectManager.addTrackToProject(track, project.getTracks().length)
-    } finally {
-      this.addTrackButton.disabled = false
+  showNewTrackDropRegion(channelCount: number) {
+    this.newTrackDropRegion.style.height = `${7 * channelCount + 1.5}rem`
+    this.newTrackDropRegion.hidden = false
+  }
+
+  hideNewTrackDropRegion() {
+    this.newTrackDropRegion.hidden = true
+  }
+
+  isPointInNewTrackDropRegion(clientX: number, clientY: number) {
+    if (this.newTrackDropRegion.hidden) {
+      return false
     }
+    const bounds = this.newTrackDropRegion.getBoundingClientRect()
+    return clientX >= bounds.left && clientX <= bounds.right && clientY >= bounds.top && clientY <= bounds.bottom
   }
 
   selectTrack(waveform: Waveform) {
@@ -352,8 +360,6 @@ export class TrackListController {
 
     this.clearSelection()
     this.pointerStateManager.startAutomating()
-    this.addTrackButton.disabled = true
-    this.addTrackButton.hidden = true
 
     for (const [trackId, candidate] of this.infoWaveformPairs) {
       const isActive = trackId == `${track.id}`
@@ -417,8 +423,6 @@ export class TrackListController {
       pair.info.classList.remove('automation-dimmed')
       pair.waveform.classList.remove('automation-dimmed', 'automation-active-waveform')
     }
-    this.addTrackButton.disabled = false
-    this.addTrackButton.hidden = false
     this.automationMode = null
     this.pointerStateManager.stopAutomating()
   }
@@ -489,6 +493,29 @@ export class TrackListController {
       scale.appendChild(tick)
     }
     return scale
+  }
+
+  async transferClipViewToNewTrack(clipViewController: ClipViewController, shift: number) {
+    const project = await ProjectManager.getActiveProject()
+    const oldWaveform = clipViewController.waveform
+    const oldClipView = oldWaveform.track.clipViews[clipViewController.clipViewIndex]
+    const clipView = cloneClipViewWithNewStartPosition(oldClipView, shift)
+    const trackNames = new Set(project.getTracks().map((track) => track.name))
+    let trackNumber = project.getTracks().length + 1
+    while (trackNames.has(`Track ${trackNumber}`)) {
+      ++trackNumber
+    }
+    const newTrack = new Track(`Track ${trackNumber}`, clipView.clip.getChannelCount())
+    await this.history.execute(
+      new MoveClipViewToNewTrackCommand(
+        project,
+        oldWaveform.track,
+        newTrack,
+        oldClipView,
+        clipView,
+        project.getTracks().length,
+      ),
+    )
   }
 
   async transferClipViewBetweenTracks(clipViewController: ClipViewController, newWaveform: Waveform, shift: number) {

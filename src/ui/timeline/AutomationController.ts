@@ -4,6 +4,7 @@ import { Track } from '../../project/Track'
 import { cloneEffectData, SetTrackEffectsCommand } from '../effects/SetTrackEffectsCommand'
 import { TrackListItemController } from './TrackListItemController'
 import { TrackListController } from './TrackListController'
+import { Waveform } from './Waveform'
 
 export class AutomationController extends TrackListItemController {
   private readonly groupElement = document.createElementNS('http://www.w3.org/2000/svg', 'g')
@@ -62,7 +63,7 @@ export class AutomationController extends TrackListItemController {
     this.pointElements.splice(0)
 
     const initialPoint = {
-      pointX: 0,
+      pointX: this.getXValueForSample(0),
       pointY: this.getYValue(this.paramVals.initialValue),
     }
     const transitionPoints = this.paramVals.transitionSequence.map((point) => ({
@@ -80,7 +81,7 @@ export class AutomationController extends TrackListItemController {
     for (const point of this.paramVals.transitionSequence) {
       const circleElement = document.createElementNS('http://www.w3.org/2000/svg', 'circle')
       circleElement.classList.add('automation-point')
-      circleElement.setAttribute('r', '5')
+      circleElement.setAttribute('r', '6')
       circleElement.setAttribute('cx', String(this.getXValueForSample(point.startSample)))
       circleElement.setAttribute('cy', String(this.getYValue(point.startValue)))
       circleElement.addEventListener('mousedown', (event) => this.startMovingPoint(event, point))
@@ -156,6 +157,22 @@ export class AutomationController extends TrackListItemController {
     point.x = event.clientX
     point.y = event.clientY
     return point.matrixTransform(this.svgElement.getScreenCTM()!.inverse())
+  }
+
+  private createAutomationScale(parameterMetadata: ParameterMetadata) {
+    const scale = document.createElement('div')
+    scale.className = 'automation-scale'
+    scale.style.top = `${Waveform.HEADER_HEIGHT}px`
+    scale.setAttribute('aria-label', `${parameterMetadata.displayName} scale`)
+    const scaleValues = [...parameterMetadata.scaleValues].sort((a, b) => b - a)
+    for (const value of scaleValues) {
+      const tick = document.createElement('span')
+      tick.className = 'automation-scale-tick'
+      tick.style.top = `${(1 - parameterMetadata.normalize(value)) * 100}%`
+      tick.textContent = parameterMetadata.displayValue(value)
+      scale.appendChild(tick)
+    }
+    return scale
   }
 
   private async recordAppliedChange(oldEffects: ReturnType<typeof cloneEffectData>, description: string) {

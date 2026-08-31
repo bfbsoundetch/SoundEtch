@@ -117,7 +117,6 @@ export class AudioInputs {
           continue
         }
         member.mediaStream.addEventListener('addtrack', (trackEvent) => {
-          console.error('add track')
           if (trackEvent.track.kind == 'audio') {
             let input = this.remoteStreams.get(member.peerId)
             if (!input) {
