@@ -66,6 +66,9 @@ export class TrackListTrack {
     effectButton.addEventListener('click', () => {
       EffectPanelController.getInstance().showTrackEffectsList(track)
     })
+    ProjectManager.addTrackListener(track, () => {
+      effectButton.innerText = 'Effects' + (track.effectRegions.length > 0 ? ` (${track.effectRegions.length})` : '')
+    })
     this.trackInfoDiv.appendChild(effectButton)
 
     const mixControls = document.createElement('div')

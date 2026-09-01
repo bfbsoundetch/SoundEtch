@@ -247,6 +247,7 @@ export class ProjectManager {
     project.deleteTrack(track)
     await DatabasePersister.save(project)
     this.projectListeners.forEach((listener) => listener(project))
+    this.trackListeners.delete(track.id!)
   }
 
   static async deleteClip(clip: Clip) {

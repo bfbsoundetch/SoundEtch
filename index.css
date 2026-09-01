@@ -909,7 +909,6 @@ video {
   flex-direction: column;
   grid-area: info;
   z-index: 3;
-  overscroll-behavior: none;
 }
 
 #audio-input-buttons {
