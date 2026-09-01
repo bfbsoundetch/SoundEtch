@@ -4,12 +4,12 @@ import { Track } from '../../project/Track'
 import { cloneEffectData, SetTrackEffectsCommand } from '../effects/SetTrackEffectsCommand'
 import { TrackListItemController } from './TrackListItemController'
 import { TrackListController } from './TrackListController'
-import { Waveform } from './Waveform'
 
 export class AutomationController extends TrackListItemController {
   private readonly groupElement = document.createElementNS('http://www.w3.org/2000/svg', 'g')
   private readonly svgPathElement = document.createElementNS('http://www.w3.org/2000/svg', 'path')
   private readonly blockerElement = document.createElementNS('http://www.w3.org/2000/svg', 'rect')
+  private readonly scaleForeignObject = document.createElementNS('http://www.w3.org/2000/svg', 'foreignObject')
   private readonly paramVals: ParameterValueSequence
   private readonly pointElements = new Array<SVGCircleElement>()
   private width: number
@@ -54,7 +54,10 @@ export class AutomationController extends TrackListItemController {
     })
 
     this.svgPathElement.classList.add('automation-path')
-    this.groupElement.append(this.blockerElement, this.svgPathElement)
+    this.scaleForeignObject.classList.add('automation-scale-container')
+    this.scaleForeignObject.appendChild(this.createAutomationScale(parameterMetadata))
+    this.resizeAutomationScale()
+    this.groupElement.append(this.blockerElement, this.scaleForeignObject, this.svgPathElement)
     this.svgElement.appendChild(this.groupElement)
   }
 
@@ -94,6 +97,7 @@ export class AutomationController extends TrackListItemController {
     this.width = this.svgElement.viewBox.baseVal.width || this.svgElement.clientWidth
     this.height = this.svgElement.viewBox.baseVal.height || this.svgElement.clientHeight
     this.blockerElement.setAttribute('height', `${Math.max(0, this.height - this.topOffset)}`)
+    this.resizeAutomationScale()
     this.draw()
   }
 
@@ -162,7 +166,6 @@ export class AutomationController extends TrackListItemController {
   private createAutomationScale(parameterMetadata: ParameterMetadata) {
     const scale = document.createElement('div')
     scale.className = 'automation-scale'
-    scale.style.top = `${Waveform.HEADER_HEIGHT}px`
     scale.setAttribute('aria-label', `${parameterMetadata.displayName} scale`)
     const scaleValues = [...parameterMetadata.scaleValues].sort((a, b) => b - a)
     for (const value of scaleValues) {
@@ -173,6 +176,12 @@ export class AutomationController extends TrackListItemController {
       scale.appendChild(tick)
     }
     return scale
+  }
+  private resizeAutomationScale() {
+    this.scaleForeignObject.setAttribute('x', '0')
+    this.scaleForeignObject.setAttribute('y', `${this.topOffset}`)
+    this.scaleForeignObject.setAttribute('width', `${4 * this.trackListController.rootFontSize}`)
+    this.scaleForeignObject.setAttribute('height', `${Math.max(0, this.height - this.topOffset)}`)
   }
 
   private async recordAppliedChange(oldEffects: ReturnType<typeof cloneEffectData>, description: string) {

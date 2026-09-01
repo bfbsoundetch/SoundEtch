@@ -36,7 +36,6 @@ interface AutomationMode {
   controller: AutomationController
   infoElement: HTMLElement
   originalInfoElements: Node[]
-  scaleElement: HTMLElement
 }
 
 export class TrackListController {
@@ -375,9 +374,6 @@ export class TrackListController {
         return
       }
       mode.controller.remove()
-      const scaleElement = this.createAutomationScale(selectedParameter)
-      mode.scaleElement.replaceWith(scaleElement)
-      mode.scaleElement = scaleElement
       mode.controller = new AutomationController(
         this,
         effectInstanceId,
@@ -397,8 +393,6 @@ export class TrackListController {
       pair.info.appendChild(infoResizeHandle)
     }
 
-    const scaleElement = this.createAutomationScale(parameterMetadata)
-    pair.waveform.appendChild(scaleElement)
     const controller = new AutomationController(
       this,
       effectInstanceId,
@@ -407,7 +401,7 @@ export class TrackListController {
       parameterMetadata,
       Waveform.HEADER_HEIGHT,
     )
-    this.automationMode = { controller, infoElement: pair.info, originalInfoElements, scaleElement }
+    this.automationMode = { controller, infoElement: pair.info, originalInfoElements }
     controller.draw()
   }
 
@@ -417,7 +411,6 @@ export class TrackListController {
       return
     }
     mode.controller.remove()
-    mode.scaleElement.remove()
     mode.infoElement.replaceChildren(...mode.originalInfoElements)
     for (const pair of this.infoWaveformPairs.values()) {
       pair.info.classList.remove('automation-dimmed')
@@ -477,22 +470,6 @@ export class TrackListController {
     exitButton.addEventListener('click', () => this.exitAutomationMode())
     panel.append(heading, exitButton)
     return panel
-  }
-
-  private createAutomationScale(parameterMetadata: ParameterMetadata) {
-    const scale = document.createElement('div')
-    scale.className = 'automation-scale'
-    scale.style.top = `${Waveform.HEADER_HEIGHT}px`
-    scale.setAttribute('aria-label', `${parameterMetadata.displayName} scale`)
-    const scaleValues = [...parameterMetadata.scaleValues].sort((a, b) => b - a)
-    for (const value of scaleValues) {
-      const tick = document.createElement('span')
-      tick.className = 'automation-scale-tick'
-      tick.style.top = `${(1 - parameterMetadata.normalize(value)) * 100}%`
-      tick.textContent = parameterMetadata.displayValue(value)
-      scale.appendChild(tick)
-    }
-    return scale
   }
 
   async transferClipViewToNewTrack(clipViewController: ClipViewController, shift: number) {
