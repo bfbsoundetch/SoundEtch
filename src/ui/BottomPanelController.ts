@@ -91,6 +91,7 @@ export class BottomPanelController {
     this.setSubtitle(options.subtitle)
     this.setBody(options.body)
     this.root.classList.add('open')
+    document.getElementById('topdiv')!.style.height = '50vh'
     this.isOpen = true
   }
 
@@ -108,6 +109,7 @@ export class BottomPanelController {
 
   hide() {
     this.root.classList.remove('open')
+    document.getElementById('topdiv')!.style.height = '100vh'
     this.isOpen = false
   }
 

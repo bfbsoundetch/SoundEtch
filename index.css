@@ -196,7 +196,7 @@ dialog.overlay[open] {
   display: grid;
 }
 
-.topdiv {
+#topdiv {
   width: 100%;
   height: 100%;
   display: grid;
@@ -909,6 +909,7 @@ video {
   flex-direction: column;
   grid-area: info;
   z-index: 3;
+  overscroll-behavior: none;
 }
 
 #audio-input-buttons {
