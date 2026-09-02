@@ -8,7 +8,6 @@ import { WorkerController } from '../audiocontext/WorkerController'
 import { JobType } from '../audiocontext/ControllableWorkerJob'
 import { AudioControl, AudioState } from '../audiocontext/AudioControl'
 import { cloneWithGetters } from '../global/ObjectUtils'
-import { AudioImporter } from './AudioImporter'
 import { NotificationsController } from '../ui/NotificationsController'
 
 export class Recorder {
@@ -119,6 +118,8 @@ export class Recorder {
   }
 
   private static async createFromSourceFile(file: File, signal?: AbortSignal): Promise<Track> {
+    // The demuxer is loaded only after import starts, keeping it out of the recording chunk.
+    const { AudioImporter } = await import('./AudioImporter')
     const track = await AudioImporter.importFile(file, {
       signal,
       onProgress: (progress) => (window as any).processingModalController?.setProgress(progress),

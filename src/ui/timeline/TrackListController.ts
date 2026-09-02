@@ -10,7 +10,7 @@ import { ClipView, cloneClipViewWithNewStartPosition } from '../../project/ClipV
 import { Clipboard } from '../Clipboard'
 import { TrackListTrack as TrackListInfo } from './TrackListTrack'
 import { InputListController } from './InputListController'
-import { SelectedRegion } from '../../playback/Player'
+import type { SelectedRegion } from '../../playback/Player'
 import { editorHistory } from '../undo/EditorHistory'
 import {
   AddClipViewCommand,
@@ -21,7 +21,6 @@ import {
 } from '../undo/UndoableActions'
 import { Track } from '../../project/Track'
 import { TimelineRegionController } from './TimelineRegionController'
-import { Freezer } from '../../freezer/Freezer'
 import { NotificationsController } from '../NotificationsController'
 import { ParameterMetadata } from '../../effects/ParameterMetadata'
 import { AutomationController } from './AutomationController'
@@ -563,6 +562,9 @@ export class TrackListController {
     if (!selection) {
       return
     }
+
+    // Rendering is loaded only after freeze starts, keeping it out of the initial timeline chunk.
+    const { Freezer } = await import('../../freezer/Freezer')
 
     ;(window as any).processingModalController?.show('Freezing selection...', () => Freezer.cancelFreeze())
     try {

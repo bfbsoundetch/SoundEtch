@@ -20,7 +20,6 @@ export default defineConfig({
     },
   },
   build: {
-    minify: false,
     rollupOptions: {
       input: {
         index: fileURLToPath(new URL('./index.html', import.meta.url)),

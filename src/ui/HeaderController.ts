@@ -1,6 +1,5 @@
-import { Player } from '../playback/Player'
 import { AudioControl, AudioState } from '../audiocontext/AudioControl'
-import { TrackListController } from './timeline/TrackListController'
+import type { TrackListController } from './timeline/TrackListController'
 import { RecordButtonController } from './RecordButtonController'
 
 export class HeaderController {
@@ -89,8 +88,11 @@ export class HeaderController {
     ;(this.secondHeaderButton.getElementsByClassName('pause')[0] as SVGUseElement).style.opacity = '0'
     ;(this.secondHeaderButton.getElementsByClassName('play')[0] as SVGUseElement).style.opacity = '1'
     this.secondHeaderButton.getElementsByTagName('span')[0].innerText = 'Play'
-    this.secondHeaderButton.onclick = () =>
-      Player.playActiveProject2(((window as any).trackListController as TrackListController).selectedRegion)
+    this.secondHeaderButton.onclick = async () => {
+      // Playback is loaded only after the user requests it, keeping it out of the initial timeline chunk.
+      const { Player } = await import('../playback/Player')
+      await Player.playActiveProject2(((window as any).trackListController as TrackListController).selectedRegion)
+    }
     this.secondHeaderButton.style.background = 'none'
     ;(this.thirdHeaderButton.getElementsByClassName('stop')[0] as SVGUseElement).style.opacity = '0'
     ;(this.thirdHeaderButton.getElementsByClassName('plus')[0] as SVGUseElement).style.opacity = '1'

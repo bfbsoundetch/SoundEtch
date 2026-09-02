@@ -1,6 +1,5 @@
 import { AudioInputs } from '../audioinputs/AudioInputs'
 import { AudioControl, AudioState } from '../audiocontext/AudioControl'
-import { Recorder } from '../recording/Recorder'
 import type { RecordingActivity } from '../remote/RemoteMediaClient3'
 
 export class RecordButtonController {
@@ -44,7 +43,7 @@ export class RecordButtonController {
     this.button.onclick = hasAvailableAudioInputs
       ? this.hasRemoteAudioInputs()
         ? () => void this.startCountdown()
-        : Recorder.startRecordingActiveAudioInputs
+        : () => void this.startRecording()
       : null
     this.button.style.background = ''
     this.hideCountdown()
@@ -97,7 +96,7 @@ export class RecordButtonController {
     this.hideCountdown()
 
     try {
-      await Recorder.startRecordingActiveAudioInputs()
+      await this.startRecording()
     } catch (error) {
       this.recordingActivityListener?.({ state: 'idle', countdownId: countdownToken })
       throw error
@@ -106,6 +105,12 @@ export class RecordButtonController {
         this.configureStoppedState()
       }
     }
+  }
+
+  private async startRecording() {
+    // Recording is loaded only after the user requests it, keeping it out of the initial timeline chunk.
+    const { Recorder } = await import('../recording/Recorder')
+    await Recorder.startRecordingActiveAudioInputs()
   }
 
   private shouldContinueCountdown(countdownToken: number) {

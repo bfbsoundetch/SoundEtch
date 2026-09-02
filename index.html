@@ -22,18 +22,20 @@
         document.getElementById('main-menu-close-button').style.display
       document.getElementById('main-menu-close-button').style.display = openButtonDisplay
     }
-    function audioFileLocalHandler() {
+    async function audioFileLocalHandler() {
       const inputForm = document.getElementById('audio-file-local')
       if (inputForm.files.length == 1) {
-        Recorder.createFromFile(inputForm.files[0])
+        const Recorder = await window.loadRecorder()
+        await Recorder.createFromFile(inputForm.files[0])
       }
     }
-    function audioFileRemoteHandler() {
+    async function audioFileRemoteHandler() {
       const inputForm = document.getElementById('audio-file-url')
       if (!URL.canParse(inputForm.value)) {
         return
       }
-      Recorder.createFromUrl(inputForm.value)
+      const Recorder = await window.loadRecorder()
+      await Recorder.createFromUrl(inputForm.value)
     }
     function setAddClipSource(sourceType) {
       const localSection = document.getElementById('add-clip-local-section')
@@ -55,13 +57,13 @@
       }
     }
 
-    function showDialog(dialogElement) {
+    async function showDialog(dialogElement) {
       const menuDropdown = document.getElementById('menu-dropdown')
       if (menuDropdown.matches(':popover-open')) {
         menuDropdown.hidePopover()
       }
-      if (dialogElement.id == 'meeting-room' && !window.meetingRoomController) {
-        window.meetingRoomController = new window.MeetingRoomController()
+      if (dialogElement.id == 'meeting-room') {
+        await window.loadMeetingRoomController()
       }
       if (dialogElement.id == 'add-clip-modal') {
         window.addClipController?.refreshExistingClips()

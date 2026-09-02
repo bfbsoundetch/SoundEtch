@@ -1,5 +1,5 @@
 import { Track } from '../project/Track'
-import { SelectedRegion } from '../playback/Player'
+import type { SelectedRegion } from '../playback/Player'
 import { Clip } from '../project/Clip'
 import { ProjectManager } from '../project/ProjectManager'
 import { Renderer } from '../rendering/Renderer'

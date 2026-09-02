@@ -16,7 +16,7 @@ import { Project } from '../project/Project'
 import { ProjectManager } from '../project/ProjectManager'
 import { Track } from '../project/Track'
 import { SummaryGenerator } from '../project/SummaryGenerator'
-import { SelectedRegion } from '../playback/Player'
+import type { SelectedRegion } from '../playback/Player'
 import { createRenderingArgument } from '../rendering/RenderingArgumentFactory'
 import { RenderingEncodingPortMessage, RenderingWorkerStartMessage } from '../rendering/RenderingWorkerProtocol'
 

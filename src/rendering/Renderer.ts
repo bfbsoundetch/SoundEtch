@@ -9,7 +9,7 @@ import {
   RenderingFileWritingInitMessage,
   RenderingWorkerStartMessage,
 } from './RenderingWorkerProtocol'
-import { SelectedRegion } from 'playback/Player'
+import type { SelectedRegion } from 'playback/Player'
 import { createRenderingArgument } from './RenderingArgumentFactory'
 import { Clip } from '../project/Clip'
 import { cloneWithGetters } from '../global/ObjectUtils'

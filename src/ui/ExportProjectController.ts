@@ -1,4 +1,3 @@
-import { Renderer } from '../rendering/Renderer'
 import {
   EncoderInfo,
   FlacEncoderInfo,
@@ -12,10 +11,10 @@ import {
   WavEncoderInfo,
   WavSampleFormat,
 } from '../encoders/EncoderType'
-import { TrackListController } from './timeline/TrackListController'
+import type { TrackListController } from './timeline/TrackListController'
 import { NotificationsController } from './NotificationsController'
 import { ProjectManager } from '../project/ProjectManager'
-import { VideoExportPresetName, VIDEO_EXPORT_PRESETS, VideoRenderer } from '../video/VideoRenderer'
+import type { VideoExportPresetName } from '../video/VideoRenderer'
 
 export class ExportProjectController {
   private readonly formatContainerMap = new Map<Format, HTMLDivElement>()
@@ -123,6 +122,9 @@ export class ExportProjectController {
       return
     }
 
+    // Rendering is loaded only after export starts, keeping it out of the initial timeline chunk.
+    const { Renderer } = await import('../rendering/Renderer')
+
     const encoderInfo = this.createEncoderInfo()
     ;(document.getElementById('export-project-modal') as HTMLDialogElement).close()
     const selectedRegion = ((window as any).trackListController as TrackListController).selectedRegion
@@ -137,6 +139,8 @@ export class ExportProjectController {
   }
 
   private async exportVideoProject() {
+    // Video encoding is the largest dependency path and is needed only for video export.
+    const { VIDEO_EXPORT_PRESETS, VideoRenderer } = await import('../video/VideoRenderer')
     const presetName = this.getSelectedVideoPreset()
     ;(document.getElementById('export-project-modal') as HTMLDialogElement).close()
     const selectedRegion = ((window as any).trackListController as TrackListController).selectedRegion
