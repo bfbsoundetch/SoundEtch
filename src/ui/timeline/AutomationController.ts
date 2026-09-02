@@ -12,6 +12,7 @@ export class AutomationController extends TrackListItemController {
   private readonly scaleForeignObject = document.createElementNS('http://www.w3.org/2000/svg', 'foreignObject')
   private readonly paramVals: ParameterValueSequence
   private readonly pointElements = new Array<SVGCircleElement>()
+  private readonly pointLabelElements = new Array<SVGTextElement>()
   private width: number
   private height: number
 
@@ -64,6 +65,8 @@ export class AutomationController extends TrackListItemController {
   draw() {
     this.pointElements.forEach((element) => element.remove())
     this.pointElements.splice(0)
+    this.pointLabelElements.forEach((element) => element.remove())
+    this.pointLabelElements.splice(0)
 
     const initialPoint = {
       pointX: this.getXValueForSample(0),
@@ -82,14 +85,33 @@ export class AutomationController extends TrackListItemController {
     this.svgPathElement.setAttribute('d', 'M ' + points.map((point) => `${point.pointX} ${point.pointY}`).join(' L '))
 
     for (const point of this.paramVals.transitionSequence) {
+      const x = this.getXValueForSample(point.startSample)
+      const y = this.getYValue(point.startValue)
       const circleElement = document.createElementNS('http://www.w3.org/2000/svg', 'circle')
       circleElement.classList.add('automation-point')
       circleElement.setAttribute('r', '6')
-      circleElement.setAttribute('cx', String(this.getXValueForSample(point.startSample)))
-      circleElement.setAttribute('cy', String(this.getYValue(point.startValue)))
+      circleElement.setAttribute('cx', String(x))
+      circleElement.setAttribute('cy', String(y))
       circleElement.addEventListener('mousedown', (event) => this.startMovingPoint(event, point))
       this.groupElement.appendChild(circleElement)
       this.pointElements.push(circleElement)
+
+      const labelElement = document.createElementNS('http://www.w3.org/2000/svg', 'text')
+      labelElement.style.pointerEvents = 'none'
+      labelElement.textContent = this.parameterMetadata.displayValue(point.startValue)
+      this.groupElement.appendChild(labelElement)
+      this.pointLabelElements.push(labelElement)
+
+      const labelGap = 10
+      const labelWidth = labelElement.getComputedTextLength()
+      const placeLeft = x + labelGap + labelWidth > this.width
+      labelElement.setAttribute('x', `${placeLeft ? x - labelGap : x + labelGap}`)
+      labelElement.setAttribute('text-anchor', placeLeft ? 'end' : 'start')
+
+      const labelHeight = labelElement.getBBox().height
+      const placeBelow = y - labelGap - labelHeight < this.topOffset
+      labelElement.setAttribute('y', `${placeBelow ? y + labelGap : y - labelGap}`)
+      labelElement.setAttribute('dominant-baseline', placeBelow ? 'hanging' : 'auto')
     }
   }
 
