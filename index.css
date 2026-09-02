@@ -1227,6 +1227,66 @@ video {
   stroke-width: 3;
   cursor: move;
 }
+.automation-point-editor {
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  padding: 1rem 1.25rem;
+  overflow: auto;
+}
+
+.automation-point-editor-empty {
+  margin: 0;
+}
+
+.automation-point-table {
+  width: 100%;
+  min-width: 42rem;
+  border-collapse: collapse;
+}
+
+.automation-point-table th,
+.automation-point-table td {
+  padding: 0.6rem;
+  border-bottom: 1px solid var(--clickable-hover);
+  text-align: left;
+}
+
+.automation-point-table th {
+  position: sticky;
+  top: 0;
+  z-index: 1;
+  background: var(--alt-background);
+}
+
+.automation-point-table th:first-child,
+.automation-point-table td:first-child {
+  width: 4rem;
+}
+
+.automation-point-table input,
+.automation-point-table select {
+  box-sizing: border-box;
+  width: 100%;
+  min-width: 7rem;
+  padding: 0.3rem;
+  border: 1px solid currentColor;
+  background: var(--bg-color);
+  color: inherit;
+  font: inherit;
+}
+
+.automation-point-value-field {
+  display: grid;
+  grid-template-columns: minmax(7rem, 1fr) auto;
+  gap: 0.6rem;
+  align-items: center;
+}
+
+.automation-point-value-preview {
+  min-width: 4rem;
+  white-space: nowrap;
+}
 
 .audio-source-label {
   display: inline-block;

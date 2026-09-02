@@ -1,16 +1,39 @@
 import { ParameterMetadata } from '../../effects/ParameterMetadata'
-import { ParameterValueSequence, ParamValueTransition } from '../../effects/ParameterValueSequence'
+import { ParameterValueSequence, ParamValueTransition, type TransitionType } from '../../effects/ParameterValueSequence'
 import { Track } from '../../project/Track'
 import { cloneEffectData, SetTrackEffectsCommand } from '../effects/SetTrackEffectsCommand'
+import { BottomPanelController } from '../BottomPanelController'
 import { TrackListItemController } from './TrackListItemController'
 import { TrackListController } from './TrackListController'
+const TRANSITION_TYPES: readonly TransitionType[] = ['linear', 'exponential', 'logarithmic', 'scurve']
+const TRANSITION_LABELS: Record<TransitionType, string> = {
+  linear: 'Linear',
+  exponential: 'Exponential',
+  logarithmic: 'Logarithmic',
+  scurve: 'S-curve',
+}
+const LOGARITHMIC_CURVE = ParamValueTransition.generateLogCurve()
+const EXPONENTIAL_CURVE = ParamValueTransition.generateExpCurve()
+const S_CURVE = ParamValueTransition.generateSCurve()
+
+interface PointEditorControls {
+  row: HTMLTableRowElement
+  number: HTMLTableCellElement
+  position: HTMLInputElement
+  value: HTMLInputElement
+  valuePreview: HTMLOutputElement
+  transition: HTMLSelectElement
+}
 
 export class AutomationController extends TrackListItemController {
   private readonly groupElement = document.createElementNS('http://www.w3.org/2000/svg', 'g')
   private readonly svgPathElement = document.createElementNS('http://www.w3.org/2000/svg', 'path')
   private readonly blockerElement = document.createElementNS('http://www.w3.org/2000/svg', 'rect')
   private readonly scaleForeignObject = document.createElementNS('http://www.w3.org/2000/svg', 'foreignObject')
-  private readonly paramVals: ParameterValueSequence
+  private readonly bottomPanelController = BottomPanelController.getInstance()
+  private readonly pointEditorControls = new Map<ParamValueTransition, PointEditorControls>()
+  private pointEditorTableBody: HTMLTableSectionElement | null = null
+  private pointEditorIsOpen = false
   private readonly pointElements = new Array<SVGCircleElement>()
   private readonly pointLabelElements = new Array<SVGTextElement>()
   private width: number
@@ -31,7 +54,6 @@ export class AutomationController extends TrackListItemController {
     if (!effectData?.params[parameterMetadata.id]) {
       throw new Error(`Parameter ${parameterMetadata.id} is unavailable`)
     }
-    this.paramVals = effectData.params[parameterMetadata.id]
 
     this.groupElement.classList.add('automation-layer')
     this.blockerElement.setAttribute('x', '0')
@@ -60,6 +82,7 @@ export class AutomationController extends TrackListItemController {
     this.resizeAutomationScale()
     this.groupElement.append(this.blockerElement, this.scaleForeignObject, this.svgPathElement)
     this.svgElement.appendChild(this.groupElement)
+    this.openPointEditor()
   }
 
   draw() {
@@ -68,21 +91,8 @@ export class AutomationController extends TrackListItemController {
     this.pointLabelElements.forEach((element) => element.remove())
     this.pointLabelElements.splice(0)
 
-    const initialPoint = {
-      pointX: this.getXValueForSample(0),
-      pointY: this.getYValue(this.paramVals.initialValue),
-    }
-    const transitionPoints = this.paramVals.transitionSequence.map((point) => ({
-      pointX: this.getXValueForSample(point.startSample),
-      pointY: this.getYValue(point.startValue),
-    }))
-    const lastPoint = transitionPoints.at(-1) ?? initialPoint
-    const points = [
-      initialPoint,
-      ...transitionPoints,
-      { pointX: Math.max(this.width, lastPoint.pointX), pointY: lastPoint.pointY },
-    ]
-    this.svgPathElement.setAttribute('d', 'M ' + points.map((point) => `${point.pointX} ${point.pointY}`).join(' L '))
+    const points = this.getAutomationPathPoints()
+    this.svgPathElement.setAttribute('d', 'M ' + points.map((point) => `${point.x} ${point.y}`).join(' L '))
 
     for (const point of this.paramVals.transitionSequence) {
       const x = this.getXValueForSample(point.startSample)
@@ -113,6 +123,7 @@ export class AutomationController extends TrackListItemController {
       labelElement.setAttribute('y', `${placeBelow ? y + labelGap : y - labelGap}`)
       labelElement.setAttribute('dominant-baseline', placeBelow ? 'hanging' : 'auto')
     }
+    this.syncPointEditor()
   }
 
   resize() {
@@ -125,6 +136,10 @@ export class AutomationController extends TrackListItemController {
 
   remove() {
     this.groupElement.remove()
+    this.pointEditorIsOpen = false
+    this.pointEditorControls.clear()
+    this.pointEditorTableBody = null
+    this.bottomPanelController.close()
   }
 
   modifyPoint(point: ParamValueTransition, x: number, y: number) {
@@ -149,6 +164,266 @@ export class AutomationController extends TrackListItemController {
       type: 'linear',
     })
     this.draw()
+    this.openPointEditor()
+  }
+
+  private get paramVals(): ParameterValueSequence {
+    const sequence = this.track.effectRegions.find((effect) => effect.instanceId == this.effectInstanceId)?.params[
+      this.parameterMetadata.id
+    ]
+    if (!sequence) {
+      throw new Error(`Parameter ${this.parameterMetadata.id} is unavailable`)
+    }
+    return sequence
+  }
+
+  private getAutomationPathPoints() {
+    const points = [
+      {
+        x: this.getXValueForSample(0),
+        y: this.getYValue(this.paramVals.initialValue),
+      },
+    ]
+    let previousSample = 0
+    let previousValue = this.paramVals.initialValue
+    for (const transition of this.paramVals.transitionSequence) {
+      const values = this.getTransitionValues(previousValue, transition)
+      for (let i = 1; i < values.length; ++i) {
+        const progress = i / (values.length - 1)
+        const sample = previousSample + (transition.startSample - previousSample) * progress
+        points.push({
+          x: this.getXValueForSample(sample),
+          y: this.getYValue(values[i]),
+        })
+      }
+      previousSample = transition.startSample
+      previousValue = transition.startValue
+    }
+    const lastPoint = points.at(-1)!
+    points.push({ x: Math.max(this.width, lastPoint.x), y: lastPoint.y })
+    return points
+  }
+
+  private getTransitionValues(previousValue: number, transition: ParamValueTransition) {
+    if (transition.type == 'linear') {
+      return [previousValue, transition.startValue]
+    }
+    if (transition.type == 'exponential' && previousValue > 0 && transition.startValue > 0) {
+      const ratio = transition.startValue / previousValue
+      return EXPONENTIAL_CURVE.map((_, index) => previousValue * ratio ** (index / (EXPONENTIAL_CURVE.length - 1)))
+    }
+    const curve =
+      transition.type == 'logarithmic' ? LOGARITHMIC_CURVE : transition.type == 'scurve' ? S_CURVE : EXPONENTIAL_CURVE
+    return curve.map((value) => previousValue + value * (transition.startValue - previousValue))
+  }
+
+  private openPointEditor() {
+    if (this.pointEditorIsOpen) {
+      return
+    }
+    this.pointEditorIsOpen = true
+    this.bottomPanelController.open({
+      title: `${this.parameterMetadata.displayName} automation`,
+      subtitle: `${this.track.name} · ${this.paramVals.transitionSequence.length} points`,
+      body: this.createPointEditor(),
+      onClose: () => {
+        this.pointEditorIsOpen = false
+        this.pointEditorControls.clear()
+        this.pointEditorTableBody = null
+      },
+    })
+  }
+
+  private createPointEditor() {
+    const body = document.createElement('div')
+    body.className = 'automation-point-editor'
+    this.pointEditorControls.clear()
+    this.pointEditorTableBody = null
+    if (this.paramVals.transitionSequence.length == 0) {
+      const message = document.createElement('p')
+      message.className = 'automation-point-editor-empty'
+      message.textContent = 'Double-click the automation curve to add a point.'
+      body.appendChild(message)
+      return body
+    }
+
+    const table = document.createElement('table')
+    table.className = 'automation-point-table'
+    const head = document.createElement('thead')
+    const headingRow = document.createElement('tr')
+    for (const heading of ['Point', 'Time (seconds)', this.parameterMetadata.displayName, 'Transition to point']) {
+      const cell = document.createElement('th')
+      cell.scope = 'col'
+      cell.textContent = heading
+      headingRow.appendChild(cell)
+    }
+    head.appendChild(headingRow)
+
+    const tableBody = document.createElement('tbody')
+    this.pointEditorTableBody = tableBody
+    this.paramVals.transitionSequence.forEach((point, index) => {
+      tableBody.appendChild(this.createPointEditorRow(point, index))
+    })
+    table.append(head, tableBody)
+    body.appendChild(table)
+    return body
+  }
+
+  private createPointEditorRow(point: ParamValueTransition, index: number) {
+    const row = document.createElement('tr')
+    const number = document.createElement('td')
+
+    const positionCell = document.createElement('td')
+    const position = document.createElement('input')
+    position.type = 'number'
+    position.min = '0'
+    position.step = '0.001'
+    position.setAttribute('aria-label', `Point ${index + 1} time in seconds`)
+    position.addEventListener('change', () => {
+      const seconds = position.valueAsNumber
+      if (!Number.isFinite(seconds)) {
+        this.syncPointEditor()
+        return
+      }
+      const startSample = Math.max(0, Math.round(seconds * this.trackListController.sampleRate))
+      if (startSample == point.startSample) {
+        this.syncPointEditor()
+        return
+      }
+      this.commitPointEdit(point, `change ${this.parameterMetadata.displayName} automation point time`, () => {
+        point.startSample = startSample
+      })
+    })
+    positionCell.appendChild(position)
+
+    const valueCell = document.createElement('td')
+    const valueField = document.createElement('div')
+    valueField.className = 'automation-point-value-field'
+    const value = document.createElement('input')
+    value.type = 'number'
+    value.min = String(this.parameterMetadata.minValue)
+    value.max = String(this.parameterMetadata.maxValue)
+    value.step = this.parameterMetadata.increment ? String(this.parameterMetadata.increment) : 'any'
+    value.setAttribute('aria-label', `Point ${index + 1} ${this.parameterMetadata.displayName}`)
+    const valuePreview = document.createElement('output')
+    valuePreview.className = 'automation-point-value-preview'
+    value.addEventListener('input', () => {
+      if (Number.isFinite(value.valueAsNumber)) {
+        const boundedValue = this.clamp(
+          value.valueAsNumber,
+          this.parameterMetadata.minValue,
+          this.parameterMetadata.maxValue,
+        )
+        valuePreview.textContent = this.parameterMetadata.displayValue(boundedValue)
+      }
+    })
+    value.addEventListener('change', () => {
+      if (!Number.isFinite(value.valueAsNumber)) {
+        this.syncPointEditor()
+        return
+      }
+      const boundedValue = this.clamp(
+        value.valueAsNumber,
+        this.parameterMetadata.minValue,
+        this.parameterMetadata.maxValue,
+      )
+      if (boundedValue == point.startValue) {
+        this.syncPointEditor()
+        return
+      }
+      this.commitPointEdit(point, `change ${this.parameterMetadata.displayName} automation point value`, () => {
+        point.startValue = boundedValue
+      })
+    })
+    valueField.append(value, valuePreview)
+    valueCell.appendChild(valueField)
+
+    const transitionCell = document.createElement('td')
+    const transition = document.createElement('select')
+    transition.setAttribute('aria-label', `Point ${index + 1} transition type`)
+    for (const transitionType of TRANSITION_TYPES) {
+      const option = document.createElement('option')
+      option.value = transitionType
+      option.textContent = TRANSITION_LABELS[transitionType]
+      transition.appendChild(option)
+    }
+    transition.addEventListener('change', () => {
+      const transitionType = transition.value as TransitionType
+      if (transitionType == point.type) {
+        return
+      }
+      this.commitPointEdit(point, `change ${this.parameterMetadata.displayName} automation transition`, () => {
+        point.type = transitionType
+      })
+    })
+    transitionCell.appendChild(transition)
+
+    row.append(number, positionCell, valueCell, transitionCell)
+    this.pointEditorControls.set(point, {
+      row,
+      number,
+      position,
+      value,
+      valuePreview,
+      transition,
+    })
+    this.updatePointEditorControls(point, index, this.pointEditorControls.get(point)!)
+    return row
+  }
+
+  private syncPointEditor() {
+    if (!this.pointEditorIsOpen) {
+      return
+    }
+    const points = this.paramVals.transitionSequence
+    this.bottomPanelController.setSubtitle(`${this.track.name} · ${points.length} points`)
+    if (points.length == 0) {
+      if (this.pointEditorControls.size > 0 || this.pointEditorTableBody) {
+        this.bottomPanelController.setBody(this.createPointEditor())
+      }
+      return
+    }
+    if (
+      !this.pointEditorTableBody ||
+      this.pointEditorControls.size != points.length ||
+      points.some((point) => !this.pointEditorControls.has(point))
+    ) {
+      this.bottomPanelController.setBody(this.createPointEditor())
+      return
+    }
+    points.forEach((point, index) => {
+      const controls = this.pointEditorControls.get(point)!
+      this.updatePointEditorControls(point, index, controls)
+      this.pointEditorTableBody!.appendChild(controls.row)
+    })
+  }
+
+  private updatePointEditorControls(point: ParamValueTransition, index: number, controls: PointEditorControls) {
+    controls.number.textContent = String(index + 1)
+    controls.position.value = (point.startSample / this.trackListController.sampleRate).toFixed(3)
+    controls.position.setAttribute('aria-label', `Point ${index + 1} time in seconds`)
+    controls.value.value = this.formatEditableValue(point.startValue)
+    controls.value.setAttribute('aria-label', `Point ${index + 1} ${this.parameterMetadata.displayName}`)
+    controls.valuePreview.textContent = this.parameterMetadata.displayValue(point.startValue)
+    controls.transition.value = point.type
+    controls.transition.setAttribute('aria-label', `Point ${index + 1} transition type`)
+  }
+
+  private formatEditableValue(value: number) {
+    const increment = this.parameterMetadata.increment
+    if (!increment) {
+      return String(value)
+    }
+    const fractionDigits = String(increment).split('.')[1]?.length ?? 0
+    return value.toFixed(fractionDigits)
+  }
+
+  private commitPointEdit(point: ParamValueTransition, description: string, apply: () => void) {
+    const oldEffects = cloneEffectData(this.track.effectRegions)
+    apply()
+    this.paramVals.transitionSequence.sort((first, second) => first.startSample - second.startSample)
+    this.draw()
+    void this.recordAppliedChange(oldEffects, description)
   }
 
   private getYValue(value: number) {
@@ -165,6 +440,7 @@ export class AutomationController extends TrackListItemController {
   private startMovingPoint(event: MouseEvent, point: ParamValueTransition) {
     event.preventDefault()
     event.stopPropagation()
+    this.openPointEditor()
     const oldEffects = cloneEffectData(this.track.effectRegions)
     const move = (moveEvent: MouseEvent) => {
       const position = this.eventToLocalPoint(moveEvent)

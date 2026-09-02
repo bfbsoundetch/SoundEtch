@@ -25,11 +25,10 @@ export class ParamValueTransition {
 
   static generateExpCurve(length = 32) {
     const result = new Array<number>(length)
-    const denominator = Math.exp(5) - 1
     for (let i = 0; i < length; ++i) {
-      result[i] = (Math.exp((5 * i) / (length - 1)) - 1) / denominator
+      result[i] = 10 ** (-3 * i / length)
     }
-    return result
+    return result.reverse()
   }
 }
 
