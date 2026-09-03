@@ -133,6 +133,7 @@ export class AudioImporter {
           }
         },
         error: (e) => {
+          console.error('AudioDecoder error: ', e)
           rejectWorkerPromises(e)
         },
       })
@@ -169,6 +170,8 @@ export class AudioImporter {
     } catch (error) {
       console.error(error)
       if (track) {
+        // release the OPFS file from the worker, then delete it
+        writingWorker.terminate()
         await cleanupImportedTrack(track)
         ;(window as any).trackListController?.draw()
       }
@@ -219,9 +222,7 @@ async function cleanupImportedTrack(track: Track) {
   if (clip) {
     await ProjectManager.deleteClip(clip)
   }
-  if (track.clipViews.length === 0) {
-    await ProjectManager.deleteTrack(track)
-  }
+  await ProjectManager.deleteTrack(track)
 }
 
 function throwIfAborted(signal?: AbortSignal) {
