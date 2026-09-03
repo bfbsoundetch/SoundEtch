@@ -208,10 +208,6 @@ export class AutomationController extends TrackListItemController {
     if (transition.type == 'linear') {
       return [previousValue, transition.startValue]
     }
-    if (transition.type == 'exponential' && previousValue > 0 && transition.startValue > 0) {
-      const ratio = transition.startValue / previousValue
-      return EXPONENTIAL_CURVE.map((_, index) => previousValue * ratio ** (index / (EXPONENTIAL_CURVE.length - 1)))
-    }
     const curve =
       transition.type == 'logarithmic' ? LOGARITHMIC_CURVE : transition.type == 'scurve' ? S_CURVE : EXPONENTIAL_CURVE
     return curve.map((value) => previousValue + value * (transition.startValue - previousValue))
