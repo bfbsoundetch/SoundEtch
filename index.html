@@ -71,7 +71,19 @@
       dialogElement.showModal()
     }
 
+    function preventHorizontalOverscroll(event) {
+      if (Math.abs(event.deltaX) > 0) {
+        event.preventDefault()
+      }
+    }
+
     document.addEventListener('DOMContentLoaded', () => {
+      document
+        .querySelector('.header-container')
+        .addEventListener('wheel', preventHorizontalOverscroll, { passive: false })
+      document
+        .getElementById('timeline-info-area')
+        .addEventListener('wheel', preventHorizontalOverscroll, { passive: false })
       window.trackListController = new window.TrackListController()
       window.audioInputsController = new window.AudioInputsController()
       window.keyPressController = new window.KeyPressController()

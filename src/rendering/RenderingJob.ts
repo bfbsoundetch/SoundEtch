@@ -1,8 +1,11 @@
 import { ClipViewSubset } from '../playback/AudioFileReader'
 import { RawDataAudioContext } from '@descript/web-audio-js'
+import type { api } from '@descript/web-audio-js'
 import { FileSystemUtils } from '../filesystem/FileSystemUtils'
 import { FileSystemSyncAccessHandle } from '../filesystem/FileSystemSyncAccessHandle'
 import { RenderingWorkerStartMessage } from './RenderingWorkerProtocol'
+import { createRenderingAudioSource } from './RenderingAudioSource'
+import type { RenderingAudioSource } from './RenderingAudioSource'
 import { scheduleParameterValues } from '../effects/ParameterScheduling'
 import {
   BoostEffectMetadata,
@@ -36,11 +39,10 @@ self.onmessage = async (e) => {
   })
   audioContext.resume()
 
-  const processors = new Array<ReadingOfflineProcessor>()
+  const trackSources = new Array<RenderingAudioSource & { processor: ReadingOfflineProcessor }>()
   const connectedEffectModules = new Array<EffectModule>()
 
   for (const track of argument.trackSubsets) {
-    const readingProcessorNode = audioContext.createScriptProcessor(BLOCK_SIZE, 0, track.channelCount)
     const processor = new ReadingOfflineProcessor(
       argument.projectId,
       track.clipViews,
@@ -48,8 +50,8 @@ self.onmessage = async (e) => {
       BLOCK_SIZE,
       argument.startPosition,
     )
-    processors.push(processor)
-    readingProcessorNode.onaudioprocess = (e: AudioProcessingEvent) => processor.process(e)
+    const source = createRenderingAudioSource(audioContext, track.channelCount)
+    trackSources.push({ ...source, processor })
 
     const effectModules = new Array<EffectModule>()
     for (const effectData of track.effects) {
@@ -81,7 +83,9 @@ self.onmessage = async (e) => {
       chainInput = await effectModule.connect(audioContext as unknown as BaseAudioContext, chainInput)
       connectedEffectModules.push(effectModule)
     }
-    readingProcessorNode.connect(chainInput as any, 0, 0)
+    // Effect modules use DOM node types while this renderer uses web-audio-js nodes.
+    const sourceDestination = chainInput as unknown as api.AudioNode
+    source.node.connect(sourceDestination, 0, 0)
     if (argument.channelCount == 1) {
       gainNode.connect(audioContext.destination, 0, 0)
     } else {
@@ -118,7 +122,10 @@ self.onmessage = async (e) => {
   }
 
   for (let i = 0; i < length; i += BLOCK_SIZE) {
-    await Promise.all(processors.map((p) => p.maybeFillBuffer()))
+    await Promise.all(trackSources.map(({ processor }) => processor.maybeFillBuffer()))
+    for (const { channelData, processor } of trackSources) {
+      processor.process(channelData)
+    }
     audioContext.process(output)
 
     const frameCount = Math.min(BLOCK_SIZE, length - i)
@@ -134,6 +141,7 @@ self.onmessage = async (e) => {
     }
   }
 
+  trackSources.forEach(({ node }) => node.disconnect())
   connectedEffectModules.forEach((effectModule) => effectModule.disconnect())
   flushPendingChunk()
   encodingPort.postMessage({ type: 'stop' })
@@ -173,8 +181,6 @@ class ReadingOfflineProcessor {
   private writePosition
   private readPosition
 
-  private readonly outputBuffers: Array<Float32Array>
-
   constructor(
     private readonly projectId: number,
     private readonly clipViews: Array<ClipViewSubset>,
@@ -183,10 +189,6 @@ class ReadingOfflineProcessor {
     private readonly startPosition: number,
   ) {
     this.readPosition = this.writePosition = startPosition
-    this.outputBuffers = new Array<Float32Array>(channelCount)
-    for (let i = 0; i < channelCount; ++i) {
-      this.outputBuffers[i] = new Float32Array(blockSize)
-    }
     while (
       this.readingClipViewIndex < this.clipViews.length &&
       this.readPosition >=
@@ -197,39 +199,37 @@ class ReadingOfflineProcessor {
     this.writingClipViewIndex = this.readingClipViewIndex
   }
 
-  process(audioProcessingEvent: AudioProcessingEvent) {
-    const output = audioProcessingEvent.outputBuffer
+  process(outputBuffers: Array<Float32Array>) {
     let emitted = 0
     let clipView = this.clipViews[this.readingClipViewIndex]
     if (!clipView) {
       for (let channel = 0; channel < this.channelCount; ++channel) {
-        this.outputBuffers[channel].fill(0)
+        outputBuffers[channel].fill(0)
       }
     }
-    while (emitted < output.length && clipView) {
+    while (emitted < this.blockSize && clipView) {
       if (this.readPosition < clipView.startPosition) {
-        const silenceSamples = Math.min(output.length - emitted, clipView.startPosition - this.readPosition)
+        const silenceSamples = Math.min(this.blockSize - emitted, clipView.startPosition - this.readPosition)
         this.readPosition += silenceSamples
         for (let i = 0; i < silenceSamples; ++i) {
           for (let channel = 0; channel < this.channelCount; ++channel) {
-            this.outputBuffers[channel][emitted + i] = 0
+            outputBuffers[channel][emitted + i] = 0
           }
         }
         emitted += silenceSamples
       }
 
       let toEmit: number
-      if (clipView.startPosition + clipView.length - this.readPosition < output.length - emitted) {
+      if (clipView.startPosition + clipView.length - this.readPosition < this.blockSize - emitted) {
         toEmit = clipView.startPosition + clipView.length - this.readPosition
         clipView = this.clipViews[++this.readingClipViewIndex]
       } else {
-        toEmit = output.length - emitted
+        toEmit = this.blockSize - emitted
       }
 
       for (let i = 0; i < toEmit; ++i) {
         for (let channel = 0; channel < this.channelCount; ++channel) {
-          this.outputBuffers[channel][emitted + i] =
-            this.buffer[this.bufferReadPosition + channel + i * this.channelCount]
+          outputBuffers[channel][emitted + i] = this.buffer[this.bufferReadPosition + channel + i * this.channelCount]
         }
       }
 
@@ -238,14 +238,10 @@ class ReadingOfflineProcessor {
       this.readPosition += toEmit
     }
 
-    if (emitted < output.length) {
+    if (emitted < this.blockSize) {
       for (let channel = 0; channel < this.channelCount; ++channel) {
-        this.outputBuffers[channel].fill(0, emitted)
+        outputBuffers[channel].fill(0, emitted)
       }
-    }
-
-    for (let channel = 0; channel < this.channelCount; ++channel) {
-      output.copyToChannel(this.outputBuffers[channel] as any, channel)
     }
   }
 
