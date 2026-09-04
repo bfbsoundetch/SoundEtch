@@ -988,12 +988,9 @@ video {
   box-sizing: border-box;
 }
 
-.tracklist-item:last-child {
-  border-bottom: solid;
-}
-
+.tracklist-item:last-child,
 #track-info-list .track-info:last-of-type {
-  border-bottom: solid;
+  box-shadow: inset 0 -3px currentColor;
 }
 
 .track-info {
