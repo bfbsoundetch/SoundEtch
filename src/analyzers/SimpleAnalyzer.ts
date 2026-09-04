@@ -11,7 +11,9 @@ export class SimpleAnalyzer {
   }
 
   getPeak(channel = 0): number {
-    return this.hasInput() ? SimpleAnalyzer.linearToDb(this.instantaneousPeak?.[channel] ?? 0) : Number.NEGATIVE_INFINITY
+    return this.hasInput()
+      ? SimpleAnalyzer.linearToDb(this.instantaneousPeak?.[channel] ?? 0)
+      : Number.NEGATIVE_INFINITY
   }
 
   getHeldPeak(channel = 0): number {
@@ -25,7 +27,9 @@ export class SimpleAnalyzer {
   }
 
   hasInput() {
-    return this.analyzerNode ? this.analyzerNode.context.state == 'running' && this.analyzerNode.numberOfInputs > 0 : false
+    return this.analyzerNode
+      ? this.analyzerNode.context.state == 'running' && this.analyzerNode.numberOfInputs > 0
+      : false
   }
 
   async attachAnalyzer(inputNode: AudioNode) {

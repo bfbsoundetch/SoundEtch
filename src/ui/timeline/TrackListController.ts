@@ -107,13 +107,13 @@ export class TrackListController {
 
   private readonly cursorPoint = new DOMPoint()
   mouseEventToSvgCoord(event: MouseEvent): DOMPoint {
-    this.cursorPoint.x = event.clientX
+    this.cursorPoint.x = event.clientX - this.rootFontSize * 14
     this.cursorPoint.y = event.clientY
     return this.cursorPoint.matrixTransform(this.positionMarkerController.positionMarkerSvg.getScreenCTM()!.inverse())
   }
 
   mouseXToSvgCoord(x: number): number {
-    this.cursorPoint.x = x
+    this.cursorPoint.x = x - this.rootFontSize * 14
     this.cursorPoint.y = 1
     return this.cursorPoint.matrixTransform(this.positionMarkerController.positionMarkerSvg.getScreenCTM()!.inverse()).x
   }
@@ -133,8 +133,7 @@ export class TrackListController {
     // sn = (s-1)(t+x)
     // n = (t + x)(s - 1) / s
     this.translationUnits -=
-      ((this.translationUnits + this.mouseEventToSvgCoord(wheelEvent).x - 14 * this.rootFontSize) * (scaling - 1)) /
-      scaling
+      ((this.translationUnits + this.mouseEventToSvgCoord(wheelEvent).x) * (scaling - 1)) / scaling
 
     this.translationUnits = Math.max(this.translationUnits, 0)
     this.draw()
@@ -161,7 +160,7 @@ export class TrackListController {
     this.history.addChangeListener(() => this.draw())
     KeyPressController.addKeyDownListener((event) => this.handleKeyDown(event))
 
-    new ResizeObserver(async (_) => {
+    const resizeCallback = async () => {
       this.timelineController.resize()
       this.waveforms.forEach((w) => w.resize())
       this.automationMode?.controller.resize()
@@ -175,7 +174,8 @@ export class TrackListController {
       this.selectionController.resize()
       this.rootFontSize = parseFloat(getComputedStyle(document.documentElement).fontSize)
       this.draw()
-    }).observe(this.tracklistElement)
+    }
+    new ResizeObserver(resizeCallback).observe(document.getElementById('topdiv')!)
 
     AudioControl.addAudioControlListener((state) => {
       if (this.automationMode && state != AudioState.STOPPED && state != AudioState.MONITORING) {

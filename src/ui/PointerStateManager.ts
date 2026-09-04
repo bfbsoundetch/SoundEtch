@@ -90,6 +90,20 @@ export class PointerStateManager extends TrackListItemController {
         return
       }
       this.mouseDownPoint = { x: mouseEvent.clientX, y: mouseEvent.clientY }
+      if (mouseEvent.buttons == 1 && mouseEvent.button == 0) {
+        if (KeyPressController.metaPressed) {
+          this.timelineRegionController = this.trackListController.selectionController
+          this.timelineRegionController.updateSelection(
+            this.getSampleForXValue(this.mouseEventToSvgCoord(mouseEvent).x),
+            this.activeWaveform,
+            false,
+          )
+          this.changeState(State.SELECTING)
+        } else {
+          trackListController.clearSelection()
+          this.timelineRegionController = null
+        }
+      }
       switch (this.state) {
         case State.DEFAULT:
           if (mouseEvent.buttons == 1 && mouseEvent.button == 0) {
@@ -115,23 +129,7 @@ export class PointerStateManager extends TrackListItemController {
           }
           break
         case State.SELECTING:
-          if (mouseEvent.buttons == 1 && mouseEvent.button == 0) {
-            if (KeyPressController.metaPressed) {
-              this.timelineRegionController = this.trackListController.selectionController
-              this.timelineRegionController.updateSelection(
-                this.getSampleForXValue(this.mouseEventToSvgCoord(mouseEvent).x),
-                this.activeWaveform,
-                false,
-              )
-            } else {
-              trackListController.clearSelection()
-              this.timelineRegionController = null
-              this.changeState(State.DEFAULT)
-            }
-          }
-          break
         case State.MOVING_CLIPVIEW:
-          break
         case State.RESIZING_CLIPVIEW:
         case State.AUTOMATING:
         case State.READ_ONLY:
@@ -315,7 +313,7 @@ export class PointerStateManager extends TrackListItemController {
   }
 
   private sampleForMouseEvent(mouseEvent: MouseEvent) {
-    return this.getSampleForXValue(this.mouseEventToSvgCoord(mouseEvent).x - 14 * this.trackListController.rootFontSize)
+    return this.getSampleForXValue(this.mouseEventToSvgCoord(mouseEvent).x)
   }
 
   private changeState(newState: State) {
@@ -335,7 +333,7 @@ export class PointerStateManager extends TrackListItemController {
       case State.MOVING_CLIPVIEW:
       case State.RESIZING_CLIPVIEW:
       case State.AUTOMATING:
-        if (newState != State.DEFAULT && newState != State.READ_ONLY) {
+        if (newState != State.DEFAULT && newState != State.SELECTING && newState != State.READ_ONLY) {
           return false
         }
         break

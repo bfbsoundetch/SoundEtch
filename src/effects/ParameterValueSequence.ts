@@ -16,13 +16,15 @@ export class ParamValueTransition {
   }
 
   static generateLogCurve(length = 32) {
-    return this.generateExpCurve(length).map(n => 1 - n).reverse()
+    return this.generateExpCurve(length)
+      .map((n) => 1 - n)
+      .reverse()
   }
 
   static generateExpCurve(length = 32) {
     const result = new Array<number>(length)
     for (let i = 0; i < length; ++i) {
-      result[i] = 10 ** (-3 * i / length)
+      result[i] = 10 ** ((-3 * i) / length)
     }
     return result.reverse()
   }
