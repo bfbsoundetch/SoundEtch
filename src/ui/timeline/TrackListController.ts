@@ -637,7 +637,9 @@ export class TrackListController {
   private canEdit() {
     return (
       !this.automationMode &&
-      (AudioControl.getState() == AudioState.STOPPED || AudioControl.getState() == AudioState.MONITORING)
+      (AudioControl.getState() == AudioState.STOPPED ||
+        AudioControl.getState() == AudioState.MONITORING ||
+        AudioControl.getState() == AudioState.MONITORING_PAUSED)
     )
   }
 

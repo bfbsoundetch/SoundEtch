@@ -45,8 +45,8 @@ export const BoostEffectMetadata: EffectMetadata = {
 
 export const NoiseReductionEffectMetadata: EffectMetadata = {
   id: 'soundetch.noise-reduction',
-  name: 'Noise Reduction',
-  description: 'Reduce steady background noise',
+  name: 'Noise Remover',
+  description: 'Remove background noise',
   categories: ['Restoration'],
   parameters: [],
   createDefaultState: () => ({ ...defaultDeepFilterParameters }),
@@ -54,7 +54,7 @@ export const NoiseReductionEffectMetadata: EffectMetadata = {
 
 export const CompressionEffectMetadata: EffectMetadata = {
   id: 'soundetch.compression',
-  name: 'Compression',
+  name: 'Compressor',
   description: 'Reduce the dynamic range of audio',
   categories: ['Dynamics'],
   parameters: [
