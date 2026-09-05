@@ -23,6 +23,7 @@ export default defineConfig({
     rollupOptions: {
       input: {
         index: fileURLToPath(new URL('./index.html', import.meta.url)),
+        about: fileURLToPath(new URL('./about.html', import.meta.url)),
         playingAudioWorklet: fileURLToPath(
           new URL('./src/playback/FilePlayingAudioWorkletProcessor.js', import.meta.url),
         ),

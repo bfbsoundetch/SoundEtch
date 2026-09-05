@@ -1,3 +1,9 @@
+/*!
+ * Adapted from AudioJS Dynamics' limiter (MIT):
+ * https://github.com/audiojs/dynamics/tree/main/packages/dynamics-limiter
+ * Copyright (c) Dmitry Iv. See public/THIRD_PARTY_NOTICES.txt.
+ */
+
 const LOOKAHEAD_MS = 5
 const MAX_CHANNELS = 32
 

@@ -3,11 +3,12 @@ import {
   BoostEffectMetadata,
   NoiseReductionEffectMetadata,
   CompressionEffectMetadata,
+  DeesserEffectMetadata,
   LimiterEffectMetadata,
   GateEffectMetadata,
 } from './BuiltinEffectMetadata'
 import { EqualizerEffectMetadata } from './equalizer/EqualizerMetadata'
-import { EffectMetadata, EffectModule } from './Effect'
+import type { EffectMetadata, EffectModule } from './Effect'
 
 export class EffectIndex {
   private static instance: EffectIndex | null = null
@@ -16,6 +17,7 @@ export class EffectIndex {
     BoostEffectMetadata,
     NoiseReductionEffectMetadata,
     CompressionEffectMetadata,
+    DeesserEffectMetadata,
     LimiterEffectMetadata,
     GateEffectMetadata,
     EqualizerEffectMetadata,
@@ -35,6 +37,7 @@ export class EffectIndex {
     return this.availableEffects.find((effect) => effect.id == id) ?? null
   }
 
+  // Effect implementations stay lazy because the runtime-selected catalog entry is the plugin boundary.
   async getEffectById(id: string): Promise<EffectModule | null> {
     switch (id) {
       case FadeEffectMetadata.id:
@@ -45,6 +48,8 @@ export class EffectIndex {
         return new (await import('./noisereduction/NoiseReductionEffect')).NoiseReductionEffect()
       case CompressionEffectMetadata.id:
         return new (await import('./compression/CompressionEffect')).CompressionEffect()
+      case DeesserEffectMetadata.id:
+        return new (await import('./deesser/DeesserEffect')).DeesserEffect()
       case LimiterEffectMetadata.id:
         return new (await import('./limiter/LimiterEffect')).LimiterEffect()
       case GateEffectMetadata.id:

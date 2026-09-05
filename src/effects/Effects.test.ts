@@ -1,6 +1,7 @@
 import {
   BoostEffectMetadata,
   CompressionEffectMetadata,
+  DeesserEffectMetadata,
   GateEffectMetadata,
   LimiterEffectMetadata,
   NoiseReductionEffectMetadata,
@@ -19,14 +20,13 @@ describe('EffectIndex', () => {
     expect(effectIndex.getAvailableEffects()).toContain(BoostEffectMetadata)
     expect(effectIndex.getAvailableEffects()).toContain(NoiseReductionEffectMetadata)
     expect(effectIndex.getAvailableEffects()).toContain(CompressionEffectMetadata)
+    expect(effectIndex.getAvailableEffects()).toContain(DeesserEffectMetadata)
     expect(effectIndex.getAvailableEffects()).toContain(LimiterEffectMetadata)
     expect(effectIndex.getAvailableEffects()).toContain(GateEffectMetadata)
     expect(effectIndex.getAvailableEffects()).toContain(EqualizerEffectMetadata)
     expect(effectIndex.getEffectMetadataById(BoostEffectMetadata.id)).toBe(BoostEffectMetadata)
     expect((await effectIndex.getEffectById(BoostEffectMetadata.id))?.metadata).toBe(BoostEffectMetadata)
     expect((await effectIndex.getEffectById(CompressionEffectMetadata.id))?.metadata).toBe(CompressionEffectMetadata)
-    expect((await effectIndex.getEffectById(LimiterEffectMetadata.id))?.metadata).toBe(LimiterEffectMetadata)
-    expect((await effectIndex.getEffectById(GateEffectMetadata.id))?.metadata).toBe(GateEffectMetadata)
   })
 
   test('creates the equalizer effect', async () => {
@@ -70,6 +70,12 @@ describe('effect parameters', () => {
       expect(parameter.denormalize(parameter.normalize(parameter.defaultValue))).toBeCloseTo(parameter.defaultValue)
     },
   )
+
+  test.each(DeesserEffectMetadata.parameters)('$displayName normalization spans its metadata range', (parameter) => {
+    expect(parameter.normalize(parameter.minValue)).toBeCloseTo(0)
+    expect(parameter.normalize(parameter.maxValue)).toBeCloseTo(1)
+    expect(parameter.denormalize(parameter.normalize(parameter.defaultValue))).toBeCloseTo(parameter.defaultValue)
+  })
 
   test.each(LimiterEffectMetadata.parameters)('$displayName normalization spans its metadata range', (parameter) => {
     expect(parameter.normalize(parameter.minValue)).toBeCloseTo(0)

@@ -1,3 +1,9 @@
+/*!
+ * Adapted from AudioJS Dynamics' gate (MIT):
+ * https://github.com/audiojs/dynamics/tree/main/packages/dynamics-gate
+ * Copyright (c) Dmitry Iv. See public/THIRD_PARTY_NOTICES.txt.
+ */
+
 const MAX_CHANNELS = 32
 const MAX_LOOKAHEAD_MS = 50
 

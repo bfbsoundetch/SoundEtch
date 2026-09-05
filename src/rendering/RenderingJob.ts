@@ -12,15 +12,17 @@ import {
   CompressionEffectMetadata,
   FadeEffectMetadata,
   NoiseReductionEffectMetadata,
+  DeesserEffectMetadata,
   LimiterEffectMetadata,
   GateEffectMetadata,
 } from '../effects/BuiltinEffectMetadata'
 import { EqualizerEffectMetadata } from '../effects/equalizer/EqualizerMetadata'
 import { BoostEffect, FadeEffect } from '../effects/gain/GainEffects'
 import { NoiseReductionEffect } from '../effects/noisereduction/NoiseReductionEffect'
-import { EffectModule } from '../effects/Effect'
+import type { EffectModule } from '../effects/Effect'
 import { CompressionEffect } from '../effects/compression/CompressionEffect'
 import { EqualizerEffect } from '../effects/equalizer/EqualizerEffect'
+import { DeesserEffect } from '../effects/deesser/DeesserEffect'
 import { LimiterEffect } from '../effects/limiter/LimiterEffect'
 import { GateEffect } from '../effects/gate/GateEffect'
 
@@ -157,6 +159,8 @@ function getRenderingEffect(id: string): EffectModule | null {
       return new NoiseReductionEffect()
     case CompressionEffectMetadata.id:
       return new CompressionEffect()
+    case DeesserEffectMetadata.id:
+      return new DeesserEffect()
     case LimiterEffectMetadata.id:
       return new LimiterEffect()
     case GateEffectMetadata.id:
