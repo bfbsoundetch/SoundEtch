@@ -5,7 +5,7 @@ export const FadeEffectMetadata: EffectMetadata = {
   id: 'soundetch.fade',
   name: 'Fade',
   description: 'Decrease volume',
-  categories: ['Utility'],
+  categories: ['Volume'],
   parameters: [
     {
       id: 'gain',
@@ -26,7 +26,7 @@ export const BoostEffectMetadata: EffectMetadata = {
   id: 'soundetch.boost',
   name: 'Boost',
   description: 'Increase volume',
-  categories: ['Utility'],
+  categories: ['Volume'],
   parameters: [
     {
       id: 'gain',
@@ -47,7 +47,7 @@ export const NoiseReductionEffectMetadata: EffectMetadata = {
   id: 'soundetch.noise-reduction',
   name: 'Noise Remover',
   description: 'Remove background noise',
-  categories: ['Restoration'],
+  categories: ['Enhancement'],
   parameters: [],
   createDefaultState: () => ({ ...defaultDeepFilterParameters }),
 }
