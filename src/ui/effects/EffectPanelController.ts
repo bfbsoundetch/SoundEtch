@@ -152,25 +152,33 @@ export class EffectPanelController {
 
     const bodyElement = document.createElement('div')
     bodyElement.className = 'effect-list-body effect-catalog-body'
+    const effectsByCategory = new Map<string, EffectMetadata[]>()
     for (const metadata of this.effectIndex.getAvailableEffects()) {
-      const listItemElement = document.createElement('article')
-      listItemElement.className = 'effect-list-item effect-catalog-item'
+      const categories = metadata.categories.length > 0 ? new Set(metadata.categories) : ['Other']
+      for (const category of categories) {
+        const categoryEffects = effectsByCategory.get(category) ?? []
+        categoryEffects.push(metadata)
+        effectsByCategory.set(category, categoryEffects)
+      }
+    }
 
-      const addEffectButton = document.createElement('button')
-      addEffectButton.type = 'button'
-      addEffectButton.className = 'clickable effect-catalog-add'
-      addEffectButton.textContent = 'Add to track'
-      addEffectButton.addEventListener('click', () => {
-        addEffectButton.disabled = true
-        void this.addEffect(track, metadata).catch((error) => {
-          addEffectButton.disabled = false
-          console.error('Failed to add effect', error)
-          NotificationsController.showErrorMessage('Could not add the effect.')
-        })
-      })
-      const [nameElement, categoryElement, descriptionElement] = this.getEffectDescriptionElements(metadata)
-      listItemElement.append(nameElement, addEffectButton, categoryElement, descriptionElement)
-      bodyElement.appendChild(listItemElement)
+    for (const [category, effects] of effectsByCategory) {
+      const categoryElement = document.createElement('details')
+      categoryElement.className = 'effect-category-section'
+      categoryElement.open = true
+
+      const categorySummaryElement = document.createElement('summary')
+      categorySummaryElement.className = 'effect-category-summary'
+      categorySummaryElement.textContent = category
+
+      const categoryItemsElement = document.createElement('div')
+      categoryItemsElement.className = 'effect-category-items'
+      for (const metadata of effects) {
+        categoryItemsElement.appendChild(this.createEffectCatalogItem(track, metadata))
+      }
+
+      categoryElement.append(categorySummaryElement, categoryItemsElement)
+      bodyElement.appendChild(categoryElement)
     }
     this.openSubview('Add Effect', track.name, bodyElement, track)
   }
@@ -412,11 +420,11 @@ export class EffectPanelController {
     const openButton = document.createElement('button')
     openButton.type = 'button'
     openButton.className = 'clickable effect-chain-open'
-    const typeElement = document.createElement('strong')
-    typeElement.textContent = 'Effect'
-    const nameElement = document.createElement('span')
+    const nameElement = document.createElement('strong')
     nameElement.textContent = metadata?.name ?? effectData.id
-    openButton.append(typeElement, nameElement)
+    const typeElement = document.createElement('span')
+    typeElement.textContent = 'Effect'
+    openButton.append(nameElement, typeElement)
     openButton.disabled = !metadata
     if (metadata) {
       openButton.addEventListener('click', () => void this.showEffectForTrack(metadata, track, index))
@@ -611,19 +619,37 @@ export class EffectPanelController {
     this.openSubview(title, track.name, body, track)
   }
 
+  private createEffectCatalogItem(track: Track, metadata: EffectMetadata) {
+    const listItemElement = document.createElement('article')
+    listItemElement.className = 'effect-list-item effect-catalog-item'
+
+    const addEffectButton = document.createElement('button')
+    addEffectButton.type = 'button'
+    addEffectButton.className = 'clickable effect-catalog-add'
+    addEffectButton.textContent = 'Add to track'
+    addEffectButton.addEventListener('click', () => {
+      addEffectButton.disabled = true
+      void this.addEffect(track, metadata).catch((error) => {
+        addEffectButton.disabled = false
+        console.error('Failed to add effect', error)
+        NotificationsController.showErrorMessage('Could not add the effect.')
+      })
+    })
+
+    const [nameElement, descriptionElement] = this.getEffectDescriptionElements(metadata)
+    listItemElement.append(nameElement, addEffectButton, descriptionElement)
+    return listItemElement
+  }
+
   private getEffectDescriptionElements(metadata: EffectMetadata) {
     const nameElement = document.createElement('p')
     nameElement.className = 'effect-name'
     nameElement.textContent = metadata.name
 
-    const categoryElement = document.createElement('p')
-    categoryElement.className = 'effect-category'
-    categoryElement.textContent = metadata.categories.join(', ')
-
     const descriptionElement = document.createElement('p')
     descriptionElement.className = 'effect-description'
     descriptionElement.textContent = metadata.description
-    return [nameElement, categoryElement, descriptionElement]
+    return [nameElement, descriptionElement]
   }
 }
 

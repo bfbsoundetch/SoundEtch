@@ -24,7 +24,7 @@ export class ParamValueTransition {
   static generateExpCurve(length = 32) {
     const result = new Array<number>(length)
     for (let i = 0; i < length; ++i) {
-      result[i] = 10 ** ((-3 * i) / length)
+      result[i] = 30 ** ((-2 * i) / length)
     }
     return result.reverse()
   }

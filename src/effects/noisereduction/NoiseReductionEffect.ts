@@ -106,10 +106,11 @@ export class NoiseReductionEffect implements EffectModule {
     body.className = 'effect-editor-body effect-parameter-form noise-reduction-editor'
     body.addEventListener('submit', (event) => event.preventDefault())
 
-    const description = document.createElement('p')
-    description.className = 'noise-reduction-editor-description'
-    description.textContent = 'Changes take effect when you click Apply.'
-    body.appendChild(description)
+    const description1 = document.createElement('p')
+    description1.className = 'noise-reduction-editor-description'
+    description1.innerHTML = 'Changes take effect when you click Apply. Powered by ' +
+      '<a href="https://github.com/rikorose/deepfilternet" target="_blank">DeepFilterNet</a>'
+    body.appendChild(description1)
 
     let draft = { ...this.state }
     let applying = false
