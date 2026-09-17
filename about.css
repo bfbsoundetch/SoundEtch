@@ -26,7 +26,7 @@ p {
     --clickable-inactive: rgba(0, 0, 0, 0.1);
   }
 }
-  
+
 a:link {
   color: var(--link-color);
 }

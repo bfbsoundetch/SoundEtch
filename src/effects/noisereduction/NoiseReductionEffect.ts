@@ -108,7 +108,8 @@ export class NoiseReductionEffect implements EffectModule {
 
     const description1 = document.createElement('p')
     description1.className = 'noise-reduction-editor-description'
-    description1.innerHTML = 'Changes take effect when you click Apply. Powered by ' +
+    description1.innerHTML =
+      'Changes take effect when you click Apply. Powered by ' +
       '<a href="https://github.com/rikorose/deepfilternet" target="_blank">DeepFilterNet</a>'
     body.appendChild(description1)
 
