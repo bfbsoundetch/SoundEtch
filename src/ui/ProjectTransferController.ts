@@ -6,23 +6,15 @@ import { editorHistory } from './undo/EditorHistory'
 
 export class ProjectTransferController {
   private readonly dialog = document.getElementById('project-transfer-modal') as HTMLDialogElement
-  private readonly openButton = document.getElementById('open-project-transfer-modal-button') as HTMLButtonElement
   private readonly exportButton = document.getElementById('project-transfer-export-button') as HTMLButtonElement
   private readonly importButton = document.getElementById('project-transfer-import-button') as HTMLButtonElement
   private readonly importInput = document.getElementById('project-transfer-import-input') as HTMLInputElement
   private readonly status = document.getElementById('project-transfer-status') as HTMLParagraphElement
 
   constructor() {
-    this.openButton.onclick = () => this.open()
     this.exportButton.onclick = () => void this.exportProject()
     this.importButton.onclick = () => this.importInput.click()
     this.importInput.onchange = () => void this.importProject()
-  }
-
-  private open() {
-    document.getElementById('menu-dropdown')?.hidePopover()
-    this.status.innerText = ''
-    this.dialog.showModal()
   }
 
   private async exportProject() {

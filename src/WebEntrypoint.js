@@ -10,12 +10,10 @@ import { KeyPressController } from './ui/KeyPressController.ts'
 import { AudioControl } from './audiocontext/AudioControl.ts'
 import { NotificationsController } from './ui/NotificationsController.ts'
 import { HeaderController } from './ui/HeaderController.ts'
-import { PublishProjectController } from './ui/PublishProjectController.ts'
 import { LogsModalController } from './ui/LogsModalController.ts'
 import { ProcessingModalController } from './ui/ProcessingModalController.ts'
 import { ClipManagerController } from './ui/ClipManagerController.ts'
 import { ProjectModalController } from './ui/ProjectModalController.ts'
-import { ProjectTransferController } from './ui/ProjectTransferController.ts'
 import { MainMenuController } from './ui/MainMenuController.ts'
 import { AddClipController } from './ui/AddClipController.ts'
 
@@ -31,16 +29,26 @@ window.KeyPressController = KeyPressController
 window.AudioControl = AudioControl
 window.NotificationsController = NotificationsController
 window.HeaderController = HeaderController
-window.PublishProjectController = PublishProjectController
 window.LogsModalController = LogsModalController
 window.ProcessingModalController = ProcessingModalController
 window.ClipManagerController = ClipManagerController
 window.ProjectModalController = ProjectModalController
-window.ProjectTransferController = ProjectTransferController
 window.MainMenuController = MainMenuController
 window.AddClipController = AddClipController
 
-// These interaction boundaries keep recording, importing, and conferencing out of the initial timeline chunk.
+// These interaction boundaries keep publishing, project transfer, recording, and conferencing out of the initial chunk.
+let publishProjectControllerPromise
+window.loadPublishProjectController = () =>
+  (publishProjectControllerPromise ??= import('./ui/PublishProjectController.ts').then(
+    ({ PublishProjectController }) => (window.publishProjectController ??= new PublishProjectController()),
+  ))
+
+let projectTransferControllerPromise
+window.loadProjectTransferController = () =>
+  (projectTransferControllerPromise ??= import('./ui/ProjectTransferController.ts').then(
+    ({ ProjectTransferController }) => (window.projectTransferController ??= new ProjectTransferController()),
+  ))
+
 let recorderPromise
 window.loadRecorder = () => (recorderPromise ??= import('./recording/Recorder.ts').then(({ Recorder }) => Recorder))
 

@@ -65,6 +65,12 @@
       if (dialogElement.id == 'meeting-room') {
         await window.loadMeetingRoomController()
       }
+      if (dialogElement.id == 'publish-project-modal') {
+        await window.loadPublishProjectController()
+      }
+      if (dialogElement.id == 'project-transfer-modal') {
+        await window.loadProjectTransferController()
+      }
       if (dialogElement.id == 'add-clip-modal') {
         window.addClipController?.refreshExistingClips()
       }
@@ -89,13 +95,11 @@
       window.keyPressController = new window.KeyPressController()
       window.mainMenuController = new window.MainMenuController()
       window.headerController = new window.HeaderController()
-      window.publishProjectController = new window.PublishProjectController()
       window.logsModalController = new window.LogsModalController()
       window.processingModalController = new window.ProcessingModalController()
       window.addClipController = new window.AddClipController()
       window.clipManagerController = new window.ClipManagerController()
       window.projectModalController = new window.ProjectModalController()
-      window.projectTransferController = new window.ProjectTransferController()
       if (window.location.search) {
         const meetingParam = new URL(window.location).searchParams.get('meeting')
         if (meetingParam) {
@@ -187,7 +191,13 @@
           >
             Publish
           </button>
-          <button id="open-project-transfer-modal-button" class="menu-item clickable">Import / Export</button>
+          <button
+            id="open-project-transfer-modal-button"
+            class="menu-item clickable"
+            onclick="showDialog(document.getElementById('project-transfer-modal'))"
+          >
+            Import / Export
+          </button>
           <button id="open-clip-manager-modal-button" class="menu-item clickable">Manage Clips</button>
           <button id="open-logs-modal-button" class="menu-item clickable">Logs</button>
           <button class="menu-item clickable" onclick="window.open('about.html', '_blank')">About</button>
