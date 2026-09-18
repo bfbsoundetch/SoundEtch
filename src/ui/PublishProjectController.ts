@@ -11,12 +11,19 @@ import {
   WavEncoderInfo,
   WavSampleFormat,
 } from '../encoders/EncoderType'
-import type { TrackListController } from './timeline/TrackListController'
+import { Renderer } from '../rendering/Renderer'
+import { VIDEO_EXPORT_PRESETS, VideoRenderer, type VideoExportPresetName } from '../video/VideoRenderer'
 import { NotificationsController } from './NotificationsController'
+import type { ProcessingModalController } from './ProcessingModalController'
+import type { TrackListController } from './timeline/TrackListController'
 import { ProjectManager } from '../project/ProjectManager'
-import type { VideoExportPresetName } from '../video/VideoRenderer'
 
-export class ExportProjectController {
+interface PublishProjectWindow extends Window {
+  readonly trackListController: TrackListController
+  readonly processingModalController?: ProcessingModalController
+}
+
+export class PublishProjectController {
   private readonly formatContainerMap = new Map<Format, HTMLDivElement>()
   private readonly mp3ModeContainerMap = new Map<Mp3Mode, HTMLDivElement>()
   private readonly formatSelect: HTMLSelectElement
@@ -25,10 +32,11 @@ export class ExportProjectController {
   private readonly channelCountInputs: HTMLInputElement[]
   private readonly mp3ModeInputs: HTMLInputElement[]
   private readonly videoPresetInputs: HTMLInputElement[]
+  private readonly appWindow = window as unknown as PublishProjectWindow
 
   constructor() {
     this.formatSelect = document.getElementById('format') as HTMLSelectElement
-    this.advancedSection = document.querySelector('#export-project-modal .export-advanced-section') as HTMLElement
+    this.advancedSection = document.querySelector('#publish-project-modal .export-advanced-section') as HTMLElement
     this.channelCountContainer = document.getElementById('channel-count-container') as HTMLElement
     this.channelCountInputs = Array.from(document.querySelectorAll('input[name="channel-count"]')) as HTMLInputElement[]
     this.mp3ModeInputs = Array.from(document.querySelectorAll('input[name="mp3-mode"]')) as HTMLInputElement[]
@@ -91,7 +99,7 @@ export class ExportProjectController {
   }
 
   private initializeSliderOutputs() {
-    document.querySelectorAll<HTMLInputElement>('#export-project-modal input[type="range"]').forEach((slider) => {
+    document.querySelectorAll<HTMLInputElement>('#publish-project-modal input[type="range"]').forEach((slider) => {
       const output = slider.nextElementSibling?.querySelector('output')
       if (!(output instanceof HTMLOutputElement)) {
         return
@@ -116,36 +124,31 @@ export class ExportProjectController {
     })
   }
 
-  async exportProject() {
+  async publishProject() {
     if (this.formatSelect.value === Format.VIDEO) {
-      await this.exportVideoProject()
+      await this.publishVideoProject()
       return
     }
 
-    // Rendering is loaded only after export starts, keeping it out of the initial timeline chunk.
-    const { Renderer } = await import('../rendering/Renderer')
-
     const encoderInfo = this.createEncoderInfo()
-    ;(document.getElementById('export-project-modal') as HTMLDialogElement).close()
-    const selectedRegion = ((window as any).trackListController as TrackListController).selectedRegion
-    ;(window as any).processingModalController?.show('Exporting project...', () => Renderer.cancelRender())
+    ;(document.getElementById('publish-project-modal') as HTMLDialogElement).close()
+    const selectedRegion = this.appWindow.trackListController.selectedRegion
+    this.appWindow.processingModalController?.show('Publishing project...', () => Renderer.cancelRender())
     try {
       await Renderer.exportProject(encoderInfo, selectedRegion)
     } catch (e) {
       NotificationsController.showError(e as Error)
     } finally {
-      ;(window as any).processingModalController?.hide()
+      this.appWindow.processingModalController?.hide()
     }
   }
 
-  private async exportVideoProject() {
-    // Video encoding is the largest dependency path and is needed only for video export.
-    const { VIDEO_EXPORT_PRESETS, VideoRenderer } = await import('../video/VideoRenderer')
+  private async publishVideoProject() {
     const presetName = this.getSelectedVideoPreset()
-    ;(document.getElementById('export-project-modal') as HTMLDialogElement).close()
-    const selectedRegion = ((window as any).trackListController as TrackListController).selectedRegion
+    ;(document.getElementById('publish-project-modal') as HTMLDialogElement).close()
+    const selectedRegion = this.appWindow.trackListController.selectedRegion
     const preset = VIDEO_EXPORT_PRESETS[presetName]
-    ;(window as any).processingModalController?.show(`Exporting ${preset.label} video...`, () =>
+    this.appWindow.processingModalController?.show(`Publishing ${preset.label} video...`, () =>
       VideoRenderer.cancelExport(),
     )
     try {
@@ -153,7 +156,7 @@ export class ExportProjectController {
     } catch (e) {
       NotificationsController.showError(e as Error)
     } finally {
-      ;(window as any).processingModalController?.hide()
+      this.appWindow.processingModalController?.hide()
     }
   }
 

@@ -89,12 +89,13 @@
       window.keyPressController = new window.KeyPressController()
       window.mainMenuController = new window.MainMenuController()
       window.headerController = new window.HeaderController()
-      window.exportProjectController = new window.ExportProjectController()
+      window.publishProjectController = new window.PublishProjectController()
       window.logsModalController = new window.LogsModalController()
       window.processingModalController = new window.ProcessingModalController()
       window.addClipController = new window.AddClipController()
       window.clipManagerController = new window.ClipManagerController()
       window.projectModalController = new window.ProjectModalController()
+      window.projectTransferController = new window.ProjectTransferController()
       if (window.location.search) {
         const meetingParam = new URL(window.location).searchParams.get('meeting')
         if (meetingParam) {
@@ -179,14 +180,17 @@
             </div>
           </div>
           <button class="menu-item clickable">Settings</button>
-          <button class="menu-item clickable" onclick="showDialog(document.getElementById('export-project-modal'))">
-            Export
+          <button
+            id="open-publish-project-modal-button"
+            class="menu-item clickable"
+            onclick="showDialog(document.getElementById('publish-project-modal'))"
+          >
+            Publish
           </button>
+          <button id="open-project-transfer-modal-button" class="menu-item clickable">Import / Export</button>
           <button id="open-clip-manager-modal-button" class="menu-item clickable">Manage Clips</button>
           <button id="open-logs-modal-button" class="menu-item clickable">Logs</button>
-          <button class="menu-item clickable" onclick="window.open('about.html', '_blank')">
-            About
-          </button>
+          <button class="menu-item clickable" onclick="window.open('about.html', '_blank')">About</button>
         </div>
         <div id="title">
           <svg style="height: 100%" viewBox="0 0 600 100">
@@ -558,6 +562,39 @@
         <div id="project-manager-list"></div>
       </div>
     </dialog>
+    <dialog id="project-transfer-modal" class="overlay">
+      <div class="overlay-close-button clickable" onclick="closeOverlay()">
+        <svg class="meeting-icon" viewBox="0 0 500 500">
+          <use xlink:href="#menu-close" />
+        </svg>
+      </div>
+      <div id="project-transfer-modal-content" class="overlay-content" onclick="event.stopPropagation()">
+        <h1>Import / Export Project</h1>
+        <div id="project-transfer-options">
+          <section class="project-transfer-option">
+            <h2>Export current project</h2>
+            <p>Stream the current project's database records and audio files to a TAR archive.</p>
+            <button id="project-transfer-export-button" class="menu-item clickable" type="button">
+              Export Current Project
+            </button>
+          </section>
+          <section class="project-transfer-option">
+            <h2>Import project</h2>
+            <p>Import a SoundEtch project archive as a new project and open it.</p>
+            <input
+              id="project-transfer-import-input"
+              type="file"
+              accept=".tar,.soundetch.tar,application/x-tar"
+              hidden
+            />
+            <button id="project-transfer-import-button" class="menu-item clickable" type="button">
+              Choose Project Archive
+            </button>
+          </section>
+        </div>
+        <p id="project-transfer-status" role="status" aria-live="polite"></p>
+      </div>
+    </dialog>
     <dialog id="clip-manager-modal" class="overlay">
       <div class="overlay-close-button clickable" onclick="closeOverlay()">
         <svg class="meeting-icon" viewBox="0 0 500 500">
@@ -594,18 +631,18 @@
         </button>
       </form>
     </dialog>
-    <dialog id="export-project-modal" class="overlay">
+    <dialog id="publish-project-modal" class="overlay">
       <div class="overlay-close-button clickable" onclick="closeOverlay()">
         <svg class="meeting-icon" viewBox="0 0 500 500">
           <use xlink:href="#menu-close" />
         </svg>
       </div>
       <div class="overlay-content">
-        <h1>Export Settings</h1>
+        <h1>Publish Settings</h1>
 
         <div class="form-group">
-          <label for="format">Export Format</label>
-          <select id="format" onchange="exportProjectController.handleFormatSwitch(this.value)">
+          <label for="format">Publish Format</label>
+          <select id="format" onchange="publishProjectController.handleFormatSwitch(this.value)">
             <option value="wav">WAV - Uncompressed Audio</option>
             <option value="flac">FLAC - Lossless Compression</option>
             <option value="mp3" selected>MP3 - Lossy Compression</option>
@@ -841,10 +878,10 @@
         </details>
 
         <button
-          class="menu-item clickable export-project-button"
-          onclick="window.exportProjectController.exportProject()"
+          class="menu-item clickable publish-project-button"
+          onclick="window.publishProjectController.publishProject()"
         >
-          Export
+          Publish
         </button>
       </div>
     </dialog>

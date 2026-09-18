@@ -14,6 +14,13 @@ export class MemoryBackedFileSystem {
     return newFile
   }
 
+  static replaceFileHandle(dirName: string, fileName: string): MemoryBackedFileSystemSyncAccessHandle {
+    const path = `${dirName}/${fileName}`
+    const file = new MemoryBackedFileSystemSyncAccessHandle(path)
+    MemoryBackedFileSystem.files.set(path, file)
+    return file
+  }
+
   static deleteFile(dirName: string, fileName: string) {
     const path = `${dirName}/${fileName}`
     MemoryBackedFileSystem.files.delete(path)
@@ -37,5 +44,16 @@ export class MemoryBackedFileSystem {
       }
     }
     return size
+  }
+
+  static getDirectoryFiles(dirName: string): Array<{ path: string; data: Blob }> {
+    const prefix = `${dirName}/`
+    const result = new Array<{ path: string; data: Blob }>()
+    for (const [path, file] of MemoryBackedFileSystem.files) {
+      if (path.startsWith(prefix)) {
+        result.push({ path: path.slice(prefix.length), data: file.toBlob() })
+      }
+    }
+    return result
   }
 }

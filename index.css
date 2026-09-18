@@ -445,7 +445,8 @@ dialog.overlay[open] {
 #clip-manager-modal-content,
 #clip-metadata-modal-content,
 #project-manager-modal-content,
-#export-project-modal .overlay-content {
+#project-transfer-modal-content,
+#publish-project-modal .overlay-content {
   display: flex;
   flex-direction: column;
   align-items: stretch;
@@ -466,10 +467,51 @@ dialog.overlay[open] {
   width: min(94vw, 58rem);
 }
 
-#export-project-modal .overlay-content {
+#publish-project-modal .overlay-content {
   gap: 1rem;
   padding: 3.5rem 1.5rem 1.5rem;
   overflow: auto;
+}
+
+#project-transfer-modal-content {
+  width: min(90vw, 44rem);
+}
+
+#project-transfer-options {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 1rem;
+}
+
+.project-transfer-option {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+  gap: 0.75rem;
+  padding: 1rem;
+  border: 1px solid var(--color);
+  background-color: var(--alt-background);
+}
+
+.project-transfer-option h2,
+.project-transfer-option p {
+  margin: 0;
+}
+
+.project-transfer-option p {
+  flex: 1;
+  line-height: 1.4;
+}
+
+#project-transfer-status {
+  min-height: 1.4em;
+  margin: 0;
+}
+
+@media (max-width: 600px) {
+  #project-transfer-options {
+    grid-template-columns: 1fr;
+  }
 }
 
 #add-clip-modal-content h1 {
@@ -559,7 +601,9 @@ dialog.overlay[open] {
 }
 
 .add-clip-manager-button,
-.export-project-button,
+.publish-project-button,
+#project-transfer-export-button,
+#project-transfer-import-button,
 #clip-manager-delete-unused-button,
 #project-manager-new-button,
 .project-manager-action-button,
@@ -1924,37 +1968,38 @@ video {
   text-align: center;
 }
 
-#export-project-modal h1,
+#publish-project-modal h1,
+#project-transfer-modal-content h1,
 #clip-manager-modal-content h1,
 #project-manager-header h1 {
   margin: 0;
   font-size: 2rem;
 }
 
-#export-project-modal .form-group {
+#publish-project-modal .form-group {
   display: flex;
   flex-direction: column;
   gap: 0.5rem;
 }
 
-#export-project-modal label {
+#publish-project-modal label {
   font-size: 1rem;
 }
 
-#export-project-modal select,
-#export-project-modal input,
-#export-project-modal output {
+#publish-project-modal select,
+#publish-project-modal input,
+#publish-project-modal output {
   font: inherit;
 }
 
-#export-project-modal select,
-#export-project-modal input[type='number'],
-#export-project-modal input[type='range'] {
+#publish-project-modal select,
+#publish-project-modal input[type='number'],
+#publish-project-modal input[type='range'] {
   width: 100%;
   box-sizing: border-box;
 }
 
-#export-project-modal button {
+#publish-project-modal button {
   align-self: flex-end;
 }
 

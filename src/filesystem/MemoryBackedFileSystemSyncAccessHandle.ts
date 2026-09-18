@@ -15,8 +15,9 @@ export class MemoryBackedFileSystemSyncAccessHandle implements FileSystemSyncAcc
     throw new Error('Method not implemented.')
   }
 
-  getFile(): Promise<File> {
-    throw new Error('Method not implemented.')
+  async getFile(): Promise<File> {
+    const name = this.name.split('/').at(-1) ?? this.name
+    return new File([this.toBlob()], name)
   }
 
   readonly isFile = true
@@ -41,6 +42,12 @@ export class MemoryBackedFileSystemSyncAccessHandle implements FileSystemSyncAcc
 
   getSize(): number {
     return this.size
+  }
+
+  toBlob(): Blob {
+    const data = new Uint8Array(this.size)
+    this.read(data.buffer)
+    return new Blob([data])
   }
 
   read(buffer: ArrayBuffer, options: { at: number } = { at: 0 }): number {
