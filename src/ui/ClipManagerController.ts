@@ -99,13 +99,13 @@ export class ClipManagerController {
     actionsElement.className = 'clip-manager-actions'
 
     const metadataButton = document.createElement('button')
-    metadataButton.className = 'menu-item clickable clip-manager-action-button'
+    metadataButton.className = 'bordered clickable clip-manager-action-button'
     metadataButton.type = 'button'
     metadataButton.innerText = 'View details'
     metadataButton.addEventListener('click', () => this.openClipInfo(clip))
 
     const deleteButton = document.createElement('button')
-    deleteButton.className = 'menu-item clickable clip-manager-action-button clip-manager-delete-button'
+    deleteButton.className = 'bordered clickable clip-manager-action-button clip-manager-delete-button'
     deleteButton.type = 'button'
     deleteButton.innerText = 'Delete clip'
     deleteButton.addEventListener('click', async () => {

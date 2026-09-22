@@ -193,7 +193,6 @@ export class TrackListController {
       this.sampleRate = project.sampleRate
       if (this.renderedProjectId != project.id) {
         this.renderedProjectId = project.id
-        this.msPerUnit = Infinity
         this.translationUnits = 0
         this.waveforms.splice(0)
         this.infoWaveformPairs.forEach((pair) => pair.infoController.remove())

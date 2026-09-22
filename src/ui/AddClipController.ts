@@ -32,7 +32,7 @@ export class AddClipController {
   private createExistingClipRow(clip: Clip, sampleRate: number): HTMLButtonElement {
     const row = document.createElement('button')
     row.type = 'button'
-    row.className = 'menu-item clickable add-clip-existing-row'
+    row.className = 'bordered clickable add-clip-existing-row'
     row.onclick = () => void this.insertExistingClip(clip, row)
 
     const nameElement = document.createElement('span')

@@ -321,13 +321,13 @@
           </label>
         </div>
         <div id="add-clip-local-section">
-          <label class="menu-item clickable add-clip-option" for="audio-file-local">Choose local file...</label>
+          <label class="bordered clickable add-clip-option" for="audio-file-local">Choose local file...</label>
           <input type="file" id="audio-file-local" accept="audio/*" hidden onchange="audioFileLocalHandler()" />
         </div>
         <div id="add-clip-remote-section" class="add-clip-url-option" style="display: none">
           <label for="audio-file-url">From URL</label>
           <input type="text" id="audio-file-url" placeholder="https://example.com/audio-file.wav" />
-          <button class="menu-item clickable add-clip-option" onclick="audioFileRemoteHandler()">
+          <button class="bordered clickable add-clip-option" onclick="audioFileRemoteHandler()">
             Load remote file
           </button>
         </div>
@@ -335,7 +335,7 @@
           <div id="add-clip-existing-list"></div>
           <button
             id="add-clip-open-clip-manager-button"
-            class="menu-item clickable add-clip-manager-button"
+            class="bordered clickable add-clip-manager-button"
             type="button"
           >
             Manage clips...
@@ -552,8 +552,8 @@
       </div>
       <div id="logs-modal-content" class="overlay-content">
         <div id="logs-modal-toolbar">
-          <button id="logs-modal-refresh-button" class="menu-item clickable logs-modal-button">Refresh</button>
-          <button id="logs-modal-download-button" class="menu-item clickable logs-modal-button">Download .txt</button>
+          <button id="logs-modal-refresh-button" class="bordered clickable logs-modal-button">Refresh</button>
+          <button id="logs-modal-download-button" class="bordered clickable logs-modal-button">Download .txt</button>
         </div>
         <pre id="logs-modal-content-text"></pre>
       </div>
@@ -567,7 +567,7 @@
       <div id="project-manager-modal-content" class="overlay-content" onclick="event.stopPropagation()">
         <div id="project-manager-header">
           <h1>Projects</h1>
-          <button id="project-manager-new-button" class="menu-item clickable">Open New Project</button>
+          <button id="project-manager-new-button" class="bordered clickable">Open New Project</button>
         </div>
         <div id="project-manager-list"></div>
       </div>
@@ -584,7 +584,7 @@
           <section class="project-transfer-option">
             <h2>Export current project</h2>
             <p>Stream the current project's database records and audio files to a TAR archive.</p>
-            <button id="project-transfer-export-button" class="menu-item clickable" type="button">
+            <button id="project-transfer-export-button" class="bordered clickable" type="button">
               Export Current Project
             </button>
           </section>
@@ -597,7 +597,7 @@
               accept=".tar,.soundetch.tar,application/x-tar"
               hidden
             />
-            <button id="project-transfer-import-button" class="menu-item clickable" type="button">
+            <button id="project-transfer-import-button" class="bordered clickable" type="button">
               Choose Project Archive
             </button>
           </section>
@@ -614,7 +614,7 @@
       <div id="clip-manager-modal-content" class="overlay-content" onclick="event.stopPropagation()">
         <div id="clip-manager-header">
           <h1>Manage Clips</h1>
-          <button id="clip-manager-delete-unused-button" class="menu-item clickable" type="button">
+          <button id="clip-manager-delete-unused-button" class="bordered clickable" type="button">
             Delete unused clips
           </button>
         </div>
@@ -888,7 +888,7 @@
         </details>
 
         <button
-          class="menu-item clickable publish-project-button"
+          class="bordered clickable publish-project-button"
           onclick="window.publishProjectController.publishProject()"
         >
           Publish
@@ -904,7 +904,7 @@
         </div>
         <div id="processing-elapsed-time">00:00:00</div>
         <div id="processing-remaining-time"></div>
-        <button id="processing-cancel-button" class="menu-item clickable">Cancel</button>
+        <button id="processing-cancel-button" class="bordered clickable">Cancel</button>
       </div>
     </dialog>
     <div id="notification-parent" popover="manual"></div>

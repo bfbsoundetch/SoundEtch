@@ -88,14 +88,14 @@ export class ProjectModalController {
     actionsElement.className = 'project-manager-actions'
 
     const openButton = document.createElement('button')
-    openButton.className = 'menu-item clickable project-manager-action-button'
+    openButton.className = 'bordered clickable project-manager-action-button'
     openButton.innerText = isActiveProject ? 'Open' : 'Open project'
     openButton.type = 'button'
     openButton.disabled = isActiveProject
     openButton.onclick = () => void this.openProject(project, openButton)
 
     const deleteButton = document.createElement('button')
-    deleteButton.className = 'menu-item clickable project-manager-action-button project-manager-delete-button'
+    deleteButton.className = 'bordered clickable project-manager-action-button project-manager-delete-button'
     deleteButton.innerText = 'Delete'
     deleteButton.type = 'button'
     deleteButton.onclick = () => void this.deleteProject(project, deleteButton)

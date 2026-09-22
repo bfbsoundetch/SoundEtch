@@ -75,6 +75,10 @@ body {
   color: var(--color);
 }
 
+.bordered {
+  border: solid 1px var(--color);
+}
+
 .menu-button {
   display: grid;
   align-items: center;
@@ -96,10 +100,9 @@ body {
   inset: 4rem auto auto 0;
   min-width: 10rem;
   overflow: visible;
-  border: solid;
+  border: none;
   background-color: var(--bg-color);
   color: var(--color);
-  border-width: 1px;
 }
 
 .main-menu-submenu {
@@ -119,8 +122,6 @@ body {
   left: 100%;
   top: -1px;
   min-width: 16rem;
-  border: solid;
-  border-width: 1px;
   background-color: var(--bg-color);
   color: var(--color);
 }
@@ -132,8 +133,9 @@ body {
 }
 
 .menu-item {
-  padding: 0.25rem;
-  border: solid;
+  padding: 0.5rem;
+  border: solid 1px;
+  border-bottom: none;
   font-size: 1.5rem;
   user-select: none;
   z-index: 1;
@@ -142,6 +144,10 @@ body {
   width: 100%;
   box-sizing: border-box;
   border-width: 1px;
+}
+
+.menu-item:last-child {
+  border-bottom: solid 1px;
 }
 
 .menu-item:disabled {
@@ -517,6 +523,10 @@ dialog.overlay[open] {
 #add-clip-modal-content h1 {
   margin: 0 0 0.25rem;
   font-size: 2rem;
+}
+
+.add-clip-option {
+  display: block;
 }
 
 .add-clip-option,
@@ -1367,7 +1377,7 @@ video {
 .context-menu li div {
   display: block;
   padding: 0.5rem;
-  border: solid;
+  border: solid 1px var(--color);
   border-bottom: none;
 }
 
@@ -1379,9 +1389,9 @@ video {
   color: darkgray;
 }
 
-.context-menu li div:last-child {
+.context-menu li:last-child {
   display: block;
-  border-bottom: solid;
+  border-bottom: solid 1px;
 }
 
 #notification-parent {
