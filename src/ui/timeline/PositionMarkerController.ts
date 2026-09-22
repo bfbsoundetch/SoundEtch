@@ -39,6 +39,7 @@ export class PositionMarkerController extends TrackListItemController {
     this.positionLineSvg.x1.baseVal.value = -100
     this.positionLineSvg.x2.baseVal.value = -100
     this.positionTimeText.setAttribute('x', '-100')
+    this.trackListController.selectionController.draw()
   }
 
   draw(positionOverride: number | null = null) {
@@ -71,5 +72,9 @@ export class PositionMarkerController extends TrackListItemController {
     const time = TimeUtils.positionToString(realPosition, this.trackListController.sampleRate, true)
     this.positionTimeText.innerHTML = time
     this.positionTimeText.setAttribute('x', `${this.x}`)
+  }
+
+  getLabelBoundingBox() {
+    return this.positionTimeText.getBBox()
   }
 }

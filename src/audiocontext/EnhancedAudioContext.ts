@@ -20,7 +20,6 @@ export class EnhancedAudioContext extends AudioContext {
     const result = new EnhancedAudioContext(mode, sampleRate)
     await result.audioWorklet.addModule(new URL('./ReportingAudioWorkletProcessor.js', import.meta.url))
     result.position[0] = position
-    console.error(result.position[0], loopEnd)
     result.setReporterNode(
       new AudioWorkletNode(result, 'ReportingAudioWorkletProcessor', {
         processorOptions: {

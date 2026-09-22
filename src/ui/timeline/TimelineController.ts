@@ -223,6 +223,20 @@ export class TimelineController extends TrackListItemController {
 
     this.selectionElements.leftLabel.setAttribute('x', `${startX - labelPush}`)
     this.selectionElements.rightLabel.setAttribute('x', `${endX + labelPush}`)
+
+    if (this.svg.checkIntersection(this.selectionElements.rightLabel, 
+        this.trackListController.positionMarkerController.getLabelBoundingBox())) {
+      this.selectionElements.rightLabel.style.opacity = '.2'
+    } else {
+      this.selectionElements.rightLabel.style.opacity = '1'
+    }
+
+    if (this.svg.checkIntersection(this.selectionElements.leftLabel, 
+        this.trackListController.positionMarkerController.getLabelBoundingBox())) {
+      this.selectionElements.leftLabel.style.opacity = '.2'
+    } else {
+      this.selectionElements.leftLabel.style.opacity = '1'
+    }
   }
 
   removeSelection() {
