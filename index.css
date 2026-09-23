@@ -13,6 +13,7 @@ button:focus {
 :root {
   --bg-color: #f8f9fa; /* https://www.color-hex.com/color/c0cbcd */
   --color: #46494a;
+  --menu-bg: white;
   --waveform-stroke: #000000;
   --waveform-header-bg: #46494a;
   --waveform-header-text: #f8f9fa;
@@ -37,6 +38,7 @@ button:focus {
   :root {
     --bg-color: #404445;
     --color: #d2d4d5;
+    --menu-bg: black;
     --clickable-hover: rgba(255, 255, 255, 0.25);
     --clickable-active: rgba(255, 255, 255, 0.35);
     --clickable-inactive: rgba(0, 0, 0, 0.1);
@@ -101,7 +103,7 @@ body {
   min-width: 10rem;
   overflow: visible;
   border: none;
-  background-color: var(--bg-color);
+  background-color: var(--menu-bg);
   color: var(--color);
 }
 
@@ -122,7 +124,7 @@ body {
   left: 100%;
   top: -1px;
   min-width: 16rem;
-  background-color: var(--bg-color);
+  background-color: var(--menu-bg);
   color: var(--color);
 }
 
@@ -1362,7 +1364,7 @@ video {
   display: none;
   z-index: 9999;
   width: 15rem;
-  background-color: var(--bg-color);
+  background-color: var(--menu-bg);
   color: var(--color);
   font-size: larger;
   user-select: none;

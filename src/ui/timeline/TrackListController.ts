@@ -186,6 +186,10 @@ export class TrackListController {
         case AudioState.RECORDING:
           this.translateToFollowPosition(0, this)
           break
+        case AudioState.STOPPED:
+          this.positionMarkerController.draw()
+          this.selectionController.draw()
+          break
       }
     })
 

@@ -39,7 +39,6 @@ export class PositionMarkerController extends TrackListItemController {
     this.positionLineSvg.x1.baseVal.value = -100
     this.positionLineSvg.x2.baseVal.value = -100
     this.positionTimeText.setAttribute('x', '-100')
-    this.trackListController.selectionController.draw()
   }
 
   draw(positionOverride: number | null = null) {
@@ -55,9 +54,11 @@ export class PositionMarkerController extends TrackListItemController {
       }
       position = AudioControl.startPosition
       this.positionLineSvg.classList = 'blink'
+      this.positionTimeText.style.color = 'var(--color)'
     } else {
       position = AudioControl.audioContext!.getPosition()
       this.positionLineSvg.classList = ''
+      this.positionTimeText.style.color = 'var(--play-button-green)'
     }
 
     const realPosition = positionOverride ?? position
