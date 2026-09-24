@@ -206,7 +206,7 @@ export class Waveform extends TrackListItemController {
   }
 
   drawClipViewOver(clipViewController: ClipViewController) {
-    this.resetAfterDrawnOver()
+    this.resetAfterDrawnOver(clipViewController.clipView)
 
     let startOverlap = 0,
       endOverlap = 0
@@ -247,25 +247,35 @@ export class Waveform extends TrackListItemController {
     }
   }
 
-  resetAfterDrawnOver() {
-    this.dragInProgressClipViews.forEach((clipViewController) => {
-      if (clipViewController.clipViewIndex > 0) {
-        clipViewController.startCrossFadeDuration = Math.max(
-          0,
-          this.track.clipViews[clipViewController.clipViewIndex - 1].getEndPosition() -
-            clipViewController.startPosition,
-        )
-      } else {
-        clipViewController.startCrossFadeDuration = 0
+  resetAfterDrawnOver(excludedClipView?: ClipView) {
+    const controllersToReset = new Set(this.dragInProgressClipViews)
+    if (excludedClipView) {
+      const excludedIndex = this.track.clipViews.indexOf(excludedClipView)
+      const previousClipView = this.track.clipViews[excludedIndex - 1]
+      const nextClipView = this.track.clipViews[excludedIndex + 1]
+      const previousController = previousClipView && this.clipViewControllerMap.get(previousClipView)
+      const nextController = nextClipView && this.clipViewControllerMap.get(nextClipView)
+      if (previousController) {
+        controllersToReset.add(previousController)
       }
-      if (clipViewController.clipViewIndex < this.track.clipViews.length - 1) {
-        clipViewController.endCrossFadeDuration = Math.max(
-          0,
-          clipViewController.endPosition - this.track.clipViews[clipViewController.clipViewIndex + 1].startPosition,
-        )
-      } else {
-        clipViewController.endCrossFadeDuration = 0
+      if (nextController) {
+        controllersToReset.add(nextController)
       }
+    }
+
+    const clipViews = excludedClipView
+      ? this.track.clipViews.filter((clipView) => clipView != excludedClipView)
+      : this.track.clipViews
+    controllersToReset.forEach((clipViewController) => {
+      const clipViewIndex = clipViews.indexOf(clipViewController.clipView)
+      const previousClipView = clipViews[clipViewIndex - 1]
+      const nextClipView = clipViews[clipViewIndex + 1]
+      clipViewController.startCrossFadeDuration = previousClipView
+        ? Math.max(0, previousClipView.getEndPosition() - clipViewController.startPosition)
+        : 0
+      clipViewController.endCrossFadeDuration = nextClipView
+        ? Math.max(0, clipViewController.endPosition - nextClipView.startPosition)
+        : 0
       clipViewController.reset()
     })
     this.dragInProgressClipViews.splice(0)
@@ -454,7 +464,7 @@ export class ClipViewController extends TrackListItemController {
       !this.waveform.track.canReplaceClipView(clipViewIndex, newClipView)
     ) {
       this.draggedShift = 0
-      this.reset()
+      this.waveform.drawAudioData()
       return
     }
     await this.trackListController.history.execute(
@@ -473,7 +483,7 @@ export class ClipViewController extends TrackListItemController {
   switchParent(waveform: Waveform) {
     const oldWaveform = this.waveform
     oldWaveform.releaseClipViewController(this)
-    oldWaveform.resetAfterDrawnOver()
+    oldWaveform.resetAfterDrawnOver(this.clipView)
     this.waveform = waveform
     waveform.adoptClipViewController(this)
     this.reset()

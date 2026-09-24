@@ -505,6 +505,7 @@ export class TrackListController {
     if (!newTrack.canAddClipView(clipView)) {
       clipViewController.draggedShift = 0
       clipViewController.switchParent(oldWaveform)
+      oldWaveform.drawAudioData()
       return
     }
     await this.history.execute(new MoveClipViewBetweenTracksCommand(oldWaveform.track, newTrack, oldClipView, clipView))
