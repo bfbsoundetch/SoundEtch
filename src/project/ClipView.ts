@@ -20,5 +20,5 @@ export class ClipView {
 }
 
 export function cloneClipViewWithNewStartPosition(old: ClipView, shift: number): ClipView {
-  return new ClipView(old.clip, old.offset, old.startPosition + shift, old.viewLength)
+  return new ClipView(old.clip, old.offset, Math.round(old.startPosition + shift), old.viewLength)
 }
