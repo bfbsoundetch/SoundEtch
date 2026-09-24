@@ -474,11 +474,11 @@ export class TrackListController {
     return panel
   }
 
-  async transferClipViewToNewTrack(clipViewController: ClipViewController, shift: number) {
+  async transferClipViewToNewTrack(clipViewController: ClipViewController) {
     const project = await ProjectManager.getActiveProject()
     const oldWaveform = clipViewController.waveform
     const oldClipView = oldWaveform.track.clipViews[clipViewController.clipViewIndex]
-    const clipView = cloneClipViewWithNewStartPosition(oldClipView, shift)
+    const clipView = cloneClipViewWithNewStartPosition(oldClipView, clipViewController.draggedShift)
     const trackNames = new Set(project.getTracks().map((track) => track.name))
     let trackNumber = project.getTracks().length + 1
     while (trackNames.has(`Track ${trackNumber}`)) {
@@ -497,16 +497,17 @@ export class TrackListController {
     )
   }
 
-  async transferClipViewBetweenTracks(clipViewController: ClipViewController, newWaveform: Waveform, shift: number) {
-    const oldWaveform = clipViewController.waveform
+  async transferClipViewBetweenTracks(clipViewController: ClipViewController, oldWaveform: Waveform) {
+    const newWaveform = clipViewController.waveform
     const newTrack = newWaveform.track
-    const oldClipView = oldWaveform.track.clipViews[clipViewController.clipViewIndex]
-    const clipView = cloneClipViewWithNewStartPosition(oldClipView, shift)
+    const oldClipView = clipViewController.clipView
+    const clipView = cloneClipViewWithNewStartPosition(oldClipView, clipViewController.draggedShift)
     if (!newTrack.canAddClipView(clipView)) {
       clipViewController.reset()
       return
     }
     await this.history.execute(new MoveClipViewBetweenTracksCommand(oldWaveform.track, newTrack, oldClipView, clipView))
+    newWaveform.removeClipViewController(clipViewController)
   }
 
   async sliceSelection(del: boolean) {

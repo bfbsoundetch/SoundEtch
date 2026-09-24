@@ -1029,6 +1029,7 @@ video {
   border: solid;
   background-color: var(--alt-background);
   font: inherit;
+  font-size: xx-large;
   user-select: none;
   cursor: copy;
 }

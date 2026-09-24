@@ -274,7 +274,7 @@ function moveClipView(fromTrack: Track, toTrack: Track, fromClipView: ClipView, 
 function removeClipViewByReference(track: Track, clipView: ClipView) {
   const clipViewIndex = track.clipViews.indexOf(clipView)
   if (clipViewIndex < 0) {
-    throw new Error('Clip view not found')
+    throw new Error('ClipView not found')
   }
   track.removeClipView(clipViewIndex)
 }

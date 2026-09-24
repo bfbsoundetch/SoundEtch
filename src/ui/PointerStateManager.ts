@@ -11,7 +11,7 @@ export class PointerStateManager extends TrackListItemController {
   public activeClipViewController: ClipViewController | null = null
   public activeWaveform: Waveform | null = null
   private mouseDownPoint: { x: number; y: number } | null = null
-  private clipViewMoveInfo: { clipViewController: ClipViewController } | null = null
+  private clipViewMoveInfo: { clipViewController: ClipViewController, startWave: Waveform } | null = null
   private timelineRegionController: TimelineRegionController | null = null
 
   private readonly timelineAreaElement = document.getElementById('timeline-area')!
@@ -68,9 +68,8 @@ export class PointerStateManager extends TrackListItemController {
           }
           break
         case State.MOVING_CLIPVIEW: {
-          this.activeWaveform?.drawClipViewOver(this.clipViewMoveInfo!.clipViewController)
           const shift = mouseEvent.clientX - this.mouseDownPoint!.x
-          this.clipViewMoveInfo!.clipViewController.drawMoveInProgressClipView(shift)
+          this.clipViewMoveInfo!.clipViewController.drawMoveInProgressClipView(shift, this.activeWaveform)
           break
         }
         case State.RESIZING_CLIPVIEW: {
@@ -153,23 +152,17 @@ export class PointerStateManager extends TrackListItemController {
             mouseEvent.clientY,
           )
           this.changeState(State.DEFAULT)
-          let xShift = mouseEvent.clientX - this.mouseDownPoint!.x
-          if (Math.abs(xShift + this.clipViewMoveInfo!.clipViewController.rectElement.x.baseVal.value) < 5) {
-            xShift = -this.clipViewMoveInfo!.clipViewController.rectElement.x.baseVal.value
-          }
-          const shift = Math.round(xShift * this.samplesPerUnit)
           if (droppedOnNewTrack) {
-            await this.trackListController.transferClipViewToNewTrack(this.clipViewMoveInfo!.clipViewController, shift)
+            await this.trackListController.transferClipViewToNewTrack(this.clipViewMoveInfo!.clipViewController)
           } else if (
             !this.activeWaveform ||
-            this.clipViewMoveInfo!.clipViewController.waveform == this.activeWaveform
+            this.clipViewMoveInfo!.startWave == this.activeWaveform
           ) {
-            await this.clipViewMoveInfo!.clipViewController.moveThisClipView(shift)
+            await this.clipViewMoveInfo!.clipViewController.moveThisClipView()
           } else {
             await this.trackListController.transferClipViewBetweenTracks(
               this.clipViewMoveInfo!.clipViewController,
-              this.activeWaveform,
-              shift,
+              this.clipViewMoveInfo!.startWave,
             )
           }
           break
@@ -235,7 +228,7 @@ export class PointerStateManager extends TrackListItemController {
     if (!this.changeState(State.MOVING_CLIPVIEW)) {
       return
     }
-    this.clipViewMoveInfo = { clipViewController: controller }
+    this.clipViewMoveInfo = { clipViewController: controller, startWave: controller.waveform }
     this.mouseDownPoint = { x: mouseDownX, y: 0 }
     this.trackListController.showNewTrackDropRegion(controller.clipView.clip.getChannelCount())
   }
