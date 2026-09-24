@@ -503,7 +503,8 @@ export class TrackListController {
     const oldClipView = clipViewController.clipView
     const clipView = cloneClipViewWithNewStartPosition(oldClipView, clipViewController.draggedShift)
     if (!newTrack.canAddClipView(clipView)) {
-      clipViewController.reset()
+      clipViewController.draggedShift = 0
+      clipViewController.switchParent(oldWaveform)
       return
     }
     await this.history.execute(new MoveClipViewBetweenTracksCommand(oldWaveform.track, newTrack, oldClipView, clipView))

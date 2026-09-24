@@ -152,17 +152,26 @@ export class PointerStateManager extends TrackListItemController {
             mouseEvent.clientY,
           )
           this.changeState(State.DEFAULT)
+          const moveInfo = this.clipViewMoveInfo!
           if (droppedOnNewTrack) {
-            await this.trackListController.transferClipViewToNewTrack(this.clipViewMoveInfo!.clipViewController)
-          } else if (
-            !this.activeWaveform ||
-            this.clipViewMoveInfo!.startWave == this.activeWaveform
-          ) {
-            await this.clipViewMoveInfo!.clipViewController.moveThisClipView()
+            if (moveInfo.clipViewController.waveform != moveInfo.startWave) {
+              moveInfo.clipViewController.switchParent(moveInfo.startWave)
+            }
+            await this.trackListController.transferClipViewToNewTrack(moveInfo.clipViewController)
+          } else if (!this.activeWaveform) {
+            if (moveInfo.clipViewController.waveform != moveInfo.startWave) {
+              moveInfo.clipViewController.switchParent(moveInfo.startWave)
+            }
+            await moveInfo.clipViewController.moveThisClipView()
+          } else if (moveInfo.startWave == this.activeWaveform) {
+            if (moveInfo.clipViewController.waveform != moveInfo.startWave) {
+              moveInfo.clipViewController.switchParent(moveInfo.startWave)
+            }
+            await moveInfo.clipViewController.moveThisClipView()
           } else {
             await this.trackListController.transferClipViewBetweenTracks(
-              this.clipViewMoveInfo!.clipViewController,
-              this.clipViewMoveInfo!.startWave,
+              moveInfo.clipViewController,
+              moveInfo.startWave,
             )
           }
           break
