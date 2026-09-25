@@ -364,13 +364,14 @@ export class ClipViewController extends TrackListItemController {
     this.headerTitleElement.style.fill = 'none'
     this.endCrossFadeHeaderElement.setAttribute('y', '0')
     this.endCrossFadeHeaderElement.setAttribute('height', `${Waveform.HEADER_HEIGHT}`)
-    this.endCrossFadeHeaderElement.style.fill = 'var(--waveform-header-bg)'
+    this.endCrossFadeHeaderElement.style.fill = 'var(--waveform-header-text)'
     this.endCrossFadeHeaderTitleDivElement.textContent = 'crossfade'
     this.endCrossFadeHeaderTitleDivElement.style.overflow = 'hidden'
     this.endCrossFadeHeaderTitleDivElement.style.textOverflow = 'clip'
     this.endCrossFadeHeaderTitleDivElement.style.whiteSpace = 'nowrap'
-    this.endCrossFadeHeaderTitleDivElement.style.marginLeft = '.1rem'
-    this.endCrossFadeHeaderTitleDivElement.style.color = 'var(--waveform-header-text)'
+    this.endCrossFadeHeaderTitleDivElement.style.textAlign = 'center'
+    this.endCrossFadeHeaderTitleDivElement.style.color = 'var(--waveform-header-bg)'
+    this.endCrossFadeHeaderTitleDivElement.style.outline = '1px'
     this.endCrossFadeHeaderTitleElement.appendChild(this.endCrossFadeHeaderTitleDivElement)
     this.endCrossFadeHeaderTitleElement.y.baseVal.value = 0
     this.endCrossFadeHeaderTitleElement.height.baseVal.value = Waveform.HEADER_HEIGHT
