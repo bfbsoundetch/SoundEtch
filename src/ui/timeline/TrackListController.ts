@@ -83,6 +83,7 @@ export class TrackListController {
   private readonly tracklistElement = document.getElementById('track-list')!
   private readonly tracklistInfoElement = document.getElementById('track-info-list')!
   private readonly newTrackDropRegion = document.createElement('div')
+  private readonly resizeCallback
   private readonly infoWaveformPairs = new Map<
     string,
     { info: HTMLElement; waveform: HTMLElement; controller: Waveform; infoController: TrackListInfo }
@@ -160,7 +161,7 @@ export class TrackListController {
     this.history.addChangeListener(() => this.draw())
     KeyPressController.addKeyDownListener((event) => this.handleKeyDown(event))
 
-    const resizeCallback = async () => {
+    this.resizeCallback = async () => {
       this.timelineController.resize()
       this.waveforms.forEach((w) => w.resize())
       this.automationMode?.controller.resize()
@@ -175,12 +176,13 @@ export class TrackListController {
       this.rootFontSize = parseFloat(getComputedStyle(document.documentElement).fontSize)
       this.draw()
     }
-    new ResizeObserver(resizeCallback).observe(document.getElementById('topdiv')!)
+    new ResizeObserver(this.resizeCallback).observe(document.getElementById('topdiv')!)
 
     AudioControl.addAudioControlListener((state) => {
       if (this.automationMode && state != AudioState.STOPPED && state != AudioState.MONITORING) {
         this.exitAutomationMode()
       }
+      this.showWelcomeOnEmptyProject()
       switch (state) {
         case AudioState.PLAYING:
         case AudioState.RECORDING:
@@ -194,6 +196,7 @@ export class TrackListController {
     })
 
     ProjectManager.addProjectListener((project) => {
+      this.showWelcomeOnEmptyProject()
       this.sampleRate = project.sampleRate
       if (this.renderedProjectId != project.id) {
         this.renderedProjectId = project.id
@@ -637,6 +640,18 @@ export class TrackListController {
         return
       }
       this.history.redo()
+    }
+  }
+
+  private async showWelcomeOnEmptyProject() {
+    const project = await ProjectManager.getActiveProject()
+    if (project.getTracks().length == 0 && project.getClips().length == 0 && AudioControl.getState() == AudioState.STOPPED) {
+        document.getElementById('timeline-body')!.style.display = 'none'
+        document.getElementById('welcome')!.style.display = ''
+    } else {
+        document.getElementById('timeline-body')!.style.display = ''
+        document.getElementById('welcome')!.style.display = 'none'
+        this.resizeCallback()
     }
   }
 

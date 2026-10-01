@@ -208,10 +208,22 @@ dialog.overlay[open] {
   width: 100%;
   height: 100%;
   display: grid;
-  grid-template-rows: 4rem auto 1fr;
+  grid-template-rows: 4rem auto;
   grid-template-columns: 100%;
   grid-template-areas:
     'header'
+    'body';
+  overscroll-behavior: none;
+}
+
+#timeline-body {
+  width: 100%;
+  height: 100%;
+  display: grid;
+  grid-area: body;
+  grid-template-rows: auto 1fr;
+  grid-template-columns: 100%;
+  grid-template-areas:
     'timeline'
     'lists';
   overscroll-behavior: none;
@@ -473,6 +485,39 @@ dialog.overlay[open] {
 
 #project-manager-modal-content {
   width: min(94vw, 58rem);
+}
+
+#welcome {
+  display: grid;
+  gap: 1rem;
+  grid-template-rows: 10rem 4rem 4rem 4rem 4rem;
+  width: 100%;
+  height: 100%;
+  grid-area: body;
+  justify-items: center;
+  overscroll-behavior: none;
+}
+
+.welcome-button {
+  height: 100%;
+  width: 70%;
+  margin: 1rem;
+  display: grid;
+  align-items: center;
+  grid-template-columns: 1fr 1fr;
+  gap: 1rem;
+  font-size: larger;
+  margin: 1rem;
+}
+
+.welcome-header {
+  text-align: right;
+}
+
+.welcome-icon {
+  flex: 1;
+  height: 3rem;
+  width: 3rem;
 }
 
 #publish-project-modal .overlay-content {

@@ -29,7 +29,7 @@ export class MediaStreamInput implements AudioInput {
   }
 
   async init(context: AudioContext) {
-    if (this.mediaStreamTrack && this.sourceNode?.context != context) {
+    if (this.mediaStreamTrack && this.sourceNode?.context != context && context.state != 'closed') {
       this.sourceNode = context.createMediaStreamSource(new MediaStream([this.mediaStreamTrack]))
       this.sourceNode.channelCount = this.channelCount
       if (this.supportsNoiseReduction) {

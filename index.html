@@ -100,6 +100,7 @@
       window.addClipController = new window.AddClipController()
       window.clipManagerController = new window.ClipManagerController()
       window.projectModalController = new window.ProjectModalController()
+      window.welcomePageController = new window.WelcomePageController
       if (window.location.search) {
         const meetingParam = new URL(window.location).searchParams.get('meeting')
         if (meetingParam) {
@@ -260,42 +261,88 @@
           </button>
         </div>
       </div>
-      <div id="timeline">
-        <svg id="timeline-svg" style="height: 100%; width: 100%; user-select: none" xmlns="http://www.w3.org/2000/svg">
-          <path id="timeline-major-ticks"></path>
-          <path id="timeline-minor-ticks"></path>
-        </svg>
+      <div id="welcome" style="display:none">
+        <div>
+          <h1 style="font-size: xxx-large; text-align: center;">Welcome!</h1>
+          <h2 style="text-align: center;">Try one of these to get started:</h2>
+        </div>
+        <button id="welcome-mic" class="welcome-button clickable">
+          <div class="welcome-header">
+            <svg class="welcome-icon" viewBox="0 0 500 500">
+              <use xlink:href="#microphone" />
+            </svg>
+            <svg class="welcome-icon" viewBox="0 0 500 500">
+              <use xlink:href="#record" />
+            </svg>
+          </div>
+          <div style="text-align: left;">Record from microphone</div>
+        </button>
+        <button id="welcome-screen" class="welcome-button clickable">
+          <div class="welcome-header">
+            <svg class="welcome-icon" viewBox="0 0 500 500">
+              <use xlink:href="#browser-tab" />
+            </svg>
+            <svg class="welcome-icon" viewBox="0 0 500 500">
+              <use xlink:href="#record" />
+            </svg>
+          </div>
+          <div>Record a browser tab or screen</div>
+        </button>
+        <button id="welcome-file" class="welcome-button clickable">
+          <div class="welcome-header">
+            <svg class="welcome-icon" viewBox="0 0 500 500">
+              <use xlink:href="#audio-file" />
+            </svg>
+          </div>
+          <div>Import a file</div>
+        </button>
+        <button id="welcome-meet" class="welcome-button clickable">
+          <div class="welcome-header">
+            <svg class="welcome-icon" viewBox="0 0 500 500">
+              <use xlink:href="#phone" />
+            </svg>
+          </div>
+          <div>Start a meeting</div>
+        </button>
       </div>
-      <div id="input-track-lists">
-        <div id="timeline-info-area">
-          <div id="input-info-list"></div>
-          <div id="track-info-list"></div>
+      <div id="timeline-body">
+        <div id="timeline">
+          <svg id="timeline-svg" style="height: 100%; width: 100%; user-select: none" xmlns="http://www.w3.org/2000/svg">
+            <path id="timeline-major-ticks"></path>
+            <path id="timeline-minor-ticks"></path>
+          </svg>
         </div>
-        <div id="timeline-area">
-          <div id="input-list"></div>
-          <div id="track-list"></div>
+        <div id="input-track-lists">
+          <div id="timeline-info-area">
+            <div id="input-info-list"></div>
+            <div id="track-info-list"></div>
+          </div>
+          <div id="timeline-area">
+            <div id="input-list"></div>
+            <div id="track-list"></div>
+          </div>
+          <svg
+            id="position-marker"
+            style="position: absolute; width: 100%; right: 0; top: 4rem; pointer-events: none; user-select: none"
+            xmlns="http://www.w3.org/2000/svg"
+          >
+            <line id="position-line" x1="150" y1="30" x2="150" y2="600" stroke-width="4"></line>
+            <text
+              id="pointer-position-text"
+              stroke="none"
+              x="0"
+              y="15"
+              dominant-baseline="middle"
+              text-anchor="middle"
+              style="
+                font-family: 'Courier New', Courier, monospace;
+                font-size: 18px;
+                font-weight: bold;
+                color: var(--color);
+              "
+            ></text>
+          </svg>
         </div>
-        <svg
-          id="position-marker"
-          style="position: absolute; width: 100%; right: 0; top: 4rem; pointer-events: none; user-select: none"
-          xmlns="http://www.w3.org/2000/svg"
-        >
-          <line id="position-line" x1="150" y1="30" x2="150" y2="600" stroke-width="4"></line>
-          <text
-            id="pointer-position-text"
-            stroke="none"
-            x="0"
-            y="15"
-            dominant-baseline="middle"
-            text-anchor="middle"
-            style="
-              font-family: 'Courier New', Courier, monospace;
-              font-size: 18px;
-              font-weight: bold;
-              color: var(--color);
-            "
-          ></text>
-        </svg>
       </div>
     </div>
     <dialog id="add-clip-modal" class="overlay">

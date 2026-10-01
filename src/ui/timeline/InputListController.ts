@@ -32,6 +32,10 @@ export class InputListController {
         return
       }
       const context = await AudioControl.getOrCreateAudioContext(AudioState.MONITORING)
+      if (context.state == 'closed') {
+        // pre-empted by a new context
+        return
+      }
       context.resume()
       const infoDivs = new Array<Node>()
       const inputDivs = new Array<Node>()
