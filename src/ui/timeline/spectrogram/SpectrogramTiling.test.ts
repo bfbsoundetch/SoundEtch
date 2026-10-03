@@ -3,7 +3,9 @@ import {
   BASE_HOP,
   FFT_SIZE,
   TILE_COLUMNS,
+  getSpectrogramBandWeight,
   createSpectrogramWindow,
+  getSpectrogramMelPoints,
   getSpectrogramLevel,
   getSpectrogramTileKeys,
   selectSpectrogramCoverage,
@@ -136,4 +138,33 @@ test('coverage clips selected segments to a trimmed source interval', () => {
       sourceEnd: 4 * tileSpan - 30,
     },
   ])
+})
+
+test('mel triangles keep the mel mapping and always integrate neighboring bins', () => {
+  for (const sampleRate of [8000, 44100, 48000]) {
+    for (const [frequencyBands, fftSize] of [
+      [128, 512],
+      [256, 512],
+      [256, 1024],
+      [512, 1024],
+      [128, 2048],
+      [128, 4096],
+    ]) {
+      const points = getSpectrogramMelPoints(frequencyBands, fftSize, sampleRate)
+      expect(points[0]).toBe(0)
+      expect(points[points.length - 1]).toBeCloseTo(fftSize / 2)
+      for (let index = 1; index < points.length; index++) {
+        expect(points[index]).toBeGreaterThan(points[index - 1])
+      }
+      for (let band = 0; band < frequencyBands; band++) {
+        const firstBin = Math.max(0, Math.floor(points[band] - 0.5))
+        const finalBin = Math.min(fftSize / 2 - 1, Math.ceil(points[band + 2] + 0.5))
+        let weightSum = 0
+        for (let bin = firstBin; bin <= finalBin; bin++) {
+          weightSum += getSpectrogramBandWeight(points, band, bin)
+        }
+        expect(weightSum).toBeGreaterThan(0)
+      }
+    }
+  }
 })

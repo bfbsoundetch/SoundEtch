@@ -42,6 +42,49 @@ export function createSpectrogramWindow(
   return window
 }
 
+export function getSpectrogramMelPoints(
+  frequencyBands: number,
+  fftSize: number,
+  sampleRate: number,
+): Float32Array<ArrayBuffer> {
+  const nyquist = sampleRate / 2
+  const maximumMel = 2595 * Math.log2(1 + nyquist / 700)
+  const pointCount = frequencyBands + 2
+  const points = new Float32Array(pointCount)
+  for (let index = 0; index < pointCount; index++) {
+    const mel = (index / (pointCount - 1)) * maximumMel
+    const frequency = 700 * (2 ** (mel / 2595) - 1)
+    points[index] = (frequency / sampleRate) * fftSize
+  }
+  return points
+}
+
+// Weight a mel triangle over FFT bins by mean triangle height across each width-one bin
+// cell (eight sub-samples per cell). Point-sampling the triangle at integer bins leaves a
+// sub-bin triangle with zero total weight at small FFT sizes, and that band renders as a
+// flat minimum-dB line. Cell-area weighting instead lets a sub-bin triangle blend its two
+// neighboring bins, keeping the mel frequency mapping itself unwarped.
+export function getSpectrogramBandWeight(
+  points: Float32Array,
+  band: number,
+  bin: number,
+): number {
+  const start = points[band]
+  const center = points[band + 1]
+  const end = points[band + 2]
+  const triangleHeight = (position: number): number => {
+    if (position <= start || position >= end) return 0
+    return position <= center
+      ? Math.min(1, Math.max(0, (position - start) / Math.max(center - start, 1e-6)))
+      : Math.min(1, Math.max(0, (end - position) / Math.max(end - center, 1e-6)))
+  }
+  let weight = 0
+  for (let sample = 0; sample < 8; sample++) {
+    weight += triangleHeight(bin - 0.5 + (sample + 0.5) / 8)
+  }
+  return weight / 8
+}
+
 export interface SpectrogramTileKey {
   clipId: number
   level: number

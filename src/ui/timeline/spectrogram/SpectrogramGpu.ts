@@ -1,6 +1,7 @@
 import type { SpectrogramSourceMessage } from './SpectrogramSourceProtocol'
 import {
   createSpectrogramWindow,
+  getSpectrogramMelPoints,
   HALO_COLUMNS,
   MAX_DB,
   SOURCE_BUFFER_BYTES,
@@ -121,28 +122,37 @@ override POWER_SCALE: f32;
 override MINIMUM_DB: f32;
 override MAXIMUM_DB: f32;
 
+fn triangleHeight(position: f32, start: f32, center: f32, end: f32) -> f32 {
+  if (position <= start || position >= end) { return 0.0; }
+  if (position <= center) {
+    return clamp((position - start) / max(center - start, 1e-6), 0.0, 1.0);
+  }
+  return clamp((end - position) / max(end - center, 1e-6), 0.0, 1.0);
+}
+
 fn intensity(column: u32, band: u32) -> u32 {
   if (column >= COLUMN_COUNT) { return 0u; }
   let start = melPoints[band];
   let center = melPoints[band + 1u];
   let end = melPoints[band + 2u];
-  let firstBin = u32(max(0.0, floor(start)));
-  let finalBin = min(FFT_LENGTH / 2u - 1u, u32(ceil(end)));
+  let firstBin = u32(max(0.0, floor(start - 0.5)));
+  let finalBin = min(FFT_LENGTH / 2u - 1u, u32(ceil(end + 0.5)));
   var weightedPower = 0.0;
   var weightSum = 0.0;
   for (var bin = firstBin; bin <= finalBin; bin++) {
-    let binPosition = f32(bin);
-    var weight = 0.0;
-    if (binPosition <= center) {
-      weight = clamp((binPosition - start) / max(center - start, 1e-6), 0.0, 1.0);
-    } else {
-      weight = clamp((end - binPosition) / max(end - center, 1e-6), 0.0, 1.0);
+    // Mean triangle height over the width-one bin cell, so a triangle narrower than one bin
+    // still blends its neighboring bins instead of accumulating zero weight.
+    var cellWeight = 0.0;
+    for (var sample = 0u; sample < 8u; sample++) {
+      let position = f32(bin) - 0.5 + (f32(sample) + 0.5) * 0.125;
+      cellWeight += triangleHeight(position, start, center, end);
     }
+    cellWeight = cellWeight * 0.125;
     let fftIndex = column * FFT_LENGTH + bin;
     let real = fftReal[fftIndex];
     let imaginary = fftImaginary[fftIndex];
-    weightedPower += (real * real + imaginary * imaginary) * POWER_SCALE * weight;
-    weightSum += weight;
+    weightedPower += (real * real + imaginary * imaginary) * POWER_SCALE * cellWeight;
+    weightSum += cellWeight;
   }
   let power = weightedPower / max(weightSum, 1e-12);
   let db = clamp(10.0 * log2(power + 1e-24) / log2(10.0), MINIMUM_DB, MAXIMUM_DB);
@@ -851,14 +861,11 @@ export class SpectrogramGpu {
   }
 
   private updateMelPoints(resources: GpuResources, sampleRate: number): void {
-    const nyquist = sampleRate / 2
-    const maximumMel = 2595 * Math.log2(1 + nyquist / 700)
-    const points = new Float32Array(resources.settings.frequencyBands + 2)
-    for (let index = 0; index < points.length; index++) {
-      const mel = (index / (points.length - 1)) * maximumMel
-      const frequency = 700 * (2 ** (mel / 2595) - 1)
-      points[index] = (frequency / sampleRate) * resources.settings.fftSize
-    }
+    const points = getSpectrogramMelPoints(
+      resources.settings.frequencyBands,
+      resources.settings.fftSize,
+      sampleRate,
+    )
     resources.device.queue.writeBuffer(resources.melBuffer, 0, points)
     resources.sampleRate = sampleRate
   }

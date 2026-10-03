@@ -15,7 +15,6 @@ export interface SpectrogramSettings {
   readonly windowFunction: SpectrogramWindowFunction
   readonly minDb: number
 }
-
 export const SPECTROGRAM_FFT_SIZES = [512, 1024, 2048, 4096] as const
 export const SPECTROGRAM_HOP_SIZES = [128, 256, 512, 1024] as const
 export const SPECTROGRAM_FREQUENCY_BANDS = [128, 256, 512] as const
