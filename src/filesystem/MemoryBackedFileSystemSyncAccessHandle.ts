@@ -102,7 +102,7 @@ export class MemoryBackedFileSystemSyncAccessHandle implements FileSystemSyncAcc
     return written
   }
 
-  createSyncAccessHandle(): FileSystemSyncAccessHandle {
+  async createSyncAccessHandle(): Promise<FileSystemSyncAccessHandle> {
     return this
   }
 }

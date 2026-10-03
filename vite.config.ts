@@ -11,12 +11,21 @@ export default defineConfig({
   },
   resolve: {
     alias: {
-      assert: '/src/global/EmptyNodeAssert.ts',
+      assert: fileURLToPath(new URL('./src/global/EmptyNodeAssert.ts', import.meta.url)),
     },
   },
   esbuild: {
+    target: 'es2022',
     supported: {
       'top-level-await': true,
+    },
+  },
+  server: {
+    headers: {
+      'Cross-Origin-Opener-Policy': 'same-origin',
+      'Cross-Origin-Embedder-Policy': 'require-corp',
+      'Access-Control-Allow-Origin': '*',
+      'Cache-Control': 'no-store',
     },
   },
   build: {

@@ -7,6 +7,12 @@ import { SummaryGenerator } from '../../project/SummaryGenerator'
 import { ReplaceClipViewCommand, SetTrackClipViewsCommand, clipViewsEqual } from '../undo/UndoableActions'
 import { TimelineRegionController } from './TimelineRegionController'
 import { createSvgIcon } from '../SvgIcon'
+import type { TrackDisplayMode } from './TrackDisplayMode'
+import {
+  SpectrogramService,
+  type SpectrogramClipPlacement,
+  type SpectrogramTrackRenderer,
+} from './spectrogram/SpectrogramService'
 
 /** Handles displaying a track's waveform. */
 export class Waveform extends TrackListItemController {
@@ -26,6 +32,12 @@ export class Waveform extends TrackListItemController {
   private height = 0
 
   private readonly dragInProgressClipViews = new Array<ClipViewController>()
+  private readonly transientClipViewControllers = new Set<ClipViewController>()
+  private readonly spectrogramCanvas = document.createElement('canvas')
+  private readonly resizeObserver: ResizeObserver
+  private trackRenderer: SpectrogramTrackRenderer | null = null
+  private spectrogramDrawFrame = 0
+  private currentDisplayMode: TrackDisplayMode = 'waveform'
 
   getHeight() {
     return this.height
@@ -40,10 +52,15 @@ export class Waveform extends TrackListItemController {
     readonly track: Track,
     readonly div: HTMLDivElement,
     readonly index: number,
+    private readonly spectrogramService: SpectrogramService,
+    initialDisplayMode: TrackDisplayMode,
   ) {
     super(trackListController)
     this.color = `var(--waveform-${index})`
     div.classList = 'waveform tracklist-item'
+    this.spectrogramCanvas.className = 'spectrogram-canvas'
+    this.spectrogramCanvas.setAttribute('aria-hidden', 'true')
+    this.div.appendChild(this.spectrogramCanvas)
     div.addEventListener('dblclick', (event) => {
       trackListController.selectTrack(this)
     })
@@ -62,13 +79,86 @@ export class Waveform extends TrackListItemController {
     this.axesPathElement.style.stroke = 'currentColor'
     this.axesPathElement.style.fill = 'none'
     this.topSvgElement.appendChild(this.axesPathElement)
+    this.axesPathElement.classList.add('waveform-axes-path')
 
     this.channelSeparatorPathElement.style.strokeWidth = '1'
     this.channelSeparatorPathElement.style.stroke = 'currentColor'
     this.channelSeparatorPathElement.style.fill = 'none'
     this.topSvgElement.appendChild(this.channelSeparatorPathElement)
     this.topSvgElement.appendChild(this.aboveClipViewGroupElement)
-    new ResizeObserver(() => this.resize()).observe(this.div)
+    this.resizeObserver = new ResizeObserver(() => this.resize())
+    this.resizeObserver.observe(this.div)
+    if (initialDisplayMode === 'spectrogram') this.setDisplayMode(initialDisplayMode)
+  }
+
+  get displayMode(): TrackDisplayMode {
+    return this.currentDisplayMode
+  }
+
+  setDisplayMode(mode: TrackDisplayMode): void {
+    if (mode === this.currentDisplayMode) return
+    this.currentDisplayMode = mode
+    const spectrogramMode = mode === 'spectrogram'
+    this.div.classList.toggle('spectrogram-mode', spectrogramMode)
+    this.div.classList.toggle('spectrogram-fallback-visible', spectrogramMode)
+    this.axesPathElement.style.visibility = spectrogramMode ? 'hidden' : ''
+    for (const controller of this.getClipViewControllers()) controller.setDisplayMode(mode)
+
+    if (spectrogramMode) {
+      this.requestSpectrogramDraw()
+    } else {
+      if (this.spectrogramDrawFrame !== 0) cancelAnimationFrame(this.spectrogramDrawFrame)
+      this.spectrogramDrawFrame = 0
+      this.trackRenderer?.clear()
+      this.draw()
+    }
+  }
+
+  requestSpectrogramDraw(): void {
+    if (this.currentDisplayMode !== 'spectrogram' || this.spectrogramDrawFrame !== 0) return
+    this.spectrogramDrawFrame = requestAnimationFrame(() => {
+      this.spectrogramDrawFrame = 0
+      if (this.currentDisplayMode !== 'spectrogram') return
+      this.trackRenderer ??= this.spectrogramService.createTrackRenderer(this.spectrogramCanvas, (available) => {
+        this.div.classList.toggle(
+          'spectrogram-fallback-visible',
+          this.currentDisplayMode === 'spectrogram' && !available,
+        )
+      })
+      const placements = new Array<SpectrogramClipPlacement>()
+      for (const clipView of this.track.clipViews) {
+        const controller = this.clipViewControllerMap.get(clipView)
+        if (controller !== undefined) placements.push(controller.getSpectrogramPlacement())
+      }
+      for (const controller of this.transientClipViewControllers) {
+        placements.push(controller.getSpectrogramPlacement())
+      }
+      this.trackRenderer.draw({
+        cssWidth: this.width,
+        cssHeight: this.fullHeight,
+        dpr: window.devicePixelRatio || 1,
+        timelineStart: this.getSampleForXValue(0),
+        samplesPerCssPixel: this.samplesPerUnit,
+        headerHeight: Waveform.HEADER_HEIGHT,
+        channelCount: this.track.getChannelCount(),
+        clips: placements,
+      })
+    })
+  }
+
+  remove(): void {
+    if (this.spectrogramDrawFrame !== 0) cancelAnimationFrame(this.spectrogramDrawFrame)
+    this.spectrogramDrawFrame = 0
+    this.resizeObserver.disconnect()
+    this.trackRenderer?.destroy()
+    this.trackRenderer = null
+    for (const controller of this.getClipViewControllers()) controller.remove()
+    this.clipViewControllerMap.clear()
+    this.transientClipViewControllers.clear()
+  }
+
+  private getClipViewControllers(): Set<ClipViewController> {
+    return new Set([...this.clipViewControllerMap.values(), ...this.transientClipViewControllers])
   }
 
   private getTopSvgElement(): SVGSVGElement {
@@ -130,12 +220,15 @@ export class Waveform extends TrackListItemController {
     if (this.clipViewControllerMap.get(controller.clipView) == controller) {
       this.clipViewControllerMap.delete(controller.clipView)
     }
+    this.transientClipViewControllers.delete(controller)
   }
 
   adoptClipViewController(controller: ClipViewController) {
     if (!this.track.clipViews.includes(controller.clipView)) {
+      this.transientClipViewControllers.add(controller)
       return
     }
+    this.transientClipViewControllers.delete(controller)
     const existingController = this.clipViewControllerMap.get(controller.clipView)
     if (existingController && existingController != controller) {
       existingController.remove()
@@ -203,6 +296,7 @@ export class Waveform extends TrackListItemController {
         this.removeClipViewController(clipViewController)
       }
     }
+    this.requestSpectrogramDraw()
   }
 
   drawClipViewOver(clipViewController: ClipViewController) {
@@ -290,6 +384,7 @@ export class ClipViewController extends TrackListItemController {
   private readonly handleElementsGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g')
 
   readonly rectElement = document.createElementNS('http://www.w3.org/2000/svg', 'rect')
+  private readonly spectrogramFallbackElement = document.createElementNS('http://www.w3.org/2000/svg', 'rect')
   readonly headerElement = document.createElementNS('http://www.w3.org/2000/svg', 'rect')
   readonly headerTitleElement = document.createElementNS('http://www.w3.org/2000/svg', 'foreignObject')
   readonly headerInfoElement = document.createElementNS('http://www.w3.org/2000/svg', 'foreignObject')
@@ -312,6 +407,7 @@ export class ClipViewController extends TrackListItemController {
 
   private readonly waveformContextMenu: ContextMenuController
   private pathElementTranslation = 0
+  private fullClipPreview = false
   private resizeInfo: {
     side: 'left' | 'right'
     oldStartX: number
@@ -325,7 +421,7 @@ export class ClipViewController extends TrackListItemController {
     readonly clipView: ClipView,
     public waveform: Waveform,
     public clipViewIndex: number,
-    color: string,
+    private readonly color: string,
   ) {
     super(trackListController)
 
@@ -339,6 +435,7 @@ export class ClipViewController extends TrackListItemController {
 
     this.waveform.clipViewGroupElement.appendChild(this.clipElementsGroup)
     this.waveform.aboveClipViewGroupElement.appendChild(this.handleElementsGroup)
+    this.clipElementsGroup.appendChild(this.spectrogramFallbackElement)
     this.clipElementsGroup.appendChild(this.rectElement)
     this.clipElementsGroup.appendChild(this.headerElement)
     this.clipElementsGroup.appendChild(this.headerTitleElement)
@@ -347,13 +444,17 @@ export class ClipViewController extends TrackListItemController {
     this.rectElement.setAttribute('y', `${Waveform.HEADER_HEIGHT}`)
     this.rectElement.setAttribute('height', `${this.waveformHeight}`)
     this.rectElement.classList = 'waveform-rect'
-    this.rectElement.style.fill = color
+    this.rectElement.style.fill = this.color
     this.rectElement.addEventListener('dblclick', (event) => {
       trackListController.selectClipView(clipView, this.waveform)
       event.stopPropagation()
     })
 
     this.rectElement.setAttribute('x', '0')
+    this.spectrogramFallbackElement.setAttribute('y', `${Waveform.HEADER_HEIGHT}`)
+    this.spectrogramFallbackElement.setAttribute('height', `${this.waveformHeight}`)
+    this.spectrogramFallbackElement.classList.add('spectrogram-fallback')
+    this.spectrogramFallbackElement.style.pointerEvents = 'none'
 
     this.headerElement.setAttribute('y', '0')
     this.headerElement.height.baseVal.value = Waveform.HEADER_HEIGHT
@@ -455,6 +556,7 @@ export class ClipViewController extends TrackListItemController {
     this.rectElement.addEventListener('mouseleave', (mouseEvent) => {
       this.trackListController.pointerStateManager.removePointedOverClipView(this)
     })
+    this.setDisplayMode(this.waveform.displayMode)
   }
 
   async moveThisClipView() {
@@ -481,13 +583,47 @@ export class ClipViewController extends TrackListItemController {
     return this.clipView.getEndPosition() + this.draggedShift
   }
 
+  setDisplayMode(mode: TrackDisplayMode): void {
+    const spectrogramMode = mode === 'spectrogram'
+    this.rectElement.classList.toggle('spectrogram-hit-rect', spectrogramMode)
+    this.rectElement.style.fill = spectrogramMode ? 'transparent' : this.color
+    this.svgPathElement.style.visibility = spectrogramMode ? 'hidden' : ''
+    this.startCrossFadePathElement.style.visibility = spectrogramMode ? 'hidden' : ''
+    this.endCrossFadePathElement.style.visibility = spectrogramMode ? 'hidden' : ''
+  }
+
+  getSpectrogramPlacement(): SpectrogramClipPlacement {
+    if (this.fullClipPreview) {
+      return {
+        clip: this.clipView.clip,
+        timelineStart: this.clipView.startPosition - this.clipView.offset,
+        sourceStart: 0,
+        length: this.clipView.clip.length,
+        startFadeLength: 0,
+        endFadeLength: 0,
+      }
+    }
+    return {
+      clip: this.clipView.clip,
+      timelineStart: this.startPosition,
+      sourceStart: this.clipView.offset,
+      length: this.clipView.length,
+      startFadeLength: this.startCrossFadeDuration,
+      endFadeLength: this.endCrossFadeDuration,
+    }
+  }
+
+
   switchParent(waveform: Waveform) {
     const oldWaveform = this.waveform
     oldWaveform.releaseClipViewController(this)
     oldWaveform.resetAfterDrawnOver(this.clipView)
     this.waveform = waveform
     waveform.adoptClipViewController(this)
+    this.setDisplayMode(waveform.displayMode)
     this.reset()
+    oldWaveform.requestSpectrogramDraw()
+    waveform.requestSpectrogramDraw()
   }
 
   private startClipViewMove(self: ClipViewController, startMouseEvent: MouseEvent) {
@@ -524,6 +660,15 @@ export class ClipViewController extends TrackListItemController {
     this.leftHandle.y2.baseVal.value = this.waveform.fullHeight
     this.rightHandle.y2.baseVal.value = this.waveform.fullHeight
     this.fullClipGrayFilter.height.baseVal.value = this.waveformHeight
+    this.spectrogramFallbackElement.height.baseVal.value = this.waveformHeight
+    const spectrogramPlacement = this.getSpectrogramPlacement()
+    const fallbackStartX = Math.max(this.getXValueForSample(spectrogramPlacement.timelineStart), -10000)
+    const fallbackEndX = Math.min(
+      this.getXValueForSample(spectrogramPlacement.timelineStart + spectrogramPlacement.length),
+      10000,
+    )
+    this.spectrogramFallbackElement.x.baseVal.value = fallbackStartX
+    this.spectrogramFallbackElement.width.baseVal.value = Math.max(0, fallbackEndX - fallbackStartX)
     // for some reason this breaks down when zooming in too much, so limit to +/-10000
     const xStart = Math.max(this.getXValueForSample(this.startPosition + this.startCrossFadeDuration), -10000)
     const startCrossFadeLength = this.startCrossFadeDuration / this.samplesPerUnit
@@ -555,7 +700,11 @@ export class ClipViewController extends TrackListItemController {
 
   async draw(startSample: number, endSample: number) {
     this.drawBoundingBox(startSample, endSample)
-    await this.drawWaveform(startSample, endSample)
+    if (this.waveform.displayMode === 'waveform') {
+      await this.drawWaveform(startSample, endSample)
+    } else {
+      this.waveform.requestSpectrogramDraw()
+    }
   }
 
   async drawWaveform(startSample: number, endSample: number, fullClip = false) {
@@ -651,6 +800,7 @@ export class ClipViewController extends TrackListItemController {
   }
 
   reset() {
+    this.fullClipPreview = false
     this.waveform.clipViewGroupElement.appendChild(this.clipElementsGroup)
     this.waveform.aboveClipViewGroupElement.appendChild(this.handleElementsGroup)
 
@@ -755,8 +905,10 @@ export class ClipViewController extends TrackListItemController {
         break
       }
     }
-    this.fullClipGrayFilter!.width.baseVal.value = 0
+    this.fullClipGrayFilter.width.baseVal.value = 0
+    this.fullClipPreview = false
     this.resizeInfo = null
+    this.waveform.requestSpectrogramDraw()
     const clipViewIndex = this.waveform.track.clipViews.indexOf(this.clipView)
     if (
       clipViewsEqual(this.clipView, newClipView) ||
@@ -771,6 +923,7 @@ export class ClipViewController extends TrackListItemController {
   }
 
   private readonly leftHandleMouseDownListener = (_: MouseEvent) => {
+    this.fullClipPreview = true
     const clipView = this.clipView
     const maxLeftShift = this.clipView.offset / this.samplesPerUnit
     const fullClipStartX = this.getXValueForSample(this.clipView.startPosition - this.clipView.offset)
@@ -789,13 +942,19 @@ export class ClipViewController extends TrackListItemController {
 
     this.fullClipGrayFilter.style.fill = '#00000040'
     this.fullClipGrayFilter.style.stroke = 'none'
-    this.drawWaveform(this.translation * this.samplesPerUnit, this.getSampleForXValue(this.waveform.width), true)
+    if (this.waveform.displayMode === 'waveform') {
+      void this.drawWaveform(this.translation * this.samplesPerUnit, this.getSampleForXValue(this.waveform.width), true)
+    } else {
+      this.drawBoundingBox(this.translation * this.samplesPerUnit, this.getSampleForXValue(this.waveform.width))
+      this.waveform.requestSpectrogramDraw()
+    }
 
     this.leftHandle.style.opacity = '1'
     this.trackListController.pointerStateManager.startResizingClipView(this)
   }
 
   private readonly rightHandleMouseDownListener = (_: MouseEvent) => {
+    this.fullClipPreview = true
     const clipView = this.clipView
     const maxRightShift = (clipView.clip.length - clipView.length - clipView.offset) / this.samplesPerUnit
     const filterStartX = this.getXValueForSample(clipView.getEndPosition())
@@ -808,7 +967,12 @@ export class ClipViewController extends TrackListItemController {
       fullClipEndX: fullClipStartX + this.clipView.clip.length / this.samplesPerUnit,
     }
 
-    this.drawWaveform(this.translation * this.samplesPerUnit, this.getSampleForXValue(this.waveform.width), true)
+    if (this.waveform.displayMode === 'waveform') {
+      void this.drawWaveform(this.translation * this.samplesPerUnit, this.getSampleForXValue(this.waveform.width), true)
+    } else {
+      this.drawBoundingBox(this.translation * this.samplesPerUnit, this.getSampleForXValue(this.waveform.width))
+      this.waveform.requestSpectrogramDraw()
+    }
 
     this.fullClipGrayFilter.x.baseVal.value = filterStartX
     this.fullClipGrayFilter.width.baseVal.value = maxRightShift

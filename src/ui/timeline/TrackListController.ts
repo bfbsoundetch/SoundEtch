@@ -24,6 +24,8 @@ import { TimelineRegionController } from './TimelineRegionController'
 import { NotificationsController } from '../NotificationsController'
 import { ParameterMetadata } from '../../effects/ParameterMetadata'
 import { AutomationController } from './AutomationController'
+import { SpectrogramService } from './spectrogram/SpectrogramService'
+import type { TrackDisplayMode } from './TrackDisplayMode'
 
 interface Selection {
   startSample: number
@@ -90,6 +92,8 @@ export class TrackListController {
   >()
   private renderedProjectId: number | undefined = undefined
   private automationMode: AutomationMode | null = null
+  private readonly trackDisplayModes = new Map<Track, TrackDisplayMode>()
+  private spectrogramService: SpectrogramService | null = null
 
   readonly timelineSelectionContextMenu = new ContextMenuController(
     'timeline-selection-contextmenu',
@@ -201,10 +205,13 @@ export class TrackListController {
       if (this.renderedProjectId != project.id) {
         this.renderedProjectId = project.id
         this.translationUnits = 0
+        this.waveforms.forEach((waveform) => waveform.remove())
         this.waveforms.splice(0)
         this.infoWaveformPairs.forEach((pair) => pair.infoController.remove())
         this.infoWaveformPairs.clear()
+        this.trackDisplayModes.clear()
         this.clearSelection()
+        this.getSpectrogramService().setProject(project.directoryName, project.sampleRate)
       }
 
       const infoDivs = new Array<Node>()
@@ -219,9 +226,16 @@ export class TrackListController {
       }
       for (const trackId of this.infoWaveformPairs.keys()) {
         if (!trackIds.has(trackId)) {
-          this.infoWaveformPairs.get(trackId)?.infoController.remove()
+          const pair = this.infoWaveformPairs.get(trackId)
+          pair?.controller.remove()
+          pair?.infoController.remove()
+          if (pair !== undefined) this.trackDisplayModes.delete(pair.controller.track)
           this.infoWaveformPairs.delete(trackId)
         }
+      }
+      const currentTracks = new Set(project.getTracks())
+      for (const track of this.trackDisplayModes.keys()) {
+        if (!currentTracks.has(track)) this.trackDisplayModes.delete(track)
       }
 
       for (let i = 0; i < project.getTracks().length; ++i) {
@@ -233,12 +247,12 @@ export class TrackListController {
           nextWaveforms.push(existing.controller)
           continue
         }
+        existing?.controller.remove()
         existing?.infoController.remove()
 
         const trackInfoDiv = document.createElement('div')
         trackInfoDiv.dataset.trackId = `${track.id}`
         trackInfoDiv.style.height = `${7 * track.getChannelCount() + 1.5}rem`
-        const trackListInfo = new TrackListInfo(project, track, trackInfoDiv, this.history)
 
         const waveformDiv = document.createElement('div')
         waveformDiv.addEventListener('contextmenu', (mouseEvent) => {
@@ -250,7 +264,26 @@ export class TrackListController {
         this.tracklistInfoElement.appendChild(trackInfoDiv)
         this.tracklistElement.appendChild(waveformDiv)
 
-        const waveform = new Waveform(this, track, waveformDiv, i)
+        const displayMode = this.trackDisplayModes.get(track) ?? 'waveform'
+        const waveform = new Waveform(
+          this,
+          track,
+          waveformDiv,
+          i,
+          this.getSpectrogramService(),
+          displayMode,
+        )
+        const trackListInfo = new TrackListInfo(
+          project,
+          track,
+          trackInfoDiv,
+          this.history,
+          displayMode,
+          (mode) => {
+            this.trackDisplayModes.set(track, mode)
+            waveform.setDisplayMode(mode)
+          },
+        )
         this.addTrackResizeHandles(trackInfoDiv, waveformDiv)
         nextWaveforms.push(waveform)
         this.infoWaveformPairs.set(`${track.id}`, {
@@ -270,6 +303,11 @@ export class TrackListController {
       this.selectionController.remove()
       this.pointerStateManager
     })
+  }
+
+  private getSpectrogramService(): SpectrogramService {
+    this.spectrogramService ??= new SpectrogramService()
+    return this.spectrogramService
   }
 
   private addTrackResizeHandles(trackInfoDiv: HTMLDivElement, waveformDiv: HTMLDivElement) {

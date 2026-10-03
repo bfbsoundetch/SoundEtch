@@ -9,7 +9,7 @@ GlobalSettings.useMemoryFS = true
 
 test('write test', async () => {
   const file = await FileSystemUtils.getFileHandle('test', 'test')
-  const syncFileAccessHandle: FileSystemSyncAccessHandle = (file as any).createSyncAccessHandle()
+  const syncFileAccessHandle: FileSystemSyncAccessHandle = await file.createSyncAccessHandle()
   const ringBufferArray = RingBuffer.getStorageForCapacity(1024, Float32Array)
   const ringBuffer = new RingBuffer(ringBufferArray, Float32Array)
   const inputBuffer = getInputArrayBuffer(1.1, 2.2, 3.3, 4.4, 5.5)

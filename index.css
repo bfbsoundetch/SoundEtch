@@ -1103,9 +1103,8 @@ video {
     'delete effects peak'
     'mix mix peak'
     'gain gain peak'
-    'pan pan peak'
-    '. . peak';
-  grid-template-rows: auto auto auto auto auto 1fr;
+    'pan pan peak';
+  grid-template-rows: auto auto auto auto 1fr;
   grid-template-columns: 2rem minmax(0, 1fr) 1.5rem;
   align-content: start;
   row-gap: 0.25rem;
@@ -1150,6 +1149,76 @@ video {
   min-width: 0;
 }
 
+.track-heading {
+  grid-area: title;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 1.5rem;
+  align-items: start;
+  gap: 0.25rem;
+}
+
+.track-display-mode-menu-button {
+  display: grid;
+  place-items: center;
+  width: 1.5rem;
+  height: 1.5rem;
+  padding: 0.2rem;
+  border: 1px solid transparent;
+  border-radius: 0.2rem;
+  box-sizing: border-box;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.track-display-mode-menu-button[aria-expanded='true'] {
+  border-color: currentColor;
+}
+
+.track-display-mode-menu-button .svg-icon {
+  width: 100%;
+  height: 100%;
+}
+
+.track-display-mode-menu {
+  position: fixed;
+  inset: auto;
+  min-width: 9rem;
+  margin: 0;
+  padding: 0.25rem;
+  border: 1px solid currentColor;
+  background: var(--menu-bg);
+  color: var(--color);
+  box-shadow: 0 0.5rem 1.5rem rgba(0, 0, 0, 0.18);
+  font: inherit;
+}
+
+.track-display-mode-menu:popover-open {
+  display: grid;
+  gap: 0.125rem;
+}
+
+.track-display-mode-option {
+  width: 100%;
+  padding: 0.45rem 0.6rem;
+  border: none;
+  background: transparent;
+  color: inherit;
+  font: inherit;
+  text-align: left;
+  cursor: pointer;
+}
+
+.track-display-mode-option:hover,
+.track-display-mode-option:focus-visible {
+  background: var(--clickable-hover);
+}
+
+.track-display-mode-option[aria-checked='true'] {
+  background: var(--clickable-active);
+  font-weight: bold;
+}
+
 .track-peak-meter {
   height: 100%;
   width: 100%;
@@ -1167,6 +1236,40 @@ video {
   position: relative;
   overflow-x: hidden;
   user-select: none;
+}
+
+.waveform > svg {
+  position: relative;
+  z-index: 1;
+}
+
+.spectrogram-canvas {
+  position: absolute;
+  z-index: 0;
+  inset: 0;
+  display: none;
+  width: 100%;
+  height: 100%;
+  pointer-events: none;
+}
+
+.spectrogram-mode .spectrogram-canvas {
+  display: block;
+}
+
+.spectrogram-fallback {
+  display: none;
+  fill: #440154;
+  stroke: none;
+  pointer-events: none;
+}
+
+.spectrogram-mode.spectrogram-fallback-visible .spectrogram-fallback {
+  display: block;
+}
+
+.spectrogram-hit-rect {
+  fill: transparent !important;
 }
 
 .track-resize-handle {

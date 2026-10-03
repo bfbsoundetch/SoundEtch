@@ -5,6 +5,10 @@ import { EditorHistory } from '../undo/EditorHistory'
 import { SetTrackPropertyCommand, TrackProperty } from '../undo/UndoableActions'
 import { PeakMeterController } from '../PeakMeterController'
 import { Project } from '../../project/Project'
+import type { TrackDisplayMode } from './TrackDisplayMode'
+import { createSvgIcon } from '../SvgIcon'
+
+let nextDisplayModeMenuId = 0
 
 export class TrackListTrack {
   private readonly peakMeter: PeakMeterController
@@ -14,8 +18,13 @@ export class TrackListTrack {
     track: Track,
     private readonly trackInfoDiv: HTMLDivElement,
     private readonly history: EditorHistory,
+    initialDisplayMode: TrackDisplayMode,
+    onDisplayModeChange: (mode: TrackDisplayMode) => void,
   ) {
     this.trackInfoDiv.classList = 'track-info tracklist-item'
+
+    const trackHeading = document.createElement('div')
+    trackHeading.className = 'track-heading'
 
     const trackTitle = document.createElement('div')
     trackTitle.style.padding = '.25rem'
@@ -25,7 +34,6 @@ export class TrackListTrack {
     trackTitle.style.maxHeight = '3em'
     trackTitle.style.overflow = 'hidden'
     trackTitle.style.wordBreak = 'break-all'
-    trackTitle.style.gridArea = 'title'
     trackTitle.innerText = track.name
 
     let titleEditStart = track.name
@@ -35,7 +43,8 @@ export class TrackListTrack {
     })
     trackTitle.addEventListener('blur', () => this.saveChanges(trackTitle, track, titleEditStart))
 
-    this.trackInfoDiv.appendChild(trackTitle)
+    trackHeading.appendChild(trackTitle)
+    this.trackInfoDiv.appendChild(trackHeading)
 
     const deleteTrackButton = document.createElement('div')
     deleteTrackButton.className = 'clickable'
@@ -200,6 +209,9 @@ export class TrackListTrack {
     panSliderParent.appendChild(panSlider)
     panSliderParent.appendChild(panOutput)
 
+    const displayModeMenu = this.createDisplayModeMenu(track, initialDisplayMode, onDisplayModeChange)
+    trackHeading.append(displayModeMenu.button, displayModeMenu.popover)
+
     const peakMeterDiv = document.createElement('div')
     peakMeterDiv.className = 'track-peak-meter'
     peakMeterDiv.style.gridArea = 'peak'
@@ -217,6 +229,7 @@ export class TrackListTrack {
       soloButton.title = `Solo ${track.name}`
       soloButton.setAttribute('aria-label', `Solo ${track.name}`)
       updateMixButtons()
+      displayModeMenu.updateAccessibleName()
       const gainNumber = 20 * Math.log10(track.getGain())
       gainSlider.value = `${gainNumber}`
       this.updateGainOutput(gainOutput, gainNumber)
@@ -261,6 +274,120 @@ export class TrackListTrack {
     button.title = title
     button.setAttribute('aria-label', title)
     return button
+  }
+
+  private createDisplayModeMenu(
+    track: Track,
+    initialDisplayMode: TrackDisplayMode,
+    onDisplayModeChange: (mode: TrackDisplayMode) => void,
+  ) {
+    const popover = document.createElement('div')
+    popover.id = `track-display-mode-menu-${++nextDisplayModeMenuId}`
+    popover.className = 'track-display-mode-menu'
+    popover.setAttribute('popover', 'auto')
+    popover.setAttribute('role', 'menu')
+
+    const button = document.createElement('button')
+    button.type = 'button'
+    button.className = 'track-display-mode-menu-button clickable'
+    button.setAttribute('aria-haspopup', 'menu')
+    button.setAttribute('aria-expanded', 'false')
+    button.setAttribute('aria-controls', popover.id)
+    button.setAttribute('popovertarget', popover.id)
+    button.appendChild(createSvgIcon('three-dots'))
+    button.addEventListener('click', (event) => event.stopPropagation())
+
+    const modes: ReadonlyArray<{ mode: TrackDisplayMode; label: string }> = [
+      { mode: 'waveform', label: 'Waveform' },
+      { mode: 'spectrogram', label: 'Spectrogram' },
+    ]
+    let currentDisplayMode = initialDisplayMode
+    const optionButtons = modes.map(({ mode, label }) => {
+      const option = document.createElement('button')
+      option.type = 'button'
+      option.className = 'track-display-mode-option'
+      option.setAttribute('role', 'menuitemradio')
+      option.textContent = label
+      option.addEventListener('click', () => {
+        if (mode != currentDisplayMode) {
+          currentDisplayMode = mode
+          updateMenuState()
+          onDisplayModeChange(mode)
+        }
+        popover.hidePopover()
+        button.setAttribute('aria-expanded', 'false')
+        button.focus()
+      })
+      return option
+    })
+    popover.append(...optionButtons)
+    popover.addEventListener('click', (event) => event.stopPropagation())
+
+    const updateAccessibleName = () => {
+      const label = modes.find(({ mode }) => mode == currentDisplayMode)!.label
+      button.title = `Display mode: ${label}`
+      button.setAttribute('aria-label', `Display mode for ${track.name}: ${label}`)
+      popover.setAttribute('aria-label', `Display mode for ${track.name}`)
+    }
+    const updateMenuState = () => {
+      updateAccessibleName()
+      for (let index = 0; index < modes.length; index++) {
+        optionButtons[index].setAttribute('aria-checked', `${modes[index].mode == currentDisplayMode}`)
+      }
+    }
+    const positionPopover = () => {
+      const triggerBounds = button.getBoundingClientRect()
+      const gap = 4
+      const viewportPadding = 8
+      const left = Math.max(
+        viewportPadding,
+        Math.min(triggerBounds.right - popover.offsetWidth, window.innerWidth - popover.offsetWidth - viewportPadding),
+      )
+      let top = triggerBounds.bottom + gap
+      if (top + popover.offsetHeight > window.innerHeight - viewportPadding) {
+        top = Math.max(viewportPadding, triggerBounds.top - popover.offsetHeight - gap)
+      }
+      popover.style.left = `${left}px`
+      popover.style.top = `${top}px`
+    }
+
+    popover.addEventListener('toggle', () => {
+      const isOpen = popover.matches(':popover-open')
+      button.setAttribute('aria-expanded', `${isOpen}`)
+      if (isOpen) positionPopover()
+    })
+    button.addEventListener('keydown', (event) => {
+      if (event.key != 'ArrowDown' && event.key != 'ArrowUp') return
+      event.preventDefault()
+      if (!popover.matches(':popover-open')) {
+        popover.showPopover()
+        button.setAttribute('aria-expanded', 'true')
+        positionPopover()
+      }
+      const selectedIndex = modes.findIndex(({ mode }) => mode == currentDisplayMode)
+      optionButtons[event.key == 'ArrowUp' ? optionButtons.length - 1 : selectedIndex].focus()
+    })
+    popover.addEventListener('keydown', (event) => {
+      const focusedIndex = optionButtons.indexOf(document.activeElement as HTMLButtonElement)
+      let nextIndex: number | null = null
+      if (event.key == 'ArrowDown') nextIndex = (focusedIndex + 1) % optionButtons.length
+      if (event.key == 'ArrowUp') nextIndex = (focusedIndex - 1 + optionButtons.length) % optionButtons.length
+      if (event.key == 'Home') nextIndex = 0
+      if (event.key == 'End') nextIndex = optionButtons.length - 1
+      if (event.key == 'Escape') {
+        event.preventDefault()
+        popover.hidePopover()
+        button.setAttribute('aria-expanded', 'false')
+        button.focus()
+        return
+      }
+      if (nextIndex === null) return
+      event.preventDefault()
+      optionButtons[nextIndex].focus()
+    })
+
+    updateMenuState()
+    return { button, popover, updateAccessibleName }
   }
 
   private async saveChanges(div: HTMLDivElement, track: Track, oldName: string) {

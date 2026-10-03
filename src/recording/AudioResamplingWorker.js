@@ -1,6 +1,6 @@
 import SoxrResampler from 'wasm-audio-resampler/app/soxr_resampler.js'
 import { SoxrDatatype, SoxrQuality } from 'wasm-audio-resampler/app/utils.js'
-import soxrWasmUrl from 'wasm-audio-resampler/app/soxr_wasm.wasm?url'
+const soxrWasmUrl = new URL(`${import.meta.env.BASE_URL}/soxr_wasm.wasm`, globalThis.location.origin).href
 
 self.onmessage = async (e) => {
   console.debug('Resampler got message ' + e.data.type)
@@ -16,8 +16,12 @@ self.onmessage = async (e) => {
         SoxrDatatype.SOXR_FLOAT32,
         SoxrQuality.SOXR_MQ,
       )
+      const wasmResponse = await fetch(soxrWasmUrl)
+      if (!wasmResponse.ok) {
+        throw new Error(`Failed to load the audio resampler: ${wasmResponse.status}`)
+      }
       await self.resampler.init(undefined, {
-        locateFile: () => soxrWasmUrl,
+        wasmBinary: await wasmResponse.arrayBuffer(),
       })
       postMessage({ type: 'ready' })
       break

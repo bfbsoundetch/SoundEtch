@@ -84,7 +84,7 @@ export class NodeFileSystemSyncAccessHandle implements FileSystemSyncAccessHandl
   requestPermission(descriptor?: FileSystemHandlePermissionDescriptor): Promise<PermissionState> {
     throw new Error('Method not implemented.')
   }
-  createSyncAccessHandle(): FileSystemSyncAccessHandle {
+  async createSyncAccessHandle(): Promise<FileSystemSyncAccessHandle> {
     return this
   }
 }
