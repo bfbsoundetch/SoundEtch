@@ -667,6 +667,15 @@
             </select>
             <p id="spectrogram-frequency-bands-description">Sets the number of mel-frequency rows.</p>
 
+            <label for="spectrogram-colormap">Color scheme</label>
+            <select id="spectrogram-colormap" aria-describedby="spectrogram-colormap-description">
+              <option value="viridis">Viridis</option>
+              <option value="magma">Magma</option>
+              <option value="inferno">Inferno</option>
+              <option value="grayscale">Grayscale</option>
+            </select>
+            <p id="spectrogram-colormap-description">Maps minimum-to-maximum signal levels to colors.</p>
+
             <label for="spectrogram-min-db">Minimum dB</label>
             <div class="settings-range-control">
               <input

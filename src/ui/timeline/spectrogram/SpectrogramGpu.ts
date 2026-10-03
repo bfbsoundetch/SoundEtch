@@ -6,6 +6,8 @@ import {
   MAX_DB,
   SOURCE_BUFFER_BYTES,
   TILE_COLUMNS,
+  SPECTROGRAM_COLORMAPS,
+  SPECTROGRAM_COLORMAP_STOPS,
 } from './SpectrogramTiling'
 import type { SpectrogramSettings } from './SpectrogramSettings'
 
@@ -175,14 +177,38 @@ fn packMagnitude(@builtin(global_invocation_id) invocation: vec3u) {
 }
 `
 
-const RENDER_SHADER = /* wgsl */ `
+function createRenderShader(): string {
+  const colorFunctions = SPECTROGRAM_COLORMAPS.map((colormap, colormapIndex) => {
+    const stops = SPECTROGRAM_COLORMAP_STOPS[colormap]
+    const [initialRed, initialGreen, initialBlue] = stops[0]
+    const gradientStops = stops
+      .slice(1)
+      .map((stop, stopIndex) => {
+        const [red, green, blue] = stop
+        const segmentStart = stopIndex / (stops.length - 1)
+        const segmentEnd = (stopIndex + 1) / (stops.length - 1)
+        return `  color = mix(color, vec3f(${red}, ${green}, ${blue}), segment(t, ${segmentStart}, ${segmentEnd}));`
+      })
+      .join('\n')
+    return `fn colormap${colormapIndex}(value: f32) -> vec3f {
+  let t = clamp(value, 0.0, 1.0);
+  var color = vec3f(${initialRed}, ${initialGreen}, ${initialBlue});
+${gradientStops}
+  return color;
+}`
+  }).join('\n\n')
+  const colorDispatch = SPECTROGRAM_COLORMAPS.map(
+    (_, index) => `  ${index === 0 ? '' : 'else '}if (index == ${index}u) { return colormap${index}(value); }`,
+  ).join('\n')
+  return /* wgsl */ `
 struct DrawUniform {
   canvasSize: vec2f,
   rectangleOrigin: vec2f,
   rectangleSize: vec2f,
   textureOrigin: vec2f,
   textureSize: vec2f,
-  padding: vec2f,
+  colormap: f32,
+  padding: f32,
   fadePositions: vec4f,
 }
 
@@ -200,18 +226,12 @@ fn segment(value: f32, start: f32, end: f32) -> f32 {
   return clamp((value - start) / (end - start), 0.0, 1.0);
 }
 
-fn viridis(value: f32) -> vec3f {
-  let normalized = clamp(value, 0.0, 1.0);
-  var color = vec3f(0.267, 0.005, 0.329);
-  color = mix(color, vec3f(0.267, 0.224, 0.514), segment(normalized, 0.0, 0.125));
-  color = mix(color, vec3f(0.192, 0.408, 0.557), segment(normalized, 0.125, 0.25));
-  color = mix(color, vec3f(0.149, 0.510, 0.557), segment(normalized, 0.25, 0.375));
-  color = mix(color, vec3f(0.122, 0.620, 0.537), segment(normalized, 0.375, 0.5));
-  color = mix(color, vec3f(0.208, 0.718, 0.475), segment(normalized, 0.5, 0.625));
-  color = mix(color, vec3f(0.431, 0.808, 0.345), segment(normalized, 0.625, 0.75));
-  color = mix(color, vec3f(0.710, 0.871, 0.169), segment(normalized, 0.75, 0.875));
-  color = mix(color, vec3f(0.992, 0.906, 0.145), segment(normalized, 0.875, 1.0));
-  return color;
+${colorFunctions}
+
+fn colormapColor(value: f32, which: f32) -> vec3f {
+  let index = u32(which + 0.5);
+${colorDispatch}
+  return vec3f(0.0, 0.0, 0.0);
 }
 
 @vertex
@@ -257,10 +277,11 @@ fn renderFragment(input: VertexOutput) -> @location(0) vec4f {
     );
     alpha *= cos(progress * 1.5707963267948966);
   }
-  let color = viridis(textureSample(tileTexture, tileSampler, input.textureCoordinate).r);
+  let color = colormapColor(textureSample(tileTexture, tileSampler, input.textureCoordinate).r, draw.colormap);
   return vec4f(color * alpha, alpha);
 }
 `
+}
 
 const RENDER_UNIFORM_FLOATS = 16
 const RENDER_UNIFORM_BYTES = RENDER_UNIFORM_FLOATS * Float32Array.BYTES_PER_ELEMENT
@@ -365,17 +386,14 @@ export class SpectrogramGpu {
   }
 
   updateSettings(settings: SpectrogramSettings): void {
-    if (
-      settings.fftSize === this.settings.fftSize &&
-      settings.hopSize === this.settings.hopSize &&
-      settings.frequencyBands === this.settings.frequencyBands &&
-      settings.windowFunction === this.settings.windowFunction &&
-      settings.minDb === this.settings.minDb
-    ) {
-      return
-    }
+    const analysisChanged =
+      settings.fftSize !== this.settings.fftSize ||
+      settings.hopSize !== this.settings.hopSize ||
+      settings.frequencyBands !== this.settings.frequencyBands ||
+      settings.windowFunction !== this.settings.windowFunction ||
+      settings.minDb !== this.settings.minDb
     this.settings = settings
-    this.clearDeviceResources()
+    if (analysisChanged) this.clearDeviceResources()
   }
 
   updateSampleRateIfInitialized(sampleRate: number): void {
@@ -436,6 +454,7 @@ export class SpectrogramGpu {
         upload[offset + 7] = textureTop
         upload[offset + 8] = draw.textureView === null ? 0 : draw.textureEndX - draw.textureStartX
         upload[offset + 9] = textureBottom - textureTop
+        upload[offset + 10] = SPECTROGRAM_COLORMAPS.indexOf(this.settings.colormap)
         upload[offset + 12] = draw.fadeStartX
         upload[offset + 13] = draw.fadeInEndX
         upload[offset + 14] = draw.fadeOutStartX
@@ -739,7 +758,10 @@ export class SpectrogramGpu {
     const windowModule = device.createShaderModule({ label: 'spectrogram window shader', code: WINDOW_SHADER })
     const fftModule = device.createShaderModule({ label: 'spectrogram FFT shader', code: FFT_SHADER })
     const magnitudeModule = device.createShaderModule({ label: 'spectrogram magnitude shader', code: MAGNITUDE_SHADER })
-    const renderModule = device.createShaderModule({ label: 'spectrogram render shader', code: RENDER_SHADER })
+    const renderModule = device.createShaderModule({
+      label: 'spectrogram render shader',
+      code: createRenderShader(),
+    })
     for (const module of [windowModule, fftModule, magnitudeModule, renderModule]) {
       const compilationInfo = await module.getCompilationInfo()
       const errors = compilationInfo.messages.filter((message) => message.type === 'error')

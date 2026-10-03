@@ -16,6 +16,7 @@ export class SettingsController {
   private readonly windowFunctionSelect = document.getElementById(
     'spectrogram-window-function',
   ) as HTMLSelectElement
+  private readonly colormapSelect = document.getElementById('spectrogram-colormap') as HTMLSelectElement
   private readonly minDbInput = document.getElementById('spectrogram-min-db') as HTMLInputElement
   private readonly minDbOutput = document.getElementById('spectrogram-min-db-value') as HTMLOutputElement
   private readonly resetButton = document.getElementById('settings-reset-button') as HTMLButtonElement
@@ -48,6 +49,7 @@ export class SettingsController {
       hopSize: Number(this.hopSizeSelect.value),
       frequencyBands: Number(this.frequencyBandsSelect.value),
       windowFunction: this.windowFunctionSelect.value,
+      colormap: this.colormapSelect.value,
       minDb: Number(this.minDbInput.value),
     })
     spectrogramSettings.set(settings)
@@ -60,6 +62,7 @@ export class SettingsController {
     this.hopSizeSelect.value = String(settings.hopSize)
     this.frequencyBandsSelect.value = String(settings.frequencyBands)
     this.windowFunctionSelect.value = settings.windowFunction
+    this.colormapSelect.value = settings.colormap
     this.minDbInput.value = String(settings.minDb)
     this.updateMinDbOutput()
     this.updateDependentOptions()

@@ -4,7 +4,9 @@ import {
   FFT_SIZE,
   FREQUENCY_BANDS,
   MIN_DB,
+  SPECTROGRAM_COLORMAPS,
   SPECTROGRAM_WINDOW_FUNCTIONS,
+  type SpectrogramColormap,
   type SpectrogramWindowFunction,
 } from './SpectrogramTiling'
 
@@ -14,6 +16,7 @@ export interface SpectrogramSettings {
   readonly frequencyBands: number
   readonly windowFunction: SpectrogramWindowFunction
   readonly minDb: number
+  readonly colormap: SpectrogramColormap
 }
 export const SPECTROGRAM_FFT_SIZES = [512, 1024, 2048, 4096] as const
 export const SPECTROGRAM_HOP_SIZES = [128, 256, 512, 1024] as const
@@ -27,6 +30,7 @@ export const DEFAULT_SPECTROGRAM_SETTINGS: SpectrogramSettings = Object.freeze({
   frequencyBands: FREQUENCY_BANDS,
   windowFunction: WindowFunction.BLACKMAN,
   minDb: MIN_DB,
+  colormap: 'viridis',
 })
 
 function supportedValue(value: unknown, supportedValues: readonly number[], fallback: number): number {
@@ -55,6 +59,8 @@ export function normalizeSpectrogramSettings(value: unknown): SpectrogramSetting
   const windowFunction = SPECTROGRAM_WINDOW_FUNCTIONS.find(
     (supportedWindowFunction) => supportedWindowFunction === candidate.windowFunction,
   ) ?? DEFAULT_SPECTROGRAM_SETTINGS.windowFunction
+  const colormap = SPECTROGRAM_COLORMAPS.find((supported) => supported === candidate.colormap)
+    ?? DEFAULT_SPECTROGRAM_SETTINGS.colormap
   const requestedMinDb = typeof candidate.minDb === 'number' && Number.isFinite(candidate.minDb)
     ? Math.round(candidate.minDb)
     : DEFAULT_SPECTROGRAM_SETTINGS.minDb
@@ -63,7 +69,7 @@ export function normalizeSpectrogramSettings(value: unknown): SpectrogramSetting
     Math.min(SPECTROGRAM_MIN_DB_RANGE.maximum, requestedMinDb),
   )
 
-  return Object.freeze({ fftSize, hopSize, frequencyBands, windowFunction, minDb })
+  return Object.freeze({ fftSize, hopSize, frequencyBands, windowFunction, colormap, minDb })
 }
 
 function loadStoredSettings(): SpectrogramSettings {
@@ -82,6 +88,7 @@ function settingsEqual(left: SpectrogramSettings, right: SpectrogramSettings): b
     left.hopSize === right.hopSize &&
     left.frequencyBands === right.frequencyBands &&
     left.windowFunction === right.windowFunction &&
+    left.colormap === right.colormap &&
     left.minDb === right.minDb
   )
 }

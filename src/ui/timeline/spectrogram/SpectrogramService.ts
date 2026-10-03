@@ -16,6 +16,7 @@ import {
   MAX_DPR,
   TILE_CACHE_BYTES,
   TILE_COLUMNS,
+  getSpectrogramFallbackColor,
   getSpectrogramLevel,
   getSpectrogramTileKeys,
   selectSpectrogramCoverage,
@@ -137,18 +138,26 @@ export class SpectrogramService {
   }
 
   private settingsChanged(settings: SpectrogramSettings): void {
-    this.generation++
+    const analysisChanged =
+      settings.fftSize !== this.settings.fftSize ||
+      settings.hopSize !== this.settings.hopSize ||
+      settings.frequencyBands !== this.settings.frequencyBands ||
+      settings.windowFunction !== this.settings.windowFunction ||
+      settings.minDb !== this.settings.minDb
     this.settings = settings
-    this.queuedDemands = []
-    this.failedKeys.clear()
-    this.cancelWorkflow()
-    this.clearCache()
     this.gpu.updateSettings(settings)
-    for (const renderer of this.renderers) {
-      renderer.settingsChanged()
-      this.updateRendererDemands(renderer)
+    if (analysisChanged) {
+      this.generation++
+      this.queuedDemands = []
+      this.failedKeys.clear()
+      this.cancelWorkflow()
+      this.clearCache()
     }
-    this.rebuildQueue()
+    for (const renderer of this.renderers) {
+      renderer.settingsChanged(analysisChanged)
+      if (analysisChanged) this.updateRendererDemands(renderer)
+    }
+    if (analysisChanged) this.rebuildQueue()
   }
 
   setProject(directoryName: string, sampleRate: number): void {
@@ -162,6 +171,10 @@ export class SpectrogramService {
     this.clearCache()
     this.gpu.updateSampleRateIfInitialized(sampleRate)
     for (const renderer of this.renderers) renderer.projectChanged()
+  }
+
+  get fallbackColor(): string {
+    return getSpectrogramFallbackColor(this.settings.colormap)
   }
 
   createTrackRenderer(
@@ -955,9 +968,14 @@ class SpectrogramTrackRendererImpl implements SpectrogramTrackRenderer {
     this.handoffPending = false
   }
 
-  settingsChanged(): void {
-    this.projectChanged()
-    this.deviceLost()
+  settingsChanged(analysisChanged: boolean): void {
+    if (analysisChanged) {
+      this.projectChanged()
+      this.deviceLost()
+      return
+    }
+    if (!this.completedFrame) this.onAvailabilityChange(false)
+    if (this.active) this.requestRedraw()
   }
 
   renderingFailed(): void {

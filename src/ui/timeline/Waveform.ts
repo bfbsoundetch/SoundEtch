@@ -95,6 +95,10 @@ export class Waveform extends TrackListItemController {
     return this.currentDisplayMode
   }
 
+  get spectrogramFallbackColor(): string {
+    return this.spectrogramService.fallbackColor
+  }
+
   setDisplayMode(mode: TrackDisplayMode): void {
     if (mode === this.currentDisplayMode) return
     this.currentDisplayMode = mode
@@ -102,7 +106,10 @@ export class Waveform extends TrackListItemController {
     this.div.classList.toggle('spectrogram-mode', spectrogramMode)
     this.div.classList.toggle('spectrogram-fallback-visible', spectrogramMode)
     this.axesPathElement.style.visibility = spectrogramMode ? 'hidden' : ''
-    for (const controller of this.getClipViewControllers()) controller.setDisplayMode(mode)
+    for (const controller of this.getClipViewControllers()) {
+      controller.setDisplayMode(mode)
+      if (spectrogramMode) controller.updateSpectrogramFallbackFill()
+    }
 
     if (spectrogramMode) {
       this.requestSpectrogramDraw()
@@ -120,6 +127,9 @@ export class Waveform extends TrackListItemController {
       this.spectrogramDrawFrame = 0
       if (this.currentDisplayMode !== 'spectrogram') return
       this.trackRenderer ??= this.spectrogramService.createTrackRenderer(this.spectrogramCanvas, (available) => {
+        if (!available) {
+          for (const controller of this.getClipViewControllers()) controller.updateSpectrogramFallbackFill()
+        }
         this.div.classList.toggle(
           'spectrogram-fallback-visible',
           this.currentDisplayMode === 'spectrogram' && !available,
@@ -455,6 +465,7 @@ export class ClipViewController extends TrackListItemController {
     this.spectrogramFallbackElement.setAttribute('height', `${this.waveformHeight}`)
     this.spectrogramFallbackElement.classList.add('spectrogram-fallback')
     this.spectrogramFallbackElement.style.pointerEvents = 'none'
+    this.updateSpectrogramFallbackFill()
 
     this.headerElement.setAttribute('y', '0')
     this.headerElement.height.baseVal.value = Waveform.HEADER_HEIGHT
@@ -583,6 +594,10 @@ export class ClipViewController extends TrackListItemController {
     return this.clipView.getEndPosition() + this.draggedShift
   }
 
+  updateSpectrogramFallbackFill(): void {
+    this.spectrogramFallbackElement.style.fill = this.waveform.spectrogramFallbackColor
+  }
+
   setDisplayMode(mode: TrackDisplayMode): void {
     const spectrogramMode = mode === 'spectrogram'
     this.rectElement.classList.toggle('spectrogram-hit-rect', spectrogramMode)
@@ -661,6 +676,7 @@ export class ClipViewController extends TrackListItemController {
     this.rightHandle.y2.baseVal.value = this.waveform.fullHeight
     this.fullClipGrayFilter.height.baseVal.value = this.waveformHeight
     this.spectrogramFallbackElement.height.baseVal.value = this.waveformHeight
+    this.updateSpectrogramFallbackFill()
     const spectrogramPlacement = this.getSpectrogramPlacement()
     const fallbackStartX = Math.max(this.getXValueForSample(spectrogramPlacement.timelineStart), -10000)
     const fallbackEndX = Math.min(

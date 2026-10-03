@@ -85,6 +85,61 @@ export function getSpectrogramBandWeight(
   return weight / 8
 }
 
+export const SPECTROGRAM_COLORMAPS = ['viridis', 'magma', 'inferno', 'grayscale'] as const
+export type SpectrogramColormap = (typeof SPECTROGRAM_COLORMAPS)[number]
+
+export const SPECTROGRAM_COLORMAP_STOPS: Record<
+  SpectrogramColormap,
+  readonly (readonly [number, number, number])[]
+> = {
+  viridis: [
+    [0.267, 0.005, 0.329],
+    [0.267, 0.224, 0.514],
+    [0.192, 0.408, 0.557],
+    [0.149, 0.51, 0.557],
+    [0.122, 0.62, 0.537],
+    [0.208, 0.718, 0.475],
+    [0.431, 0.808, 0.345],
+    [0.71, 0.871, 0.169],
+    [0.992, 0.906, 0.145],
+  ],
+  magma: [
+    [0, 0, 0.016],
+    [0.114, 0.067, 0.278],
+    [0.318, 0.071, 0.486],
+    [0.51, 0.149, 0.506],
+    [0.714, 0.212, 0.475],
+    [0.902, 0.318, 0.392],
+    [0.984, 0.533, 0.38],
+    [0.996, 0.624, 0.427],
+    [0.988, 0.992, 0.749],
+  ],
+  inferno: [
+    [0, 0, 0.016],
+    [0.106, 0.047, 0.255],
+    [0.29, 0.047, 0.42],
+    [0.471, 0.11, 0.427],
+    [0.647, 0.173, 0.376],
+    [0.812, 0.267, 0.275],
+    [0.929, 0.412, 0.145],
+    [0.988, 0.647, 0.039],
+    [0.988, 1, 0.643],
+  ],
+  grayscale: [
+    [0, 0, 0],
+    [1, 1, 1],
+  ],
+}
+
+export function getSpectrogramFallbackColor(colormap: SpectrogramColormap): string {
+  const [red, green, blue] = SPECTROGRAM_COLORMAP_STOPS[colormap][0]
+  const channel = (value: number): string =>
+    Math.round(value * 255)
+      .toString(16)
+      .padStart(2, '0')
+  return `#${channel(red)}${channel(green)}${channel(blue)}`
+}
+
 export interface SpectrogramTileKey {
   clipId: number
   level: number

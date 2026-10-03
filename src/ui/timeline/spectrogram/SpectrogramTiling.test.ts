@@ -2,10 +2,13 @@ import { WindowFunction } from '../../../analyzers/FFTWindowFunctions'
 import {
   BASE_HOP,
   FFT_SIZE,
+  SPECTROGRAM_COLORMAPS,
+  SPECTROGRAM_COLORMAP_STOPS,
   TILE_COLUMNS,
   getSpectrogramBandWeight,
   createSpectrogramWindow,
   getSpectrogramMelPoints,
+  getSpectrogramFallbackColor,
   getSpectrogramLevel,
   getSpectrogramTileKeys,
   selectSpectrogramCoverage,
@@ -28,6 +31,32 @@ test('spectrogram windows use the periodic FFT convention', () => {
   expect(hann[0]).toBeCloseTo(0)
   expect(hann[FFT_SIZE / 4]).toBeCloseTo(0.5)
   expect(hann[FFT_SIZE / 2]).toBeCloseTo(1)
+})
+
+test('color schemes use the prototype palettes and matching minimum-dB colors', () => {
+  expect(SPECTROGRAM_COLORMAPS).toEqual(['viridis', 'magma', 'inferno', 'grayscale'])
+  expect(SPECTROGRAM_COLORMAP_STOPS.viridis[0]).toEqual([0.267, 0.005, 0.329])
+  expect(SPECTROGRAM_COLORMAP_STOPS.inferno.at(-1)).toEqual([0.988, 1, 0.643])
+  expect(SPECTROGRAM_COLORMAP_STOPS.grayscale).toEqual([
+    [0, 0, 0],
+    [1, 1, 1],
+  ])
+  expect(SPECTROGRAM_COLORMAPS.map(getSpectrogramFallbackColor)).toEqual([
+    '#440154',
+    '#000004',
+    '#000004',
+    '#000000',
+  ])
+
+  for (const colormap of SPECTROGRAM_COLORMAPS) {
+    for (const stop of SPECTROGRAM_COLORMAP_STOPS[colormap]) {
+      expect(stop).toHaveLength(3)
+      for (const channel of stop) {
+        expect(channel).toBeGreaterThanOrEqual(0)
+        expect(channel).toBeLessThanOrEqual(1)
+      }
+    }
+  }
 })
 
 test('LOD transitions account for device pixels', () => {
