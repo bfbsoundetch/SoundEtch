@@ -1,21 +1,14 @@
 import type { SpectrogramSourceMessage } from './SpectrogramSourceProtocol'
 import {
-  BASE_HOP,
-  BLACKMAN_WINDOW,
-  FFT_SIZE,
-  FREQUENCY_BANDS,
+  createSpectrogramWindow,
   HALO_COLUMNS,
   MAX_DB,
-  MIN_DB,
   SOURCE_BUFFER_BYTES,
   TILE_COLUMNS,
 } from './SpectrogramTiling'
+import type { SpectrogramSettings } from './SpectrogramSettings'
 
 const TEXTURE_COLUMNS = TILE_COLUMNS + 2 * HALO_COLUMNS
-const FFT_COMPONENT_BYTES = TEXTURE_COLUMNS * FFT_SIZE * Float32Array.BYTES_PER_ELEMENT
-const PACKED_COLUMNS = Math.ceil(TEXTURE_COLUMNS / 4)
-const STAGING_BYTES_PER_ROW = 1280
-const STAGING_BUFFER_BYTES = STAGING_BYTES_PER_ROW * FREQUENCY_BANDS
 const METADATA_BYTES = 32
 
 const WINDOW_SHADER = /* wgsl */ `
@@ -298,6 +291,9 @@ interface GpuResources {
   windowBindGroup: GPUBindGroup
   fftBindGroups: readonly [GPUBindGroup, GPUBindGroup]
   magnitudeBindGroups: readonly [GPUBindGroup, GPUBindGroup]
+  settings: SpectrogramSettings
+  packedColumnCount: number
+  stagingBytesPerRow: number
   sampleRate: number
   renderPipeline: GPURenderPipeline
   renderBindGroupLayout: GPUBindGroupLayout
@@ -322,7 +318,10 @@ export class SpectrogramGpu {
   private recovering = false
   private recoveryUsed = false
 
-  constructor(private readonly onDeviceLost: (message: string) => void) {}
+  constructor(
+    private readonly onDeviceLost: (message: string) => void,
+    private settings: SpectrogramSettings,
+  ) {}
 
   async ensureAvailable(sampleRate: number): Promise<void> {
     if (this.permanentlyUnavailable) throw new Error('WebGPU spectrogram is unavailable for this session')
@@ -332,16 +331,41 @@ export class SpectrogramGpu {
     }
     if (this.initialization === null) {
       if (this.recovering) this.recoveryUsed = true
-      this.initialization = this.initialize(sampleRate)
+      this.initialization = this.initialize(sampleRate, this.settings)
     }
 
+    const initialization = this.initialization
     try {
-      this.resources = await this.initialization
+      const resources = await initialization
+      if (this.initialization !== initialization) {
+        this.destroyResourcesAfterWork(resources)
+        await this.ensureAvailable(sampleRate)
+        return
+      }
+      this.resources = resources
     } catch (error) {
+      if (this.initialization !== initialization) {
+        await this.ensureAvailable(sampleRate)
+        return
+      }
       this.initialization = null
       this.permanentlyUnavailable = true
       throw error
     }
+  }
+
+  updateSettings(settings: SpectrogramSettings): void {
+    if (
+      settings.fftSize === this.settings.fftSize &&
+      settings.hopSize === this.settings.hopSize &&
+      settings.frequencyBands === this.settings.frequencyBands &&
+      settings.windowFunction === this.settings.windowFunction &&
+      settings.minDb === this.settings.minDb
+    ) {
+      return
+    }
+    this.settings = settings
+    this.clearDeviceResources()
   }
 
   updateSampleRateIfInitialized(sampleRate: number): void {
@@ -386,8 +410,9 @@ export class SpectrogramGpu {
     if (draws.length > 0) {
       const upload = new Float32Array(requiredUniformBytes / Float32Array.BYTES_PER_ELEMENT)
       const strideFloats = uniformStride / Float32Array.BYTES_PER_ELEMENT
-      const textureTop = (FREQUENCY_BANDS - 0.5) / FREQUENCY_BANDS
-      const textureBottom = 0.5 / FREQUENCY_BANDS
+      const frequencyBands = resources.settings.frequencyBands
+      const textureTop = (frequencyBands - 0.5) / frequencyBands
+      const textureBottom = 0.5 / frequencyBands
       for (let index = 0; index < draws.length; index++) {
         const draw = draws[index]
         const offset = index * strideFloats
@@ -448,7 +473,11 @@ export class SpectrogramGpu {
     const resources = this.requireResources()
     const texture = resources.device.createTexture({
       label: 'spectrogram tile',
-      size: { width: TEXTURE_COLUMNS, height: FREQUENCY_BANDS, depthOrArrayLayers: channelCount },
+      size: {
+        width: TEXTURE_COLUMNS,
+        height: resources.settings.frequencyBands,
+        depthOrArrayLayers: channelCount,
+      },
       format: 'r8unorm',
       usage: GPUTextureUsage.COPY_DST | GPUTextureUsage.TEXTURE_BINDING,
     })
@@ -496,24 +525,30 @@ export class SpectrogramGpu {
       const computePass = commandEncoder.beginComputePass()
       computePass.setPipeline(resources.windowPipeline)
       computePass.setBindGroup(0, resources.windowBindGroup)
-      computePass.dispatchWorkgroups(Math.ceil((TEXTURE_COLUMNS * FFT_SIZE) / 128))
+      computePass.dispatchWorkgroups(Math.ceil((TEXTURE_COLUMNS * resources.settings.fftSize) / 128))
 
       let pingPongIndex = 0
       for (const pipeline of resources.fftPipelines) {
         computePass.setPipeline(pipeline)
         computePass.setBindGroup(0, resources.fftBindGroups[pingPongIndex])
-        computePass.dispatchWorkgroups(Math.ceil((TEXTURE_COLUMNS * (FFT_SIZE / 2)) / 128))
+        computePass.dispatchWorkgroups(Math.ceil((TEXTURE_COLUMNS * (resources.settings.fftSize / 2)) / 128))
         pingPongIndex = 1 - pingPongIndex
       }
       computePass.setPipeline(resources.magnitudePipeline)
       computePass.setBindGroup(0, resources.magnitudeBindGroups[pingPongIndex])
-      computePass.dispatchWorkgroups(Math.ceil((PACKED_COLUMNS * FREQUENCY_BANDS) / 64))
+      computePass.dispatchWorkgroups(
+        Math.ceil((resources.packedColumnCount * resources.settings.frequencyBands) / 64),
+      )
       computePass.end()
 
       commandEncoder.copyBufferToTexture(
-        { buffer: resources.stagingBuffer, bytesPerRow: STAGING_BYTES_PER_ROW, rowsPerImage: FREQUENCY_BANDS },
+        {
+          buffer: resources.stagingBuffer,
+          bytesPerRow: resources.stagingBytesPerRow,
+          rowsPerImage: resources.settings.frequencyBands,
+        },
         { texture: tile.texture, origin: { x: 0, y: 0, z: message.firstChannel + channelOffset } },
-        { width: TEXTURE_COLUMNS, height: FREQUENCY_BANDS, depthOrArrayLayers: 1 },
+        { width: TEXTURE_COLUMNS, height: resources.settings.frequencyBands, depthOrArrayLayers: 1 },
       )
       resources.device.queue.submit([commandEncoder.finish()])
     }
@@ -528,16 +563,22 @@ export class SpectrogramGpu {
   }
 
   clearDeviceResources(): void {
-    if (this.resources !== null) this.destroyResources(this.resources)
+    const resources = this.resources
     this.resources = null
     this.initialization = null
+    if (resources !== null) this.destroyResourcesAfterWork(resources)
   }
 
-  private async initialize(sampleRate: number): Promise<GpuResources> {
+  private async initialize(
+    sampleRate: number,
+    settings: SpectrogramSettings,
+  ): Promise<GpuResources> {
     if (navigator.gpu === undefined) throw new Error('navigator.gpu is unavailable')
     const adapter = await navigator.gpu.requestAdapter()
     if (adapter === null) throw new Error('No WebGPU adapter is available')
-    const requiredStorageSize = Math.max(FFT_COMPONENT_BYTES, SOURCE_BUFFER_BYTES)
+    const fftComponentBytes =
+      TEXTURE_COLUMNS * settings.fftSize * Float32Array.BYTES_PER_ELEMENT
+    const requiredStorageSize = Math.max(fftComponentBytes, SOURCE_BUFFER_BYTES)
     if (
       adapter.limits.maxStorageBufferBindingSize < requiredStorageSize ||
       adapter.limits.maxBufferSize < requiredStorageSize
@@ -551,7 +592,7 @@ export class SpectrogramGpu {
         maxBufferSize: requiredStorageSize,
       },
     })
-    const resources = await this.createResources(device, sampleRate)
+    const resources = await this.createResources(device, sampleRate, settings)
     void device.lost.then((info) => {
       if (this.resources?.device !== device) return
       this.resources = null
@@ -567,15 +608,25 @@ export class SpectrogramGpu {
     return resources
   }
 
-  private async createResources(device: GPUDevice, sampleRate: number): Promise<GpuResources> {
+  private async createResources(
+    device: GPUDevice,
+    sampleRate: number,
+    settings: SpectrogramSettings,
+  ): Promise<GpuResources> {
+    const analysisWindow = createSpectrogramWindow(settings.fftSize, settings.windowFunction)
+    const fftComponentBytes =
+      TEXTURE_COLUMNS * settings.fftSize * Float32Array.BYTES_PER_ELEMENT
+    const packedColumnCount = Math.ceil(TEXTURE_COLUMNS / 4)
+    const stagingBytesPerRow = Math.ceil(TEXTURE_COLUMNS / 256) * 256
+    const stagingBufferBytes = stagingBytesPerRow * settings.frequencyBands
     const sourceBuffer = device.createBuffer({
       label: 'spectrogram source',
       size: SOURCE_BUFFER_BYTES,
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
     })
     const windowBuffer = device.createBuffer({
-      label: 'spectrogram Blackman window',
-      size: BLACKMAN_WINDOW.byteLength,
+      label: 'spectrogram analysis window',
+      size: analysisWindow.byteLength,
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
     })
     const metadataBuffer = device.createBuffer({
@@ -585,17 +636,33 @@ export class SpectrogramGpu {
     })
     const melBuffer = device.createBuffer({
       label: 'spectrogram mel filters',
-      size: (FREQUENCY_BANDS + 2) * Float32Array.BYTES_PER_ELEMENT,
+      size: (settings.frequencyBands + 2) * Float32Array.BYTES_PER_ELEMENT,
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_DST,
     })
     const scratchUsage = GPUBufferUsage.STORAGE
-    const realA = device.createBuffer({ label: 'spectrogram FFT real A', size: FFT_COMPONENT_BYTES, usage: scratchUsage })
-    const imaginaryA = device.createBuffer({ label: 'spectrogram FFT imaginary A', size: FFT_COMPONENT_BYTES, usage: scratchUsage })
-    const realB = device.createBuffer({ label: 'spectrogram FFT real B', size: FFT_COMPONENT_BYTES, usage: scratchUsage })
-    const imaginaryB = device.createBuffer({ label: 'spectrogram FFT imaginary B', size: FFT_COMPONENT_BYTES, usage: scratchUsage })
+    const realA = device.createBuffer({
+      label: 'spectrogram FFT real A',
+      size: fftComponentBytes,
+      usage: scratchUsage,
+    })
+    const imaginaryA = device.createBuffer({
+      label: 'spectrogram FFT imaginary A',
+      size: fftComponentBytes,
+      usage: scratchUsage,
+    })
+    const realB = device.createBuffer({
+      label: 'spectrogram FFT real B',
+      size: fftComponentBytes,
+      usage: scratchUsage,
+    })
+    const imaginaryB = device.createBuffer({
+      label: 'spectrogram FFT imaginary B',
+      size: fftComponentBytes,
+      usage: scratchUsage,
+    })
     const stagingBuffer = device.createBuffer({
       label: 'spectrogram packed tile staging',
-      size: STAGING_BUFFER_BYTES,
+      size: stagingBufferBytes,
       usage: GPUBufferUsage.STORAGE | GPUBufferUsage.COPY_SRC,
     })
     const initialRenderUniformCapacity = Math.max(256, device.limits.minUniformBufferOffsetAlignment)
@@ -631,7 +698,7 @@ export class SpectrogramGpu {
     })
 
 
-    device.queue.writeBuffer(windowBuffer, 0, BLACKMAN_WINDOW)
+    device.queue.writeBuffer(windowBuffer, 0, analysisWindow)
 
     const readOnlyStorage = (binding: number): GPUBindGroupLayoutEntry => ({
       binding,
@@ -692,7 +759,7 @@ export class SpectrogramGpu {
     })
 
     const commonConstants = {
-      FFT_LENGTH: FFT_SIZE,
+      FFT_LENGTH: settings.fftSize,
       COLUMN_COUNT: TEXTURE_COLUMNS,
     }
     const windowPipeline = await device.createComputePipelineAsync({
@@ -700,11 +767,11 @@ export class SpectrogramGpu {
       compute: {
         module: windowModule,
         entryPoint: 'windowInput',
-        constants: { ...commonConstants, FFT_BITS: Math.log2(FFT_SIZE) },
+        constants: { ...commonConstants, FFT_BITS: Math.log2(settings.fftSize) },
       },
     })
     const fftPipelines = new Array<GPUComputePipeline>()
-    for (let halfLength = 1; halfLength < FFT_SIZE; halfLength *= 2) {
+    for (let halfLength = 1; halfLength < settings.fftSize; halfLength *= 2) {
       fftPipelines.push(
         await device.createComputePipelineAsync({
           layout: device.createPipelineLayout({ bindGroupLayouts: [fftLayout] }),
@@ -716,7 +783,7 @@ export class SpectrogramGpu {
         }),
       )
     }
-    const windowSum = BLACKMAN_WINDOW.reduce((sum, value) => sum + value, 0)
+    const windowSum = analysisWindow.reduce((sum, value) => sum + value, 0)
     const magnitudePipeline = await device.createComputePipelineAsync({
       layout: device.createPipelineLayout({ bindGroupLayouts: [magnitudeLayout] }),
       compute: {
@@ -724,11 +791,11 @@ export class SpectrogramGpu {
         entryPoint: 'packMagnitude',
         constants: {
           ...commonConstants,
-          BAND_COUNT: FREQUENCY_BANDS,
-          PACKED_COLUMN_COUNT: PACKED_COLUMNS,
-          OUTPUT_WORDS_PER_ROW: STAGING_BYTES_PER_ROW / Uint32Array.BYTES_PER_ELEMENT,
+          BAND_COUNT: settings.frequencyBands,
+          PACKED_COLUMN_COUNT: packedColumnCount,
+          OUTPUT_WORDS_PER_ROW: stagingBytesPerRow / Uint32Array.BYTES_PER_ELEMENT,
           POWER_SCALE: (2 / windowSum) ** 2,
-          MINIMUM_DB: MIN_DB,
+          MINIMUM_DB: settings.minDb,
           MAXIMUM_DB: MAX_DB,
         },
       },
@@ -766,6 +833,9 @@ export class SpectrogramGpu {
       windowBindGroup,
       fftBindGroups,
       magnitudeBindGroups,
+      settings,
+      packedColumnCount,
+      stagingBytesPerRow,
       sampleRate,
       renderPipeline,
       renderBindGroupLayout,
@@ -783,11 +853,11 @@ export class SpectrogramGpu {
   private updateMelPoints(resources: GpuResources, sampleRate: number): void {
     const nyquist = sampleRate / 2
     const maximumMel = 2595 * Math.log2(1 + nyquist / 700)
-    const points = new Float32Array(FREQUENCY_BANDS + 2)
+    const points = new Float32Array(resources.settings.frequencyBands + 2)
     for (let index = 0; index < points.length; index++) {
       const mel = (index / (points.length - 1)) * maximumMel
       const frequency = 700 * (2 ** (mel / 2595) - 1)
-      points[index] = (frequency / sampleRate) * FFT_SIZE
+      points[index] = (frequency / sampleRate) * resources.settings.fftSize
     }
     resources.device.queue.writeBuffer(resources.melBuffer, 0, points)
     resources.sampleRate = sampleRate
@@ -796,6 +866,11 @@ export class SpectrogramGpu {
   private requireResources(): GpuResources {
     if (this.resources === null) throw new Error('WebGPU spectrogram resources are not initialized')
     return this.resources
+  }
+
+  private destroyResourcesAfterWork(resources: GpuResources): void {
+    const destroy = (): void => this.destroyResources(resources)
+    void resources.device.queue.onSubmittedWorkDone().then(destroy, destroy)
   }
 
   private destroyResources(resources: GpuResources): void {
@@ -814,5 +889,6 @@ export class SpectrogramGpu {
 }
 
 export const SPECTROGRAM_TEXTURE_COLUMNS = TEXTURE_COLUMNS
-export const SPECTROGRAM_TILE_BYTES_PER_CHANNEL = TEXTURE_COLUMNS * FREQUENCY_BANDS
-export const SPECTROGRAM_BASE_HOP = BASE_HOP
+export function getSpectrogramTileBytesPerChannel(settings: SpectrogramSettings): number {
+  return TEXTURE_COLUMNS * settings.frequencyBands
+}

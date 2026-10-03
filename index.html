@@ -94,6 +94,7 @@
       window.audioInputsController = new window.AudioInputsController()
       window.keyPressController = new window.KeyPressController()
       window.mainMenuController = new window.MainMenuController()
+      window.settingsController = new window.SettingsController()
       window.headerController = new window.HeaderController()
       window.logsModalController = new window.LogsModalController()
       window.processingModalController = new window.ProcessingModalController()
@@ -184,7 +185,7 @@
               <button id="main-menu-redo-button" class="menu-item clickable" role="menuitem">Redo</button>
             </div>
           </div>
-          <button class="menu-item clickable">Settings</button>
+          <button id="open-settings-modal-button" class="menu-item clickable">Settings</button>
           <button
             id="open-publish-project-modal-button"
             class="menu-item clickable"
@@ -604,6 +605,97 @@
         </div>
         <pre id="logs-modal-content-text"></pre>
       </div>
+    </dialog>
+    <dialog id="settings-modal" class="overlay" aria-labelledby="settings-modal-title">
+      <button
+        class="overlay-close-button clickable"
+        type="button"
+        aria-label="Close settings"
+        onclick="document.getElementById('settings-modal').close()"
+      >
+        <svg class="meeting-icon" viewBox="0 0 500 500" aria-hidden="true">
+          <use xlink:href="#menu-close" />
+        </svg>
+      </button>
+      <form id="settings-form" class="overlay-content settings-modal-content" onclick="event.stopPropagation()">
+        <header>
+          <h1 id="settings-modal-title">Settings</h1>
+          <p>Spectrogram settings are saved in this browser and apply to every spectrogram track.</p>
+        </header>
+        <section class="settings-section" aria-labelledby="spectrogram-settings-title">
+          <h2 id="spectrogram-settings-title">Spectrogram</h2>
+          <div class="settings-grid">
+            <label for="spectrogram-fft-size">FFT size</label>
+            <select id="spectrogram-fft-size" aria-describedby="spectrogram-fft-size-description">
+              <option value="512">512 samples</option>
+              <option value="1024">1,024 samples</option>
+              <option value="2048">2,048 samples</option>
+              <option value="4096">4,096 samples</option>
+            </select>
+            <p id="spectrogram-fft-size-description">Larger transforms provide finer frequency resolution.</p>
+
+            <label for="spectrogram-window-function">Window function</label>
+            <select
+              id="spectrogram-window-function"
+              aria-describedby="spectrogram-window-function-description"
+            >
+              <option value="BLACKMAN">Blackman</option>
+              <option value="BLACKMAN_HARRIS">Blackman-Harris</option>
+              <option value="HANN">Hann</option>
+            </select>
+            <p id="spectrogram-window-function-description">
+              Controls spectral leakage and frequency resolution before the FFT.
+            </p>
+
+            <label for="spectrogram-hop-size">Hop size</label>
+            <select id="spectrogram-hop-size" aria-describedby="spectrogram-hop-size-description">
+              <option value="128">128 samples</option>
+              <option value="256">256 samples</option>
+              <option value="512">512 samples</option>
+              <option value="1024">1,024 samples</option>
+            </select>
+            <p id="spectrogram-hop-size-description">Smaller hops provide finer time resolution.</p>
+
+            <label for="spectrogram-frequency-bands">Frequency bands</label>
+            <select
+              id="spectrogram-frequency-bands"
+              aria-describedby="spectrogram-frequency-bands-description"
+            >
+              <option value="128">128 bands</option>
+              <option value="256">256 bands</option>
+              <option value="512">512 bands</option>
+            </select>
+            <p id="spectrogram-frequency-bands-description">Sets the number of mel-frequency rows.</p>
+
+            <label for="spectrogram-min-db">Minimum dB</label>
+            <div class="settings-range-control">
+              <input
+                id="spectrogram-min-db"
+                type="range"
+                min="-160"
+                max="-1"
+                step="1"
+                value="-96"
+                aria-describedby="spectrogram-min-db-description spectrogram-min-db-value"
+              />
+              <output id="spectrogram-min-db-value" for="spectrogram-min-db" aria-live="polite">-96 dB</output>
+            </div>
+            <p id="spectrogram-min-db-description">Signals at or below this level use the background color.</p>
+          </div>
+        </section>
+        <footer class="settings-actions">
+          <button id="settings-reset-button" class="bordered clickable" type="button">Reset to defaults</button>
+          <span class="settings-actions-spacer"></span>
+          <button
+            class="bordered clickable"
+            type="button"
+            onclick="document.getElementById('settings-modal').close()"
+          >
+            Cancel
+          </button>
+          <button class="bordered clickable" type="submit">Apply</button>
+        </footer>
+      </form>
     </dialog>
     <dialog id="project-manager-modal" class="overlay">
       <div class="overlay-close-button clickable" onclick="closeOverlay()">

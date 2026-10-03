@@ -6,6 +6,7 @@ export type SpectrogramSourceCommand =
       clipLength: number
       sourceChannelCount: number
       hop: number
+      fftSize: number
       firstColumn: number
       columnCount: number
     }

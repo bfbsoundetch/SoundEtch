@@ -1,3 +1,5 @@
+import { WindowFunction } from '../../../analyzers/FFTWindowFunctions'
+
 export const FFT_SIZE = 2048
 export const BASE_HOP = 512
 export const TILE_COLUMNS = 1024
@@ -8,13 +10,37 @@ export const MAX_DB = 0
 export const MAX_DPR = 2
 export const SOURCE_BUFFER_BYTES = 20 << 20
 export const TILE_CACHE_BYTES = 64 << 20
+export const SPECTROGRAM_WINDOW_FUNCTIONS = [
+  WindowFunction.BLACKMAN,
+  WindowFunction.BLACKMAN_HARRIS,
+  WindowFunction.HANN,
+] as const
+export type SpectrogramWindowFunction = (typeof SPECTROGRAM_WINDOW_FUNCTIONS)[number]
 
-export const BLACKMAN_WINDOW = new Float32Array(
-  Array.from({ length: FFT_SIZE }, (_, index) => {
-    const phase = (2 * Math.PI * index) / FFT_SIZE
-    return 0.42 - 0.5 * Math.cos(phase) + 0.08 * Math.cos(2 * phase)
-  }),
-)
+const WINDOW_COEFFICIENTS: Record<SpectrogramWindowFunction, readonly number[]> = {
+  [WindowFunction.BLACKMAN]: [0.42, -0.5, 0.08],
+  [WindowFunction.BLACKMAN_HARRIS]: [0.35875, -0.48829, 0.14128, -0.01168],
+  [WindowFunction.HANN]: [0.5, -0.5],
+}
+
+
+export function createSpectrogramWindow(
+  fftSize: number,
+  windowFunction: SpectrogramWindowFunction,
+): Float32Array<ArrayBuffer> {
+  if (!Number.isInteger(fftSize) || fftSize <= 0) throw new Error('FFT size must be a positive integer')
+  const coefficients = WINDOW_COEFFICIENTS[windowFunction]
+  const window = new Float32Array(fftSize)
+  for (let index = 0; index < fftSize; index++) {
+    const phase = (2 * Math.PI * index) / fftSize
+    let value = coefficients[0]
+    for (let harmonic = 1; harmonic < coefficients.length; harmonic++) {
+      value += coefficients[harmonic] * Math.cos(harmonic * phase)
+    }
+    window[index] = value
+  }
+  return window
+}
 
 export interface SpectrogramTileKey {
   clipId: number
@@ -28,9 +54,13 @@ export interface SpectrogramCoverageSegment {
   sourceEnd: number
 }
 
-export function getSpectrogramLevel(samplesPerCssPixel: number, dpr: number): number {
+export function getSpectrogramLevel(
+  samplesPerCssPixel: number,
+  dpr: number,
+  baseHop: number = BASE_HOP,
+): number {
   const devicePixelRatio = Math.min(MAX_DPR, Math.max(1, dpr))
-  const sourceColumnsPerDevicePixel = samplesPerCssPixel / devicePixelRatio / BASE_HOP
+  const sourceColumnsPerDevicePixel = samplesPerCssPixel / devicePixelRatio / baseHop
   return Math.max(0, Math.floor(Math.log2(sourceColumnsPerDevicePixel)))
 }
 
@@ -40,10 +70,11 @@ export function getSpectrogramTileKeys(
   sourceEnd: number,
   level: number,
   marginTiles: number,
+  baseHop: number = BASE_HOP,
 ): SpectrogramTileKey[] {
   if (sourceEnd <= sourceStart) return []
 
-  const hop = BASE_HOP * 2 ** level
+  const hop = baseHop * 2 ** level
   const tileSourceSpan = hop * TILE_COLUMNS
   const margin = Math.max(0, Math.floor(marginTiles))
   const firstTile = Math.floor(sourceStart / tileSourceSpan) - margin
@@ -62,13 +93,14 @@ export function selectSpectrogramCoverage(
   sourceStart: number,
   sourceEnd: number,
   targetLevel: number,
+  baseHop: number = BASE_HOP,
 ): SpectrogramCoverageSegment[] {
   if (sourceEnd <= sourceStart) return []
 
   const candidates = readyTiles
     .filter((key) => key.clipId === clipId)
     .map((key) => {
-      const tileSourceSpan = BASE_HOP * 2 ** key.level * TILE_COLUMNS
+      const tileSourceSpan = baseHop * 2 ** key.level * TILE_COLUMNS
       return {
         key,
         sourceStart: key.tileIndex * tileSourceSpan,

@@ -17,6 +17,7 @@ import { ProjectModalController } from './ui/ProjectModalController.ts'
 import { MainMenuController } from './ui/MainMenuController.ts'
 import { AddClipController } from './ui/AddClipController.ts'
 import { WelcomePageController } from './ui/WelcomePageController.ts'
+import { SettingsController } from './ui/SettingsController.ts'
 
 window.AudioInputs = AudioInputs
 window.LocalMediaStreams = LocalMediaStreams
@@ -37,6 +38,7 @@ window.ProjectModalController = ProjectModalController
 window.MainMenuController = MainMenuController
 window.AddClipController = AddClipController
 window.WelcomePageController = WelcomePageController
+window.SettingsController = SettingsController
 
 // These interaction boundaries keep publishing, project transfer, recording, and conferencing out of the initial chunk.
 let publishProjectControllerPromise

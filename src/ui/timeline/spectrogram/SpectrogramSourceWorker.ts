@@ -1,6 +1,6 @@
 /// <reference lib="webworker" />
 
-import { FFT_SIZE, SOURCE_BUFFER_BYTES } from './SpectrogramTiling'
+import { SOURCE_BUFFER_BYTES } from './SpectrogramTiling'
 import type { SpectrogramSourceCommand, SpectrogramSourceMessage } from './SpectrogramSourceProtocol'
 
 interface SourceRequestState {
@@ -51,16 +51,21 @@ async function loadSource(
   state: SourceRequestState,
 ): Promise<void> {
   try {
-    if (command.sourceChannelCount < 1 || command.hop < 1 || command.columnCount < 1) {
+    if (
+      command.sourceChannelCount < 1 ||
+      command.hop < 1 ||
+      command.fftSize < 1 ||
+      command.columnCount < 1
+    ) {
       throw new Error('Invalid spectrogram source request dimensions')
     }
 
     const bytesPerFrame = command.sourceChannelCount * Float32Array.BYTES_PER_ELEMENT
     const fileFrameCount = Math.floor(command.file.size / bytesPerFrame)
     const sourceFrameCount = Math.max(0, Math.min(fileFrameCount, Math.floor(command.clipLength)))
-    const firstWindowStart = command.firstColumn * command.hop - FFT_SIZE / 2
+    const firstWindowStart = command.firstColumn * command.hop - command.fftSize / 2
     const finalWindowEnd =
-      (command.firstColumn + command.columnCount - 1) * command.hop - FFT_SIZE / 2 + FFT_SIZE
+      (command.firstColumn + command.columnCount - 1) * command.hop - command.fftSize / 2 + command.fftSize
     const requestedFrameCount = finalWindowEnd - firstWindowStart
     const interleavedByteLength = requestedFrameCount * bytesPerFrame
 
@@ -127,7 +132,7 @@ async function loadPackedWindows(
   sourceFrameCount: number,
   bytesPerFrame: number,
 ): Promise<void> {
-  const floatsPerChannel = command.columnCount * FFT_SIZE
+  const floatsPerChannel = command.columnCount * command.fftSize
   const bytesPerChannel = floatsPerChannel * Float32Array.BYTES_PER_ELEMENT
   const channelsPerBatch = Math.max(1, Math.floor(SOURCE_BUFFER_BYTES / bytesPerChannel))
   let reusableBuffer: ArrayBuffer | undefined
@@ -151,7 +156,7 @@ async function loadPackedWindows(
       for (let columnOffset = groupStart; columnOffset < groupEnd; columnOffset++) {
         const windowStart = firstWindowStart + columnOffset * command.hop
         const readStart = Math.max(0, windowStart)
-        const readEnd = Math.min(sourceFrameCount, windowStart + FFT_SIZE)
+        const readEnd = Math.min(sourceFrameCount, windowStart + command.fftSize)
         if (readEnd <= readStart) continue
 
         reads.push(
@@ -173,7 +178,7 @@ async function loadPackedWindows(
         for (let channelOffset = 0; channelOffset < batchChannelCount; channelOffset++) {
           const sourceChannel = firstChannel + channelOffset
           const destinationStart =
-            (channelOffset * command.columnCount + read.columnOffset) * FFT_SIZE + windowDestinationOffset
+            (channelOffset * command.columnCount + read.columnOffset) * command.fftSize + windowDestinationOffset
           for (let frame = 0; frame < validFrameCount; frame++) {
             output[destinationStart + frame] = source[frame * command.sourceChannelCount + sourceChannel]
           }

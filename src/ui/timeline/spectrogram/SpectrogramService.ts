@@ -3,17 +3,15 @@ import { FileSystemUtils } from '../../../filesystem/FileSystemUtils'
 import { Logger } from '../../../global/Logger'
 import type { Clip } from '../../../project/Clip'
 import {
+  getSpectrogramTileBytesPerChannel,
   SpectrogramGpu,
   SPECTROGRAM_TEXTURE_COLUMNS,
-  SPECTROGRAM_TILE_BYTES_PER_CHANNEL,
   type SpectrogramGpuCanvas,
   type SpectrogramGpuDraw,
   type SpectrogramGpuTile,
 } from './SpectrogramGpu'
 import type { SpectrogramSourceCommand, SpectrogramSourceMessage } from './SpectrogramSourceProtocol'
 import {
-  BASE_HOP,
-  FFT_SIZE,
   HALO_COLUMNS,
   MAX_DPR,
   TILE_CACHE_BYTES,
@@ -23,6 +21,10 @@ import {
   selectSpectrogramCoverage,
   type SpectrogramTileKey,
 } from './SpectrogramTiling'
+import {
+  spectrogramSettings,
+  type SpectrogramSettings,
+} from './SpectrogramSettings'
 
 export interface SpectrogramClipPlacement {
   clip: Clip
@@ -98,7 +100,11 @@ interface VisiblePlacement {
 
 export class SpectrogramService {
   private readonly logger = new Logger('Spectrogram')
-  private readonly gpu = new SpectrogramGpu((message) => this.handleDeviceLost(message))
+  private settings = spectrogramSettings.current
+  private readonly gpu = new SpectrogramGpu(
+    (message) => this.handleDeviceLost(message),
+    this.settings,
+  )
   private readonly cache = new Map<string, CachedSpectrogramTile>()
   private readonly pinnedKeys = new Set<string>()
   private readonly failedKeys = new Set<string>()
@@ -127,6 +133,22 @@ export class SpectrogramService {
       }
       this.lastAudioState = state
     })
+    spectrogramSettings.addChangeListener((settings) => this.settingsChanged(settings))
+  }
+
+  private settingsChanged(settings: SpectrogramSettings): void {
+    this.generation++
+    this.settings = settings
+    this.queuedDemands = []
+    this.failedKeys.clear()
+    this.cancelWorkflow()
+    this.clearCache()
+    this.gpu.updateSettings(settings)
+    for (const renderer of this.renderers) {
+      renderer.settingsChanged()
+      this.updateRendererDemands(renderer)
+    }
+    this.rebuildQueue()
   }
 
   setProject(directoryName: string, sampleRate: number): void {
@@ -187,7 +209,11 @@ export class SpectrogramService {
       return
     }
 
-    const targetLevel = getSpectrogramLevel(frame.samplesPerCssPixel, frame.dpr)
+    const targetLevel = getSpectrogramLevel(
+      frame.samplesPerCssPixel,
+      frame.dpr,
+      this.settings.hopSize,
+    )
     const timelineEnd = frame.timelineStart + frame.cssWidth * frame.samplesPerCssPixel
     const visibleByKey = new Map<string, TileDemand>()
     const marginByKey = new Map<string, TileDemand>()
@@ -210,9 +236,16 @@ export class SpectrogramService {
       if (sourceEnd <= sourceStart) continue
 
       const sourceCenter = (sourceStart + sourceEnd) / 2
-      const visibleKeys = getSpectrogramTileKeys(clipId, sourceStart, sourceEnd, targetLevel, 0)
+      const visibleKeys = getSpectrogramTileKeys(
+        clipId,
+        sourceStart,
+        sourceEnd,
+        targetLevel,
+        0,
+        this.settings.hopSize,
+      )
       for (const key of visibleKeys) {
-        const tileSpan = BASE_HOP * 2 ** key.level * TILE_COLUMNS
+        const tileSpan = this.settings.hopSize * 2 ** key.level * TILE_COLUMNS
         const rank = Math.abs((key.tileIndex + 0.5) * tileSpan - sourceCenter)
         const keyString = this.getKeyString(key)
         const previous = visibleByKey.get(keyString)
@@ -221,11 +254,18 @@ export class SpectrogramService {
         }
       }
 
-      const marginKeys = getSpectrogramTileKeys(clipId, sourceStart, sourceEnd, targetLevel, 1)
+      const marginKeys = getSpectrogramTileKeys(
+        clipId,
+        sourceStart,
+        sourceEnd,
+        targetLevel,
+        1,
+        this.settings.hopSize,
+      )
       for (const key of marginKeys) {
         const keyString = this.getKeyString(key)
         if (visibleByKey.has(keyString)) continue
-        const tileSpan = BASE_HOP * 2 ** key.level * TILE_COLUMNS
+        const tileSpan = this.settings.hopSize * 2 ** key.level * TILE_COLUMNS
         const rank = Math.abs((key.tileIndex + 0.5) * tileSpan - sourceCenter)
         const previous = marginByKey.get(keyString)
         if (previous === undefined || rank < previous.rank) {
@@ -279,7 +319,7 @@ export class SpectrogramService {
   private shouldQueueDemand(demand: TileDemand): boolean {
     const keyString = this.getKeyString(demand.key)
     if (this.failedKeys.has(keyString)) return false
-    const hop = BASE_HOP * 2 ** demand.key.level
+    const hop = this.settings.hopSize * 2 ** demand.key.level
     const ownedStart = demand.key.tileIndex * TILE_COLUMNS * hop
     const ownedEnd = (demand.key.tileIndex + 1) * TILE_COLUMNS * hop
     if (ownedEnd <= 0 || ownedStart >= demand.clip.length) return false
@@ -289,8 +329,9 @@ export class SpectrogramService {
 
     const firstColumn = demand.key.tileIndex * TILE_COLUMNS - HALO_COLUMNS
     const finalColumn = firstColumn + TILE_COLUMNS + 2 * HALO_COLUMNS - 1
-    const firstWindowFrame = firstColumn * hop - FFT_SIZE / 2
-    const finalWindowFrame = finalColumn * hop - FFT_SIZE / 2 + FFT_SIZE
+    const firstWindowFrame = firstColumn * hop - this.settings.fftSize / 2
+    const finalWindowFrame =
+      finalColumn * hop - this.settings.fftSize / 2 + this.settings.fftSize
     if (finalWindowFrame <= entry.sourceFrameCount || firstWindowFrame >= demand.clip.length) return false
 
     const stoppedGrowth =
@@ -391,7 +432,11 @@ export class SpectrogramService {
   }
 
   private buildDraws(frame: SpectrogramTrackFrame, dpr: number): SpectrogramGpuDraw[] {
-    const targetLevel = getSpectrogramLevel(frame.samplesPerCssPixel, frame.dpr)
+    const targetLevel = getSpectrogramLevel(
+      frame.samplesPerCssPixel,
+      frame.dpr,
+      this.settings.hopSize,
+    )
     const visiblePlacements = this.getVisiblePlacements(frame, dpr)
     const backgroundDraws = new Array<SpectrogramGpuDraw>()
     const coverageDraws = new Array<SpectrogramGpuDraw>()
@@ -428,12 +473,13 @@ export class SpectrogramService {
         visible.sourceStart,
         visible.sourceEnd,
         targetLevel,
+        this.settings.hopSize,
       )
       for (const segment of coverage) {
         const entry = this.getCachedTile(segment.key)
         if (entry === null) continue
         this.pinTile(segment.key)
-        const hop = BASE_HOP * 2 ** segment.key.level
+        const hop = this.settings.hopSize * 2 ** segment.key.level
         const ownedFirstColumn = segment.key.tileIndex * TILE_COLUMNS
         const textureStartX =
           (segment.sourceStart / hop - ownedFirstColumn + HALO_COLUMNS + 0.5) / SPECTROGRAM_TEXTURE_COLUMNS
@@ -529,7 +575,7 @@ export class SpectrogramService {
 
     const keyString = this.getKeyString(key)
     const existing = this.cache.get(keyString) ?? null
-    const hop = BASE_HOP * 2 ** key.level
+    const hop = this.settings.hopSize * 2 ** key.level
     const ownedStart = key.tileIndex * TILE_COLUMNS * hop
     const ownedEnd = (key.tileIndex + 1) * TILE_COLUMNS * hop
     if (ownedEnd <= 0 || ownedStart >= clip.length) return existing
@@ -555,8 +601,9 @@ export class SpectrogramService {
       const sourceFrameCount = Math.max(0, Math.min(fileFrameCount, Math.floor(clip.length)))
       const firstColumn = key.tileIndex * TILE_COLUMNS - HALO_COLUMNS
       const finalColumn = firstColumn + TILE_COLUMNS + 2 * HALO_COLUMNS - 1
-      const firstWindowFrame = firstColumn * hop - FFT_SIZE / 2
-      const finalWindowFrame = finalColumn * hop - FFT_SIZE / 2 + FFT_SIZE
+      const firstWindowFrame = firstColumn * hop - this.settings.fftSize / 2
+      const finalWindowFrame =
+        finalColumn * hop - this.settings.fftSize / 2 + this.settings.fftSize
 
       if (existing !== null) {
         existing.lastRefreshAt = now
@@ -599,6 +646,7 @@ export class SpectrogramService {
           clipLength: clip.length,
           sourceChannelCount,
           hop,
+          fftSize: this.settings.fftSize,
           firstColumn,
           columnCount: TILE_COLUMNS + 2 * HALO_COLUMNS,
         }
@@ -676,7 +724,7 @@ export class SpectrogramService {
     const entry: CachedSpectrogramTile = {
       key: workflow.key,
       gpuTile: workflow.gpuTile,
-      bytes: SPECTROGRAM_TILE_BYTES_PER_CHANNEL * workflow.gpuTile.channelCount,
+      bytes: getSpectrogramTileBytesPerChannel(this.settings) * workflow.gpuTile.channelCount,
       sourceFrameCount: message.sourceFrameCount,
       lastUsed: ++this.useCounter,
       lastRefreshAt: performance.now(),
@@ -905,6 +953,11 @@ class SpectrogramTrackRendererImpl implements SpectrogramTrackRenderer {
     this.marginDemands = []
     this.handoffGeneration++
     this.handoffPending = false
+  }
+
+  settingsChanged(): void {
+    this.projectChanged()
+    this.deviceLost()
   }
 
   renderingFailed(): void {

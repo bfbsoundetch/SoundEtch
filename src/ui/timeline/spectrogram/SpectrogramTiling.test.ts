@@ -1,17 +1,31 @@
+import { WindowFunction } from '../../../analyzers/FFTWindowFunctions'
 import {
   BASE_HOP,
-  BLACKMAN_WINDOW,
   FFT_SIZE,
   TILE_COLUMNS,
+  createSpectrogramWindow,
   getSpectrogramLevel,
   getSpectrogramTileKeys,
   selectSpectrogramCoverage,
 } from './SpectrogramTiling'
 
-test('Blackman window uses the fixed periodic FFT size', () => {
-  expect(BLACKMAN_WINDOW).toHaveLength(FFT_SIZE)
-  expect(BLACKMAN_WINDOW[0]).toBeCloseTo(0)
-  expect(BLACKMAN_WINDOW[FFT_SIZE / 2]).toBeCloseTo(1)
+test('spectrogram windows use the periodic FFT convention', () => {
+  const blackman = createSpectrogramWindow(FFT_SIZE, WindowFunction.BLACKMAN)
+  const blackmanHarris = createSpectrogramWindow(FFT_SIZE, WindowFunction.BLACKMAN_HARRIS)
+  const hann = createSpectrogramWindow(FFT_SIZE, WindowFunction.HANN)
+
+  expect(blackman).toHaveLength(FFT_SIZE)
+  expect(blackman[0]).toBeCloseTo(0)
+  expect(blackman[FFT_SIZE / 4]).toBeCloseTo(0.34)
+  expect(blackman[FFT_SIZE / 2]).toBeCloseTo(1)
+
+  expect(blackmanHarris[0]).toBeCloseTo(0.00006)
+  expect(blackmanHarris[FFT_SIZE / 4]).toBeCloseTo(0.21747)
+  expect(blackmanHarris[FFT_SIZE / 2]).toBeCloseTo(1)
+
+  expect(hann[0]).toBeCloseTo(0)
+  expect(hann[FFT_SIZE / 4]).toBeCloseTo(0.5)
+  expect(hann[FFT_SIZE / 2]).toBeCloseTo(1)
 })
 
 test('LOD transitions account for device pixels', () => {
@@ -21,6 +35,34 @@ test('LOD transitions account for device pixels', () => {
   expect(getSpectrogramLevel(1024, 2)).toBe(0)
   expect(getSpectrogramLevel(2048, 2)).toBe(1)
   expect(getSpectrogramLevel(4096, 3)).toBe(2)
+})
+
+test('LOD and tile boundaries follow a configured hop size', () => {
+  const hopSize = 256
+  const tileSpan = hopSize * TILE_COLUMNS
+
+  expect(getSpectrogramLevel(255, 1, hopSize)).toBe(0)
+  expect(getSpectrogramLevel(512, 1, hopSize)).toBe(1)
+  expect(getSpectrogramTileKeys(8, tileSpan - 1, tileSpan + 1, 0, 0, hopSize)).toEqual([
+    { clipId: 8, level: 0, tileIndex: 0 },
+    { clipId: 8, level: 0, tileIndex: 1 },
+  ])
+  expect(
+    selectSpectrogramCoverage(
+      [{ clipId: 8, level: 0, tileIndex: 1 }],
+      8,
+      tileSpan,
+      2 * tileSpan,
+      0,
+      hopSize,
+    ),
+  ).toEqual([
+    {
+      key: { clipId: 8, level: 0, tileIndex: 1 },
+      sourceStart: tileSpan,
+      sourceEnd: 2 * tileSpan,
+    },
+  ])
 })
 
 test('tile lookup treats source intervals as half-open at tile boundaries', () => {
