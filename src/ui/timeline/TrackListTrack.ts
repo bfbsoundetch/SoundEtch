@@ -31,7 +31,7 @@ export class TrackListTrack {
     trackTitle.style.textWrap = 'pretty'
     trackTitle.style.width = '100%'
     trackTitle.style.boxSizing = 'border-box'
-    trackTitle.style.maxHeight = '3em'
+    trackTitle.style.height = '100%'
     trackTitle.style.overflow = 'hidden'
     trackTitle.style.wordBreak = 'break-all'
     trackTitle.innerText = track.name

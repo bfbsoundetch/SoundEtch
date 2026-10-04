@@ -1225,7 +1225,7 @@ video {
     'mix mix peak'
     'gain gain peak'
     'pan pan peak';
-  grid-template-rows: auto auto auto auto 1fr;
+  grid-template-rows: minmax(1.2em, 100vh) auto auto auto 1fr;
   grid-template-columns: 2rem minmax(0, 1fr) 1.5rem;
   align-content: start;
   row-gap: 0.25rem;
