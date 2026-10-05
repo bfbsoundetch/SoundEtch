@@ -1666,6 +1666,90 @@ video {
   border-bottom: solid 1px;
 }
 
+.go-to-time-dialog {
+  border: solid 1px var(--color);
+  border-radius: 0.5rem;
+  background-color: var(--menu-bg);
+  color: var(--color);
+  padding: 1.5rem;
+  min-width: 20rem;
+}
+
+.go-to-time-dialog::backdrop {
+  background: rgba(0, 0, 0, 0.4);
+}
+
+.go-to-time-dialog h1 {
+  margin: 0 0 1rem;
+  font-size: 1.2rem;
+}
+
+.go-to-time-fields {
+  display: grid;
+  grid-template-rows: auto auto;
+  justify-content: center;
+  align-items: center;
+  column-gap: 0.25rem;
+  row-gap: 0.3rem;
+}
+
+.go-to-time-caption {
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 0.8rem;
+  text-align: center;
+  opacity: 0.7;
+}
+
+.go-to-time-input {
+  box-sizing: border-box;
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 1.2rem;
+  text-align: center;
+  color: var(--color);
+  background: transparent;
+  border: solid 1px var(--color);
+  border-radius: 0.25rem;
+  padding: 0.25rem 0;
+}
+
+.go-to-time-input:focus {
+  outline: none;
+}
+
+.go-to-time-input::-webkit-outer-spin-button,
+.go-to-time-input::-webkit-inner-spin-button {
+  -webkit-appearance: none;
+  margin: 0;
+}
+
+.go-to-time-input[type='number'] {
+  appearance: textfield;
+  -moz-appearance: textfield;
+}
+
+.go-to-time-separator {
+  color: var(--color);
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 1.2rem;
+}
+
+.go-to-time-invalid {
+  border-color: #ff4d4d;
+}
+
+.go-to-time-buttons {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.go-to-time-buttons button {
+  padding: 0.25rem 1rem;
+  background: transparent;
+  color: var(--color);
+}
+
 #notification-parent {
   position: fixed;
   inset: 1rem 0 auto;

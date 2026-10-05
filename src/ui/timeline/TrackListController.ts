@@ -26,6 +26,7 @@ import { ParameterMetadata } from '../../effects/ParameterMetadata'
 import { AutomationController } from './AutomationController'
 import { SpectrogramService } from './spectrogram/SpectrogramService'
 import type { TrackDisplayMode } from './TrackDisplayMode'
+import { GoToTimeController } from './GoToTimeController'
 
 interface Selection {
   startSample: number
@@ -110,6 +111,17 @@ export class TrackListController {
     new ContextMenuItem('Paste', (activeTrackIndex, startSample) => this.paste(activeTrackIndex, startSample)),
   )
 
+  private readonly goToTimeController = new GoToTimeController((ms) =>
+    this.goToSample(Math.round((ms * this.sampleRate) / 1000)),
+  )
+
+  private readonly timelineContextMenu = new ContextMenuController(
+    'timeline-contextmenu',
+    this.pointerStateManager,
+    new ContextMenuItem('Go to cursor', () => this.goToSample(this.getCursorPosition() ?? 0)),
+    new ContextMenuItem('Go to time', () => this.goToTimeController.open()),
+  )
+
   private readonly cursorPoint = new DOMPoint()
   mouseEventToSvgCoord(event: MouseEvent): DOMPoint {
     this.cursorPoint.x = event.clientX - this.rootFontSize * 14
@@ -156,6 +168,11 @@ export class TrackListController {
   }
 
   constructor() {
+    document.getElementById('timeline')!.addEventListener('contextmenu', (event) => {
+      event.preventDefault()
+      this.timelineContextMenu.draw(event.clientX, event.clientY)
+    })
+
     this.newTrackDropRegion.className = 'new-track-drop-region clickable'
     this.newTrackDropRegion.textContent = '+ new track'
     this.newTrackDropRegion.setAttribute('aria-label', 'Drop clip to create a new track')
@@ -717,6 +734,27 @@ export class TrackListController {
 
   private clipViewArraysEqual(a: ClipView[], b: ClipView[]) {
     return a.length == b.length && a.every((clipView, index) => clipView == b[index])
+  }
+
+  /** Centers the timeline view on this sample position. */
+  goToSample(sample: number) {
+    if (!Number.isFinite(this.msPerUnit)) {
+      return
+    }
+    this.translationUnits = Math.max(0, Math.round(sample / this.sampleScale - this.width / 2))
+    this.draw()
+  }
+
+  /**
+   * The sample position of the cursor (the position marker), or null when no
+   * cursor is set.
+   */
+  private getCursorPosition(): number | null {
+    const state = AudioControl.getState()
+    if (state == AudioState.STOPPED || state == AudioState.MONITORING || state == AudioState.MONITORING_PAUSED) {
+      return AudioControl.startPosition == 0 ? null : AudioControl.startPosition
+    }
+    return AudioControl.audioContext?.getPosition() ?? AudioControl.startPosition
   }
 
   private translateToFollowPosition(timestamp: number, controller: TrackListController) {
