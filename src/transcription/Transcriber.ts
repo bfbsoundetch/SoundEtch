@@ -1,11 +1,5 @@
 import { SampleRateConverter } from '../rendering/SampleRateConverter'
 
-export type TranscribedRange = {
-  text: string
-  startSample: number
-  endSample: number
-}
-
 type TranscriptionResult = {
   text: string
   chunks: Array<{

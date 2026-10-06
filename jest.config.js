@@ -7,7 +7,7 @@ export default {
   coveragePathIgnorePatterns: ['node_modules'],
   reporters: ['default'],
   transform: {
-    '^.+\.tsx?$': ['ts-jest', {}],
+    '^.+\\.tsx?$': ['ts-jest', { tsconfig: { target: 'ES2022' } }],
   },
   moduleDirectories: ['node_modules', '<rootDir>'],
 }

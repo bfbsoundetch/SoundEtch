@@ -13,6 +13,7 @@ import {
   type SpectrogramClipPlacement,
   type SpectrogramTrackRenderer,
 } from './spectrogram/SpectrogramService'
+import { TranscriptionOverlayController } from './TranscriptionOverlay'
 
 /** Handles displaying a track's waveform. */
 export class Waveform extends TrackListItemController {
@@ -418,6 +419,7 @@ export class ClipViewController extends TrackListItemController {
   private readonly waveformContextMenu: ContextMenuController
   private pathElementTranslation = 0
   private fullClipPreview = false
+  private readonly transcriptionOverlay: TranscriptionOverlayController
   private resizeInfo: {
     side: 'left' | 'right'
     oldStartX: number
@@ -528,6 +530,11 @@ export class ClipViewController extends TrackListItemController {
     this.clipElementsGroup.appendChild(this.svgPathElement)
     this.clipElementsGroup.appendChild(this.startCrossFadePathElement)
     this.clipElementsGroup.appendChild(this.endCrossFadePathElement)
+    this.transcriptionOverlay = new TranscriptionOverlayController(
+      this.trackListController,
+      this.clipView.clip,
+      this.clipElementsGroup,
+    )
 
     this.svgPathElement.classList = 'waveform-path'
     this.startCrossFadePathElement.classList = 'waveform-path'
@@ -714,8 +721,29 @@ export class ClipViewController extends TrackListItemController {
     this.headerInfoElement.width.baseVal.value = Math.min(Waveform.HEADER_HEIGHT, width)
   }
 
+  private drawTranscriptionOverlay(viewportStartSample: number, viewportEndSample: number): void {
+    const sourceStartSample = this.fullClipPreview ? 0 : this.clipView.offset
+    const sourceEndSample = this.fullClipPreview
+      ? this.clipView.clip.length
+      : this.clipView.offset + this.clipView.length
+    const timelineStartSample = this.fullClipPreview
+      ? this.startPosition - this.clipView.offset
+      : this.startPosition
+    this.transcriptionOverlay.draw(
+      sourceStartSample,
+      sourceEndSample,
+      timelineStartSample,
+      viewportStartSample,
+      viewportEndSample,
+      this.waveform.width,
+      Waveform.HEADER_HEIGHT,
+      this.waveformHeight,
+    )
+  }
+
   async draw(startSample: number, endSample: number) {
     this.drawBoundingBox(startSample, endSample)
+    this.drawTranscriptionOverlay(startSample, endSample)
     if (this.waveform.displayMode === 'waveform') {
       await this.drawWaveform(startSample, endSample)
     } else {
@@ -836,13 +864,14 @@ export class ClipViewController extends TrackListItemController {
   }
 
   remove() {
+    this.transcriptionOverlay.remove()
     this.clipElementsGroup.remove()
     this.handleElementsGroup.remove()
     this.waveformContextMenu.remove()
   }
 
   resize() {
-    /*handled by parent*/
+    this.transcriptionOverlay.resize()
   }
 
   private get waveformHeight() {
@@ -958,6 +987,7 @@ export class ClipViewController extends TrackListItemController {
 
     this.fullClipGrayFilter.style.fill = '#00000040'
     this.fullClipGrayFilter.style.stroke = 'none'
+    this.drawTranscriptionOverlay(this.getSampleForXValue(0), this.getSampleForXValue(this.waveform.width))
     if (this.waveform.displayMode === 'waveform') {
       void this.drawWaveform(this.translation * this.samplesPerUnit, this.getSampleForXValue(this.waveform.width), true)
     } else {
@@ -982,6 +1012,7 @@ export class ClipViewController extends TrackListItemController {
       fullClipStartX: fullClipStartX,
       fullClipEndX: fullClipStartX + this.clipView.clip.length / this.samplesPerUnit,
     }
+    this.drawTranscriptionOverlay(this.getSampleForXValue(0), this.getSampleForXValue(this.waveform.width))
 
     if (this.waveform.displayMode === 'waveform') {
       void this.drawWaveform(this.translation * this.samplesPerUnit, this.getSampleForXValue(this.waveform.width), true)

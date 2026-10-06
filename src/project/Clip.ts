@@ -1,12 +1,12 @@
 import { Restorable } from '../persistence/Restoration'
 import { DatabasePersisted } from '../persistence/DatabasePersisted'
 import { Summary } from './Summary'
-import { TranscribedRange } from '../transcription/Transcriber'
+import type { TranscribedRange } from './Transcription'
 
 @Restorable('Clip')
 export class Clip extends DatabasePersisted {
   readonly summary: Summary
-  readonly transcription = new Array<TranscribedRange>()
+  transcription: TranscribedRange[] = []
   importedMetadata: Record<string, unknown> | null = null
   readonly tags: Record<string, string>
   readonly sourceFilename: string | null

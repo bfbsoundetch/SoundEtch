@@ -1,10 +1,9 @@
 import { RingBuffer } from 'ringbuf.js'
-import { ClipViewSubset } from './AudioFileReader'
+import type { ClipViewSubset } from './AudioFileReader'
 import { ProjectManager } from '../project/ProjectManager'
 import { WorkerController } from '../audiocontext/WorkerController'
 import { JobType } from '../audiocontext/ControllableWorkerJob'
 import { AudioControl, AudioState } from '../audiocontext/AudioControl'
-import { cloneWithGetters } from '../global/ObjectUtils'
 import { Track } from '../project/Track'
 import { EffectIndex } from '../effects/EffectIndex'
 import { scheduleParameterValues } from '../effects/ParameterScheduling'
@@ -91,12 +90,15 @@ export class Player {
       analyzerOutput.connect(audioContext.destination)
 
       playbackInfos.push({
-        clipViews: track.clipViews.map((c) => {
-          const result = cloneWithGetters(c)
-          delete result.clip.summary
-          delete result.fileCache
-          return result
-        }),
+        clipViews: track.clipViews.map((clipView): ClipViewSubset => ({
+          startPosition: clipView.startPosition,
+          offset: clipView.offset,
+          length: clipView.length,
+          clip: {
+            id: clipView.clip.id!,
+            channelCount: clipView.clip.getChannelCount(),
+          },
+        })),
         ringBufferArray: ringBufferArray,
       })
       track.registerNewPlayback(
