@@ -1,5 +1,6 @@
 import { fileURLToPath } from 'url'
-import { defineConfig, PluginOption } from 'vite'
+import { defineConfig } from 'vitest/config'
+import { PluginOption } from 'vite'
 import wasm from 'vite-plugin-wasm'
 import { nodePolyfills } from 'vite-plugin-node-polyfills'
 
@@ -64,5 +65,9 @@ export default defineConfig({
   worker: {
     plugins: () => [wasm() as PluginOption],
     format: 'es',
+  },
+  test: {
+    environment: 'node',
+    globals: true,
   },
 })

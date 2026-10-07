@@ -14,9 +14,12 @@ test('simple2', async () => {
   })
   let { promise, resolve, reject } = Promise.withResolvers()
   processor.onmessage = (message) => {
-    resolve(message.peak)
+    resolve(message)
   }
-  const peak = await promise
+  const { heldPeaks } = await promise
   processor.process([[testArray]], [[outputArray]])
-  console.log(peak[0])
+  processor.process([[testArray]], [[outputArray]])
+  // Lanczos interpolation overshoots a full-scale square wave (Gibbs phenomenon).
+  expect(heldPeaks[0]).toBeGreaterThan(1)
+  expect(heldPeaks[0]).toBeLessThan(2)
 })

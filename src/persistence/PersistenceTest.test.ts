@@ -1,8 +1,6 @@
-import indexedDB from 'fake-indexeddb'
-globalThis.indexedDB = indexedDB
+import 'fake-indexeddb/auto'
 import { DatabasePersisted } from './DatabasePersisted'
 import { DatabasePersister } from './DatabasePersister'
-import 'fake-indexeddb/auto'
 import { Restorable } from './Restoration'
 
 @Restorable('Simple')
@@ -27,9 +25,7 @@ test('myTest', async () => {
   await DatabasePersister.save(second)
   await DatabasePersister.save(third)
   const savedFirst = await DatabasePersister.save(first)
-  console.log(savedFirst)
-
-  savedFirst.children.push(first)
+  expect(savedFirst.id).toBe(3)
 
   const one = (await DatabasePersister.getObjectById(1)) as SimplePersisted
   expect(one.name).toBe('scooter')
@@ -41,7 +37,6 @@ test('myTest', async () => {
   expect(three.name).toBe('friend')
   expect(three.worthless).toBeDefined()
 
-  console.log(JSON.stringify(await DatabasePersister.fromPersistedObject(three)))
-
-  expect(1).toBe(1)
+  const restored = await DatabasePersister.fromPersistedObject(three)
+  expect(restored.children.map((child: SimplePersisted) => child.name)).toEqual(['scooter', 'trendy'])
 })

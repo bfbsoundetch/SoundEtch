@@ -3,7 +3,7 @@ import { AudioFileWriter } from './AudioFileWriter'
 import { RingBuffer } from 'ringbuf.js'
 import { FileSystemSyncAccessHandle } from '../filesystem/FileSystemSyncAccessHandle'
 import { GlobalSettings } from '../global/GlobalSettings'
-import { Summary } from 'project/Summary'
+import { Summary } from '../project/Summary'
 
 GlobalSettings.useMemoryFS = true
 

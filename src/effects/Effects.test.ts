@@ -12,6 +12,7 @@ import { BoostEffect } from './gain/GainEffects'
 import { EqualizerEffectMetadata } from './equalizer/EqualizerMetadata'
 import { EqualizerEffect } from './equalizer/EqualizerEffect'
 import { RawDataAudioContext } from '@descript/web-audio-js'
+import { vi } from 'vitest'
 
 describe('EffectIndex', () => {
   test('lists and creates built-in effects', async () => {
@@ -132,11 +133,11 @@ describe('effect module connections', () => {
     const gainNode = {
       context: null as unknown as BaseAudioContext,
       gain: {},
-      connect: jest.fn(),
-      disconnect: jest.fn(),
+      connect: vi.fn(),
+      disconnect: vi.fn(),
     }
     const audioContext = {
-      createGain: jest.fn(() => gainNode),
+      createGain: vi.fn(() => gainNode),
     } as unknown as BaseAudioContext
     gainNode.context = audioContext
     const destination = {} as AudioNode

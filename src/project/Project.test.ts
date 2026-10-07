@@ -3,7 +3,14 @@ import { Project } from './Project'
 import { Track } from './Track'
 
 function attachPlayback(track: Track) {
-  const playerNode = { disconnect: vi.fn() } as unknown as AudioWorkletNode
+  const playerNode = {
+    disconnect: vi.fn(),
+    context: {
+      state: 'running',
+      addEventListener: vi.fn(),
+      removeEventListener: vi.fn(),
+    },
+  } as unknown as AudioWorkletNode
   const gainNode = { gain: { value: 0 } } as GainNode
   const pannerNode = { pan: { value: 0 } } as StereoPannerNode
   track.registerNewPlayback(playerNode, gainNode, pannerNode)

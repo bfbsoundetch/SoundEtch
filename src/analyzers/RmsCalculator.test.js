@@ -17,5 +17,5 @@ test('simple', async () => {
     rmsCalculator.process(argument)
   })
 
-  console.log(output[0])
+  expect(output[0]).toBeCloseTo(0.5)
 })

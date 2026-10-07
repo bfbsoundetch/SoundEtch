@@ -1,4 +1,4 @@
-class RmsProcessor extends AudioWorkletProcessor {
+export class RmsProcessor extends AudioWorkletProcessor {
   constructor(options) {
     super(options)
     this.rmsWindow = Math.round(((options.processorOptions.rmsWindow ?? 400) * sampleRate) / 1000)

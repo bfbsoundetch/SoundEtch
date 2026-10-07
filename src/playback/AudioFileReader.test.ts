@@ -104,28 +104,28 @@ test('timed wait test', async () => {
 
   audioFileReader.runBufferFillingLoop()
 
-  const outputArray = new Float32Array(10)
-  await waitForFullRingBuffer(ringBuffer)
+  const outputArray = new Float32Array(5)
   await stepAwaitsForward()
-
   ringBuffer.pop(outputArray)
+  expect(outputArray).toEqual(new Float32Array([Number.NaN, 5, 0.2, 0.3, 0.4]))
 
-  const testArray = new Float32Array(10)
-  testArray.set([10, 0.2, 0.3, 0.4, 184])
-  expect(outputArray).toEqual(testArray)
-
+  // The ring buffer fills up mid-clip; the reader continues after a timed wait covering the
+  // silence: clipView2 startPosition 100 - clipView1 startPosition 5 - length 3 = 92 samples,
+  // which is 92,000 ms at a sample rate of 1, minus the 250 ms head start.
   await stepAwaitsForward()
-
-  expect(ringBuffer.availableRead()).toBe(0)
-
-  // clipView2 startPosition 100 - clipView1 startPosition 5 - length 3 = 92 samples
-  // sample rate is 1, then * 1000 milliseconds per second, finally subtract 250ms
   vi.advanceTimersByTime(92 * 1000 - 250)
   await stepAwaitsForward()
-  ringBuffer.pop(outputArray, 4, 5)
+  ringBuffer.pop(outputArray)
+  expect(outputArray).toEqual(new Float32Array([Number.NaN, 92, 0.3, 0.4, 0.5]))
 
-  testArray.set([10, 0.2, 0.3, 0.4, 184, 0.3, 0.4, 0.5, 0.6])
-  expect(outputArray).toEqual(testArray)
+  // The last sample only fits after the pop; the reader retries on a short 10 ms timer.
+  vi.advanceTimersByTime(10)
+  await stepAwaitsForward()
+  const tail = new Float32Array(1)
+  ringBuffer.pop(tail)
+  expect(tail[0]).toBeCloseTo(0.6)
+  expect(ringBuffer.availableRead()).toBe(0)
+  vi.useRealTimers()
 })
 
 test('pause and resume', async () => {
@@ -181,29 +181,35 @@ test('stop test', async () => {
 })
 
 test('large silence', async () => {
-  const ringBufferArray = RingBuffer.getStorageForCapacity(5, Float32Array)
+  const ringBufferArray = RingBuffer.getStorageForCapacity(12, Float32Array)
   const ringBuffer = new RingBuffer(ringBufferArray, Float32Array)
   MemoryBackedFileSystem.deleteFile('test', '1')
   const file1 = MemoryBackedFileSystem.getFileHandle('test', '1')
   file1.write(getInputArrayBuffer(0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7))
   const clipView1 = {
-    startPosition: 33_554_433, // max exact int * 2 + 1
+    startPosition: 33_554_433, // max exact float32 int * 4 + 1: silence splits across five (NaN, count) pairs
     offset: 1,
     length: 2,
     clip: { id: 1, channelCount: 1 },
   }
-  const audioFileReader = new AudioFileReader('test', 0, 999, [clipView1], 1, false, ringBufferArray)
+  const audioFileReader = new AudioFileReader('test', 0, 33_554_435, [clipView1], 1, false, ringBufferArray)
 
   audioFileReader.runBufferFillingLoop()
-
-  const outputArray = new Float32Array(5)
-  await waitForFullRingBuffer(ringBuffer)
   await stepAwaitsForward()
 
+  const outputArray = new Float32Array(12)
   ringBuffer.pop(outputArray)
 
-  const expected = new Float32Array(5)
-  expected.set([33554432, 33554432, 2, 0.2, 0.3])
+  const maxExact = 8_388_608
+  const expected = new Float32Array(12)
+  expected.set([
+    Number.NaN, maxExact,
+    Number.NaN, maxExact,
+    Number.NaN, maxExact,
+    Number.NaN, maxExact,
+    Number.NaN, 1,
+    0.2, 0.3,
+  ])
   expect(outputArray).toEqual(expected)
   expect(ringBuffer.availableRead()).toBe(0)
 })
@@ -216,12 +222,6 @@ function getInputArrayBuffer(...data: Array<number>): ArrayBuffer {
   return result.buffer
 }
 
-//TODO: more elegantly wait for buffer filling loop to hit await
-async function waitForFullRingBuffer(ringBuffer: RingBuffer) {
-  while (ringBuffer.availableWrite() || !ringBuffer.availableRead()) {
-    await Promise.resolve(null)
-  }
-}
 
 async function stepAwaitsForward() {
   for (let i = 0; i < 100; ++i) {

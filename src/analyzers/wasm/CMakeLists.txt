@@ -5,7 +5,7 @@ target_link_options(upsampled_peak PUBLIC -sEXPORTED_FUNCTIONS=_init,_lanczosInt
 target_link_options(upsampled_peak PUBLIC -sSINGLE_FILE=1)
 target_link_options(upsampled_peak PUBLIC -sUSE_PTHREADS=1)
 target_link_options(upsampled_peak PUBLIC -sEXPORTED_RUNTIME_METHODS=[HEAPF32])
-target_link_options(upsampled_peak PUBLIC -sENVIRONMENT=shell,worker)
+target_link_options(upsampled_peak PUBLIC -sENVIRONMENT=shell,worker,node)
 target_link_options(upsampled_peak PUBLIC -sMODULARIZE=1)
 target_link_options(upsampled_peak PUBLIC -sEXPORT_NAME=createModule)
 

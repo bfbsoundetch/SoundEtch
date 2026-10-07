@@ -125,7 +125,7 @@ test('silence', async () => {
   FilePlayingAudioWorkletProcessor.RENDER_QUANTUM = 4
   const ringBufferArray = RingBuffer.getStorageForCapacity(1024, Float32Array)
   const ringBuffer = new RingBuffer(ringBufferArray, Float32Array)
-  ringBuffer.push(createTestData(1, 12, -1))
+  ringBuffer.push(createTestData(1, NaN, 6, -1))
   const underrunBits = new BigUint64Array(1)
   const processor = new FilePlayingAudioWorkletProcessor({
     processorOptions: {
@@ -153,7 +153,7 @@ test('multiple silences', async () => {
   FilePlayingAudioWorkletProcessor.RENDER_QUANTUM = 128
   const ringBufferArray = RingBuffer.getStorageForCapacity(1024, Float32Array)
   const ringBuffer = new RingBuffer(ringBufferArray, Float32Array)
-  ringBuffer.push(createTestData(1, 14, 10, -1))
+  ringBuffer.push(createTestData(1, NaN, 8, NaN, 6, -1))
   const underrunBits = new BigUint64Array(1)
   const processor = new FilePlayingAudioWorkletProcessor({
     processorOptions: {

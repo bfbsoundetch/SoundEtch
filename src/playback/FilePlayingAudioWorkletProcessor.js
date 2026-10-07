@@ -80,7 +80,7 @@ export class FilePlayingAudioWorkletProcessor extends AudioWorkletProcessor {
         this.bufferOffset += 2
 
         const remainingQuantum = FilePlayingAudioWorkletProcessor.RENDER_QUANTUM - i
-        i += this.silenceLength
+        i += this.silenceLength - 1
         this.silenceLength -= Math.min(remainingQuantum, this.silenceLength)
         continue
       }
