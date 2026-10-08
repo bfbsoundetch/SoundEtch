@@ -668,6 +668,7 @@ async function transcribeGraniteSegment(
         speechMask,
         energies,
         SILERO_VAD_FRAME_SAMPLES / SILERO_VAD_SAMPLE_RATE,
+        segmentOffsetSeconds,
         (segmentStart16kSample + audio.length) / GRANITE_SAMPLE_RATE,
       ).map((word) => ({
         ...word,

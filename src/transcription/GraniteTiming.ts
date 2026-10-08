@@ -1,5 +1,10 @@
 import type { TranscribedRange } from '../project/Transcription'
-import { GRANITE_SAMPLE_RATE, SILERO_VAD_FRAME_SAMPLES, type SelectedSourceSampleRange } from './GraniteCtc'
+import {
+  GRANITE_SAMPLE_RATE,
+  GRANITE_VAD_SEGMENTATION_SETTINGS,
+  SILERO_VAD_FRAME_SAMPLES,
+  type SelectedSourceSampleRange,
+} from './GraniteCtc'
 
 export const GRANITE_TIMING_FRAME_SECONDS = 0.08
 
@@ -212,22 +217,118 @@ export function timeGraniteWords(
   })
 }
 
-/** Bounded acoustic boundary adjustment that preserves VAD-supported quiet onsets. */
+/** Speech runs shorter than this are treated as clicks, not a word. */
+const MIN_RELOCATION_RUN_FRAMES = 2
+
+/**
+ * Leading-word speech must reach this fraction of the loudest frame before the
+ * next word. Stricter than end refinement's 10%: inside a long speech region,
+ * Silero probability can stay above the speech-mask threshold through pauses,
+ * so energy is what separates the pause from the word.
+ */
+const RELOCATION_ENERGY_RATIO = 0.2
+
+/**
+ * Granite can emit a segment's first word at the very start of the segment,
+ * inside the VAD pre-roll or a 20-second chunk's leading pause, up to 750 ms
+ * before the speech it transcribes. Bounded refinement cannot reach that far,
+ * so a first word that starts within that leading window and is at least 80%
+ * unsupported moves onto the nearest supported speech run between the segment
+ * start and the next word.
+ */
+function relocateLeadingWord(
+  anchor: TimedGraniteWord,
+  nextStart: number,
+  segmentStartSeconds: number,
+  speechMask: Uint8Array,
+  frameEnergies: Float32Array,
+  frameSeconds: number,
+): { start: number; end: number } | undefined {
+  if (anchor.start >= segmentStartSeconds + GRANITE_VAD_SEGMENTATION_SETTINGS.preSpeechMs / 1_000) {
+    return undefined
+  }
+  // Frames straddling the segment start belong partly to the previous segment.
+  const firstFrame = Math.ceil(segmentStartSeconds / frameSeconds)
+  const lastFrame = Math.min(speechMask.length, frameEnergies.length, Math.ceil(nextStart / frameSeconds))
+  let peak = 0
+  for (let frame = firstFrame; frame < lastFrame; ++frame) {
+    peak = Math.max(peak, frameEnergies[frame])
+  }
+  const threshold = Math.max(1e-5, peak * RELOCATION_ENERGY_RATIO)
+  const active = (frame: number): boolean => speechMask[frame] !== 0 && frameEnergies[frame] >= threshold
+
+  const anchorFirstFrame = Math.floor(anchor.start / frameSeconds)
+  const anchorLastFrame = Math.min(speechMask.length, Math.ceil(anchor.end / frameSeconds))
+  let supportedFrames = 0
+  for (let frame = anchorFirstFrame; frame < anchorLastFrame; ++frame) {
+    if (active(frame)) {
+      ++supportedFrames
+    }
+  }
+  if (supportedFrames > (anchorLastFrame - anchorFirstFrame) * 0.2) {
+    return undefined
+  }
+
+  let best: { start: number; end: number } | undefined
+  let bestDistance = Infinity
+  for (let frame = firstFrame; frame < lastFrame;) {
+    if (!active(frame)) {
+      ++frame
+      continue
+    }
+    const runStart = frame
+    while (frame < lastFrame && active(frame)) {
+      ++frame
+    }
+    if (frame - runStart < MIN_RELOCATION_RUN_FRAMES) {
+      continue
+    }
+    const start = runStart * frameSeconds
+    const end = Math.min(frame * frameSeconds, nextStart)
+    const distance = Math.max(start - anchor.end, anchor.start - end, 0)
+    if (end - start >= 0.02 && distance < bestDistance) {
+      best = { start, end }
+      bestDistance = distance
+    }
+  }
+  return best
+}
+
+/**
+ * Bounded acoustic boundary adjustment for the words of one Granite segment.
+ * Preserves VAD-supported quiet onsets and never reaches outside the segment.
+ */
 export function refineGraniteWords(
   words: readonly TimedGraniteWord[],
   speechMask: Uint8Array,
   frameEnergies: Float32Array,
   frameSeconds: number,
-  durationSeconds: number,
+  segmentStartSeconds: number,
+  segmentEndSeconds: number,
 ): TimedGraniteWord[] {
   const refined = words.map((word) => ({ ...word }))
   for (let index = 0; index < refined.length; ++index) {
     const word = refined[index]
     const anchor = words[index]
-    const previousEnd = index > 0 ? words[index - 1].end : 0
-    const nextStart = words[index + 1]?.start ?? durationSeconds
+    const previousEnd = index > 0 ? words[index - 1].end : segmentStartSeconds
+    const nextStart = words[index + 1]?.start ?? segmentEndSeconds
+    if (index === 0) {
+      const relocated = relocateLeadingWord(
+        anchor,
+        nextStart,
+        segmentStartSeconds,
+        speechMask,
+        frameEnergies,
+        frameSeconds,
+      )
+      if (relocated) {
+        word.start = relocated.start
+        word.end = relocated.end
+        continue
+      }
+    }
     const from = Math.max(previousEnd, anchor.start - 0.16, 0)
-    const to = Math.min(nextStart, anchor.end + 0.32, durationSeconds)
+    const to = Math.min(nextStart, anchor.end + 0.32, segmentEndSeconds)
     const firstFrame = Math.max(0, Math.floor(from / frameSeconds))
     const lastFrame = Math.min(frameEnergies.length, Math.ceil(to / frameSeconds))
     let peak = 0
@@ -286,8 +387,8 @@ export function refineGraniteWords(
         word.end = anchor.end
       }
     }
-    word.start = Math.max(0, Math.min(durationSeconds, word.start))
-    word.end = Math.max(word.start, Math.min(durationSeconds, word.end))
+    word.start = Math.max(segmentStartSeconds, Math.min(segmentEndSeconds, word.start))
+    word.end = Math.max(word.start, Math.min(segmentEndSeconds, word.end))
   }
 
   for (let index = 0; index + 1 < refined.length; ++index) {

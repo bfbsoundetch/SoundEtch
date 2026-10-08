@@ -118,10 +118,60 @@ test('nearby acoustic edges cannot collapse a preceding short word', () => {
   ]
   const speech = new Uint8Array(220)
   speech.fill(1, 177, 179)
-  expect(geometry(refineGraniteWords(words, speech, Float32Array.from(speech), 0.032, 7))).toEqual([
+  expect(geometry(refineGraniteWords(words, speech, Float32Array.from(speech), 0.032, 0, 7))).toEqual([
     { start: 5.554, end: 5.714 },
     { start: 5.714, end: 5.794 },
   ])
+})
+
+test('a first word emitted in the segment pre-roll moves onto its speech without reaching the next word', () => {
+  // Fireside Chat: the segment starts 750 ms before "friends"; Granite put "my" in that silence.
+  const words = [
+    { text: 'my', start: 10.45, end: 10.53 },
+    { text: 'friends', start: 11.01, end: 11.33 },
+  ]
+  const speech = new Uint8Array(400)
+  speech.fill(1, 339, 343)
+  speech.fill(1, 347, 358)
+  const [my, friends] = refineGraniteWords(words, speech, Float32Array.from(speech), 0.032, 10.4, 30.4)
+  expect(geometry([my])).toEqual([{ start: 339 * 0.032, end: 343 * 0.032 }])
+  expect(friends.start).toBe(11.01)
+})
+
+test('leading-word relocation is limited to the pre-roll and ignores earlier segments and one-frame clicks', () => {
+  const late = [{ text: 'late', start: 11.3, end: 11.38 }]
+  const distantSpeech = new Uint8Array(400).fill(1, 370, 376)
+  const refineLate = (segmentStart: number) =>
+    geometry(refineGraniteWords(late, distantSpeech, Float32Array.from(distantSpeech), 0.032, segmentStart, 30))
+  expect(refineLate(10.4)).toEqual(geometry(late))
+  expect(refineLate(10.6)).toEqual([{ start: 370 * 0.032, end: 376 * 0.032 }])
+
+  const words = [
+    { text: 'my', start: 10.45, end: 10.53 },
+    { text: 'friends', start: 11.04, end: 11.3 },
+  ]
+  const speech = new Uint8Array(400)
+  speech.fill(1, 320, 326) // previous segment, including the frame straddling the 10.41 s start
+  speech[335] = 1 // click
+  speech.fill(1, 340, 344)
+  speech.fill(1, 346, 356)
+  const [my] = refineGraniteWords(words, speech, Float32Array.from(speech), 0.032, 10.41, 30.41)
+  expect(geometry([my])).toEqual([{ start: 340 * 0.032, end: 344 * 0.032 }])
+})
+
+test('a leading word in a pause the VAD still marks as speech moves onto the louder speech that follows', () => {
+  // A 20-second chunk boundary inside one speech region: Silero stays above the mask threshold
+  // through the pause, so only energy distinguishes the pause from "which".
+  const words = [
+    { text: 'which', start: 0.02, end: 0.1 },
+    { text: 'may', start: 0.6, end: 0.8 },
+  ]
+  const speech = new Uint8Array(40).fill(1)
+  const energies = new Float32Array(40).fill(0.006)
+  energies.fill(0.09, 12, 15)
+  energies.fill(0.1, 19)
+  const [which] = refineGraniteWords(words, speech, energies, 0.032, 0, 1.28)
+  expect(geometry([which])).toEqual([{ start: 12 * 0.032, end: 15 * 0.032 }])
 })
 
 test('unsupported leading padding is removed without cutting a VAD-supported quiet onset', () => {
@@ -129,14 +179,14 @@ test('unsupported leading padding is removed without cutting a VAD-supported qui
   const energies = new Float32Array(80).fill(0.002)
   speech.fill(2, 30, 40)
   energies.fill(0.1, 30, 40)
-  expect(geometry(refineGraniteWords([{ text: 'ladies', start: 0.2, end: 1.16 }], speech, energies, 0.032, 2))).toEqual(
-    [{ start: 0.928, end: 1.28 }],
-  )
+  expect(
+    geometry(refineGraniteWords([{ text: 'ladies', start: 0.2, end: 1.16 }], speech, energies, 0.032, 0, 2)),
+  ).toEqual([{ start: 0.928, end: 1.28 }])
 
   speech.fill(1, 6, 30)
-  expect(geometry(refineGraniteWords([{ text: 'ladies', start: 0.2, end: 1.16 }], speech, energies, 0.032, 2))).toEqual(
-    [{ start: 0.2, end: 1.28 }],
-  )
+  expect(
+    geometry(refineGraniteWords([{ text: 'ladies', start: 0.2, end: 1.16 }], speech, energies, 0.032, 0, 2)),
+  ).toEqual([{ start: 0.2, end: 1.28 }])
 })
 
 test('silent gaps stay uncovered and unsupported anchors keep their CTC spans', () => {
@@ -146,11 +196,11 @@ test('silent gaps stay uncovered and unsupported anchors keep their CTC spans', 
   ]
   const speech = new Uint8Array(100)
   speech.fill(1, 12, 20)
-  expect(geometry(refineGraniteWords(words, speech, Float32Array.from(speech), 0.032, 3.2))).toEqual([
+  expect(geometry(refineGraniteWords(words, speech, Float32Array.from(speech), 0.032, 0, 3.2))).toEqual([
     { start: 0.4, end: 20 * 0.032 },
     { start: 2.4, end: 2.48 },
   ])
-  expect(geometry(refineGraniteWords(words, new Uint8Array(100), new Float32Array(100), 0.032, 3.2))).toEqual(
+  expect(geometry(refineGraniteWords(words, new Uint8Array(100), new Float32Array(100), 0.032, 0, 3.2))).toEqual(
     geometry(words),
   )
 })
@@ -161,7 +211,7 @@ test('continuous speech extends ends by no more than 240 ms', () => {
     { text: 'two', start: 2.4, end: 2.48 },
   ]
   const speech = new Uint8Array(100).fill(1)
-  expect(geometry(refineGraniteWords(words, speech, Float32Array.from(speech), 0.032, 3.2))).toEqual([
+  expect(geometry(refineGraniteWords(words, speech, Float32Array.from(speech), 0.032, 0, 3.2))).toEqual([
     { start: 0.4, end: 0.72 },
     { start: 2.4, end: 2.48 + 0.24 },
   ])
@@ -170,7 +220,7 @@ test('continuous speech extends ends by no more than 240 ms', () => {
 test('segment end bounds refinement when acoustic support continues into the next chunk', () => {
   const speech = new Uint8Array(700).fill(1)
   const words = [{ text: 'boundary', start: 19.8, end: 19.92 }]
-  expect(geometry(refineGraniteWords(words, speech, Float32Array.from(speech), 0.032, 20))).toEqual([
+  expect(geometry(refineGraniteWords(words, speech, Float32Array.from(speech), 0.032, 0, 20))).toEqual([
     { start: 19.8, end: 20 },
   ])
 })
@@ -186,6 +236,7 @@ test('competing nearby speech runs keep the selected end bounded', () => {
         speech,
         Float32Array.from(speech),
         0.032,
+        0,
         3.2,
       ),
     ),
@@ -201,17 +252,17 @@ test('quiet prefixes and blended speech retain CTC starts instead of internal en
   const speech = new Uint8Array(240).fill(1)
   const energies = new Float32Array(240).fill(0.08)
   energies.fill(0.002, 85, 100)
-  expect(geometry(refineGraniteWords(words, speech, energies, 0.01, 2.4))).toEqual([
+  expect(geometry(refineGraniteWords(words, speech, energies, 0.01, 0, 2.4))).toEqual([
     { start: 0.4, end: 0.85 },
     { start: 0.9, end: 1.34 },
     { start: 1.6, end: 2.04 },
   ])
-  expect(geometry(refineGraniteWords(words, speech, new Float32Array(240).fill(0.08), 0.01, 2.4))).toEqual([
+  expect(geometry(refineGraniteWords(words, speech, new Float32Array(240).fill(0.08), 0.01, 0, 2.4))).toEqual([
     { start: 0.4, end: 0.9 },
     { start: 0.9, end: 1.34 },
     { start: 1.6, end: 2.04 },
   ])
-  expect(geometry(refineGraniteWords(words, new Uint8Array(240), energies, 0.01, 2.4))).toEqual(geometry(words))
+  expect(geometry(refineGraniteWords(words, new Uint8Array(240), energies, 0.01, 0, 2.4))).toEqual(geometry(words))
 })
 
 test('frame energies use RMS and include a partial trailing frame', () => {
