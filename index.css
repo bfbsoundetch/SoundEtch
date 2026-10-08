@@ -227,6 +227,7 @@ dialog.overlay[open] {
     'timeline'
     'lists';
   overscroll-behavior: none;
+  overflow-y: scroll;
 }
 
 .clickable {
