@@ -89,6 +89,7 @@ export class EffectPanelController {
         return
       }
       this.bottomPanelController.open({
+        owner: this,
         title: metadata.name,
         subtitle: track.name,
         body,
@@ -136,6 +137,7 @@ export class EffectPanelController {
     bodyElement.appendChild(this.createChainArrow())
     bodyElement.appendChild(this.createChainEndpoint('Output'))
     this.bottomPanelController.open({
+      owner: this,
       title: 'Effects',
       subtitle: track.name,
       body: bodyElement,
@@ -566,7 +568,7 @@ export class EffectPanelController {
     if (parameters.length == 0) {
       return
     }
-    this.bottomPanelController.close()
+    this.bottomPanelController.close(this)
     trackListController.enterAutomationMode(track, effectData.instanceId, parameters)
   }
 
@@ -599,6 +601,7 @@ export class EffectPanelController {
 
   private openSubview(title: string, subtitle: string, body: HTMLElement, track: Track) {
     this.bottomPanelController.open({
+      owner: this,
       title,
       subtitle,
       body,

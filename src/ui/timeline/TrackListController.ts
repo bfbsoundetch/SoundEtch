@@ -37,6 +37,8 @@ import {
 } from '../../transcription/TranscriptionSelection'
 import type { TranscriptionReplacement } from '../../transcription/TranscriptionSelection'
 import type { ProcessingModalController } from '../ProcessingModalController'
+import { TranscriptPanelController } from '../TranscriptPanelController'
+import type { TrackTranscriptEntry } from '../transcript/TrackTranscript'
 
 interface Selection {
   startSample: number
@@ -93,7 +95,7 @@ export class TrackListController {
   readonly selectionController = new TimelineRegionController(
     false,
     (event: PointerEvent) => this.timelineSelectionContextMenu.draw(event.clientX, event.clientY),
-    () => {},
+    (selection) => this.transcriptPanelController?.syncSelection(selection),
     this,
   )
 
@@ -109,6 +111,7 @@ export class TrackListController {
   private automationMode: AutomationMode | null = null
   private readonly trackDisplayModes = new Map<Track, TrackDisplayMode>()
   private spectrogramService: SpectrogramService | null = null
+  private transcriptPanelController: TranscriptPanelController | null = null
 
   readonly timelineSelectionContextMenu = new ContextMenuController(
     'timeline-selection-contextmenu',
@@ -194,7 +197,10 @@ export class TrackListController {
     this.newTrackDropRegion.hidden = true
     this.tracklistElement.appendChild(this.newTrackDropRegion)
 
-    this.history.addChangeListener(() => this.draw())
+    this.history.addChangeListener(() => {
+      this.draw()
+      this.transcriptPanelController?.refreshData()
+    })
     KeyPressController.addKeyDownListener((event) => this.handleKeyDown(event))
 
     this.resizeCallback = async () => {
@@ -235,6 +241,7 @@ export class TrackListController {
       this.showWelcomeOnEmptyProject()
       this.sampleRate = project.sampleRate
       if (this.renderedProjectId != project.id) {
+        this.transcriptPanelController?.close()
         this.renderedProjectId = project.id
         this.translationUnits = 0
         this.waveforms.forEach((waveform) => waveform.remove())
@@ -333,8 +340,16 @@ export class TrackListController {
       this.tracklistElement.replaceChildren(...waveformDivs, this.newTrackDropRegion)
       this.waveforms.forEach((waveform) => waveform.draw())
       this.selectionController.remove()
-      this.pointerStateManager
+      this.pointerStateManager.reset()
+      const panelTrack = this.transcriptPanelController?.track
+      if (panelTrack && !project.getTracks().includes(panelTrack)) this.transcriptPanelController?.close()
+      else this.transcriptPanelController?.refreshData()
     })
+  }
+
+  openTrackTranscript(track: Track, entry: TrackTranscriptEntry): void {
+    this.transcriptPanelController ??= new TranscriptPanelController(this)
+    this.transcriptPanelController.open(track, entry)
   }
 
   private getSpectrogramService(): SpectrogramService {

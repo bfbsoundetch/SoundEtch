@@ -1,3 +1,4 @@
+import type { SelectedRegion } from '../../playback/Player'
 import { KeyPressController } from '../KeyPressController'
 import { TrackListController } from './TrackListController'
 import { TrackListItemController } from './TrackListItemController'
@@ -20,7 +21,7 @@ export class TimelineRegionController extends TrackListItemController {
   constructor(
     private readonly singleWaveform: boolean,
     private readonly contextMenuListener: (event: PointerEvent) => any,
-    readonly updateListener: () => any,
+    private readonly selectionChangeListener: (selection: SelectedRegion | null) => void,
     trackListController: TrackListController,
   ) {
     super(trackListController)
@@ -56,6 +57,7 @@ export class TimelineRegionController extends TrackListItemController {
         this.setUpElementsForWaveform(waveform)
       }
       this.draw()
+      this.selectionChangeListener(this.selectedRegion)
       return
     }
     if (!this.draggedFirstWaveform) {
@@ -84,15 +86,17 @@ export class TimelineRegionController extends TrackListItemController {
       }
     }
     this.draw()
+    this.selectionChangeListener(this.selectedRegion)
   }
 
   setSelection(startSample: number, endSample: number, waveforms: Set<Waveform>) {
-    this.remove()
+    this.clearElements()
     this.firstPosition = startSample
     this.secondPosition = endSample
     waveforms.forEach((w) => this.setUpElementsForWaveform(w))
-    this.trackListController.pointerStateManager.startSelecting()
+    this.trackListController.positionMarkerController.hidePositionMarker()
     this.draw()
+    this.selectionChangeListener(this.selectedRegion)
   }
 
   updateSelectionStartSample(leftExpand: boolean) {
@@ -110,6 +114,7 @@ export class TimelineRegionController extends TrackListItemController {
     this.firstPosition = newLow
     this.secondPosition = newHigh
     this.draw()
+    this.selectionChangeListener(this.selectedRegion)
   }
 
   draw(isActive = true) {
@@ -159,6 +164,11 @@ export class TimelineRegionController extends TrackListItemController {
   }
 
   remove() {
+    this.clearElements()
+    this.selectionChangeListener(null)
+  }
+
+  private clearElements(): void {
     this.waveformElements.values().forEach((v) => {
       v.rect.remove()
       v.leftExpand.remove()
@@ -214,7 +224,7 @@ export class TimelineRegionController extends TrackListItemController {
     leftExpand.addEventListener('mousedown', (event) => {
       if (event.buttons == 1 && event.button == 0) {
         this.updateSelectionStartSample(true)
-        this.trackListController.pointerStateManager.startResizingSelection(this)
+        this.trackListController.pointerStateManager.startResizingSelection(this, event)
         event.stopPropagation()
       }
     })
@@ -222,7 +232,7 @@ export class TimelineRegionController extends TrackListItemController {
     rightExpand.addEventListener('mousedown', (event) => {
       if (event.buttons == 1 && event.button == 0) {
         this.updateSelectionStartSample(false)
-        this.trackListController.pointerStateManager.startResizingSelection(this)
+        this.trackListController.pointerStateManager.startResizingSelection(this, event)
         event.stopPropagation()
       }
     })

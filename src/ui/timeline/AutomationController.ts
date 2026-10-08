@@ -139,7 +139,7 @@ export class AutomationController extends TrackListItemController {
     this.pointEditorIsOpen = false
     this.pointEditorControls.clear()
     this.pointEditorTableBody = null
-    this.bottomPanelController.close()
+    this.bottomPanelController.close(this)
   }
 
   modifyPoint(point: ParamValueTransition, x: number, y: number) {
@@ -219,6 +219,7 @@ export class AutomationController extends TrackListItemController {
     }
     this.pointEditorIsOpen = true
     this.bottomPanelController.open({
+      owner: this,
       title: `${this.parameterMetadata.displayName} automation`,
       subtitle: `${this.track.name} · ${this.paramVals.transitionSequence.length} points`,
       body: this.createPointEditor(),

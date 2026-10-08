@@ -14,6 +14,7 @@ import {
   type SpectrogramTrackRenderer,
 } from './spectrogram/SpectrogramService'
 import { TRANSCRIPTION_LANE_HEIGHT, TranscriptionOverlayController } from './TranscriptionOverlay'
+import { getTrackTranscriptEntries, type TrackTranscriptEntry } from '../transcript/TrackTranscript'
 
 /** Handles displaying a track's waveform. */
 export class Waveform extends TrackListItemController {
@@ -56,6 +57,24 @@ export class Waveform extends TrackListItemController {
 
   get fullHeight() {
     return this.transcriptionLaneTop + this.transcriptionLaneHeight
+  }
+
+  revealTranscriptLane(): void {
+    this.transcriptionLaneElement.scrollIntoView({ block: 'nearest', inline: 'nearest' })
+  }
+
+  hitTestTranscript(event: MouseEvent): TrackTranscriptEntry | null {
+    if (!this.topSvgElement.isConnected || this.transcriptionLaneHeight === 0) return null
+    const matrix = this.topSvgElement.getScreenCTM()
+    if (!matrix) return null
+    const point = new DOMPoint(event.clientX, event.clientY).matrixTransform(matrix.inverse())
+    if (point.x < 0 || point.x >= this.width || point.y < this.transcriptionLaneTop || point.y >= this.fullHeight)
+      return null
+    const sample = this.getSampleForXValue(point.x)
+    return (
+      getTrackTranscriptEntries(this.track).find((entry) => entry.startSample <= sample && sample < entry.endSample) ??
+      null
+    )
   }
 
   constructor(

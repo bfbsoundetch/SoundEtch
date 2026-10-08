@@ -1,6 +1,7 @@
 import { createArrowIcon } from './SvgIcon'
 
 export type BottomPanelOptions = {
+  owner: object
   title: string
   subtitle: string
   body: HTMLElement
@@ -23,6 +24,7 @@ export class BottomPanelController {
   private readonly closeButton = document.createElement('button')
   private onBack: (() => Promise<void> | void) | null = null
   private onClose: (() => Promise<void> | void) | null = null
+  private owner: object | null = null
   private isOpen = false
 
   private constructor() {
@@ -65,7 +67,7 @@ export class BottomPanelController {
     this.closeButton.className = 'clickable bottom-panel-close'
     this.closeButton.type = 'button'
     this.closeButton.title = 'Close'
-    this.closeButton.setAttribute('aria-label', 'Close effect panel')
+    this.closeButton.setAttribute('aria-label', 'Close panel')
     const closeIcon = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
     closeIcon.setAttribute('viewBox', '0 0 500 500')
     closeIcon.setAttribute('aria-hidden', 'true')
@@ -83,6 +85,10 @@ export class BottomPanelController {
   }
 
   open(options: BottomPanelOptions) {
+    if (this.isOpen && this.owner !== options.owner) {
+      this.close()
+    }
+    this.owner = options.owner
     this.onBack = options.onBack ?? null
     this.onClose = options.onClose
     this.backButton.disabled = false
@@ -113,14 +119,15 @@ export class BottomPanelController {
     this.isOpen = false
   }
 
-  close() {
-    if (!this.isOpen) {
+  close(owner?: object): void {
+    if (!this.isOpen || (owner !== undefined && owner !== this.owner)) {
       return
     }
     this.hide()
     const onClose = this.onClose
     this.onBack = null
     this.onClose = null
+    this.owner = null
     try {
       void Promise.resolve(onClose?.()).catch((error) => console.error('Bottom panel close action failed', error))
     } catch (error) {

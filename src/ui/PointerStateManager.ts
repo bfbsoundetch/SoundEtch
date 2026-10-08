@@ -4,6 +4,7 @@ import { TimelineRegionController } from './timeline/TimelineRegionController'
 import { TrackListController } from './timeline/TrackListController'
 import { TrackListItemController } from './timeline/TrackListItemController'
 import { ClipViewController, Waveform } from './timeline/Waveform'
+import type { TrackTranscriptEntry } from './transcript/TrackTranscript'
 
 export class PointerStateManager extends TrackListItemController {
   private state = State.DEFAULT
@@ -13,6 +14,14 @@ export class PointerStateManager extends TrackListItemController {
   private mouseDownPoint: { x: number; y: number } | null = null
   private clipViewMoveInfo: { clipViewController: ClipViewController; startWave: Waveform } | null = null
   private timelineRegionController: TimelineRegionController | null = null
+  private selectingTranscript = false
+  private pendingTranscript: {
+    waveform: Waveform
+    entry: TrackTranscriptEntry
+    clientX: number
+    clientY: number
+    cancelled: boolean
+  } | null = null
 
   private readonly timelineAreaElement = document.getElementById('timeline-area')!
 
@@ -36,6 +45,55 @@ export class PointerStateManager extends TrackListItemController {
       }
     })
 
+    document.addEventListener(
+      'mousedown',
+      () => {
+        this.pendingTranscript = null
+        this.finishSelectingTranscript()
+      },
+      true,
+    )
+    window.addEventListener('blur', () => {
+      this.pendingTranscript = null
+      this.finishSelectingTranscript()
+    })
+    timelineAreaElement.addEventListener(
+      'mousedown',
+      (event) => {
+        if (
+          event.button !== 0 ||
+          event.altKey ||
+          event.ctrlKey ||
+          event.metaKey ||
+          event.shiftKey ||
+          (this.state !== State.DEFAULT && this.state !== State.SELECTING && this.state !== State.READ_ONLY) ||
+          Math.abs(event.clientX - this.trackListController.positionMarkerController.x) < 2 ||
+          !(event.target instanceof Element) ||
+          event.target instanceof SVGLineElement
+        )
+          return
+        const div = event.target.closest('.waveform')
+        const waveform = this.trackListController.waveforms.find((w) => w.div === div)
+        const entry = waveform?.hitTestTranscript(event)
+        if (waveform && entry) {
+          this.pendingTranscript = {
+            waveform,
+            entry,
+            clientX: event.clientX,
+            clientY: event.clientY,
+            cancelled: false,
+          }
+        }
+      },
+      true,
+    )
+    document.addEventListener('mousemove', (event) => {
+      const pending = this.pendingTranscript
+      if (pending && (Math.abs(event.clientX - pending.clientX) >= 2 || Math.abs(event.clientY - pending.clientY) >= 2)) {
+        pending.cancelled = true
+      }
+    })
+
     const mouseMoveListener = async (mouseEvent: MouseEvent) => {
       if (Math.abs(mouseEvent.x - this.trackListController.positionMarkerController.x) < 2) {
         this.timelineAreaElement.style.cursor = 'col-resize'
@@ -51,6 +109,7 @@ export class PointerStateManager extends TrackListItemController {
           }
           break
         case State.SELECTING:
+          if (this.selectingTranscript) break
           if (
             mouseEvent.buttons == 1 &&
             mouseEvent.button == 0 &&
@@ -143,8 +202,8 @@ export class PointerStateManager extends TrackListItemController {
           this.changeState(State.DEFAULT)
           break
         case State.SELECTING:
-          this.changeState(State.DEFAULT)
-          this.timelineRegionController!.updateListener()
+          if (this.selectingTranscript) this.finishSelectingTranscript()
+          else this.changeState(State.DEFAULT)
           break
         case State.MOVING_CLIPVIEW: {
           const droppedOnNewTrack = this.trackListController.isPointInNewTrackDropRegion(
@@ -186,6 +245,28 @@ export class PointerStateManager extends TrackListItemController {
         case State.READ_ONLY:
           break
       }
+      const pending = this.pendingTranscript
+      this.pendingTranscript = null
+      if (
+        pending &&
+        !pending.cancelled &&
+        mouseEvent.button === 0 &&
+        mouseEvent.target instanceof Element &&
+        mouseEvent.target.closest('.waveform') === pending.waveform.div &&
+        this.trackListController.waveforms.includes(pending.waveform)
+      ) {
+        const entry = pending.waveform.hitTestTranscript(mouseEvent)
+        if (
+          entry &&
+          entry.clipView === pending.entry.clipView &&
+          entry.placementIndex === pending.entry.placementIndex &&
+          entry.rangeIndex === pending.entry.rangeIndex &&
+          entry.startSample === pending.entry.startSample &&
+          entry.endSample === pending.entry.endSample
+        ) {
+          this.trackListController.openTrackTranscript(pending.waveform.track, entry)
+        }
+      }
     }
 
     const scrollListener = (event: WheelEvent) => {
@@ -212,7 +293,24 @@ export class PointerStateManager extends TrackListItemController {
     document.addEventListener('mouseup', mouseUpListener)
   }
 
-  startResizingSelection(timelineRegionController: TimelineRegionController) {
+  startSelectingTranscript(event: MouseEvent): void {
+    if (this.state !== State.DEFAULT && this.state !== State.SELECTING) return
+    this.pendingTranscript = null
+    this.mouseDownPoint = { x: event.clientX, y: event.clientY }
+    this.activeClipViewController = null
+    this.activeWaveform = null
+    this.timelineRegionController = this.trackListController.selectionController
+    this.selectingTranscript = true
+    this.changeState(State.SELECTING)
+  }
+
+  finishSelectingTranscript(): void {
+    if (this.selectingTranscript) this.changeState(State.DEFAULT)
+  }
+
+  startResizingSelection(timelineRegionController: TimelineRegionController, event: MouseEvent): void {
+    this.pendingTranscript = null
+    this.mouseDownPoint = { x: event.clientX, y: event.clientY }
     this.activeClipViewController = null
     this.activeWaveform = null
     this.timelineRegionController = timelineRegionController
@@ -240,11 +338,6 @@ export class PointerStateManager extends TrackListItemController {
     this.clipViewMoveInfo = { clipViewController: controller, startWave: controller.waveform }
     this.mouseDownPoint = { x: mouseDownX, y: 0 }
     this.trackListController.showNewTrackDropRegion(controller.clipView.clip.getChannelCount())
-  }
-
-  startSelecting() {
-    this.trackListController.positionMarkerController.hidePositionMarker()
-    this.changeState(State.SELECTING)
   }
 
   startAutomating() {
@@ -306,6 +399,7 @@ export class PointerStateManager extends TrackListItemController {
   }
 
   reset() {
+    this.pendingTranscript = null
     this.changeState(State.DEFAULT)
     this.activeClipViewController = null
     this.activeWaveform = null
@@ -319,8 +413,20 @@ export class PointerStateManager extends TrackListItemController {
   }
 
   private changeState(newState: State) {
+    if (
+      newState === State.MARKING ||
+      newState === State.MOVING_CLIPVIEW ||
+      newState === State.RESIZING_CLIPVIEW ||
+      newState === State.AUTOMATING
+    )
+      this.pendingTranscript = null
     if (this.state == newState) {
       return
+    }
+    if (this.selectingTranscript && newState !== State.SELECTING) {
+      this.selectingTranscript = false
+      this.mouseDownPoint = null
+      this.timelineRegionController = null
     }
     switch (this.state) {
       case State.SELECTING:

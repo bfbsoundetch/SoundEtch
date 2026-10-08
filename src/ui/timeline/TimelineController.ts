@@ -166,6 +166,7 @@ export class TimelineController extends TrackListItemController {
           this.trackListController.selectionController.updateSelectionStartSample(true)
           this.trackListController.pointerStateManager.startResizingSelection(
             this.trackListController.selectionController,
+            event,
           )
           event.stopPropagation()
         }
@@ -176,6 +177,7 @@ export class TimelineController extends TrackListItemController {
           this.trackListController.selectionController.updateSelectionStartSample(false)
           this.trackListController.pointerStateManager.startResizingSelection(
             this.trackListController.selectionController,
+            event,
           )
           event.stopPropagation()
         }
