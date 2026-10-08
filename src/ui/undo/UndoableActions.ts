@@ -1,3 +1,5 @@
+import type { TranscribedRange } from '../../project/Transcription'
+import { Clip } from '../../project/Clip'
 import { ClipView } from '../../project/ClipView'
 import { Project } from '../../project/Project'
 import { ProjectManager } from '../../project/ProjectManager'
@@ -12,6 +14,7 @@ export type UndoableAction =
   | MoveClipViewToNewTrackCommand
   | SetTrackClipViewsCommand
   | SetTrackPropertyCommand
+  | SetClipTranscriptionCommand
   | BatchCommand
 
 export class BatchCommand implements Undoable {
@@ -210,6 +213,36 @@ export class SetTrackClipViewsCommand implements Undoable {
   }
 }
 
+export class SetClipTranscriptionCommand implements Undoable {
+  private readonly oldRanges: TranscribedRange[]
+  private readonly newRanges: TranscribedRange[]
+
+  constructor(
+    private readonly clip: Clip,
+    oldRanges: readonly TranscribedRange[],
+    newRanges: readonly TranscribedRange[],
+  ) {
+    this.oldRanges = copyTranscriptionRanges(oldRanges)
+    this.newRanges = copyTranscriptionRanges(newRanges)
+  }
+
+  async perform() {
+    this.clip.transcription = copyTranscriptionRanges(this.newRanges)
+  }
+
+  async undo() {
+    this.clip.transcription = copyTranscriptionRanges(this.oldRanges)
+  }
+
+  async save() {
+    await ProjectManager.saveClip(this.clip)
+  }
+
+  toString() {
+    return 'set clip transcription'
+  }
+}
+
 export class SetTrackPropertyCommand implements Undoable {
   constructor(
     private readonly track: Track,
@@ -285,4 +318,8 @@ function setTrackClipViews(track: Track, clipViews: ClipView[]) {
 
 async function saveTracks(...tracks: Track[]) {
   await Promise.all([...new Set(tracks)].map((track) => ProjectManager.saveTrack(track)))
+}
+
+function copyTranscriptionRanges(ranges: readonly TranscribedRange[]): TranscribedRange[] {
+  return ranges.map((range) => ({ ...range }))
 }

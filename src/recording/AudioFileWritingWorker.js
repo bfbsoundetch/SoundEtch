@@ -14,6 +14,7 @@ self.onmessage = async (e) => {
       Object.keys(input.clip.summary).forEach((key) => (self.summary[key] = input.clip.summary[key]))
       self.summary.setSyncFileHandle(await summaryFileHandle.createSyncAccessHandle())
       self.position = 0
+      postMessage({ type: 'ready' })
       break
     case 'audio':
       self.fileSyncHandle.write(e.data.audio, { at: self.position })

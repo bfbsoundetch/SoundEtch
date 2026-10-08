@@ -101,7 +101,7 @@
       window.addClipController = new window.AddClipController()
       window.clipManagerController = new window.ClipManagerController()
       window.projectModalController = new window.ProjectModalController()
-      window.welcomePageController = new window.WelcomePageController
+      window.welcomePageController = new window.WelcomePageController()
       if (window.location.search) {
         const meetingParam = new URL(window.location).searchParams.get('meeting')
         if (meetingParam) {
@@ -262,10 +262,10 @@
           </button>
         </div>
       </div>
-      <div id="welcome" style="display:none">
+      <div id="welcome" style="display: none">
         <div>
-          <h1 style="font-size: xxx-large; text-align: center;">Welcome!</h1>
-          <h2 style="text-align: center;">Try one of these to get started:</h2>
+          <h1 style="font-size: xxx-large; text-align: center">Welcome!</h1>
+          <h2 style="text-align: center">Try one of these to get started:</h2>
         </div>
         <button id="welcome-mic" class="welcome-button clickable">
           <div class="welcome-header">
@@ -276,7 +276,7 @@
               <use xlink:href="#record" />
             </svg>
           </div>
-          <div style="text-align: left;">Record from microphone</div>
+          <div style="text-align: left">Record from microphone</div>
         </button>
         <button id="welcome-screen" class="welcome-button clickable">
           <div class="welcome-header">
@@ -308,7 +308,11 @@
       </div>
       <div id="timeline-body">
         <div id="timeline">
-          <svg id="timeline-svg" style="height: 100%; width: 100%; user-select: none" xmlns="http://www.w3.org/2000/svg">
+          <svg
+            id="timeline-svg"
+            style="height: 100%; width: 100%; user-select: none"
+            xmlns="http://www.w3.org/2000/svg"
+          >
             <path id="timeline-major-ticks"></path>
             <path id="timeline-minor-ticks"></path>
           </svg>
@@ -635,10 +639,7 @@
             <p id="spectrogram-fft-size-description">Larger transforms provide finer frequency resolution.</p>
 
             <label for="spectrogram-window-function">Window function</label>
-            <select
-              id="spectrogram-window-function"
-              aria-describedby="spectrogram-window-function-description"
-            >
+            <select id="spectrogram-window-function" aria-describedby="spectrogram-window-function-description">
               <option value="BLACKMAN">Blackman</option>
               <option value="BLACKMAN_HARRIS">Blackman-Harris</option>
               <option value="HANN">Hann</option>
@@ -657,10 +658,7 @@
             <p id="spectrogram-hop-size-description">Smaller hops provide finer time resolution.</p>
 
             <label for="spectrogram-frequency-bands">Frequency bands</label>
-            <select
-              id="spectrogram-frequency-bands"
-              aria-describedby="spectrogram-frequency-bands-description"
-            >
+            <select id="spectrogram-frequency-bands" aria-describedby="spectrogram-frequency-bands-description">
               <option value="128">128 bands</option>
               <option value="256">256 bands</option>
               <option value="512">512 bands</option>
@@ -695,11 +693,7 @@
         <footer class="settings-actions">
           <button id="settings-reset-button" class="bordered clickable" type="button">Reset to defaults</button>
           <span class="settings-actions-spacer"></span>
-          <button
-            class="bordered clickable"
-            type="button"
-            onclick="document.getElementById('settings-modal').close()"
-          >
+          <button class="bordered clickable" type="button" onclick="document.getElementById('settings-modal').close()">
             Cancel
           </button>
           <button class="bordered clickable" type="submit">Apply</button>

@@ -11,7 +11,7 @@ export class PointerStateManager extends TrackListItemController {
   public activeClipViewController: ClipViewController | null = null
   public activeWaveform: Waveform | null = null
   private mouseDownPoint: { x: number; y: number } | null = null
-  private clipViewMoveInfo: { clipViewController: ClipViewController, startWave: Waveform } | null = null
+  private clipViewMoveInfo: { clipViewController: ClipViewController; startWave: Waveform } | null = null
   private timelineRegionController: TimelineRegionController | null = null
 
   private readonly timelineAreaElement = document.getElementById('timeline-area')!

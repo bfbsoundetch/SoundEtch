@@ -51,12 +51,7 @@ async function loadSource(
   state: SourceRequestState,
 ): Promise<void> {
   try {
-    if (
-      command.sourceChannelCount < 1 ||
-      command.hop < 1 ||
-      command.fftSize < 1 ||
-      command.columnCount < 1
-    ) {
+    if (command.sourceChannelCount < 1 || command.hop < 1 || command.fftSize < 1 || command.columnCount < 1) {
       throw new Error('Invalid spectrogram source request dimensions')
     }
 
@@ -142,9 +137,10 @@ async function loadPackedWindows(
 
     const batchChannelCount = Math.min(channelsPerBatch, command.sourceChannelCount - firstChannel)
     const requiredBytes = batchChannelCount * bytesPerChannel
-    const data = reusableBuffer !== undefined && reusableBuffer.byteLength >= requiredBytes
-      ? reusableBuffer
-      : new ArrayBuffer(requiredBytes)
+    const data =
+      reusableBuffer !== undefined && reusableBuffer.byteLength >= requiredBytes
+        ? reusableBuffer
+        : new ArrayBuffer(requiredBytes)
     const output = new Float32Array(data, 0, requiredBytes / Float32Array.BYTES_PER_ELEMENT)
     output.fill(0)
 
@@ -160,12 +156,15 @@ async function loadPackedWindows(
         if (readEnd <= readStart) continue
 
         reads.push(
-          command.file.slice(readStart * bytesPerFrame, readEnd * bytesPerFrame).arrayBuffer().then((data) => ({
-            columnOffset,
-            windowStart,
-            readStart,
-            data,
-          })),
+          command.file
+            .slice(readStart * bytesPerFrame, readEnd * bytesPerFrame)
+            .arrayBuffer()
+            .then((data) => ({
+              columnOffset,
+              windowStart,
+              readStart,
+              data,
+            })),
         )
       }
 

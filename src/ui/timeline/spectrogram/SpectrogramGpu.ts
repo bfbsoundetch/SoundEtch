@@ -304,7 +304,6 @@ export interface SpectrogramGpuCanvas {
   readonly context: GPUCanvasContext
 }
 
-
 interface GpuResources {
   device: GPUDevice
   sourceBuffer: GPUBuffer
@@ -415,7 +414,12 @@ export class SpectrogramGpu {
     return { context }
   }
 
-  render(canvas: SpectrogramGpuCanvas, width: number, height: number, draws: readonly SpectrogramGpuDraw[]): Promise<void> {
+  render(
+    canvas: SpectrogramGpuCanvas,
+    width: number,
+    height: number,
+    draws: readonly SpectrogramGpuDraw[],
+  ): Promise<void> {
     const resources = this.requireResources()
     const uniformStride =
       Math.ceil(RENDER_UNIFORM_BYTES / resources.device.limits.minUniformBufferOffsetAlignment) *
@@ -532,9 +536,10 @@ export class SpectrogramGpu {
     }
 
     resources.device.queue.writeBuffer(resources.sourceBuffer, 0, message.data)
-    const storedFrameCount = message.layout === 'interleaved'
-      ? message.data.byteLength / Float32Array.BYTES_PER_ELEMENT / message.batchChannelCount
-      : 0
+    const storedFrameCount =
+      message.layout === 'interleaved'
+        ? message.data.byteLength / Float32Array.BYTES_PER_ELEMENT / message.batchChannelCount
+        : 0
 
     for (let channelOffset = 0; channelOffset < message.batchChannelCount; channelOffset++) {
       const metadata = new ArrayBuffer(METADATA_BYTES)
@@ -565,9 +570,7 @@ export class SpectrogramGpu {
       }
       computePass.setPipeline(resources.magnitudePipeline)
       computePass.setBindGroup(0, resources.magnitudeBindGroups[pingPongIndex])
-      computePass.dispatchWorkgroups(
-        Math.ceil((resources.packedColumnCount * resources.settings.frequencyBands) / 64),
-      )
+      computePass.dispatchWorkgroups(Math.ceil((resources.packedColumnCount * resources.settings.frequencyBands) / 64))
       computePass.end()
 
       commandEncoder.copyBufferToTexture(
@@ -598,15 +601,11 @@ export class SpectrogramGpu {
     if (resources !== null) this.destroyResourcesAfterWork(resources)
   }
 
-  private async initialize(
-    sampleRate: number,
-    settings: SpectrogramSettings,
-  ): Promise<GpuResources> {
+  private async initialize(sampleRate: number, settings: SpectrogramSettings): Promise<GpuResources> {
     if (navigator.gpu === undefined) throw new Error('navigator.gpu is unavailable')
     const adapter = await navigator.gpu.requestAdapter()
     if (adapter === null) throw new Error('No WebGPU adapter is available')
-    const fftComponentBytes =
-      TEXTURE_COLUMNS * settings.fftSize * Float32Array.BYTES_PER_ELEMENT
+    const fftComponentBytes = TEXTURE_COLUMNS * settings.fftSize * Float32Array.BYTES_PER_ELEMENT
     const requiredStorageSize = Math.max(fftComponentBytes, SOURCE_BUFFER_BYTES)
     if (
       adapter.limits.maxStorageBufferBindingSize < requiredStorageSize ||
@@ -643,8 +642,7 @@ export class SpectrogramGpu {
     settings: SpectrogramSettings,
   ): Promise<GpuResources> {
     const analysisWindow = createSpectrogramWindow(settings.fftSize, settings.windowFunction)
-    const fftComponentBytes =
-      TEXTURE_COLUMNS * settings.fftSize * Float32Array.BYTES_PER_ELEMENT
+    const fftComponentBytes = TEXTURE_COLUMNS * settings.fftSize * Float32Array.BYTES_PER_ELEMENT
     const packedColumnCount = Math.ceil(TEXTURE_COLUMNS / 4)
     const stagingBytesPerRow = Math.ceil(TEXTURE_COLUMNS / 256) * 256
     const stagingBufferBytes = stagingBytesPerRow * settings.frequencyBands
@@ -725,7 +723,6 @@ export class SpectrogramGpu {
         { binding: 2, visibility: GPUShaderStage.FRAGMENT, texture: { sampleType: 'float', viewDimension: '2d' } },
       ],
     })
-
 
     device.queue.writeBuffer(windowBuffer, 0, analysisWindow)
 
@@ -883,11 +880,7 @@ export class SpectrogramGpu {
   }
 
   private updateMelPoints(resources: GpuResources, sampleRate: number): void {
-    const points = getSpectrogramMelPoints(
-      resources.settings.frequencyBands,
-      resources.settings.fftSize,
-      sampleRate,
-    )
+    const points = getSpectrogramMelPoints(resources.settings.frequencyBands, resources.settings.fftSize, sampleRate)
     resources.device.queue.writeBuffer(resources.melBuffer, 0, points)
     resources.sampleRate = sampleRate
   }

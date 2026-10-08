@@ -41,12 +41,7 @@ test('color schemes use the prototype palettes and matching minimum-dB colors', 
     [0, 0, 0],
     [1, 1, 1],
   ])
-  expect(SPECTROGRAM_COLORMAPS.map(getSpectrogramFallbackColor)).toEqual([
-    '#440154',
-    '#000004',
-    '#000004',
-    '#000000',
-  ])
+  expect(SPECTROGRAM_COLORMAPS.map(getSpectrogramFallbackColor)).toEqual(['#440154', '#000004', '#000004', '#000000'])
 
   for (const colormap of SPECTROGRAM_COLORMAPS) {
     for (const stop of SPECTROGRAM_COLORMAP_STOPS[colormap]) {
@@ -79,14 +74,7 @@ test('LOD and tile boundaries follow a configured hop size', () => {
     { clipId: 8, level: 0, tileIndex: 1 },
   ])
   expect(
-    selectSpectrogramCoverage(
-      [{ clipId: 8, level: 0, tileIndex: 1 }],
-      8,
-      tileSpan,
-      2 * tileSpan,
-      0,
-      hopSize,
-    ),
+    selectSpectrogramCoverage([{ clipId: 8, level: 0, tileIndex: 1 }], 8, tileSpan, 2 * tileSpan, 0, hopSize),
   ).toEqual([
     {
       key: { clipId: 8, level: 0, tileIndex: 1 },

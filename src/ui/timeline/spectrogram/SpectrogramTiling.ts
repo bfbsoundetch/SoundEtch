@@ -23,7 +23,6 @@ const WINDOW_COEFFICIENTS: Record<SpectrogramWindowFunction, readonly number[]> 
   [WindowFunction.HANN]: [0.5, -0.5],
 }
 
-
 export function createSpectrogramWindow(
   fftSize: number,
   windowFunction: SpectrogramWindowFunction,
@@ -64,11 +63,7 @@ export function getSpectrogramMelPoints(
 // sub-bin triangle with zero total weight at small FFT sizes, and that band renders as a
 // flat minimum-dB line. Cell-area weighting instead lets a sub-bin triangle blend its two
 // neighboring bins, keeping the mel frequency mapping itself unwarped.
-export function getSpectrogramBandWeight(
-  points: Float32Array,
-  band: number,
-  bin: number,
-): number {
+export function getSpectrogramBandWeight(points: Float32Array, band: number, bin: number): number {
   const start = points[band]
   const center = points[band + 1]
   const end = points[band + 2]
@@ -88,10 +83,7 @@ export function getSpectrogramBandWeight(
 export const SPECTROGRAM_COLORMAPS = ['viridis', 'magma', 'inferno', 'grayscale'] as const
 export type SpectrogramColormap = (typeof SPECTROGRAM_COLORMAPS)[number]
 
-export const SPECTROGRAM_COLORMAP_STOPS: Record<
-  SpectrogramColormap,
-  readonly (readonly [number, number, number])[]
-> = {
+export const SPECTROGRAM_COLORMAP_STOPS: Record<SpectrogramColormap, readonly (readonly [number, number, number])[]> = {
   viridis: [
     [0.267, 0.005, 0.329],
     [0.267, 0.224, 0.514],
@@ -152,11 +144,7 @@ export interface SpectrogramCoverageSegment {
   sourceEnd: number
 }
 
-export function getSpectrogramLevel(
-  samplesPerCssPixel: number,
-  dpr: number,
-  baseHop: number = BASE_HOP,
-): number {
+export function getSpectrogramLevel(samplesPerCssPixel: number, dpr: number, baseHop: number = BASE_HOP): number {
   const devicePixelRatio = Math.min(MAX_DPR, Math.max(1, dpr))
   const sourceColumnsPerDevicePixel = samplesPerCssPixel / devicePixelRatio / baseHop
   return Math.max(0, Math.floor(Math.log2(sourceColumnsPerDevicePixel)))
@@ -249,4 +237,3 @@ export function selectSpectrogramCoverage(
 
   return segments
 }
-

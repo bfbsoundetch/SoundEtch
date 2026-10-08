@@ -36,3 +36,55 @@ SOFTWARE.
 
 The upstream project also states:
 "This work is offered under the Krishnized License (https://github.com/krishnized/license)."
+
+IBM Granite Speech 5.0 TurboCTC
+--------------------------------
+
+Model: ibm-granite/granite-speech-5.0-470m-turboctc
+https://huggingface.co/ibm-granite/granite-speech-5.0-470m-turboctc
+
+Browser export pinned to Space revision 245e1e52c6fc01ba065c35b4af884d89cdca60de:
+https://huggingface.co/spaces/ibm-granite/granite-speech-streaming-webgpu/tree/245e1e52c6fc01ba065c35b4af884d89cdca60de/onnx-ctc
+
+public/granite/granite_timing_v1_q4f16.onnx is derived at build time by scripts/prepare-granite-timing.mjs from that pinned Apache-2.0 Space export. Reproduce it with: yarn prepare:timing
+
+The model and pinned browser export are provided under the Apache License 2.0:
+https://www.apache.org/licenses/LICENSE-2.0
+
+Silero VAD
+----------
+
+Voice-activity segmentation uses the quantized Silero VAD v5 ONNX export:
+
+- Model: snakers4/silero-vad, MIT License
+  https://github.com/snakers4/silero-vad
+- ONNX conversion pinned to revision e71cae966052b992a7eca6b17738916ce0eca4ec:
+  https://huggingface.co/onnx-community/silero-vad/tree/e71cae966052b992a7eca6b17738916ce0eca4ec
+
+ONNX Runtime Web and fft.js
+---------------------------
+
+- onnxruntime-web 1.26.0, Copyright (c) Microsoft Corporation
+  https://github.com/microsoft/onnxruntime
+- fft.js 4.0.4, Copyright (c) Fedor Indutny
+  https://github.com/indutny/fft.js
+
+Both dependencies are provided under the MIT License:
+
+Permission is hereby granted, free of charge, to any person obtaining a copy
+of this software and associated documentation files (the "Software"), to deal
+in the Software without restriction, including without limitation the rights
+to use, copy, modify, merge, publish, distribute, sublicense, and/or sell
+copies of the Software, and to permit persons to whom the Software is
+furnished to do so, subject to the following conditions:
+
+The above copyright notice and this permission notice shall be included in all
+copies or substantial portions of the Software.
+
+THE SOFTWARE IS PROVIDED "AS IS", WITHOUT WARRANTY OF ANY KIND, EXPRESS OR
+IMPLIED, INCLUDING BUT NOT LIMITED TO THE WARRANTIES OF MERCHANTABILITY,
+FITNESS FOR A PARTICULAR PURPOSE AND NONINFRINGEMENT. IN NO EVENT SHALL THE
+AUTHORS OR COPYRIGHT HOLDERS BE LIABLE FOR ANY CLAIM, DAMAGES OR OTHER
+LIABILITY, WHETHER IN AN ACTION OF CONTRACT, TORT OR OTHERWISE, ARISING FROM,
+OUT OF OR IN CONNECTION WITH THE SOFTWARE OR THE USE OR OTHER DEALINGS IN THE
+SOFTWARE.

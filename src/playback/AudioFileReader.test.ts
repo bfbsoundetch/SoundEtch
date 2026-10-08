@@ -203,12 +203,18 @@ test('large silence', async () => {
   const maxExact = 8_388_608
   const expected = new Float32Array(12)
   expected.set([
-    Number.NaN, maxExact,
-    Number.NaN, maxExact,
-    Number.NaN, maxExact,
-    Number.NaN, maxExact,
-    Number.NaN, 1,
-    0.2, 0.3,
+    Number.NaN,
+    maxExact,
+    Number.NaN,
+    maxExact,
+    Number.NaN,
+    maxExact,
+    Number.NaN,
+    maxExact,
+    Number.NaN,
+    1,
+    0.2,
+    0.3,
   ])
   expect(outputArray).toEqual(expected)
   expect(ringBuffer.availableRead()).toBe(0)
@@ -221,7 +227,6 @@ function getInputArrayBuffer(...data: Array<number>): ArrayBuffer {
   }
   return result.buffer
 }
-
 
 async function stepAwaitsForward() {
   for (let i = 0; i < 100; ++i) {

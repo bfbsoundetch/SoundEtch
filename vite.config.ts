@@ -11,6 +11,7 @@ export default defineConfig({
     global: {}, // Or global: 'window'
   },
   resolve: {
+    conditions: ['onnxruntime-web-use-extern-wasm'],
     alias: {
       assert: fileURLToPath(new URL('./src/global/EmptyNodeAssert.ts', import.meta.url)),
     },
@@ -59,7 +60,6 @@ export default defineConfig({
           return 'assets/[name]-[hash].js'
         },
       },
-      external: ['@huggingface/transformers'],
     },
   },
   worker: {

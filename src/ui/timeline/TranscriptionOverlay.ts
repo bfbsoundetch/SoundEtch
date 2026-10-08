@@ -21,14 +21,8 @@ export function projectVisibleTranscribedRanges(
   viewportStartSample: number,
   viewportEndSample: number,
 ): ProjectedTranscribedRange[] {
-  const visibleSourceStart = Math.max(
-    sourceStartSample,
-    sourceStartSample + viewportStartSample - timelineStartSample,
-  )
-  const visibleSourceEnd = Math.min(
-    sourceEndSample,
-    sourceStartSample + viewportEndSample - timelineStartSample,
-  )
+  const visibleSourceStart = Math.max(sourceStartSample, sourceStartSample + viewportStartSample - timelineStartSample)
+  const visibleSourceEnd = Math.min(sourceEndSample, sourceStartSample + viewportEndSample - timelineStartSample)
   if (visibleSourceStart >= visibleSourceEnd || transcription.length === 0) {
     return []
   }

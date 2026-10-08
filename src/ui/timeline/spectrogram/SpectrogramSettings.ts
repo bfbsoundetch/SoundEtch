@@ -38,36 +38,37 @@ function supportedValue(value: unknown, supportedValues: readonly number[], fall
 }
 
 export function normalizeSpectrogramSettings(value: unknown): SpectrogramSettings {
-  const candidate = value !== null && typeof value === 'object' ? value as Record<string, unknown> : {}
+  const candidate = value !== null && typeof value === 'object' ? (value as Record<string, unknown>) : {}
   const fftSize = supportedValue(candidate.fftSize, SPECTROGRAM_FFT_SIZES, DEFAULT_SPECTROGRAM_SETTINGS.fftSize)
   const requestedHopSize = supportedValue(
     candidate.hopSize,
     SPECTROGRAM_HOP_SIZES,
     DEFAULT_SPECTROGRAM_SETTINGS.hopSize,
   )
-  const hopSize = requestedHopSize <= fftSize
-    ? requestedHopSize
-    : Math.max(...SPECTROGRAM_HOP_SIZES.filter((size) => size <= fftSize))
+  const hopSize =
+    requestedHopSize <= fftSize
+      ? requestedHopSize
+      : Math.max(...SPECTROGRAM_HOP_SIZES.filter((size) => size <= fftSize))
   const requestedFrequencyBands = supportedValue(
     candidate.frequencyBands,
     SPECTROGRAM_FREQUENCY_BANDS,
     DEFAULT_SPECTROGRAM_SETTINGS.frequencyBands,
   )
-  const frequencyBands = requestedFrequencyBands <= fftSize / 2
-    ? requestedFrequencyBands
-    : Math.max(...SPECTROGRAM_FREQUENCY_BANDS.filter((count) => count <= fftSize / 2))
-  const windowFunction = SPECTROGRAM_WINDOW_FUNCTIONS.find(
-    (supportedWindowFunction) => supportedWindowFunction === candidate.windowFunction,
-  ) ?? DEFAULT_SPECTROGRAM_SETTINGS.windowFunction
-  const colormap = SPECTROGRAM_COLORMAPS.find((supported) => supported === candidate.colormap)
-    ?? DEFAULT_SPECTROGRAM_SETTINGS.colormap
-  const requestedMinDb = typeof candidate.minDb === 'number' && Number.isFinite(candidate.minDb)
-    ? Math.round(candidate.minDb)
-    : DEFAULT_SPECTROGRAM_SETTINGS.minDb
-  const minDb = Math.max(
-    SPECTROGRAM_MIN_DB_RANGE.minimum,
-    Math.min(SPECTROGRAM_MIN_DB_RANGE.maximum, requestedMinDb),
-  )
+  const frequencyBands =
+    requestedFrequencyBands <= fftSize / 2
+      ? requestedFrequencyBands
+      : Math.max(...SPECTROGRAM_FREQUENCY_BANDS.filter((count) => count <= fftSize / 2))
+  const windowFunction =
+    SPECTROGRAM_WINDOW_FUNCTIONS.find(
+      (supportedWindowFunction) => supportedWindowFunction === candidate.windowFunction,
+    ) ?? DEFAULT_SPECTROGRAM_SETTINGS.windowFunction
+  const colormap =
+    SPECTROGRAM_COLORMAPS.find((supported) => supported === candidate.colormap) ?? DEFAULT_SPECTROGRAM_SETTINGS.colormap
+  const requestedMinDb =
+    typeof candidate.minDb === 'number' && Number.isFinite(candidate.minDb)
+      ? Math.round(candidate.minDb)
+      : DEFAULT_SPECTROGRAM_SETTINGS.minDb
+  const minDb = Math.max(SPECTROGRAM_MIN_DB_RANGE.minimum, Math.min(SPECTROGRAM_MIN_DB_RANGE.maximum, requestedMinDb))
 
   return Object.freeze({ fftSize, hopSize, frequencyBands, windowFunction, colormap, minDb })
 }

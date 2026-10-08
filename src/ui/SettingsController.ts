@@ -13,9 +13,7 @@ export class SettingsController {
   private readonly fftSizeSelect = document.getElementById('spectrogram-fft-size') as HTMLSelectElement
   private readonly hopSizeSelect = document.getElementById('spectrogram-hop-size') as HTMLSelectElement
   private readonly frequencyBandsSelect = document.getElementById('spectrogram-frequency-bands') as HTMLSelectElement
-  private readonly windowFunctionSelect = document.getElementById(
-    'spectrogram-window-function',
-  ) as HTMLSelectElement
+  private readonly windowFunctionSelect = document.getElementById('spectrogram-window-function') as HTMLSelectElement
   private readonly colormapSelect = document.getElementById('spectrogram-colormap') as HTMLSelectElement
   private readonly minDbInput = document.getElementById('spectrogram-min-db') as HTMLInputElement
   private readonly minDbOutput = document.getElementById('spectrogram-min-db-value') as HTMLOutputElement

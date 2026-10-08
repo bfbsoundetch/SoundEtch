@@ -51,10 +51,12 @@ export class AudioImporter {
         channelCount: decoderConfig.numberOfChannels,
         clip: cloneWithGetters(clip),
       }
+      const writeReadyPromise = Promise.withResolvers<void>()
       const writeFinishPromise = Promise.withResolvers<void>()
       const resamplingReadyPromise = Promise.withResolvers<void>()
       const resamplingFinishPromise = Promise.withResolvers<void>()
       const rejectWorkerPromises = (error: unknown) => {
+        writeReadyPromise.reject(error)
         writeFinishPromise.reject(error)
         resamplingReadyPromise.reject(error)
         resamplingFinishPromise.reject(error)
@@ -64,12 +66,17 @@ export class AudioImporter {
       writingWorker.addEventListener('messageerror', (e) => rejectWorkerPromises(e))
 
       writingWorker.addEventListener('message', (e) => {
+        if (e.data.type == 'ready') {
+          writeReadyPromise.resolve()
+          return
+        }
         if (e.data.type == 'finish') {
           writeFinishPromise.resolve()
         }
       })
       writingWorker.addEventListener('message', clipView.clip.summary.getWorkerMessageListener())
       writingWorker.postMessage({ type: 'init', input: workerInput })
+      await writeReadyPromise.promise
 
       const encodedReader = demuxer.read('audio').getReader()
 

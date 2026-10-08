@@ -2728,7 +2728,10 @@ video {
 }
 
 #processing-modal-title {
+  width: 100%;
   margin: 0;
+  text-align: center;
+  text-wrap: balance;
 }
 
 #processing-progress-row {

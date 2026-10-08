@@ -18,6 +18,7 @@ import {
   MoveClipViewBetweenTracksCommand,
   MoveClipViewToNewTrackCommand,
   SetTrackClipViewsCommand,
+  SetClipTranscriptionCommand,
 } from '../undo/UndoableActions'
 import { Track } from '../../project/Track'
 import { TimelineRegionController } from './TimelineRegionController'
@@ -27,6 +28,15 @@ import { AutomationController } from './AutomationController'
 import { SpectrogramService } from './spectrogram/SpectrogramService'
 import type { TrackDisplayMode } from './TrackDisplayMode'
 import { GoToTimeController } from './GoToTimeController'
+import type { Clip } from '../../project/Clip'
+import { Transcriber } from '../../transcription/Transcriber'
+import {
+  getSelectedClipIntervals,
+  replaceTranscriptionRanges,
+  transcriptionRangesEqual,
+} from '../../transcription/TranscriptionSelection'
+import type { TranscriptionReplacement } from '../../transcription/TranscriptionSelection'
+import type { ProcessingModalController } from '../ProcessingModalController'
 
 interface Selection {
   startSample: number
@@ -38,6 +48,10 @@ interface AutomationMode {
   controller: AutomationController
   infoElement: HTMLElement
   originalInfoElements: Node[]
+}
+
+interface TrackListWindow extends Window {
+  readonly processingModalController?: ProcessingModalController
 }
 
 export class TrackListController {
@@ -103,6 +117,7 @@ export class TrackListController {
     new ContextMenuItem('Copy', () => this.sliceSelection(false)),
     new ContextMenuItem('Paste', (activeTrackIndex, startSample) => this.paste(activeTrackIndex, startSample)),
     new ContextMenuItem('Freeze', () => this.freezeSelection()),
+    new ContextMenuItem('Generate transcription', () => this.generateTranscription()),
   )
 
   private readonly timelineUnselectionContextMenu = new ContextMenuController(
@@ -282,25 +297,11 @@ export class TrackListController {
         this.tracklistElement.appendChild(waveformDiv)
 
         const displayMode = this.trackDisplayModes.get(track) ?? 'waveform'
-        const waveform = new Waveform(
-          this,
-          track,
-          waveformDiv,
-          i,
-          this.getSpectrogramService(),
-          displayMode,
-        )
-        const trackListInfo = new TrackListInfo(
-          project,
-          track,
-          trackInfoDiv,
-          this.history,
-          displayMode,
-          (mode) => {
-            this.trackDisplayModes.set(track, mode)
-            waveform.setDisplayMode(mode)
-          },
-        )
+        const waveform = new Waveform(this, track, waveformDiv, i, this.getSpectrogramService(), displayMode)
+        const trackListInfo = new TrackListInfo(project, track, trackInfoDiv, this.history, displayMode, (mode) => {
+          this.trackDisplayModes.set(track, mode)
+          waveform.setDisplayMode(mode)
+        })
         this.addTrackResizeHandles(trackInfoDiv, waveformDiv)
         nextWaveforms.push(waveform)
         this.infoWaveformPairs.set(`${track.id}`, {
@@ -641,6 +642,79 @@ export class TrackListController {
     }
   }
 
+  private async generateTranscription() {
+    if (!this.canEdit()) {
+      return
+    }
+    const selection = this.selectedRegion
+    if (!selection) {
+      return
+    }
+    const intervals = getSelectedClipIntervals(selection)
+    if (intervals.length === 0) {
+      NotificationsController.showLongDurationMessage('The selected region contains no audio to transcribe.')
+      return
+    }
+
+    const modal = (window as TrackListWindow).processingModalController
+    let displayedTitle = 'Preparing Granite transcription…'
+    modal?.show(displayedTitle, () => Transcriber.cancel())
+    try {
+      const project = await ProjectManager.getActiveProject()
+      const results = await Transcriber.transcribe(project, intervals, (progress) => {
+        let title: string
+        switch (progress.stage) {
+          case 'download':
+            title = 'Downloading Granite speech model…'
+            break
+          case 'loading':
+            title = `Loading Granite speech model (${progress.backend ?? 'WebGPU/WASM'})…`
+            break
+          case 'transcribing':
+            title = `Generating transcription (${progress.backend ?? 'WebGPU/WASM'})…`
+            break
+        }
+        if (title !== displayedTitle) {
+          displayedTitle = title
+          modal?.setTitle(title)
+        }
+        modal?.setProgress(progress.progress)
+      })
+
+      const replacementsByClip = new Map<Clip, TranscriptionReplacement[]>()
+      let generatedWordCount = 0
+      for (const result of results) {
+        const replacements = replacementsByClip.get(result.clip) ?? []
+        replacements.push({
+          startSample: result.startSample,
+          endSample: result.endSample,
+          ranges: result.ranges,
+        })
+        replacementsByClip.set(result.clip, replacements)
+        generatedWordCount += result.ranges.length
+      }
+
+      const commands = new Array<SetClipTranscriptionCommand>()
+      for (const [clip, replacements] of replacementsByClip) {
+        const replacement = replaceTranscriptionRanges(clip.transcription, replacements)
+        if (!transcriptionRangesEqual(clip.transcription, replacement)) {
+          commands.push(new SetClipTranscriptionCommand(clip, clip.transcription, replacement))
+        }
+      }
+      if (commands.length > 0) {
+        await this.history.execute(new BatchCommand(commands, 'generate transcription'))
+      } else if (generatedWordCount === 0) {
+        NotificationsController.showLongDurationMessage('No speech was detected in the selected audio.')
+      }
+    } catch (error) {
+      if (!(error instanceof DOMException && error.name === 'AbortError')) {
+        NotificationsController.showError(error instanceof Error ? error : new Error(String(error)))
+      }
+    } finally {
+      modal?.hide()
+    }
+  }
+
   draw() {
     this.timelineController.draw()
     this.waveforms.forEach((waveform) => waveform.draw())
@@ -700,13 +774,17 @@ export class TrackListController {
 
   private async showWelcomeOnEmptyProject() {
     const project = await ProjectManager.getActiveProject()
-    if (project.getTracks().length == 0 && project.getClips().length == 0 && AudioControl.getState() == AudioState.STOPPED) {
-        document.getElementById('timeline-body')!.style.display = 'none'
-        document.getElementById('welcome')!.style.display = ''
+    if (
+      project.getTracks().length == 0 &&
+      project.getClips().length == 0 &&
+      AudioControl.getState() == AudioState.STOPPED
+    ) {
+      document.getElementById('timeline-body')!.style.display = 'none'
+      document.getElementById('welcome')!.style.display = ''
     } else {
-        document.getElementById('timeline-body')!.style.display = ''
-        document.getElementById('welcome')!.style.display = 'none'
-        this.resizeCallback()
+      document.getElementById('timeline-body')!.style.display = ''
+      document.getElementById('welcome')!.style.display = 'none'
+      this.resizeCallback()
     }
   }
 

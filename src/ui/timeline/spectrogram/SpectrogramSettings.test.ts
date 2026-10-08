@@ -1,8 +1,5 @@
 import { WindowFunction } from '../../../analyzers/FFTWindowFunctions'
-import {
-  DEFAULT_SPECTROGRAM_SETTINGS,
-  normalizeSpectrogramSettings,
-} from './SpectrogramSettings'
+import { DEFAULT_SPECTROGRAM_SETTINGS, normalizeSpectrogramSettings } from './SpectrogramSettings'
 
 test('spectrogram settings preserve the established analysis defaults', () => {
   expect(DEFAULT_SPECTROGRAM_SETTINGS).toEqual({

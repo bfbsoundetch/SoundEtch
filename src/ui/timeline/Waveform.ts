@@ -635,7 +635,6 @@ export class ClipViewController extends TrackListItemController {
     }
   }
 
-
   switchParent(waveform: Waveform) {
     const oldWaveform = this.waveform
     oldWaveform.releaseClipViewController(this)
@@ -726,9 +725,7 @@ export class ClipViewController extends TrackListItemController {
     const sourceEndSample = this.fullClipPreview
       ? this.clipView.clip.length
       : this.clipView.offset + this.clipView.length
-    const timelineStartSample = this.fullClipPreview
-      ? this.startPosition - this.clipView.offset
-      : this.startPosition
+    const timelineStartSample = this.fullClipPreview ? this.startPosition - this.clipView.offset : this.startPosition
     this.transcriptionOverlay.draw(
       sourceStartSample,
       sourceEndSample,
@@ -764,8 +761,7 @@ export class ClipViewController extends TrackListItemController {
     this.pathElementTranslation = Math.max(startSampleX, clipViewStart)
 
     if (fullClip) {
-      let extendedShift =
-        clipViewStart <= 0 ? 0 : Math.min(this.startPosition - startSample, this.clipView.offset)
+      let extendedShift = clipViewStart <= 0 ? 0 : Math.min(this.startPosition - startSample, this.clipView.offset)
       extendedShift = Math.floor(extendedShift / this.samplesPerUnit) * this.samplesPerUnit
       this.pathElementTranslation -= extendedShift / this.samplesPerUnit
       realStart -= extendedShift
