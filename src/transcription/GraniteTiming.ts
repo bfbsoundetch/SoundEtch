@@ -222,18 +222,37 @@ const MIN_RELOCATION_RUN_FRAMES = 2
 
 /**
  * Leading-word speech must reach this fraction of the loudest frame before the
- * next word. Stricter than end refinement's 10%: inside a long speech region,
- * Silero probability can stay above the speech-mask threshold through pauses,
- * so energy is what separates the pause from the word.
+ * next word. Stricter than the 10% used for word extents: inside a long speech
+ * region, Silero probability can stay above the speech-mask threshold through
+ * pauses, so energy is what separates the pause from the word.
  */
 const RELOCATION_ENERGY_RATIO = 0.2
+
+/** Fraction of the loudest nearby frame's amplitude that counts as speech for word extents. */
+const ACTIVITY_RATIO = 0.1
+/** Seconds on each side of a word's spike searched for its loudest nearby frame. */
+const ACTIVITY_PEAK_WINDOW_SECONDS = 0.5
+/** A start moves to resumed speech only within this distance of its CTC spike. */
+const ONSET_SEARCH_SECONDS = 0.4
+/** Shorter quiet stretches after a spike are the word's own weak onset, not a pause. */
+const ONSET_MIN_SHIFT_SECONDS = 0.12
+/** Kept before resumed speech for a quiet initial consonant such as /f/. */
+const WEAK_ONSET_SECONDS = 0.064
+/** Quiet frames an end bridges once the word has its expected length (stop closures). */
+const SHORT_DIP_FRAMES = 3
+/** Quiet frames an end bridges while the word is shorter than expected (the /st/ of "states"). */
+const LONG_DIP_FRAMES = 6
+const EXPECTED_SECONDS_PER_LETTER = 0.045
+const MAX_SECONDS_PER_LETTER = 0.09
+const MIN_LONGEST_WORD_SECONDS = 0.3
+const MIN_WORD_SECONDS = 0.02
 
 /**
  * Granite can emit a segment's first word at the very start of the segment,
  * inside the VAD pre-roll or a 20-second chunk's leading pause, up to 750 ms
  * before the speech it transcribes. Bounded refinement cannot reach that far,
  * so a first word that starts within that leading window and is at least 80%
- * unsupported moves onto the nearest supported speech run between the segment
+ * unsupported starts at the nearest supported speech run between the segment
  * start and the next word.
  */
 function relocateLeadingWord(
@@ -243,7 +262,7 @@ function relocateLeadingWord(
   speechMask: Uint8Array,
   frameEnergies: Float32Array,
   frameSeconds: number,
-): { start: number; end: number } | undefined {
+): number | undefined {
   if (anchor.start >= segmentStartSeconds + GRANITE_VAD_SEGMENTATION_SETTINGS.preSpeechMs / 1_000) {
     return undefined
   }
@@ -269,7 +288,7 @@ function relocateLeadingWord(
     return undefined
   }
 
-  let best: { start: number; end: number } | undefined
+  let bestStart: number | undefined
   let bestDistance = Infinity
   for (let frame = firstFrame; frame < lastFrame;) {
     if (!active(frame)) {
@@ -286,17 +305,60 @@ function relocateLeadingWord(
     const start = runStart * frameSeconds
     const end = Math.min(frame * frameSeconds, nextStart)
     const distance = Math.max(start - anchor.end, anchor.start - end, 0)
-    if (end - start >= 0.02 && distance < bestDistance) {
-      best = { start, end }
+    if (end - start >= MIN_WORD_SECONDS && distance < bestDistance) {
+      bestStart = start
       bestDistance = distance
     }
   }
-  return best
+  return bestStart
 }
 
 /**
- * Bounded acoustic boundary adjustment for the words of one Granite segment.
- * Preserves VAD-supported quiet onsets and never reaches outside the segment.
+ * A spike that sits in a pause starts its word where speech resumes, keeping
+ * room for a quiet initial consonant. At a segment start, where Silero is not
+ * lagging behind earlier speech, VAD-supported quiet onset frames are kept too.
+ */
+function speechOnsetStart(
+  anchor: TimedGraniteWord,
+  searchEndSeconds: number,
+  active: (frame: number) => boolean,
+  speechMask: Uint8Array,
+  frameSeconds: number,
+  keepVadOnset: boolean,
+): number {
+  const anchorFrame = Math.floor(anchor.start / frameSeconds)
+  const searchEndFrame = Math.ceil(searchEndSeconds / frameSeconds)
+  for (let frame = anchorFrame; frame < searchEndFrame; ++frame) {
+    if (!active(frame) || !active(frame + 1)) {
+      continue
+    }
+    if (frame * frameSeconds - anchor.start <= ONSET_MIN_SHIFT_SECONDS) {
+      return anchor.start
+    }
+    let onset = frame
+    if (keepVadOnset) {
+      let unsupportedFrames = 0
+      for (let earlier = frame - 1; earlier >= anchorFrame; --earlier) {
+        if ((speechMask[earlier] & 1) !== 0) {
+          onset = earlier
+          unsupportedFrames = 0
+        } else if (++unsupportedFrames >= 2) {
+          break
+        }
+      }
+    }
+    return Math.max(anchor.start, onset * frameSeconds - WEAK_ONSET_SECONDS)
+  }
+  return anchor.start
+}
+
+/**
+ * Word extents for one Granite segment. Granite emits one sharp CTC spike per
+ * word, usually near its onset, so a word starts at its spike (or where speech
+ * resumes after a spike that sits in a pause) and ends where its speech stops.
+ * Ends bridge quiet stretches up to 96 ms (stop closures), or up to 192 ms
+ * while the word is shorter than its letters suggest (quiet fricatives), and
+ * never pass the next word's start, a letter-based length cap, or the segment.
  */
 export function refineGraniteWords(
   words: readonly TimedGraniteWord[],
@@ -306,97 +368,67 @@ export function refineGraniteWords(
   segmentStartSeconds: number,
   segmentEndSeconds: number,
 ): TimedGraniteWord[] {
-  const refined = words.map((word) => ({ ...word }))
-  for (let index = 0; index < refined.length; ++index) {
-    const word = refined[index]
-    const anchor = words[index]
-    const previousEnd = index > 0 ? words[index - 1].end : segmentStartSeconds
-    const nextStart = words[index + 1]?.start ?? segmentEndSeconds
-    if (index === 0) {
-      const relocated = relocateLeadingWord(
-        anchor,
-        nextStart,
-        segmentStartSeconds,
-        speechMask,
-        frameEnergies,
-        frameSeconds,
-      )
-      if (relocated) {
-        word.start = relocated.start
-        word.end = relocated.end
-        continue
-      }
-    }
-    const from = Math.max(previousEnd, anchor.start - 0.16, 0)
-    const to = Math.min(nextStart, anchor.end + 0.32, segmentEndSeconds)
-    const firstFrame = Math.max(0, Math.floor(from / frameSeconds))
-    const lastFrame = Math.min(frameEnergies.length, Math.ceil(to / frameSeconds))
+  // Frames straddling the segment start belong partly to the previous segment.
+  const segmentFirstFrame = Math.ceil(segmentStartSeconds / frameSeconds)
+  const segmentLastFrame = Math.min(
+    speechMask.length,
+    frameEnergies.length,
+    Math.ceil(segmentEndSeconds / frameSeconds),
+  )
+  const activityAround = (seconds: number): ((frame: number) => boolean) => {
+    const from = Math.max(segmentFirstFrame, Math.floor((seconds - ACTIVITY_PEAK_WINDOW_SECONDS) / frameSeconds))
+    const to = Math.min(segmentLastFrame, Math.ceil((seconds + ACTIVITY_PEAK_WINDOW_SECONDS) / frameSeconds))
     let peak = 0
-    for (let frame = firstFrame; frame < lastFrame; ++frame) {
+    for (let frame = from; frame < to; ++frame) {
       peak = Math.max(peak, frameEnergies[frame])
     }
-    const threshold = Math.max(1e-5, peak * 0.1)
-    const active = (frame: number): boolean => speechMask[frame] !== 0 && frameEnergies[frame] >= threshold
-
-    let bestRun: { start: number; end: number; startFrame: number } | undefined
-    let bestDistance = Infinity
-    for (let frame = firstFrame; frame < lastFrame;) {
-      if (!active(frame)) {
-        ++frame
-        continue
-      }
-      const runStart = frame
-      let lastActive = frame
-      ++frame
-      while (frame < lastFrame) {
-        if (active(frame)) {
-          lastActive = frame
-        } else if (frame - lastActive >= 2) {
-          break
-        }
-        ++frame
-      }
-      const start = Math.max(from, runStart * frameSeconds)
-      const end = Math.min(to, (lastActive + 1) * frameSeconds)
-      const distance = Math.max(start - anchor.end, anchor.end - end, 0)
-      if (distance < bestDistance && end > start) {
-        bestDistance = distance
-        bestRun = { start, end, startFrame: runStart }
-      }
-    }
-
-    if (bestRun && bestDistance <= 0.16) {
-      let supportedStartFrame = bestRun.startFrame
-      const anchorStartFrame = Math.max(firstFrame, Math.floor(anchor.start / frameSeconds))
-      let unsupportedFrames = 0
-      for (let frame = supportedStartFrame - 1; frame >= anchorStartFrame; --frame) {
-        if ((speechMask[frame] & 1) !== 0) {
-          supportedStartFrame = frame
-          unsupportedFrames = 0
-        } else if (++unsupportedFrames >= 2) {
-          break
-        }
-      }
-      const acousticStart = Math.max(anchor.start, (supportedStartFrame - 1) * frameSeconds)
-      if (acousticStart - anchor.start >= frameSeconds * 3) {
-        word.start = acousticStart
-      }
-      word.end = Math.min(bestRun.end, anchor.end + 0.24, nextStart)
-      if (word.end < word.start + 0.02) {
-        word.start = anchor.start
-        word.end = anchor.end
-      }
-    }
-    word.start = Math.max(segmentStartSeconds, Math.min(segmentEndSeconds, word.start))
-    word.end = Math.max(word.start, Math.min(segmentEndSeconds, word.end))
+    const threshold = Math.max(1e-5, peak * ACTIVITY_RATIO)
+    return (frame) =>
+      frame >= segmentFirstFrame &&
+      frame < segmentLastFrame &&
+      speechMask[frame] !== 0 &&
+      frameEnergies[frame] >= threshold
   }
 
-  for (let index = 0; index + 1 < refined.length; ++index) {
-    if (refined[index].end > refined[index + 1].start) {
-      refined[index].end = Math.max(refined[index].start, refined[index + 1].start)
+  const starts = new Array<number>(words.length)
+  words.forEach((anchor, index) => {
+    const nextAnchorStart = words[index + 1]?.start ?? segmentEndSeconds
+    const searchEnd = Math.min(nextAnchorStart, Math.max(anchor.end, anchor.start + ONSET_SEARCH_SECONDS))
+    const relocated =
+      index === 0
+        ? relocateLeadingWord(anchor, nextAnchorStart, segmentStartSeconds, speechMask, frameEnergies, frameSeconds)
+        : undefined
+    const start =
+      relocated ??
+      speechOnsetStart(anchor, searchEnd, activityAround(anchor.start), speechMask, frameSeconds, index === 0)
+    starts[index] =
+      index > 0 ? Math.max(start, starts[index - 1] + MIN_WORD_SECONDS) : Math.max(start, segmentStartSeconds)
+  })
+
+  return words.map((anchor, index) => {
+    const start = starts[index]
+    const nextStart = index + 1 < words.length ? starts[index + 1] : segmentEndSeconds
+    const active = activityAround(anchor.start)
+    const letters = Math.max(1, anchor.text.replace(/[^a-z']/gi, '').length)
+    const expectedSeconds = EXPECTED_SECONDS_PER_LETTER * letters
+    const latestEnd = Math.min(
+      nextStart,
+      segmentEndSeconds,
+      start + Math.max(MIN_LONGEST_WORD_SECONDS, MAX_SECONDS_PER_LETTER * letters),
+    )
+    let end = Math.min(nextStart, Math.max(start + MIN_WORD_SECONDS, anchor.end))
+    let quietFrames = 0
+    const nextFrame = Math.ceil(nextStart / frameSeconds)
+    for (let frame = Math.floor(Math.max(start, end - frameSeconds) / frameSeconds); frame < nextFrame; ++frame) {
+      if (active(frame)) {
+        quietFrames = 0
+        end = Math.max(end, Math.min((frame + 1) * frameSeconds, latestEnd))
+      } else if (++quietFrames > (end - start < expectedSeconds ? LONG_DIP_FRAMES : SHORT_DIP_FRAMES)) {
+        break
+      }
     }
-  }
-  return refined
+    return { text: anchor.text, start, end: Math.min(end, segmentEndSeconds) }
+  })
 }
 
 export function computeFrameEnergies(audio: Float32Array, frameSamples: number): Float32Array {

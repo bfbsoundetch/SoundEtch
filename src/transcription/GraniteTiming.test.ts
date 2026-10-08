@@ -181,12 +181,11 @@ test('unsupported leading padding is removed without cutting a VAD-supported qui
   energies.fill(0.1, 30, 40)
   expect(
     geometry(refineGraniteWords([{ text: 'ladies', start: 0.2, end: 1.16 }], speech, energies, 0.032, 0, 2)),
-  ).toEqual([{ start: 0.928, end: 1.28 }])
+  ).toEqual([{ start: 30 * 0.032 - 0.064, end: 40 * 0.032 }])
 
   speech.fill(1, 6, 30)
-  expect(
-    geometry(refineGraniteWords([{ text: 'ladies', start: 0.2, end: 1.16 }], speech, energies, 0.032, 0, 2)),
-  ).toEqual([{ start: 0.2, end: 1.28 }])
+  const [quietOnset] = refineGraniteWords([{ text: 'ladies', start: 0.2, end: 1.16 }], speech, energies, 0.032, 0, 2)
+  expect(quietOnset.start).toBe(0.2)
 })
 
 test('silent gaps stay uncovered and unsupported anchors keep their CTC spans', () => {
@@ -205,15 +204,15 @@ test('silent gaps stay uncovered and unsupported anchors keep their CTC spans', 
   )
 })
 
-test('continuous speech extends ends by no more than 240 ms', () => {
+test('continuous speech extends an end only up to a letter-based length cap', () => {
   const words = [
     { text: 'one', start: 0.4, end: 0.48 },
     { text: 'two', start: 2.4, end: 2.48 },
   ]
   const speech = new Uint8Array(100).fill(1)
   expect(geometry(refineGraniteWords(words, speech, Float32Array.from(speech), 0.032, 0, 3.2))).toEqual([
-    { start: 0.4, end: 0.72 },
-    { start: 2.4, end: 2.48 + 0.24 },
+    { start: 0.4, end: 0.4 + 0.3 },
+    { start: 2.4, end: 2.4 + 0.3 },
   ])
 })
 
@@ -225,22 +224,38 @@ test('segment end bounds refinement when acoustic support continues into the nex
   ])
 })
 
-test('competing nearby speech runs keep the selected end bounded', () => {
-  const speech = new Uint8Array(100)
-  speech.fill(1, 12, 16)
-  speech.fill(1, 19, 28)
-  expect(
-    geometry(
-      refineGraniteWords(
-        [{ text: 'banking', start: 0.402, end: 0.482 }],
-        speech,
-        Float32Array.from(speech),
-        0.032,
-        0,
-        3.2,
-      ),
-    ),
-  ).toEqual([{ start: 0.402, end: 16 * 0.032 }])
+test('a word still shorter than its letters suggest bridges its quiet consonants to the end of its speech', () => {
+  // Fireside Chat "united states": the spike sits on the /s/ onset, and the quiet /st/ precedes the vowel.
+  const speech = new Uint8Array(300).fill(1)
+  const energies = new Float32Array(300).fill(0.005)
+  energies.fill(0.1, 207, 219)
+  energies.fill(0.1, 223, 228)
+  const words = [
+    { text: 'united', start: 6.626, end: 6.706 },
+    { text: 'states', start: 6.946, end: 7.026 },
+  ]
+  expect(geometry(refineGraniteWords(words, speech, energies, 0.032, 3.2, 7.7))).toEqual([
+    { start: 6.626, end: 6.946 },
+    { start: 6.946, end: 228 * 0.032 },
+  ])
+})
+
+test('a long word ends at a pause, and a spike inside that pause starts its word where speech resumes', () => {
+  // Fireside Chat "comparatively few who": the "few" spike sits in the pause before its speech.
+  const speech = new Uint8Array(700).fill(1)
+  const energies = new Float32Array(700).fill(0.005)
+  energies.fill(0.08, 579, 582) // "com"
+  energies.fill(0.1, 584, 602) // "-paratively", after a stop closure
+  energies.fill(0.1, 607, 615) // "few"
+  energies.fill(0.1, 616, 622) // "who"
+  const words = [
+    { text: 'comparatively', start: 18.61, end: 18.69 },
+    { text: 'few', start: 19.25, end: 19.33 },
+    { text: 'who', start: 19.65, end: 19.73 },
+  ]
+  const [comparatively, few] = refineGraniteWords(words, speech, energies, 0.032, 10.4, 30.4)
+  expect(comparatively.end).toBe(602 * 0.032)
+  expect(geometry([few])).toEqual([{ start: 607 * 0.032 - 0.064, end: 19.65 }])
 })
 
 test('quiet prefixes and blended speech retain CTC starts instead of internal energy rises', () => {
@@ -252,17 +267,11 @@ test('quiet prefixes and blended speech retain CTC starts instead of internal en
   const speech = new Uint8Array(240).fill(1)
   const energies = new Float32Array(240).fill(0.08)
   energies.fill(0.002, 85, 100)
-  expect(geometry(refineGraniteWords(words, speech, energies, 0.01, 0, 2.4))).toEqual([
-    { start: 0.4, end: 0.85 },
-    { start: 0.9, end: 1.34 },
-    { start: 1.6, end: 2.04 },
-  ])
-  expect(geometry(refineGraniteWords(words, speech, new Float32Array(240).fill(0.08), 0.01, 0, 2.4))).toEqual([
-    { start: 0.4, end: 0.9 },
-    { start: 0.9, end: 1.34 },
-    { start: 1.6, end: 2.04 },
-  ])
-  expect(geometry(refineGraniteWords(words, new Uint8Array(240), energies, 0.01, 0, 2.4))).toEqual(geometry(words))
+  const starts = (mask: Uint8Array, frameEnergies: Float32Array) =>
+    refineGraniteWords(words, mask, frameEnergies, 0.01, 0, 2.4).map((word) => word.start)
+  expect(starts(speech, energies)).toEqual([0.4, 0.9, 1.6])
+  expect(starts(speech, new Float32Array(240).fill(0.08))).toEqual([0.4, 0.9, 1.6])
+  expect(starts(new Uint8Array(240), energies)).toEqual([0.4, 0.9, 1.6])
 })
 
 test('frame energies use RMS and include a partial trailing frame', () => {
