@@ -5,6 +5,8 @@ import { TrackListItemController } from './TrackListItemController'
 
 const SVG_NAMESPACE = 'http://www.w3.org/2000/svg'
 
+export const TRANSCRIPTION_LANE_HEIGHT = 32
+
 export interface ProjectedTranscribedRange {
   readonly text: string
   readonly startSample: number
@@ -69,8 +71,8 @@ interface DrawCache {
   readonly viewportStartSample: number
   readonly viewportEndSample: number
   readonly viewportWidth: number
-  readonly top: number
-  readonly height: number
+  readonly laneTop: number
+  readonly laneHeight: number
   readonly samplesPerUnit: number
   readonly translation: number
 }
@@ -100,8 +102,8 @@ export class TranscriptionOverlayController extends TrackListItemController {
     viewportStartSample: number,
     viewportEndSample: number,
     viewportWidth: number,
-    top: number,
-    height: number,
+    laneTop: number,
+    laneHeight: number,
   ): void {
     const transcription = this.clip.transcription
     if (
@@ -113,8 +115,8 @@ export class TranscriptionOverlayController extends TrackListItemController {
       this.cache.viewportStartSample === viewportStartSample &&
       this.cache.viewportEndSample === viewportEndSample &&
       this.cache.viewportWidth === viewportWidth &&
-      this.cache.top === top &&
-      this.cache.height === height &&
+      this.cache.laneTop === laneTop &&
+      this.cache.laneHeight === laneHeight &&
       this.cache.samplesPerUnit === this.samplesPerUnit &&
       this.cache.translation === this.translation
     ) {
@@ -126,9 +128,9 @@ export class TranscriptionOverlayController extends TrackListItemController {
     const overlayEndX = Math.min(viewportWidth, this.getXValueForSample(footprintEndSample))
     const overlayWidth = Math.max(0, overlayEndX - overlayX)
     this.overlayElement.setAttribute('x', `${overlayX}`)
-    this.overlayElement.setAttribute('y', `${top}`)
+    this.overlayElement.setAttribute('y', `${laneTop}`)
     this.overlayElement.setAttribute('width', `${overlayWidth}`)
-    this.overlayElement.setAttribute('height', `${Math.max(0, height)}`)
+    this.overlayElement.setAttribute('height', `${Math.max(0, laneHeight)}`)
 
     const projected = projectVisibleTranscribedRanges(
       transcription,
@@ -148,7 +150,7 @@ export class TranscriptionOverlayController extends TrackListItemController {
       label.foreignObject.setAttribute('x', `${rangeStartX}`)
       label.foreignObject.setAttribute('y', '0')
       label.foreignObject.setAttribute('width', `${Math.max(0, rangeEndX - rangeStartX)}`)
-      label.foreignObject.setAttribute('height', `${Math.max(0, height)}`)
+      label.foreignObject.setAttribute('height', `${Math.max(0, laneHeight)}`)
       label.foreignObject.style.display = ''
       if (label.content.textContent !== range.text) {
         label.content.textContent = range.text
@@ -156,12 +158,12 @@ export class TranscriptionOverlayController extends TrackListItemController {
 
       if (range.drawStartBoundary && previousBoundarySample !== range.startSample) {
         const x = rangeStartX
-        boundaryPath += `M ${x} 0 V ${Math.max(0, height)} `
+        boundaryPath += `M ${x} 0 V ${Math.max(0, laneHeight)} `
         previousBoundarySample = range.startSample
       }
       if (range.drawEndBoundary && previousBoundarySample !== range.endSample) {
         const x = rangeEndX
-        boundaryPath += `M ${x} 0 V ${Math.max(0, height)} `
+        boundaryPath += `M ${x} 0 V ${Math.max(0, laneHeight)} `
         previousBoundarySample = range.endSample
       }
     }
@@ -179,8 +181,8 @@ export class TranscriptionOverlayController extends TrackListItemController {
       viewportStartSample,
       viewportEndSample,
       viewportWidth,
-      top,
-      height,
+      laneTop,
+      laneHeight,
       samplesPerUnit: this.samplesPerUnit,
       translation: this.translation,
     }

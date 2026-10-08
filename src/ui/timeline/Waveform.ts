@@ -13,7 +13,7 @@ import {
   type SpectrogramClipPlacement,
   type SpectrogramTrackRenderer,
 } from './spectrogram/SpectrogramService'
-import { TranscriptionOverlayController } from './TranscriptionOverlay'
+import { TRANSCRIPTION_LANE_HEIGHT, TranscriptionOverlayController } from './TranscriptionOverlay'
 
 /** Handles displaying a track's waveform. */
 export class Waveform extends TrackListItemController {
@@ -28,9 +28,11 @@ export class Waveform extends TrackListItemController {
   readonly aboveClipViewGroupElement = document.createElementNS('http://www.w3.org/2000/svg', 'g')
   private readonly axesPathElement = document.createElementNS('http://www.w3.org/2000/svg', 'path')
   private readonly channelSeparatorPathElement = document.createElementNS('http://www.w3.org/2000/svg', 'path')
+  private readonly transcriptionLaneElement = document.createElementNS('http://www.w3.org/2000/svg', 'rect')
   private readonly color: string
   width = 0
   private height = 0
+  private transcriptionLaneHeightValue = 0
 
   private readonly dragInProgressClipViews = new Array<ClipViewController>()
   private readonly transientClipViewControllers = new Set<ClipViewController>()
@@ -44,8 +46,16 @@ export class Waveform extends TrackListItemController {
     return this.height
   }
 
-  get fullHeight() {
+  get transcriptionLaneTop() {
     return this.height + Waveform.HEADER_HEIGHT
+  }
+
+  get transcriptionLaneHeight() {
+    return this.transcriptionLaneHeightValue
+  }
+
+  get fullHeight() {
+    return this.transcriptionLaneTop + this.transcriptionLaneHeight
   }
 
   constructor(
@@ -55,6 +65,7 @@ export class Waveform extends TrackListItemController {
     readonly index: number,
     private readonly spectrogramService: SpectrogramService,
     initialDisplayMode: TrackDisplayMode,
+    private readonly resizeTrackForTranscriptionLane: (heightDelta: number) => void,
   ) {
     super(trackListController)
     this.color = `var(--waveform-${index})`
@@ -73,6 +84,8 @@ export class Waveform extends TrackListItemController {
       this.trackListController.pointerStateManager.removePointedOverTrack(this)
     })
 
+    this.transcriptionLaneElement.classList.add('transcription-lane')
+    this.topSvgElement.appendChild(this.transcriptionLaneElement)
     this.topSvgElement.appendChild(this.clipViewGroupElement)
     this.topSvgElement.appendChild(this.topGroupElement)
 
@@ -146,7 +159,7 @@ export class Waveform extends TrackListItemController {
       }
       this.trackRenderer.draw({
         cssWidth: this.width,
-        cssHeight: this.fullHeight,
+        cssHeight: this.transcriptionLaneTop,
         dpr: window.devicePixelRatio || 1,
         timelineStart: this.getSampleForXValue(0),
         samplesPerCssPixel: this.samplesPerUnit,
@@ -182,7 +195,7 @@ export class Waveform extends TrackListItemController {
       this.topSvgElement.style.display = 'block'
       this.div.appendChild(this.topSvgElement)
     }
-    this.topSvgElement.setAttribute('viewBox', `0 0 ${this.width} ${this.height + Waveform.HEADER_HEIGHT}`)
+    this.topSvgElement.setAttribute('viewBox', `0 0 ${this.width} ${this.fullHeight}`)
 
     return this.topSvgElement
   }
@@ -191,6 +204,7 @@ export class Waveform extends TrackListItemController {
    * Draws the waveform.
    */
   draw() {
+    this.updateLayout()
     const topSvgElement = this.getTopSvgElement()
 
     this.drawAudioDataForCanvasXRange(this, topSvgElement, 0, this.width)
@@ -202,10 +216,35 @@ export class Waveform extends TrackListItemController {
   }
 
   resize() {
-    this.width = this.div.clientWidth
-    this.height = Math.max(0, this.div.clientHeight - Waveform.HEADER_HEIGHT)
-    this.topSvgElement.setAttribute('viewBox', `0 0 ${this.width} ${this.height + Waveform.HEADER_HEIGHT}`)
     this.draw()
+  }
+
+  private updateLayout(): void {
+    const transcriptionLaneHeight = this.track.clipViews.some((clipView) => clipView.clip.transcription.length > 0)
+      ? TRANSCRIPTION_LANE_HEIGHT
+      : 0
+    const transcriptionLaneHeightChanged = transcriptionLaneHeight !== this.transcriptionLaneHeightValue
+    if (transcriptionLaneHeightChanged) {
+      const heightDelta = transcriptionLaneHeight - this.transcriptionLaneHeightValue
+      this.transcriptionLaneHeightValue = transcriptionLaneHeight
+      this.resizeTrackForTranscriptionLane(heightDelta)
+    }
+
+    const width = this.div.clientWidth
+    const height = Math.max(0, this.div.clientHeight - Waveform.HEADER_HEIGHT - this.transcriptionLaneHeight)
+    if (!transcriptionLaneHeightChanged && width === this.width && height === this.height) {
+      return
+    }
+
+    this.width = width
+    this.height = height
+    this.topSvgElement.setAttribute('viewBox', `0 0 ${this.width} ${this.fullHeight}`)
+    this.transcriptionLaneElement.setAttribute('x', '0')
+    this.transcriptionLaneElement.setAttribute('y', `${this.transcriptionLaneTop}`)
+    this.transcriptionLaneElement.setAttribute('width', `${this.width}`)
+    this.transcriptionLaneElement.setAttribute('height', `${this.transcriptionLaneHeight}`)
+    this.transcriptionLaneElement.style.display = this.transcriptionLaneHeight > 0 ? '' : 'none'
+    this.spectrogramCanvas.style.height = `${this.transcriptionLaneTop}px`
   }
 
   private drawAxes() {
@@ -678,8 +717,8 @@ export class ClipViewController extends TrackListItemController {
   drawBoundingBox(startSample: number, endSample: number) {
     this.headerTitleDivElement.innerText = this.clipView.clip.name
     this.rectElement.height.baseVal.value = this.waveformHeight
-    this.leftHandle.y2.baseVal.value = this.waveform.fullHeight
-    this.rightHandle.y2.baseVal.value = this.waveform.fullHeight
+    this.leftHandle.y2.baseVal.value = this.waveform.transcriptionLaneTop
+    this.rightHandle.y2.baseVal.value = this.waveform.transcriptionLaneTop
     this.fullClipGrayFilter.height.baseVal.value = this.waveformHeight
     this.spectrogramFallbackElement.height.baseVal.value = this.waveformHeight
     this.updateSpectrogramFallbackFill()
@@ -733,8 +772,8 @@ export class ClipViewController extends TrackListItemController {
       viewportStartSample,
       viewportEndSample,
       this.waveform.width,
-      Waveform.HEADER_HEIGHT,
-      this.waveformHeight,
+      this.waveform.transcriptionLaneTop,
+      this.waveform.transcriptionLaneHeight,
     )
   }
 

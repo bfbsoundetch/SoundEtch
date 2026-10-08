@@ -1838,6 +1838,15 @@ video {
   shape-rendering: crispEdges;
 }
 
+.transcription-lane {
+  fill: var(--alt-background);
+  stroke: color-mix(in srgb, var(--color) 55%, transparent);
+  stroke-width: 1;
+  vector-effect: non-scaling-stroke;
+  shape-rendering: crispEdges;
+  pointer-events: none;
+}
+
 .transcription-overlay {
   overflow: hidden;
   pointer-events: none;
@@ -1846,10 +1855,9 @@ video {
 .transcription-range-boundaries {
   fill: none;
   stroke: var(--color);
-  stroke-opacity: 0.75;
+  stroke-opacity: 0.45;
   stroke-width: 1;
   vector-effect: non-scaling-stroke;
-  filter: drop-shadow(0 0 1px var(--bg-color));
   pointer-events: none;
 }
 
@@ -1865,20 +1873,15 @@ video {
   display: flex;
   align-items: center;
   justify-content: center;
-  padding: 0 0.15rem;
+  padding: 0 0.25rem;
   overflow: hidden;
   white-space: nowrap;
   text-overflow: clip;
   color: var(--color);
-  font-family: inherit;
-  font-size: 0.875rem;
+  font-family: system-ui, sans-serif;
+  font-size: 0.8125rem;
   font-weight: 600;
-  line-height: 1.1;
-  text-shadow:
-    -1px -1px 0 var(--bg-color),
-    1px -1px 0 var(--bg-color),
-    -1px 1px 0 var(--bg-color),
-    1px 1px 0 var(--bg-color);
+  line-height: 1;
   pointer-events: none;
 }
 

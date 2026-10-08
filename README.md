@@ -10,7 +10,7 @@ Open **Settings** from the application menu to configure spectrogram rendering a
 
 ## Transcription timeline overlays
 
-Clips can store sparse, ordered transcription ranges in clip-source samples. Every placement projects the same ranges onto its timeline position, preserving alignment through moves, splits, trims, repeated placements, waveform mode, and spectrogram mode. Range labels and their real start/end boundaries are clipped to the visible placement without filling untranscribed gaps or creating boundaries at trim and viewport edges.
+Tracks with transcription show a dedicated lane below the waveform or spectrogram, keeping labels clear of the audio display. Every placement projects the clip's sparse, ordered source-sample ranges onto its timeline position, preserving alignment through moves, splits, trims, repeated placements, and display-mode changes. Range labels and their real start/end boundaries are clipped to the visible placement without filling untranscribed gaps or creating boundaries at trim and viewport edges.
 
 Transcription ranges persist with the clip in IndexedDB and project archives. Clips created by older versions load with an empty transcription.
 

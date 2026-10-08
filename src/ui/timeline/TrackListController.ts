@@ -297,12 +297,26 @@ export class TrackListController {
         this.tracklistElement.appendChild(waveformDiv)
 
         const displayMode = this.trackDisplayModes.get(track) ?? 'waveform'
-        const waveform = new Waveform(this, track, waveformDiv, i, this.getSpectrogramService(), displayMode)
+        const resizeTrackForTranscriptionLane = (heightDelta: number) => {
+          const currentHeight = parseFloat(getComputedStyle(waveformDiv).height)
+          const height = Math.max(0, currentHeight + heightDelta)
+          trackInfoDiv.style.height = `${height}px`
+          waveformDiv.style.height = `${height}px`
+        }
+        const waveform = new Waveform(
+          this,
+          track,
+          waveformDiv,
+          i,
+          this.getSpectrogramService(),
+          displayMode,
+          resizeTrackForTranscriptionLane,
+        )
         const trackListInfo = new TrackListInfo(project, track, trackInfoDiv, this.history, displayMode, (mode) => {
           this.trackDisplayModes.set(track, mode)
           waveform.setDisplayMode(mode)
         })
-        this.addTrackResizeHandles(trackInfoDiv, waveformDiv)
+        this.addTrackResizeHandles(trackInfoDiv, waveformDiv, waveform)
         nextWaveforms.push(waveform)
         this.infoWaveformPairs.set(`${track.id}`, {
           info: trackInfoDiv,
@@ -328,7 +342,7 @@ export class TrackListController {
     return this.spectrogramService
   }
 
-  private addTrackResizeHandles(trackInfoDiv: HTMLDivElement, waveformDiv: HTMLDivElement) {
+  private addTrackResizeHandles(trackInfoDiv: HTMLDivElement, waveformDiv: HTMLDivElement, waveform: Waveform) {
     const startResize = (event: PointerEvent) => {
       if (event.button != 0) {
         return
@@ -340,7 +354,7 @@ export class TrackListController {
       const pointerId = event.pointerId
       const startY = event.clientY
       const startHeight = waveformDiv.getBoundingClientRect().height
-      const minimumHeight = 6 * this.rootFontSize
+      const minimumHeight = 6 * this.rootFontSize + waveform.transcriptionLaneHeight
 
       handle.setPointerCapture(pointerId)
       handle.classList.add('track-resize-handle-active')
