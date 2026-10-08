@@ -1,5 +1,5 @@
 import { FlacFileWriter } from './FlacFileWriter'
-import { expect, test } from 'vitest'
+import { expect, onTestFinished, test } from 'vitest'
 import { FileSystemUtils } from '../filesystem/FileSystemUtils'
 // export type FlacEncoderInfo = {
 //   encoder: 'flac'
@@ -9,7 +9,7 @@ import { FileSystemUtils } from '../filesystem/FileSystemUtils'
 //   compressionLevel: number
 // }
 test('basic test', async () => {
-  const fileHandle = await (await FileSystemUtils.getFileHandle('.', 'basic.flac')).createSyncAccessHandle()
+  const fileHandle = await createFileHandle('basic.flac')
 
   const encoderInfo = {
     encoder: 'flac',
@@ -30,7 +30,7 @@ test('basic test', async () => {
 })
 
 test('stereo test', async () => {
-  const fileHandle = await (await FileSystemUtils.getFileHandle('.', 'stereo.flac')).createSyncAccessHandle()
+  const fileHandle = await createFileHandle('stereo.flac')
 
   const encoderInfo = {
     encoder: 'flac',
@@ -50,6 +50,15 @@ test('stereo test', async () => {
   flacFileWriter.checkStatus()
   await flacFileWriter.finish()
 })
+
+async function createFileHandle(fileName) {
+  const fileHandle = await (await FileSystemUtils.getFileHandle('.', fileName)).createSyncAccessHandle()
+  onTestFinished(() => {
+    fileHandle.close()
+    return FileSystemUtils.deleteFile('.', fileName)
+  })
+  return fileHandle
+}
 
 function fillBuffer(inputBuffer, n) {
   for (let i = 0; i < inputBuffer.length; ++i) {

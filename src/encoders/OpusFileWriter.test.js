@@ -1,5 +1,5 @@
 import { OpusFileWriter } from './OpusFileWriter'
-import { expect, test } from 'vitest'
+import { expect, onTestFinished, test } from 'vitest'
 import { FileSystemUtils } from '../filesystem/FileSystemUtils'
 import { OpusApplication, OpusBandwidth, OpusBitrateMode } from './EncoderType'
 // export type OpusEncoderInfo = {
@@ -14,7 +14,7 @@ import { OpusApplication, OpusBandwidth, OpusBitrateMode } from './EncoderType'
 //   frameSize: 2.5 | 5 | 10 | 20 | 40 | 60
 // }
 test('basic test', async () => {
-  const fileHandle = await (await FileSystemUtils.getFileHandle('.', 'basic.opus')).createSyncAccessHandle()
+  const fileHandle = await createFileHandle('basic.opus')
 
   const encoderInfo = {
     encoder: 'opus',
@@ -38,7 +38,7 @@ test('basic test', async () => {
 })
 
 test('stereo test', async () => {
-  const fileHandle = await (await FileSystemUtils.getFileHandle('.', 'stereo.opus')).createSyncAccessHandle()
+  const fileHandle = await createFileHandle('stereo.opus')
 
   const encoderInfo = {
     encoder: 'opus',
@@ -65,6 +65,15 @@ test('stereo test', async () => {
   }
   await opusFileWriter.finish()
 })
+
+async function createFileHandle(fileName) {
+  const fileHandle = await (await FileSystemUtils.getFileHandle('.', fileName)).createSyncAccessHandle()
+  onTestFinished(() => {
+    fileHandle.close()
+    return FileSystemUtils.deleteFile('.', fileName)
+  })
+  return fileHandle
+}
 
 function fillBuffer(inputBuffer, n) {
   for (let i = 0; i < inputBuffer.length; ++i) {

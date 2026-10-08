@@ -1,5 +1,5 @@
 import { WavFileWriter } from './WavFileWriter'
-import { expect, test } from 'vitest'
+import { expect, onTestFinished, test } from 'vitest'
 import { FileSystemUtils } from '../filesystem/FileSystemUtils'
 
 // export type WavEncoderInfo = {
@@ -11,7 +11,7 @@ import { FileSystemUtils } from '../filesystem/FileSystemUtils'
 // }
 
 test('float32 test', async () => {
-  const fileHandle = await (await FileSystemUtils.getFileHandle('.', 'float32Test.wav')).createSyncAccessHandle()
+  const fileHandle = await createFileHandle('float32Test.wav')
 
   const encoderInfo = {
     encoder: 'wav',
@@ -31,7 +31,7 @@ test('float32 test', async () => {
 })
 
 test('int24 test', async () => {
-  const fileHandle = await (await FileSystemUtils.getFileHandle('.', 'int24Test.wav')).createSyncAccessHandle()
+  const fileHandle = await createFileHandle('int24Test.wav')
 
   const encoderInfo = {
     encoder: 'wav',
@@ -51,7 +51,7 @@ test('int24 test', async () => {
 })
 
 test('int16 test', async () => {
-  const fileHandle = await (await FileSystemUtils.getFileHandle('.', 'int16Test.wav')).createSyncAccessHandle()
+  const fileHandle = await createFileHandle('int16Test.wav')
 
   const encoderInfo = {
     encoder: 'wav',
@@ -71,7 +71,7 @@ test('int16 test', async () => {
 })
 
 test('int8 test', async () => {
-  const fileHandle = await (await FileSystemUtils.getFileHandle('.', 'int8Test.wav')).createSyncAccessHandle()
+  const fileHandle = await createFileHandle('int8Test.wav')
 
   const encoderInfo = {
     encoder: 'wav',
@@ -91,7 +91,7 @@ test('int8 test', async () => {
 })
 
 test('stereo test', async () => {
-  const fileHandle = await (await FileSystemUtils.getFileHandle('.', 'stereoTest.wav')).createSyncAccessHandle()
+  const fileHandle = await createFileHandle('stereoTest.wav')
 
   const encoderInfo = {
     encoder: 'wav',
@@ -114,6 +114,15 @@ test('stereo test', async () => {
   }
   await wavFileWriter.finish()
 })
+
+async function createFileHandle(fileName) {
+  const fileHandle = await (await FileSystemUtils.getFileHandle('.', fileName)).createSyncAccessHandle()
+  onTestFinished(() => {
+    fileHandle.close()
+    return FileSystemUtils.deleteFile('.', fileName)
+  })
+  return fileHandle
+}
 
 function fillBuffer(inputBuffer, n) {
   for (let i = 0; i < inputBuffer.length; ++i) {

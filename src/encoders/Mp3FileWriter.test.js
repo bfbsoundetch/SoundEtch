@@ -1,5 +1,5 @@
 import { Mp3FileWriter } from './Mp3FileWriter'
-import { expect, test } from 'vitest'
+import { expect, onTestFinished, test } from 'vitest'
 import { FileSystemUtils } from '../filesystem/FileSystemUtils'
 // export type Mp3EncoderInfo = {
 //   encoder: 'mp3'
@@ -10,7 +10,7 @@ import { FileSystemUtils } from '../filesystem/FileSystemUtils'
 // }
 
 test('vbr test', async () => {
-  const fileHandle = await (await FileSystemUtils.getFileHandle('.', 'vbrTest.mp3')).createSyncAccessHandle()
+  const fileHandle = await createFileHandle('vbrTest.mp3')
 
   const encoderInfo = {
     encoder: 'mp3',
@@ -29,7 +29,7 @@ test('vbr test', async () => {
 })
 
 test('cbr test', async () => {
-  const fileHandle = await (await FileSystemUtils.getFileHandle('.', 'cbrTest.mp3')).createSyncAccessHandle()
+  const fileHandle = await createFileHandle('cbrTest.mp3')
   const encoderInfo = {
     encoder: 'mp3',
     sampleRate: 44100,
@@ -47,7 +47,7 @@ test('cbr test', async () => {
 })
 
 test('stereo test', async () => {
-  const fileHandle = await (await FileSystemUtils.getFileHandle('.', 'stereoTest.mp3')).createSyncAccessHandle()
+  const fileHandle = await createFileHandle('stereoTest.mp3')
 
   const encoderInfo = {
     encoder: 'mp3',
@@ -67,6 +67,15 @@ test('stereo test', async () => {
   }
   await mp3FileWriter.finish()
 })
+
+async function createFileHandle(fileName) {
+  const fileHandle = await (await FileSystemUtils.getFileHandle('.', fileName)).createSyncAccessHandle()
+  onTestFinished(() => {
+    fileHandle.close()
+    return FileSystemUtils.deleteFile('.', fileName)
+  })
+  return fileHandle
+}
 
 function fillBuffer(inputBuffer, n) {
   for (let i = 0; i < inputBuffer.length; ++i) {
