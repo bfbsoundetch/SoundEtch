@@ -2,6 +2,7 @@ import init, { DFRuntimeParams, DFState as WasmDFState } from './wasm/df.js'
 import type { InitOutput } from './wasm/df.js'
 import { defaultDeepFilterParameters } from './DeepFilterParameters'
 import type { DeepFilterParameters } from './DeepFilterParameters'
+import { DEEP_FILTER_CACHE_NAME } from '../ModelCache'
 
 export { defaultDeepFilterParameters, readDeepFilterParameters } from './DeepFilterParameters'
 export type { DeepFilterParameters } from './DeepFilterParameters'
@@ -114,7 +115,7 @@ function resourceUrl(filename: string) {
 
 async function getCachedOrFetch(url: string) {
   console.debug('fetching', url)
-  const cache = await caches.open('soundetch-cache')
+  const cache = await caches.open(DEEP_FILTER_CACHE_NAME)
   const cached = await cache.match(url)
   if (cached) {
     return cached.arrayBuffer()

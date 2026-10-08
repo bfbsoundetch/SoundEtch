@@ -512,14 +512,68 @@ dialog.overlay[open] {
 }
 
 .settings-modal-content header > p,
-.settings-grid > p {
+.settings-grid > p,
+.settings-section-description,
+.model-cache-description {
   color: var(--clip-view-header-text);
 }
 
 .settings-section {
+  border: 1px solid var(--color);
+}
+
+.settings-section-summary {
+  padding: 0.75rem 1rem;
+  font-size: 1.15rem;
+  font-weight: bold;
+  cursor: pointer;
+  user-select: none;
+}
+
+.settings-section[open] > .settings-section-summary {
+  border-bottom: 1px solid var(--color);
+}
+
+.settings-section-content {
   display: flex;
   flex-direction: column;
   gap: 1rem;
+  padding: 1rem;
+}
+
+.model-cache-list {
+  display: flex;
+  flex-direction: column;
+  gap: 0.75rem;
+  margin: 0;
+  padding: 0;
+  list-style: none;
+}
+
+.model-cache-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 1rem;
+  padding: 0.75rem;
+  border: 1px solid var(--color);
+}
+
+.settings-modal-content .model-cache-description,
+.settings-modal-content .model-cache-status {
+  margin-top: 0.25rem;
+  font-size: 0.9rem;
+}
+
+.model-cache-status {
+  font-variant-numeric: tabular-nums;
+}
+
+.model-cache-unload-button {
+  padding: 0.45rem 0.75rem;
+  color: inherit;
+  background: var(--bg-color);
+  font: inherit;
 }
 
 .settings-grid {

@@ -8,6 +8,16 @@ import ortWasmBinaryUrl from 'onnxruntime-web/ort-wasm-simd-threaded.jsep.wasm?u
 import SoxrResampler from 'wasm-audio-resampler/app/soxr_resampler.js'
 import { SoxrDatatype, SoxrQuality } from 'wasm-audio-resampler/app/utils.js'
 import { FileSystemUtils } from '../filesystem/FileSystemUtils'
+import {
+  GRANITE_MODEL_CACHE_NAME as MODEL_CACHE_NAME,
+  GRANITE_MODEL_DATA_FILE as MODEL_DATA_FILE,
+  GRANITE_MODEL_REVISION as MODEL_REVISION,
+  GRANITE_TIMING_GRAPH_FILE as TIMING_GRAPH_FILE,
+  SILERO_VAD_CACHE_NAME as VAD_CACHE_NAME,
+  SILERO_VAD_FILE as VAD_FILE,
+  SILERO_VAD_REVISION,
+  TRANSCRIPTION_ASSET_BYTES as ASSET_MANIFEST,
+} from '../ModelCache'
 import type { FileSystemSyncAccessHandle } from '../filesystem/FileSystemSyncAccessHandle'
 import type { TranscribedRange } from '../project/Transcription'
 import type {
@@ -50,27 +60,10 @@ import {
 } from './GraniteDiagnostics'
 import { SileroVad } from './SileroVad'
 
-const MODEL_REVISION = '245e1e52c6fc01ba065c35b4af884d89cdca60de'
 const MODEL_BASE_URL = `https://huggingface.co/spaces/ibm-granite/granite-speech-streaming-webgpu/resolve/${MODEL_REVISION}/onnx-ctc/`
-const MODEL_CACHE_NAME = `soundetch-granite-ctc-${MODEL_REVISION}`
-const TIMING_GRAPH_FILE = 'granite_timing_v1_q4f16.onnx'
-const MODEL_DATA_FILE = 'ctc_conformer_q4f16.onnx.data'
-const VAD_FILE = 'silero-vad.onnx'
-const SILERO_VAD_REVISION = 'e71cae966052b992a7eca6b17738916ce0eca4ec'
-const VAD_CACHE_NAME = `soundetch-silero-vad-${SILERO_VAD_REVISION}`
 const AUDIO_READ_CHUNK_FRAMES = 65_536
 const APP_BASE_PATH = import.meta.env.BASE_URL.endsWith('/') ? import.meta.env.BASE_URL : `${import.meta.env.BASE_URL}/`
 const SOXR_WASM_URL = new URL('soxr_wasm.wasm', new URL(APP_BASE_PATH, globalThis.location.origin)).href
-
-const ASSET_MANIFEST = {
-  [TIMING_GRAPH_FILE]: 573_789,
-  [MODEL_DATA_FILE]: 311_533_568,
-  'frontend_config.json': 303,
-  'mel_filters.bin': 82_240,
-  'stft_window.bin': 2_048,
-  'vocab.json': 177_439,
-  [VAD_FILE]: 639_335,
-} as const satisfies Record<string, number>
 
 type AssetName = keyof typeof ASSET_MANIFEST
 type LoadedAssets = Record<AssetName, Uint8Array<ArrayBuffer>>

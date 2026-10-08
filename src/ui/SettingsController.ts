@@ -1,9 +1,18 @@
+import { MODEL_CACHE_INFO, getModelCacheUsage, unloadModelCache, type ModelCacheId } from '../ModelCache'
+import { humanizeBytes } from './DiskUsage'
+import { NotificationsController } from './NotificationsController'
+
 import {
   DEFAULT_SPECTROGRAM_SETTINGS,
   normalizeSpectrogramSettings,
   spectrogramSettings,
   type SpectrogramSettings,
 } from './timeline/spectrogram/SpectrogramSettings'
+
+interface ModelCacheControl {
+  readonly status: HTMLParagraphElement
+  readonly unloadButton: HTMLButtonElement
+}
 
 export class SettingsController {
   private readonly menuButton = document.getElementById('open-settings-modal-button') as HTMLButtonElement
@@ -18,6 +27,20 @@ export class SettingsController {
   private readonly minDbInput = document.getElementById('spectrogram-min-db') as HTMLInputElement
   private readonly minDbOutput = document.getElementById('spectrogram-min-db-value') as HTMLOutputElement
   private readonly resetButton = document.getElementById('settings-reset-button') as HTMLButtonElement
+  private readonly firstSectionSummary = this.dialog.querySelector('.settings-section-summary') as HTMLElement
+  private readonly modelCacheControls = Object.fromEntries(
+    MODEL_CACHE_INFO.map(({ id }) => {
+      const row = this.dialog.querySelector(`[data-model-cache-id="${id}"]`) as HTMLLIElement
+      return [
+        id,
+        {
+          status: row.querySelector('.model-cache-status') as HTMLParagraphElement,
+          unloadButton: row.querySelector('.model-cache-unload-button') as HTMLButtonElement,
+        },
+      ] as const
+    }),
+  ) as Record<ModelCacheId, ModelCacheControl>
+  private modelCacheRefreshVersion = 0
 
   constructor() {
     this.menuButton.addEventListener('click', () => this.open())
@@ -32,13 +55,19 @@ export class SettingsController {
       this.setFormValues(DEFAULT_SPECTROGRAM_SETTINGS)
       this.dialog.close()
     })
+    for (const { id, label } of MODEL_CACHE_INFO) {
+      const control = this.modelCacheControls[id]
+      control.unloadButton.setAttribute('aria-label', `Unload ${label} cached files`)
+      control.unloadButton.addEventListener('click', () => void this.unloadModel(id, label))
+    }
   }
 
   private open(): void {
     this.setFormValues(spectrogramSettings.current)
     if (this.menuDropdown.matches(':popover-open')) this.menuDropdown.hidePopover()
     this.dialog.showModal()
-    this.fftSizeSelect.focus()
+    this.firstSectionSummary.focus()
+    void this.refreshModelCacheUsage()
   }
 
   private apply(): void {
@@ -84,5 +113,46 @@ export class SettingsController {
     if (isSupported(Number(select.value))) return
     const fallback = options.filter((option) => !option.disabled).at(-1)
     if (fallback !== undefined) select.value = fallback.value
+  }
+
+  private async refreshModelCacheUsage(): Promise<void> {
+    const refreshVersion = ++this.modelCacheRefreshVersion
+    for (const control of Object.values(this.modelCacheControls)) {
+      control.status.textContent = 'Checking…'
+      control.unloadButton.disabled = true
+    }
+
+    try {
+      const usage = await getModelCacheUsage()
+      if (refreshVersion != this.modelCacheRefreshVersion) return
+      for (const { id } of MODEL_CACHE_INFO) {
+        const control = this.modelCacheControls[id]
+        const bytes = usage[id]
+        control.status.textContent = bytes > 0 ? `${humanizeBytes(bytes)} on disk` : 'Not cached'
+        control.unloadButton.disabled = bytes == 0
+      }
+    } catch (error) {
+      if (refreshVersion != this.modelCacheRefreshVersion) return
+      console.error('Could not read model cache storage', error)
+      for (const control of Object.values(this.modelCacheControls)) {
+        control.status.textContent = 'Cache storage unavailable'
+        control.unloadButton.disabled = true
+      }
+    }
+  }
+
+  private async unloadModel(modelId: ModelCacheId, label: string): Promise<void> {
+    ++this.modelCacheRefreshVersion
+    const control = this.modelCacheControls[modelId]
+    control.status.textContent = 'Unloading…'
+    control.unloadButton.disabled = true
+    try {
+      await unloadModelCache(modelId)
+      NotificationsController.showShortDurationMessage(`Unloaded ${label} cached files.`)
+    } catch (error) {
+      NotificationsController.showError(error instanceof Error ? error : new Error(String(error)))
+    } finally {
+      await this.refreshModelCacheUsage()
+    }
   }
 }
