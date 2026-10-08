@@ -1118,6 +1118,10 @@ video {
   right: 0;
 }
 
+#position-marker {
+  z-index: 11;
+}
+
 #timeline-area {
   display: flex;
   flex-direction: column;
