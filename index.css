@@ -335,7 +335,7 @@ dialog.overlay[open] {
   margin: auto;
   display: inline-block;
   position: absolute;
-  height: 60%;
+  height: 80%;
   transition: opacity 0.15s ease;
 }
 
@@ -360,13 +360,13 @@ dialog.overlay[open] {
 }
 
 .project-button {
-  height: 100%;
   display: grid;
   flex: 1;
   place-items: center;
   position: relative;
   user-select: none;
-  border: 1px solid transparent;
+  border: 1px dotted;
+  margin: .3rem;
 }
 
 .meeting-button {
