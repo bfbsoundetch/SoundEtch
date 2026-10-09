@@ -42,7 +42,7 @@ import {
   SILERO_VAD_FRAME_SAMPLES,
   SILERO_VAD_SAMPLE_RATE,
 } from './GraniteCtc'
-import type { SelectedSourceSampleRange } from './GraniteCtc'
+import type { GraniteSpeechSegment, SelectedSourceSampleRange } from './GraniteCtc'
 import {
   buildSpeechSupportMask,
   computeFrameEnergies,
@@ -260,7 +260,7 @@ async function processTranscription(command: TranscribeCommand): Promise<void> {
     const vadProbabilities = await traceStage(`${intervalLabel} Silero VAD`, () =>
       runtime.vad.computeProbabilities(audio, () => assertRequestActive(command.requestId)),
     )
-    const segments = segmentSpeechFromVadProbabilities(vadProbabilities, audio.length)
+    const { speechRegions, segments } = segmentSpeechFromVadProbabilities(vadProbabilities, audio.length)
     graniteLog(`${intervalLabel}: ${(audio.length / GRANITE_SAMPLE_RATE).toFixed(1)} s, ${segments.length} segments`)
     const energies = computeFrameEnergies(audio, SILERO_VAD_FRAME_SAMPLES)
     const speechMask = buildSpeechSupportMask(
@@ -287,6 +287,7 @@ async function processTranscription(command: TranscribeCommand): Promise<void> {
               interval,
               speechMask,
               energies,
+              speechRegions,
             ),
         )),
       )
@@ -588,6 +589,7 @@ async function transcribeGraniteSegment(
   selectedRange: SelectedSourceSampleRange,
   speechMask: Uint8Array,
   energies: Float32Array,
+  speechRegions: readonly GraniteSpeechSegment[],
 ) {
   const input = runtime.frontend.prepareInput(audio)
   if (input.realFrames === 0) {
@@ -669,7 +671,7 @@ async function transcribeGraniteSegment(
         end: word.end - segmentOffsetSeconds,
       }))
     }
-    return timedWordsToTranscribedRanges(timed, segmentStart16kSample, projectSampleRate, selectedRange)
+    return timedWordsToTranscribedRanges(timed, segmentStart16kSample, projectSampleRate, selectedRange, speechRegions)
   } finally {
     features.dispose()
     paddingMask.dispose()

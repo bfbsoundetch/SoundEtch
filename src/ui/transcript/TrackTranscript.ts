@@ -9,6 +9,7 @@ export interface TrackTranscriptEntry {
   readonly text: string
   readonly startSample: number
   readonly endSample: number
+  readonly speechStartSample?: number
 }
 
 export function getTrackTranscriptEntries(track: Track): TrackTranscriptEntry[] {
@@ -28,7 +29,15 @@ export function getTrackTranscriptEntries(track: Track): TrackTranscriptEntry[] 
       const startSample = Math.max(clipView.startPosition, range.startSample)
       const endSample = Math.min(placementEnd, range.endSample)
       if (range.text.trim().length === 0 || startSample >= endSample) return
-      entries.push({ clipView, placementIndex, rangeIndex, text: range.text, startSample, endSample })
+      entries.push({
+        clipView,
+        placementIndex,
+        rangeIndex,
+        text: range.text,
+        startSample,
+        endSample,
+        speechStartSample: range.speechStartSample,
+      })
     })
   })
   return entries.sort(

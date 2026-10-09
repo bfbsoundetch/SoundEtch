@@ -4,6 +4,7 @@ import {
   GRANITE_VAD_SEGMENTATION_SETTINGS,
   SILERO_VAD_FRAME_SAMPLES,
   type SelectedSourceSampleRange,
+  type GraniteSpeechSegment,
 } from './GraniteCtc'
 
 export const GRANITE_TIMING_FRAME_SECONDS = 0.08
@@ -480,6 +481,7 @@ export function timedWordsToTranscribedRanges(
   segmentStart16kSample: number,
   projectSampleRate: number,
   selectedRange: SelectedSourceSampleRange,
+  speechRegions: readonly GraniteSpeechSegment[],
 ): TranscribedRange[] {
   const segmentOffsetSeconds = segmentStart16kSample / GRANITE_SAMPLE_RATE
   const ranges = words.flatMap((word) => {
@@ -496,7 +498,28 @@ export function timedWordsToTranscribedRanges(
     if (word.text.length === 0 || startSample >= endSample) {
       return []
     }
-    return [{ text: word.text, startSample, endSample }]
+    return [{ text: word.text, startSample, endSample, speechStartSample: undefined as number | undefined }]
   })
-  return ranges.sort((left, right) => left.startSample - right.startSample || left.endSample - right.endSample)
+  ranges.sort((left, right) => left.startSample - right.startSample || left.endSample - right.endSample)
+  if (speechRegions.length > 0) {
+    const sampleRatio = projectSampleRate / GRANITE_SAMPLE_RATE
+    let regionIndex = 0
+    let speechStartSample = selectedRange.startSample + Math.round(speechRegions[0].startSample * sampleRatio)
+    for (const range of ranges) {
+      const midpoint16kSample =
+        ((range.startSample + range.endSample) / 2 - selectedRange.startSample) / sampleRatio
+      // Words in padding belong to the nearest speech region, not the previous
+      // paragraph merely because their timing precedes Silero's detected onset.
+      while (
+        regionIndex + 1 < speechRegions.length &&
+        midpoint16kSample >=
+          (speechRegions[regionIndex].endSample + speechRegions[regionIndex + 1].startSample) / 2
+      ) {
+        regionIndex += 1
+        speechStartSample = selectedRange.startSample + Math.round(speechRegions[regionIndex].startSample * sampleRatio)
+      }
+      range.speechStartSample = speechStartSample
+    }
+  }
+  return ranges
 }

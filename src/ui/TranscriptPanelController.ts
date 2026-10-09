@@ -104,17 +104,29 @@ export class TranscriptPanelController {
     }))
     this.content.setAttribute('aria-label', `Transcript for ${track.name}`)
     this.shell.setSubtitle(track.name)
-    const paragraph = document.createElement('p')
-    this.bindings = getTrackTranscriptEntries(track).map((entry, i) => {
+    const entries = getTrackTranscriptEntries(track)
+    let paragraph = document.createElement('p')
+    const paragraphs = [paragraph]
+    this.bindings = entries.map((entry, i) => {
+      const previous = entries[i - 1]
+      if (
+        previous &&
+        (entry.speechStartSample !== previous.speechStartSample ||
+          (entry.speechStartSample !== undefined && entry.clipView.clip !== previous.clipView.clip))
+      ) {
+        paragraph = document.createElement('p')
+        paragraphs.push(paragraph)
+      } else if (i > 0) {
+        paragraph.append(' ')
+      }
       const element = document.createElement('span')
       element.className = 'transcript-word'
       element.textContent = entry.text
-      if (i > 0) paragraph.append(' ')
       paragraph.append(element)
       return { entry, element }
     })
     if (this.bindings.length === 0) paragraph.textContent = 'No transcript on this track.'
-    this.content.replaceChildren(paragraph)
+    this.content.replaceChildren(...paragraphs)
     this.firstHighlighted = null
     this.syncSelection(this.trackListController.selectedRegion)
   }

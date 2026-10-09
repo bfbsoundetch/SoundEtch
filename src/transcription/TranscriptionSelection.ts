@@ -95,7 +95,8 @@ export function transcriptionRangesEqual(
       (range, index) =>
         range.text === right[index].text &&
         range.startSample === right[index].startSample &&
-        range.endSample === right[index].endSample,
+        range.endSample === right[index].endSample &&
+        range.speechStartSample === right[index].speechStartSample,
     )
   )
 }

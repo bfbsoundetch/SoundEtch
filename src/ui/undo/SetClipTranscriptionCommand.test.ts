@@ -18,14 +18,14 @@ async function restoreTranscription(clip: Clip): Promise<TranscribedRange[]> {
 test('a transcription batch persists two clips through perform, undo, and redo with fresh arrays', async () => {
   const first = new Clip('first', 1, 10_000)
   const second = new Clip('second', 1, 10_000)
-  first.transcription = [{ text: 'first old', startSample: 100, endSample: 200 }]
-  second.transcription = [{ text: 'second old', startSample: 300, endSample: 400 }]
+  first.transcription = [{ text: 'first old', startSample: 100, endSample: 200, speechStartSample: 80 }]
+  second.transcription = [{ text: 'second old', startSample: 300, endSample: 400, speechStartSample: 250 }]
   await Promise.all([DatabasePersister.save(first), DatabasePersister.save(second)])
 
   const firstOldIdentity = first.transcription
   const secondOldIdentity = second.transcription
-  const firstNew = [{ text: 'first new', startSample: 500, endSample: 600 }]
-  const secondNew = [{ text: 'second new', startSample: 700, endSample: 800 }]
+  const firstNew = [{ text: 'first new', startSample: 500, endSample: 600, speechStartSample: 450 }]
+  const secondNew = [{ text: 'second new', startSample: 700, endSample: 800, speechStartSample: 650 }]
   const history = new BackStack()
   const batch = new BatchCommand(
     [

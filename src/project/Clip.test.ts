@@ -3,8 +3,8 @@ import { DatabasePersister, type PersistedObject } from '../persistence/Database
 import { Clip } from './Clip'
 
 const transcription = [
-  { text: 'all terrain', startSample: 1_000, endSample: 2_000 },
-  { text: 'keeps moving', startSample: 4_000, endSample: 5_500 },
+  { text: 'all terrain', startSample: 1_000, endSample: 2_000, speechStartSample: 500 },
+  { text: 'keeps moving', startSample: 4_000, endSample: 5_500, speechStartSample: 3_500 },
 ]
 
 test('new clips have an empty transcription', () => {

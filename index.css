@@ -2098,11 +2098,17 @@ video {
   padding: 1.25rem;
   overflow-y: auto;
   user-select: text;
+  margin-left: 4rem;
+  margin-right: 4rem;
 }
 
 #transcript-panel-content p {
   margin: 0;
   line-height: 1.65;
+}
+
+#transcript-panel-content p + p {
+  margin-top: 1rem;
 }
 
 #transcript-panel-content .transcript-word:hover {

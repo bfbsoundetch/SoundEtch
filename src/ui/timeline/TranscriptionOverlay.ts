@@ -11,6 +11,7 @@ export interface ProjectedTranscribedRange {
   readonly text: string
   readonly startSample: number
   readonly endSample: number
+  readonly speechStartSample?: number
   readonly drawStartBoundary: boolean
   readonly drawEndBoundary: boolean
 }
@@ -50,6 +51,10 @@ export function projectVisibleTranscribedRanges(
       text: range.text,
       startSample: timelineStartSample + range.startSample - sourceStartSample,
       endSample: timelineStartSample + range.endSample - sourceStartSample,
+      speechStartSample:
+        range.speechStartSample === undefined
+          ? undefined
+          : timelineStartSample + range.speechStartSample - sourceStartSample,
       drawStartBoundary: range.startSample >= visibleSourceStart,
       drawEndBoundary: range.endSample <= visibleSourceEnd,
     })

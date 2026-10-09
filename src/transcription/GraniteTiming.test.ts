@@ -304,7 +304,7 @@ test('word timing uses posterior medians, a 20 ms minimum, and raw-frame fallbac
 test('timed words preserve offsets, project rates, clamping, and stable sorting', () => {
   const selectedRange = { startSample: 1_000, endSample: 30_000 }
   expect(
-    timedWordsToTranscribedRanges([{ text: 'offset', start: 0, end: 0.08 }], 8_000, 44_100, selectedRange),
+    timedWordsToTranscribedRanges([{ text: 'offset', start: 0, end: 0.08 }], 8_000, 44_100, selectedRange, []),
   ).toEqual([{ text: 'offset', startSample: 23_050, endSample: 26_578 }])
 
   expect(
@@ -317,9 +317,48 @@ test('timed words preserve offsets, project rates, clamping, and stable sorting'
       0,
       48_000,
       { startSample: 1_000, endSample: 5_000 },
+      [],
     ),
   ).toEqual([
     { text: 'short', startSample: 1_000, endSample: 4_840 },
     { text: 'long', startSample: 1_000, endSample: 5_000 },
+  ])
+})
+
+test('paragraph membership uses source-rate VAD onsets and assigns padding to the nearest speech region', () => {
+  expect(
+    timedWordsToTranscribedRanges(
+      [
+        { text: 'second padding', start: 1.7, end: 1.75 },
+        { text: 'first trailing', start: 1, end: 1.05 },
+        { text: 'leading', start: 0, end: 0.08 },
+        { text: 'second speech', start: 1.9, end: 2 },
+      ],
+      0,
+      48_000,
+      { startSample: 48_000, endSample: 624_000 },
+      [
+        { startSample: 1_600, endSample: 12_800 },
+        { startSample: 28_800, endSample: 48_000 },
+      ],
+    ),
+  ).toEqual([
+    { text: 'leading', startSample: 48_000, endSample: 51_840, speechStartSample: 52_800 },
+    { text: 'first trailing', startSample: 96_000, endSample: 98_400, speechStartSample: 52_800 },
+    { text: 'second padding', startSample: 129_600, endSample: 132_000, speechStartSample: 134_400 },
+    { text: 'second speech', startSample: 139_200, endSample: 144_000, speechStartSample: 134_400 },
+  ])
+})
+
+test('processing another 20-second chunk does not start a new speech paragraph', () => {
+  const speechRegions = [{ startSample: 0, endSample: 720_000 }]
+  const interval = { startSample: 0, endSample: 2_160_000 }
+  const words = [{ text: 'continuous', start: 0.2, end: 0.4 }]
+  expect([
+    ...timedWordsToTranscribedRanges(words, 0, 48_000, interval, speechRegions),
+    ...timedWordsToTranscribedRanges(words, 320_000, 48_000, interval, speechRegions),
+  ]).toEqual([
+    { text: 'continuous', startSample: 9_600, endSample: 19_200, speechStartSample: 0 },
+    { text: 'continuous', startSample: 969_600, endSample: 979_200, speechStartSample: 0 },
   ])
 })

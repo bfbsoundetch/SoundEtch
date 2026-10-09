@@ -66,6 +66,11 @@ export interface GraniteSpeechSegment {
   readonly startSample: number
   readonly endSample: number
 }
+
+export interface GraniteSpeechSegmentation {
+  readonly speechRegions: GraniteSpeechSegment[]
+  readonly segments: GraniteSpeechSegment[]
+}
 interface MutableTokenSpan {
   readonly id: number
   readonly startFrame: number
@@ -401,9 +406,9 @@ export function segmentSpeechFromVadProbabilities(
   probabilities: ArrayLike<number>,
   audioSampleCount: number,
   settings: VadSegmentationSettings = GRANITE_VAD_SEGMENTATION_SETTINGS,
-): GraniteSpeechSegment[] {
+): GraniteSpeechSegmentation {
   if (audioSampleCount <= 0) {
-    return []
+    return { speechRegions: [], segments: [] }
   }
 
   const frameMs = (SILERO_VAD_FRAME_SAMPLES / SILERO_VAD_SAMPLE_RATE) * 1_000
@@ -413,7 +418,7 @@ export function segmentSpeechFromVadProbabilities(
   const postSpeechSamples = Math.round((settings.postSpeechMs / 1_000) * SILERO_VAD_SAMPLE_RATE)
   const totalFrames = Math.min(probabilities.length, Math.ceil(audioSampleCount / SILERO_VAD_FRAME_SAMPLES))
 
-  const detected = new Array<GraniteSpeechSegment>()
+  const speechRegions = new Array<GraniteSpeechSegment>()
   let speaking = false
   let speechStart = 0
   let speechFrames = 0
@@ -426,7 +431,7 @@ export function segmentSpeechFromVadProbabilities(
     if (probability >= settings.positiveThreshold) {
       if (!speaking) {
         speaking = true
-        speechStart = Math.max(0, offset - preSpeechSamples)
+        speechStart = offset
         speechFrames = 0
       }
       speechFrames += 1
@@ -435,9 +440,8 @@ export function segmentSpeechFromVadProbabilities(
       redemptionFrames += 1
       if (redemptionFrames >= redemptionFrameLimit) {
         const silenceStartSample = offset - (redemptionFrames - 1) * SILERO_VAD_FRAME_SAMPLES
-        const speechEndSample = Math.min(audioSampleCount, silenceStartSample + postSpeechSamples)
         if (speechFrames >= minSpeechFrames) {
-          detected.push({ startSample: speechStart, endSample: speechEndSample })
+          speechRegions.push({ startSample: speechStart, endSample: silenceStartSample })
         }
         speaking = false
         speechFrames = 0
@@ -447,32 +451,30 @@ export function segmentSpeechFromVadProbabilities(
   }
 
   if (speaking && speechFrames >= minSpeechFrames) {
-    detected.push({ startSample: speechStart, endSample: audioSampleCount })
+    speechRegions.push({ startSample: speechStart, endSample: audioSampleCount })
   }
 
   const segments = new Array<GraniteSpeechSegment>()
-  if (detected.length === 0) {
+  if (speechRegions.length === 0) {
     appendCappedSegment(segments, 0, audioSampleCount)
-    return segments
+    return { speechRegions, segments }
   }
 
-  detected.sort((left, right) => left.startSample - right.startSample)
-  const merged = new Array<GraniteSpeechSegment>()
-  for (const segment of detected) {
+  const merged: Array<{ startSample: number; endSample: number }> = []
+  for (const region of speechRegions) {
+    const startSample = Math.max(0, region.startSample - preSpeechSamples)
+    const endSample = Math.min(audioSampleCount, region.endSample + postSpeechSamples)
     const previous = merged[merged.length - 1]
-    if (previous && segment.startSample <= previous.endSample) {
-      merged[merged.length - 1] = {
-        startSample: previous.startSample,
-        endSample: Math.max(previous.endSample, segment.endSample),
-      }
+    if (previous && startSample <= previous.endSample) {
+      previous.endSample = Math.max(previous.endSample, endSample)
     } else {
-      merged.push(segment)
+      merged.push({ startSample, endSample })
     }
   }
   for (const segment of merged) {
     appendCappedSegment(segments, segment.startSample, segment.endSample)
   }
-  return segments
+  return { speechRegions, segments }
 }
 
 function appendCappedSegment(segments: GraniteSpeechSegment[], startSample: number, endSample: number): void {
