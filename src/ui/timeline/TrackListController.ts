@@ -225,6 +225,7 @@ export class TrackListController {
         this.exitAutomationMode()
       }
       this.showWelcomeOnEmptyProject()
+      this.transcriptPanelController?.syncPlayback()
       switch (state) {
         case AudioState.PLAYING:
         case AudioState.RECORDING:
@@ -750,6 +751,7 @@ export class TrackListController {
     this.automationMode?.controller.draw()
     this.selectionController.draw()
     this.positionMarkerController.draw()
+    this.transcriptPanelController?.syncPlayback()
   }
 
   private handleKeyDown(event: KeyboardEvent) {
@@ -883,5 +885,6 @@ export class TrackListController {
     this.waveforms.forEach((waveform) => waveform.drawAudioData())
     this.selectionController.draw()
     this.positionMarkerController.draw(position)
+    this.transcriptPanelController?.syncPlayback(position)
   }
 }

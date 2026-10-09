@@ -33,6 +33,10 @@ export class TranscriptPanelController {
   private publishing = false
   private ignoredSelection: NativeEndpoints | null = null
   private firstHighlighted: HTMLSpanElement | null = null
+  private readonly playingBindings = new Set<Binding>()
+  private nextPlaybackIndex = 0
+  private lastPlaybackSample: number | null = null
+  private firstPlayingElement: HTMLSpanElement | null = null
 
   constructor(private readonly trackListController: TrackListController) {}
 
@@ -58,6 +62,7 @@ export class TranscriptPanelController {
       body: this.content!,
       onClose: () => this.deactivate(),
     })
+    this.syncPlayback()
     const binding = this.bindings.find(
       (b) =>
         b.entry.clipView === entry.clipView &&
@@ -95,6 +100,7 @@ export class TranscriptPanelController {
     this.gesture = null
     this.trackListController.pointerStateManager.finishSelectingTranscript()
     this.clearOwnedNativeSelection()
+    this.clearPlayback()
     this.trackName = track.name
     this.snapshot = views.map((clipView) => ({
       clipView,
@@ -129,6 +135,7 @@ export class TranscriptPanelController {
     this.content.replaceChildren(...paragraphs)
     this.firstHighlighted = null
     this.syncSelection(this.trackListController.selectedRegion)
+    this.syncPlayback()
   }
 
   syncSelection(selection: SelectedRegion | null): void {
@@ -166,10 +173,59 @@ export class TranscriptPanelController {
     this.firstHighlighted = firstElement
   }
 
+  syncPlayback(position?: number): void {
+    if (!this.activeTrack) return
+    const sample = AudioControl.isPlaying() ? (position ?? AudioControl.audioContext?.getPosition()) : undefined
+    if (sample === undefined) {
+      this.clearPlayback()
+      return
+    }
+    if (this.lastPlaybackSample !== null && sample < this.lastPlaybackSample) this.clearPlayback()
+    this.lastPlaybackSample = sample
+
+    let first: HTMLSpanElement | null = null
+    for (const binding of this.playingBindings) {
+      if (binding.entry.endSample <= sample) {
+        binding.element.classList.remove('playing')
+        this.playingBindings.delete(binding)
+      } else {
+        first ??= binding.element
+      }
+    }
+    // Bindings are ordered by start time. Advance only past newly reached
+    // occurrences; overlapping placements can have more than one active word.
+    while (
+      this.nextPlaybackIndex < this.bindings.length &&
+      this.bindings[this.nextPlaybackIndex].entry.startSample <= sample
+    ) {
+      const binding = this.bindings[this.nextPlaybackIndex++]
+      if (sample < binding.entry.endSample) {
+        binding.element.classList.add('playing')
+        this.playingBindings.add(binding)
+        first ??= binding.element
+      }
+    }
+    if (!this.gesture) {
+      if (first && first !== this.firstPlayingElement) {
+        first.scrollIntoView({ block: 'nearest', inline: 'nearest' })
+      }
+      this.firstPlayingElement = first
+    }
+  }
+
+  private clearPlayback(): void {
+    for (const binding of this.playingBindings) binding.element.classList.remove('playing')
+    this.playingBindings.clear()
+    this.nextPlaybackIndex = 0
+    this.lastPlaybackSample = null
+    this.firstPlayingElement = null
+  }
+
   private deactivate(): void {
     this.gesture = null
     this.trackListController.pointerStateManager.finishSelectingTranscript()
     this.clearOwnedNativeSelection()
+    this.clearPlayback()
     this.lifetime?.abort()
     this.lifetime = null
     this.activeTrack = null
