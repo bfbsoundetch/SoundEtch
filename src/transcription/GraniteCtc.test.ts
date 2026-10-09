@@ -143,9 +143,29 @@ test('long uninterrupted speech has one VAD paragraph despite capped inference c
   expect(segmentSpeechFromVadProbabilities(probabilities, samples)).toEqual({
     speechRegions: [{ startSample: 0, endSample: samples }],
     segments: [
-      { startSample: 0, endSample: 320_000 },
-      { startSample: 320_000, endSample: 640_000 },
-      { startSample: 640_000, endSample: 720_000 },
+      { startSample: 0, endSample: 319_744 },
+      { startSample: 319_744, endSample: 639_232 },
+      { startSample: 639_232, endSample: 720_000 },
+    ],
+  })
+})
+
+test('long speech is cut mid-pause before the 20-second cap, never through a word at the cap', () => {
+  const samples = 16_000 * 45
+  const probabilities = new Float32Array(Math.ceil(samples / 512)).fill(0.9)
+  // A 10-frame pause, shorter than redemption, and a later 3-frame pause in the first search window.
+  probabilities.fill(0.1, 560, 570)
+  probabilities.fill(0.1, 600, 603)
+  // No pause in the second search window; frame 1100 is the least speech-like.
+  probabilities[1100] = 0.6
+  expect(segmentSpeechFromVadProbabilities(probabilities, samples)).toEqual({
+    speechRegions: [{ startSample: 0, endSample: samples }],
+    segments: [
+      // Middle of the longest pause: frame boundary 565.
+      { startSample: 0, endSample: 289_280 },
+      // Middle of frame 1100.
+      { startSample: 289_280, endSample: 563_456 },
+      { startSample: 563_456, endSample: 720_000 },
     ],
   })
 })

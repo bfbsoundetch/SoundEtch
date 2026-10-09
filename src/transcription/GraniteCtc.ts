@@ -10,6 +10,7 @@ const AGC_PEAK_LIMIT = 0.97
 export const SILERO_VAD_SAMPLE_RATE = 16_000
 export const SILERO_VAD_FRAME_SAMPLES = 512
 const MAX_INFERENCE_SEGMENT_SAMPLES = 320_000
+const SEGMENT_CUT_SEARCH_SAMPLES = 80_000
 
 type NumericArray = ArrayLike<number | bigint>
 
@@ -456,7 +457,7 @@ export function segmentSpeechFromVadProbabilities(
 
   const segments = new Array<GraniteSpeechSegment>()
   if (speechRegions.length === 0) {
-    appendCappedSegment(segments, 0, audioSampleCount)
+    appendCappedSegment(segments, 0, audioSampleCount, probabilities, totalFrames, settings.negativeThreshold)
     return { speechRegions, segments }
   }
 
@@ -472,19 +473,58 @@ export function segmentSpeechFromVadProbabilities(
     }
   }
   for (const segment of merged) {
-    appendCappedSegment(segments, segment.startSample, segment.endSample)
+    appendCappedSegment(
+      segments,
+      segment.startSample,
+      segment.endSample,
+      probabilities,
+      totalFrames,
+      settings.negativeThreshold,
+    )
   }
   return { speechRegions, segments }
 }
 
-function appendCappedSegment(segments: GraniteSpeechSegment[], startSample: number, endSample: number): void {
+/**
+ * Splits a speech segment into inference segments of at most 20 s. Granite
+ * transcribes a word cut by a segment boundary, often with its neighbours, in
+ * both segments, so each cut falls within the last 5 s before the cap: in the
+ * middle of the longest run of frames below the negative threshold (the latest
+ * on ties) or, in speech without such a pause, in the frame with the lowest
+ * speech probability. Without probabilities the cut falls at the cap.
+ */
+function appendCappedSegment(
+  segments: GraniteSpeechSegment[],
+  startSample: number,
+  endSample: number,
+  probabilities: ArrayLike<number>,
+  frameCount: number,
+  negativeThreshold: number,
+): void {
   let chunkStart = startSample
   while (endSample - chunkStart > MAX_INFERENCE_SEGMENT_SAMPLES) {
-    segments.push({
-      startSample: chunkStart,
-      endSample: chunkStart + MAX_INFERENCE_SEGMENT_SAMPLES,
-    })
-    chunkStart += MAX_INFERENCE_SEGMENT_SAMPLES
+    const capSample = chunkStart + MAX_INFERENCE_SEGMENT_SAMPLES
+    const firstFrame = Math.ceil((capSample - SEGMENT_CUT_SEARCH_SAMPLES) / SILERO_VAD_FRAME_SAMPLES)
+    const endFrame = Math.min(frameCount, Math.floor(capSample / SILERO_VAD_FRAME_SAMPLES))
+    let cutSample = capSample
+    let longestPauseFrames = 0
+    let quietestFrame = -1
+    for (let frame = firstFrame, pauseStart = firstFrame; frame < endFrame; ++frame) {
+      if (probabilities[frame] >= negativeThreshold) {
+        pauseStart = frame + 1
+      } else if (frame + 1 - pauseStart >= longestPauseFrames) {
+        longestPauseFrames = frame + 1 - pauseStart
+        cutSample = (pauseStart + frame + 1) * (SILERO_VAD_FRAME_SAMPLES / 2)
+      }
+      if (quietestFrame < 0 || probabilities[frame] <= probabilities[quietestFrame]) {
+        quietestFrame = frame
+      }
+    }
+    if (longestPauseFrames === 0 && quietestFrame >= 0) {
+      cutSample = quietestFrame * SILERO_VAD_FRAME_SAMPLES + SILERO_VAD_FRAME_SAMPLES / 2
+    }
+    segments.push({ startSample: chunkStart, endSample: cutSample })
+    chunkStart = cutSample
   }
   if (chunkStart < endSample) {
     segments.push({ startSample: chunkStart, endSample })
