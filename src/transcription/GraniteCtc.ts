@@ -217,6 +217,7 @@ export class GraniteCtcFrontend {
 export class GraniteCtcDecoder {
   private readonly encodedPieces: Uint8Array[]
   private readonly textDecoder = new TextDecoder('utf-8')
+  private readonly wordInitialIds = new Map<string, number>()
 
   constructor(
     vocabulary: readonly string[],
@@ -235,6 +236,23 @@ export class GraniteCtcDecoder {
       }
       return bytes.subarray(0, byteCount)
     })
+    this.encodedPieces.forEach((bytes, index) => {
+      if (bytes.length > 1 && bytes[0] === 0x20) {
+        this.wordInitialIds.set(this.textDecoder.decode(bytes.subarray(1)), index + numSpecialTokens)
+      }
+    })
+  }
+
+  /** Ids of the word-initial vocabulary pieces that spell a prefix of `text`, including the whole word. */
+  wordPrefixTokenIds(text: string): number[] {
+    const ids = new Array<number>()
+    for (let length = 1; length <= text.length; ++length) {
+      const id = this.wordInitialIds.get(text.slice(0, length))
+      if (id !== undefined) {
+        ids.push(id)
+      }
+    }
+    return ids
   }
 
   decodeTokenSpans(rawIds: NumericArray): GraniteTokenSpan[] {

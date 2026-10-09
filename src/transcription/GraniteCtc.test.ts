@@ -32,6 +32,12 @@ test('CTC collapse extends raw repeats and preserves identical tokens separated 
   ])
 })
 
+test('word prefix ids cover word-initial pieces spelling a prefix, including the whole word', () => {
+  const prefixDecoder = new GraniteCtcDecoder(['Ġleg', 'Ġlegisl', 'leg', 'Ġlegislation', 'Ġlegal', 'Ġ'], 0, 1)
+  expect(prefixDecoder.wordPrefixTokenIds('legislation')).toEqual([1, 2, 4])
+  expect(prefixDecoder.wordPrefixTokenIds('le')).toEqual([])
+})
+
 test('token spans preserve blank-separated repeats and word token indices', () => {
   const repeatedDecoder = new GraniteCtcDecoder(['h'], 0, 1)
   const spans = repeatedDecoder.decodeTokenSpans(new Int32Array([1, 1, 0, 1]))

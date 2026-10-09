@@ -8,11 +8,12 @@ import schema from '../node_modules/onnxruntime-web/lib/onnxjs/ort-schema/protob
 const { onnx } = schema
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
 const sourcePath = resolve(root, 'public/granite/ctc_conformer_q4f16.onnx')
-const targetPath = resolve(root, 'public/granite/granite_timing_v1_q4f16.onnx')
+const timingVersion = '2'
+const targetPath = resolve(root, `public/granite/granite_timing_v${timingVersion}_q4f16.onnx`)
 const sourceUrl =
   'https://huggingface.co/spaces/ibm-granite/granite-speech-streaming-webgpu/resolve/245e1e52c6fc01ba065c35b4af884d89cdca60de/onnx-ctc/ctc_conformer_q4f16.onnx'
 const externalWeights = 'ctc_conformer_q4f16.onnx.data'
-const prefix = '/soundetch_timing_v1/'
+const prefix = `/soundetch_timing_v${timingVersion}/`
 const versionKey = 'soundetch.timing_version'
 const logits = '/model/out/Add_output_0'
 const argmax = '/ArgMax_output_0'
@@ -35,6 +36,7 @@ const expectedOutputs = [
   valueInfo('frame_ids', 7, ['T']),
   valueInfo('token_ids', 7, ['N']),
   valueInfo('ctc_scores', 1, ['T', 'N+1']),
+  valueInfo('vocab_log_probs', 1, ['T', 16384]),
 ]
 
 function timingTail() {
@@ -77,6 +79,11 @@ function timingTail() {
   const columns = prefix + 'columns'
   const compact = prefix + 'compact'
   const squeezed = prefix + 'squeezed'
+  const vocabAxis = prefix + 'vocab_axis'
+  const logitsFloat = prefix + 'logits_float'
+  const nonblankLogits = prefix + 'nonblank_logits'
+  const nonblankLogNorm = prefix + 'nonblank_log_norm'
+  const batchedLogProbs = prefix + 'batched_vocab_log_probs'
 
   return {
     initializers: [
@@ -88,6 +95,7 @@ function timingTail() {
       tensor('step_one', 7, [1]),
       tensor('blank', 7, [0]),
       tensor('final_keep', 9, [1]),
+      tensor('vocab_axis', 7, [2]),
     ],
     nodes: [
       node('frame_ids', 'Squeeze', [argmax, axes], 'frame_ids'),
@@ -107,6 +115,15 @@ function timingTail() {
       node('compact', 'Gather', [logits, columns], compact, [integer('axis', 2)]),
       node('squeezed', 'Squeeze', [compact, axes], squeezed),
       node('ctc_scores', 'Cast', [squeezed], 'ctc_scores', [integer('to', 1)]),
+      // log P(token | non-blank) for every vocabulary id; the blank column is not a probability.
+      node('logits_float', 'Cast', [logits], logitsFloat, [integer('to', 1)]),
+      node('nonblank_logits', 'Slice', [logitsFloat, startOne, endMax, vocabAxis, stepOne], nonblankLogits),
+      node('nonblank_log_norm', 'ReduceLogSumExp', [nonblankLogits], nonblankLogNorm, [
+        integers('axes', [2]),
+        integer('keepdims', 1),
+      ]),
+      node('batched_vocab_log_probs', 'Sub', [logitsFloat, nonblankLogNorm], batchedLogProbs),
+      node('vocab_log_probs', 'Squeeze', [batchedLogProbs, axes], 'vocab_log_probs'),
     ],
   }
 }
@@ -235,7 +252,7 @@ function checkConverted(model) {
   )
   assert.equal(
     model.metadataProps.find((entry) => entry.key === versionKey).value,
-    '1',
+    timingVersion,
     'Unsupported timing graph version',
   )
   assert.equal(model.graph.output.length, expectedOutputs.length, 'Unexpected timing outputs')
@@ -306,7 +323,7 @@ if (args[0] === '--verify') {
   model.graph.node.push(...tail.nodes)
   model.graph.initializer.push(...tail.initializers)
   model.graph.output = expectedOutputs
-  model.metadataProps.push(onnx.StringStringEntryProto.fromObject({ key: versionKey, value: '1' }))
+  model.metadataProps.push(onnx.StringStringEntryProto.fromObject({ key: versionKey, value: timingVersion }))
   prune(model.graph)
   checkConverted(model)
   assert.deepEqual(externalLocations(model.graph), originalLocations, 'External weight locations changed')

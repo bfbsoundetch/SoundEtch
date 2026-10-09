@@ -5,6 +5,7 @@ import {
   SILERO_VAD_FRAME_SAMPLES,
   type SelectedSourceSampleRange,
   type GraniteSpeechSegment,
+  type GraniteTokenSpan,
 } from './GraniteCtc'
 
 export const GRANITE_TIMING_FRAME_SECONDS = 0.08
@@ -202,15 +203,91 @@ export function ctcTokenPosteriors(
   return boundaries
 }
 
+/** Share of the non-blank distribution that a word's prefix pieces need to show the word has begun. */
+const PREFIX_ONSET_SHARE = 0.4
+/**
+ * Prefix evidence must lead the word's spike by this many 80 ms frames to move
+ * its start; within two frames it is as often early as the spike is late.
+ */
+const MIN_PREFIX_ONSET_LEAD_FRAMES = 3
+/** The previous word still occupies the frame after its spike. */
+const MIN_PREFIX_ONSET_FRAMES_AFTER_PREVIOUS_SPIKE = 2
+/**
+ * Shorter words sit close to their spike, and their prefix pieces ("Ġo", "Ġa")
+ * are too common to mark them.
+ */
+const MIN_PREFIX_ONSET_LETTERS = 6
+
+/**
+ * Granite emits a word once it has heard enough to identify it, so a long
+ * single-token word can spike several frames after it begins: "legislation"
+ * spikes on "-lation". The non-blank vocabulary distribution shows the word
+ * earlier, as its word-initial prefix pieces ("Ġlegisl"; "Ġag" for
+ * "agriculture") take over from the previous word's. For each word of at
+ * least six letters, returns the first frame, from the second frame after the
+ * previous word's spike, where its prefix pieces hold at least 40% of the
+ * non-blank distribution and more than the previous word's pieces, if that
+ * frame leads its spike by at least three frames. Pieces that spell a prefix
+ * of both words ("Ġi" for "i issued") count for neither.
+ *
+ * `vocabularyLogProbs` holds log P(token | non-blank) for `vocabularySize`
+ * token ids per 80 ms frame.
+ */
+export function graniteWordOnsetFrames(
+  words: readonly RawGraniteWord[],
+  tokenSpans: readonly GraniteTokenSpan[],
+  vocabularyLogProbs: Float32Array,
+  vocabularySize: number,
+  prefixTokenIds: (text: string) => readonly number[],
+): Array<number | undefined> {
+  const prefixIds = words.map((word) => prefixTokenIds(word.text))
+  return words.map((word, index) => {
+    if (word.text.replace(/[^a-z']/gi, '').length < MIN_PREFIX_ONSET_LETTERS) {
+      return undefined
+    }
+    const previousIds = index > 0 ? prefixIds[index - 1] : []
+    const ownIds = prefixIds[index].filter((id) => !previousIds.includes(id))
+    const otherIds = previousIds.filter((id) => !prefixIds[index].includes(id))
+    const spike = tokenSpans[word.firstToken].startFrame
+    const firstFrame =
+      index > 0 ? tokenSpans[words[index - 1].firstToken].startFrame + MIN_PREFIX_ONSET_FRAMES_AFTER_PREVIOUS_SPIKE : 0
+    for (let frame = firstFrame; frame <= spike - MIN_PREFIX_ONSET_LEAD_FRAMES; ++frame) {
+      const row = frame * vocabularySize
+      let own = 0
+      for (const id of ownIds) {
+        own += Math.exp(vocabularyLogProbs[row + id])
+      }
+      let other = 0
+      for (const id of otherIds) {
+        other += Math.exp(vocabularyLogProbs[row + id])
+      }
+      if (own >= PREFIX_ONSET_SHARE && own > other) {
+        return frame
+      }
+    }
+    return undefined
+  })
+}
+
+/**
+ * Word extents in segment seconds from CTC posterior medians, or the frame
+ * path without posteriors. A word with prefix evidence from
+ * `graniteWordOnsetFrames` starts at the middle of that frame when earlier.
+ */
 export function timeGraniteWords(
   words: readonly RawGraniteWord[],
   posteriors: readonly CtcTokenBoundary[] | null,
+  onsetFrames: readonly (number | undefined)[],
   durationSeconds: number,
 ): TimedGraniteWord[] {
-  return words.map((word) => {
+  return words.map((word, index) => {
     const posteriorStart = posteriors?.[word.firstToken]?.start.median
     const posteriorEnd = posteriors?.[word.lastToken]?.end.median
-    const startFrames = posteriorStart ?? word.startFrame
+    const onsetFrame = onsetFrames[index]
+    const startFrames = Math.min(
+      posteriorStart ?? word.startFrame,
+      onsetFrame === undefined ? Infinity : onsetFrame + 0.5,
+    )
     const endFrames = posteriorEnd ?? word.endFrame
     const start = Math.max(0, Math.min(durationSeconds, startFrames * GRANITE_TIMING_FRAME_SECONDS))
     const end = Math.max(start + 0.02, Math.min(durationSeconds, endFrames * GRANITE_TIMING_FRAME_SECONDS))
@@ -254,11 +331,14 @@ const MIN_WORD_SECONDS = 0.02
  * before the speech it transcribes. Bounded refinement cannot reach that far,
  * so a first word that starts within that leading window and is at least 80%
  * unsupported starts at the nearest supported speech run between the segment
- * start and the next word.
+ * start and the next word. When the next word's spike already sits where that
+ * speech begins, the first word starts at the first supported run before the
+ * next word ends.
  */
 function relocateLeadingWord(
   anchor: TimedGraniteWord,
   nextStart: number,
+  nextEnd: number,
   segmentStartSeconds: number,
   speechMask: Uint8Array,
   frameEnergies: Float32Array,
@@ -311,7 +391,20 @@ function relocateLeadingWord(
       bestDistance = distance
     }
   }
-  return bestStart
+  if (bestStart !== undefined) {
+    return bestStart
+  }
+  const nextEndFrame = Math.min(speechMask.length, frameEnergies.length, Math.ceil(nextEnd / frameSeconds))
+  for (let frame = lastFrame; frame + MIN_RELOCATION_RUN_FRAMES <= nextEndFrame; ++frame) {
+    let runFrames = 0
+    while (runFrames < MIN_RELOCATION_RUN_FRAMES && active(frame + runFrames)) {
+      ++runFrames
+    }
+    if (runFrames === MIN_RELOCATION_RUN_FRAMES) {
+      return frame * frameSeconds
+    }
+  }
+  return undefined
 }
 
 /**
@@ -397,7 +490,15 @@ export function refineGraniteWords(
     const searchEnd = Math.min(nextAnchorStart, Math.max(anchor.end, anchor.start + ONSET_SEARCH_SECONDS))
     const relocated =
       index === 0
-        ? relocateLeadingWord(anchor, nextAnchorStart, segmentStartSeconds, speechMask, frameEnergies, frameSeconds)
+        ? relocateLeadingWord(
+            anchor,
+            nextAnchorStart,
+            words[index + 1]?.end ?? segmentEndSeconds,
+            segmentStartSeconds,
+            speechMask,
+            frameEnergies,
+            frameSeconds,
+          )
         : undefined
     const start =
       relocated ??

@@ -46,7 +46,7 @@ https://huggingface.co/ibm-granite/granite-speech-5.0-470m-turboctc
 Browser export pinned to Space revision 245e1e52c6fc01ba065c35b4af884d89cdca60de:
 https://huggingface.co/spaces/ibm-granite/granite-speech-streaming-webgpu/tree/245e1e52c6fc01ba065c35b4af884d89cdca60de/onnx-ctc
 
-public/granite/granite_timing_v1_q4f16.onnx is derived at build time by scripts/prepare-granite-timing.mjs from that pinned Apache-2.0 Space export. Reproduce it with: yarn prepare:timing
+public/granite/granite_timing_v2_q4f16.onnx is derived at build time by scripts/prepare-granite-timing.mjs from that pinned Apache-2.0 Space export. Reproduce it with: yarn prepare:timing
 
 The model and pinned browser export are provided under the Apache License 2.0:
 https://www.apache.org/licenses/LICENSE-2.0

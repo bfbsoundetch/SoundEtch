@@ -5,6 +5,7 @@ import {
   refineGraniteWords,
   timedWordsToTranscribedRanges,
   timeGraniteWords,
+  graniteWordOnsetFrames,
   type CtcTokenBoundary,
 } from './GraniteTiming'
 
@@ -136,6 +137,19 @@ test('a first word emitted in the segment pre-roll moves onto its speech without
   const [my, friends] = refineGraniteWords(words, speech, Float32Array.from(speech), 0.032, 10.4, 30.4)
   expect(geometry([my])).toEqual([{ start: 339 * 0.032, end: 343 * 0.032 }])
   expect(friends.start).toBe(11.01)
+})
+
+test('a first word in the leading silence starts with the speech where the next word already spikes', () => {
+  // Fireside Chat "and so it became": a chunk starts mid-pause; Granite put "and" at the chunk start
+  // and the "so" spike where speech resumes, leaving no speech between them.
+  const words = [
+    { text: 'and', start: 0, end: 0.08 },
+    { text: 'so', start: 0.48, end: 0.56 },
+  ]
+  const speech = new Uint8Array(60).fill(1, 15, 30)
+  const [and, so] = refineGraniteWords(words, speech, Float32Array.from(speech), 0.032, 0, 1.92)
+  expect(and.start).toBeCloseTo(15 * 0.032, 9)
+  expect(so.start).toBeCloseTo(15 * 0.032 + 0.02, 9)
 })
 
 test('leading-word relocation is limited to the pre-roll and ignores earlier segments and one-frame clicks', () => {
@@ -291,14 +305,104 @@ test('speech support distinguishes VAD, energy, and frames outside padded segmen
   ).toEqual([1, 2, 0])
 })
 
-test('word timing uses posterior medians, a 20 ms minimum, and raw-frame fallback', () => {
+test('word timing uses posterior medians, earlier prefix onsets, a 20 ms minimum, and raw-frame fallback', () => {
   const word = { text: 'word', startFrame: 2, endFrame: 3, firstToken: 0, lastToken: 0 }
   const posterior: CtcTokenBoundary = {
     start: { low: 2, median: 3, high: 4 },
     end: { low: 2, median: 3, high: 4 },
   }
-  expect(timeGraniteWords([word], [posterior], 1)).toEqual([{ text: 'word', start: 0.24, end: 0.26 }])
-  expect(timeGraniteWords([word], null, 1)).toEqual([{ text: 'word', start: 0.16, end: 0.24 }])
+  expect(timeGraniteWords([word], [posterior], [], 1)).toEqual([{ text: 'word', start: 0.24, end: 0.26 }])
+  expect(timeGraniteWords([word], null, [], 1)).toEqual([{ text: 'word', start: 0.16, end: 0.24 }])
+  // An onset starts the word mid-frame when earlier than the posterior start, and never delays it.
+  expect(timeGraniteWords([word], [posterior], [1], 1)).toEqual([{ text: 'word', start: 0.12, end: 0.24 }])
+  expect(timeGraniteWords([word], [posterior], [5], 1)).toEqual([{ text: 'word', start: 0.24, end: 0.26 }])
+})
+
+// Non-blank vocabulary log-probabilities, one row per frame; ids absent from a row share the remainder.
+function vocabularyLogProbs(rows: readonly Record<number, number>[], vocabularySize: number): Float32Array {
+  const logProbs = new Float32Array(rows.length * vocabularySize)
+  rows.forEach((row, frame) => {
+    const listed = Object.values(row).reduce((sum, probability) => sum + probability, 0)
+    const rest = (1 - listed) / (vocabularySize - 1 - Object.keys(row).length)
+    for (let id = 1; id < vocabularySize; ++id) {
+      logProbs[frame * vocabularySize + id] = Math.log(row[id] ?? rest)
+    }
+  })
+  return logProbs
+}
+
+test('a long word starts where its prefix pieces overtake the previous word, not at its late spike', () => {
+  // Ids: 1 "Ġthe", 2 "Ġleg", 3 "Ġlegisl", 4 "Ġlegislation".
+  const prefixIds: Record<string, number[]> = { the: [1], legislation: [2, 3, 4] }
+  const words = [
+    { text: 'the', startFrame: 1, endFrame: 2, firstToken: 0, lastToken: 0 },
+    { text: 'legislation', startFrame: 7, endFrame: 8, firstToken: 1, lastToken: 1 },
+  ]
+  const spans = [
+    { id: 1, startFrame: 1, endFrame: 2 },
+    { id: 4, startFrame: 7, endFrame: 8 },
+  ]
+  const logProbs = vocabularyLogProbs(
+    [
+      { 2: 0.5 },
+      { 1: 1 },
+      { 2: 0.6 },
+      { 1: 0.6, 2: 0.3 },
+      { 1: 0.3, 2: 0.1, 3: 0.4 },
+      { 3: 0.9 },
+      { 3: 0.9 },
+      { 4: 1 },
+    ],
+    8,
+  )
+  // Frames 0–2 precede or still belong to the previous word; frame 3 holds 34%; frame 4 holds 55% against 30%.
+  expect(graniteWordOnsetFrames(words, spans, logProbs, 8, (text) => prefixIds[text])).toEqual([undefined, 4])
+  // Evidence must lead the spike by three frames.
+  const lateSpans = [spans[0], { id: 4, startFrame: 6, endFrame: 7 }]
+  const lateWords = [words[0], { ...words[1], startFrame: 6, endFrame: 7 }]
+  expect(graniteWordOnsetFrames(lateWords, lateSpans, logProbs, 8, (text) => prefixIds[text])).toEqual([
+    undefined,
+    undefined,
+  ])
+})
+
+test('prefix onsets skip short words and pieces that spell a prefix of the previous word too', () => {
+  // Ids: 1 "Ġi", 2 "Ġis", 3 "Ġissued", 4 "Ġto".
+  const prefixIds: Record<string, number[]> = { i: [1], issued: [1, 2, 3], to: [4] }
+  const spans = [
+    { id: 1, startFrame: 0, endFrame: 1 },
+    { id: 3, startFrame: 5, endFrame: 6 },
+    { id: 4, startFrame: 10, endFrame: 11 },
+  ]
+  const words = spans.map((span, index) => ({
+    text: ['i', 'issued', 'to'][index],
+    startFrame: span.startFrame,
+    endFrame: span.endFrame,
+    firstToken: index,
+    lastToken: index,
+  }))
+  const logProbs = vocabularyLogProbs(
+    [
+      { 1: 1 },
+      { 1: 0.9 },
+      { 1: 0.9 },
+      { 1: 0.6, 2: 0.2 },
+      { 2: 0.1, 3: 0.2 },
+      { 3: 1 },
+      { 4: 0.9 },
+      { 4: 0.9 },
+      { 4: 0.9 },
+      { 4: 0.9 },
+      { 4: 1 },
+    ],
+    6,
+  )
+  // "Ġi" is no evidence for "issued"; "to" is too short despite leading "Ġto" frames.
+  expect(graniteWordOnsetFrames(words, spans, logProbs, 6, (text) => prefixIds[text])).toEqual([
+    undefined,
+    undefined,
+    undefined,
+  ])
 })
 
 test('timed words preserve offsets, project rates, clamping, and stable sorting', () => {

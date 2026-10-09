@@ -47,6 +47,7 @@ import {
   buildSpeechSupportMask,
   computeFrameEnergies,
   ctcTokenPosteriors,
+  graniteWordOnsetFrames,
   refineGraniteWords,
   timedWordsToTranscribedRanges,
   timeGraniteWords,
@@ -607,7 +608,15 @@ async function transcribeGraniteSegment(
     const frameIds = outputs.frame_ids
     const tokenIds = outputs.token_ids
     const ctcScores = outputs.ctc_scores
-    if (!frameIds || !tokenIds || !ctcScores || ctcScores.dims.length !== 2) {
+    const vocabularyLogProbs = outputs.vocab_log_probs
+    if (
+      !frameIds ||
+      !tokenIds ||
+      !ctcScores ||
+      ctcScores.dims.length !== 2 ||
+      !vocabularyLogProbs ||
+      vocabularyLogProbs.dims.length !== 2
+    ) {
       throw new Error('Granite timing export is missing. Run: yarn prepare:timing')
     }
 
@@ -615,7 +624,8 @@ async function transcribeGraniteSegment(
     if (
       frameIds.data.length < realOutputFrames ||
       ctcScores.dims[0] < realOutputFrames ||
-      ctcScores.dims[0] !== frameIds.data.length
+      ctcScores.dims[0] !== frameIds.data.length ||
+      vocabularyLogProbs.dims[0] !== frameIds.data.length
     ) {
       throw new Error('Granite timing output does not match its 80 ms frame count')
     }
@@ -650,7 +660,14 @@ async function transcribeGraniteSegment(
           )
         : null
     const segmentDurationSeconds = audio.length / GRANITE_SAMPLE_RATE
-    let timed = timeGraniteWords(words, posteriors, segmentDurationSeconds)
+    const onsetFrames = graniteWordOnsetFrames(
+      words,
+      spans,
+      vocabularyLogProbs.data as Float32Array,
+      vocabularyLogProbs.dims[1],
+      (text) => runtime.decoder.wordPrefixTokenIds(text),
+    )
+    let timed = timeGraniteWords(words, posteriors, onsetFrames, segmentDurationSeconds)
     if (posteriors !== null) {
       const segmentOffsetSeconds = segmentStart16kSample / GRANITE_SAMPLE_RATE
       timed = timed.map((word) => ({
