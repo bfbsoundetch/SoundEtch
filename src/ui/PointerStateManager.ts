@@ -202,7 +202,9 @@ export class PointerStateManager extends TrackListItemController {
           this.changeState(State.DEFAULT)
           break
         case State.SELECTING:
-          if (this.selectingTranscript) this.finishSelectingTranscript()
+          if (this.selectingTranscript) {
+            this.finishSelectingTranscript()
+          }
           else this.changeState(State.DEFAULT)
           break
         case State.MOVING_CLIPVIEW: {
@@ -305,7 +307,9 @@ export class PointerStateManager extends TrackListItemController {
   }
 
   finishSelectingTranscript(): void {
-    if (this.selectingTranscript) this.changeState(State.DEFAULT)
+    if (this.selectingTranscript) {
+      this.changeState(State.DEFAULT)
+    }
   }
 
   startResizingSelection(timelineRegionController: TimelineRegionController, event: MouseEvent): void {
