@@ -488,8 +488,10 @@ export class MeetingRoomController {
         this.guestContainers[i].vidElement.poster = this.getSvgPosterForUser(state.members[i].username, false)
         this.guestContainers[i].setRecordingActivity(state.members[i].username, state.members[i].recordingActivity)
         const remoteAudioInput = AudioInputs.getRemoteStreamForUser(state.members[i].peerId, false)
-        if (remoteAudioInput) {
+        if (remoteAudioInput && remoteAudioInput.isActive) {
           this.guestContainers[i].startSpeakerMeter(remoteAudioInput)
+        } else {
+          this.guestContainers[i].stopSpeakerMeter()
         }
         this.guestContainers[i].isActive = true
       } else {

@@ -28,6 +28,10 @@ export class MediaStreamInput implements AudioInput {
     return this.analyzer.getHeldPeak(channel)
   }
 
+  get isActive() {
+    return this.mediaStreamTrack?.readyState == 'live'
+  }
+
   async init(context: AudioContext) {
     if (this.mediaStreamTrack && this.sourceNode?.context != context && context.state != 'closed') {
       this.sourceNode = context.createMediaStreamSource(new MediaStream([this.mediaStreamTrack]))
