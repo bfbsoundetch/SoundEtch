@@ -7,7 +7,9 @@ import {
   TILE_COLUMNS,
   getSpectrogramBandWeight,
   createSpectrogramWindow,
+  getSpectrogramFrequencyFraction,
   getSpectrogramMelPoints,
+  getSpectrogramScaleTicks,
   getSpectrogramFallbackColor,
   getSpectrogramLevel,
   getSpectrogramTileKeys,
@@ -61,6 +63,51 @@ test('LOD transitions account for device pixels', () => {
   expect(getSpectrogramLevel(1024, 2)).toBe(0)
   expect(getSpectrogramLevel(2048, 2)).toBe(1)
   expect(getSpectrogramLevel(4096, 3)).toBe(2)
+})
+
+test('frequency fractions follow the mel band centers shown at the body edges', () => {
+  const frequencyBands = 128
+  const sampleRate = 48000
+  const melPoints = getSpectrogramMelPoints(frequencyBands, FFT_SIZE, sampleRate)
+
+  expect(getSpectrogramFrequencyFraction(0, frequencyBands, sampleRate)).toBe(0)
+  expect(getSpectrogramFrequencyFraction(-5, frequencyBands, sampleRate)).toBe(0)
+  expect(getSpectrogramFrequencyFraction(sampleRate / 2, frequencyBands, sampleRate)).toBe(1)
+
+  // The rectangle edges show the centers of the first and last bands, and frequencies map
+  // linearly between the band centers in between.
+  for (const band of [0, 1, 32, 64, 96, 127]) {
+    const centerFrequency = (melPoints[band + 1] / FFT_SIZE) * sampleRate
+    expect(getSpectrogramFrequencyFraction(centerFrequency, frequencyBands, sampleRate)).toBeCloseTo(
+      band / (frequencyBands - 1),
+    )
+  }
+})
+
+test('scale ticks descend a spaced 1-2-5 ladder within the body', () => {
+  const ticks = getSpectrogramScaleTicks(128, 48000, 400, 16)
+
+  expect(ticks[0]).toEqual({ frequency: 20000, label: '20 kHz', fraction: expect.any(Number) })
+  expect(ticks.at(-1)!.label).toBe('50 Hz')
+  for (let index = 1; index < ticks.length; ++index) {
+    expect(ticks[index].frequency).toBeLessThan(ticks[index - 1].frequency)
+    expect((ticks[index - 1].fraction - ticks[index].fraction) * 400).toBeGreaterThanOrEqual(16)
+  }
+  for (const tick of ticks) {
+    expect(tick.fraction).toBeGreaterThanOrEqual(0)
+    expect(tick.fraction).toBeLessThanOrEqual(1)
+  }
+})
+
+test('scale ticks thin out and vanish as the body shrinks', () => {
+  const tallTicks = getSpectrogramScaleTicks(128, 48000, 400, 16)
+  const shortTicks = getSpectrogramScaleTicks(128, 48000, 40, 16)
+  expect(shortTicks.length).toBeGreaterThan(0)
+  expect(shortTicks.length).toBeLessThan(tallTicks.length)
+
+  expect(getSpectrogramScaleTicks(128, 48000, 0, 16)).toEqual([])
+  expect(getSpectrogramScaleTicks(128, 0, 400, 16)).toEqual([])
+  expect(getSpectrogramScaleTicks(128, 48000, 400, 0)).toEqual([])
 })
 
 test('LOD and tile boundaries follow a configured hop size', () => {

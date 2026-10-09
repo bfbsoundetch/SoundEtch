@@ -41,21 +41,84 @@ export function createSpectrogramWindow(
   return window
 }
 
+const MEL_SCALE = 2595
+const MEL_REFERENCE_FREQUENCY = 700
+
+function frequencyToMel(frequency: number): number {
+  return MEL_SCALE * Math.log2(1 + frequency / MEL_REFERENCE_FREQUENCY)
+}
+
 export function getSpectrogramMelPoints(
   frequencyBands: number,
   fftSize: number,
   sampleRate: number,
 ): Float32Array<ArrayBuffer> {
   const nyquist = sampleRate / 2
-  const maximumMel = 2595 * Math.log2(1 + nyquist / 700)
+  const maximumMel = frequencyToMel(nyquist)
   const pointCount = frequencyBands + 2
   const points = new Float32Array(pointCount)
   for (let index = 0; index < pointCount; index++) {
     const mel = (index / (pointCount - 1)) * maximumMel
-    const frequency = 700 * (2 ** (mel / 2595) - 1)
+    const frequency = MEL_REFERENCE_FREQUENCY * (2 ** (mel / MEL_SCALE) - 1)
     points[index] = (frequency / sampleRate) * fftSize
   }
   return points
+}
+
+/**
+ * Fraction of the visible spectrogram height at which a frequency sits, measured from the
+ * bottom edge: zero at the bottom, one at the top. The render shader maps band centers
+ * linearly across the rectangle, whose edges show the centers of the first and last bands,
+ * so a frequency is placed at the interpolated position of the band center it falls on.
+ */
+export function getSpectrogramFrequencyFraction(frequency: number, frequencyBands: number, sampleRate: number): number {
+  const nyquist = sampleRate / 2
+  if (!(frequency > 0) || !(nyquist > 0) || frequencyBands < 2) return 0
+  const melFraction = frequencyToMel(frequency) / frequencyToMel(nyquist)
+  const centerBand = melFraction * (frequencyBands + 1) - 1
+  return Math.min(1, Math.max(0, centerBand / (frequencyBands - 1)))
+}
+
+export interface SpectrogramScaleTick {
+  readonly frequency: number
+  readonly label: string
+  readonly fraction: number
+}
+
+const SCALE_TICK_MULTIPLIERS = [5, 2, 1] as const
+const MINIMUM_SCALE_FREQUENCY = 10
+
+function formatScaleFrequency(frequency: number): string {
+  return frequency >= 1000 ? `${frequency / 1000} kHz` : `${frequency} Hz`
+}
+
+/**
+ * Labeled frequencies for a spectrogram scale, ordered from the top of the visible body
+ * downward. Walks a 1-2-5 decade ladder from the Nyquist frequency down and keeps a label
+ * only when it clears the previous one by at least minimumLabelSpacing pixels, so short
+ * tracks simply show fewer entries.
+ */
+export function getSpectrogramScaleTicks(
+  frequencyBands: number,
+  sampleRate: number,
+  bodyHeight: number,
+  minimumLabelSpacing: number,
+): SpectrogramScaleTick[] {
+  const nyquist = sampleRate / 2
+  if (frequencyBands < 2 || !(nyquist > 0) || !(bodyHeight > 0) || !(minimumLabelSpacing > 0)) return []
+
+  const ticks = new Array<SpectrogramScaleTick>()
+  for (let exponent = Math.floor(Math.log10(nyquist)); exponent >= Math.log10(MINIMUM_SCALE_FREQUENCY); exponent--) {
+    for (const multiplier of SCALE_TICK_MULTIPLIERS) {
+      const frequency = multiplier * 10 ** exponent
+      if (frequency > nyquist) continue
+      const fraction = getSpectrogramFrequencyFraction(frequency, frequencyBands, sampleRate)
+      const spacing = ticks.length === 0 ? Infinity : ticks[ticks.length - 1].fraction - fraction
+      if (fraction < 0 || spacing * bodyHeight < minimumLabelSpacing) continue
+      ticks.push({ frequency, label: formatScaleFrequency(frequency), fraction })
+    }
+  }
+  return ticks
 }
 
 // Weight a mel triangle over FFT bins by mean triangle height across each width-one bin

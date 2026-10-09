@@ -13,6 +13,8 @@ import {
   type SpectrogramClipPlacement,
   type SpectrogramTrackRenderer,
 } from './spectrogram/SpectrogramService'
+import { getSpectrogramScaleTicks } from './spectrogram/SpectrogramTiling'
+import { spectrogramSettings } from './spectrogram/SpectrogramSettings'
 import { TRANSCRIPTION_LANE_HEIGHT, TranscriptionOverlayController } from './TranscriptionOverlay'
 import { getTrackTranscriptEntries, type TrackTranscriptEntry } from '../transcript/TrackTranscript'
 
@@ -20,6 +22,11 @@ import { getTrackTranscriptEntries, type TrackTranscriptEntry } from '../transcr
 export class Waveform extends TrackListItemController {
   static readonly HEADER_HEIGHT = 20
   private readonly PIXEL_RATIO = window.devicePixelRatio || 1
+
+  private static readonly SCALE_TICK_LENGTH = 8
+  private static readonly SCALE_LABEL_OFFSET = 11
+  private static readonly SCALE_LABEL_HALF_HEIGHT = 7
+  private static readonly SCALE_LABEL_SPACING = 16
 
   topSvgElement: SVGSVGElement
 
@@ -38,10 +45,13 @@ export class Waveform extends TrackListItemController {
   private readonly dragInProgressClipViews = new Array<ClipViewController>()
   private readonly transientClipViewControllers = new Set<ClipViewController>()
   private readonly spectrogramCanvas = document.createElement('canvas')
+  private readonly spectrogramScaleGroupElement = document.createElementNS('http://www.w3.org/2000/svg', 'g')
   private readonly resizeObserver: ResizeObserver
   private trackRenderer: SpectrogramTrackRenderer | null = null
   private spectrogramDrawFrame = 0
   private currentDisplayMode: TrackDisplayMode = 'waveform'
+  private spectrogramScaleLayoutKey = ''
+  private readonly removeSpectrogramSettingsListener: () => void
 
   getHeight() {
     return this.height
@@ -119,6 +129,11 @@ export class Waveform extends TrackListItemController {
     this.channelSeparatorPathElement.style.fill = 'none'
     this.topSvgElement.appendChild(this.channelSeparatorPathElement)
     this.topSvgElement.appendChild(this.aboveClipViewGroupElement)
+    this.spectrogramScaleGroupElement.classList.add('spectrogram-scale')
+    this.topSvgElement.appendChild(this.spectrogramScaleGroupElement)
+    this.removeSpectrogramSettingsListener = spectrogramSettings.addChangeListener(() => {
+      if (this.currentDisplayMode === 'spectrogram') this.drawSpectrogramScale()
+    })
     this.resizeObserver = new ResizeObserver(() => this.resize())
     this.resizeObserver.observe(this.div)
     if (initialDisplayMode === 'spectrogram') this.setDisplayMode(initialDisplayMode)
@@ -146,6 +161,7 @@ export class Waveform extends TrackListItemController {
 
     if (spectrogramMode) {
       this.requestSpectrogramDraw()
+      this.drawSpectrogramScale()
     } else {
       if (this.spectrogramDrawFrame !== 0) cancelAnimationFrame(this.spectrogramDrawFrame)
       this.spectrogramDrawFrame = 0
@@ -192,6 +208,7 @@ export class Waveform extends TrackListItemController {
   remove(): void {
     if (this.spectrogramDrawFrame !== 0) cancelAnimationFrame(this.spectrogramDrawFrame)
     this.spectrogramDrawFrame = 0
+    this.removeSpectrogramSettingsListener()
     this.resizeObserver.disconnect()
     this.trackRenderer?.destroy()
     this.trackRenderer = null
@@ -228,6 +245,7 @@ export class Waveform extends TrackListItemController {
 
     this.drawAudioDataForCanvasXRange(this, topSvgElement, 0, this.width)
     this.drawAxes()
+    this.drawSpectrogramScale()
   }
 
   drawAudioData() {
@@ -283,6 +301,53 @@ export class Waveform extends TrackListItemController {
     }
     this.axesPathElement.setAttribute('d', axesPath)
     this.channelSeparatorPathElement.setAttribute('d', channelSeparatorPath)
+  }
+
+  /**
+   * Draws the mel-warped frequency scale along the left edge of each channel while the
+   * spectrogram is visible; ticks stay at their exact frequency and edge labels are nudged
+   * fully inside the channel so the top and bottom entries never clip.
+   */
+  private drawSpectrogramScale(): void {
+    const channelCount = this.track.getChannelCount()
+    const channelHeight = channelCount > 0 ? this.height / channelCount : 0
+    const layoutKey = `${this.currentDisplayMode}|${this.height}|${channelCount}|${spectrogramSettings.current.frequencyBands}|${this.sampleRate}`
+    if (layoutKey === this.spectrogramScaleLayoutKey) return
+    this.spectrogramScaleLayoutKey = layoutKey
+
+    if (this.currentDisplayMode !== 'spectrogram' || channelHeight <= 0) {
+      this.spectrogramScaleGroupElement.replaceChildren()
+      return
+    }
+
+    const ticks = getSpectrogramScaleTicks(
+      spectrogramSettings.current.frequencyBands,
+      this.sampleRate,
+      channelHeight,
+      Waveform.SCALE_LABEL_SPACING,
+    )
+    const scaleFragment = document.createDocumentFragment()
+    for (let channel = 0; channel < channelCount; ++channel) {
+      const channelBottom = Waveform.HEADER_HEIGHT + (channel + 1) * channelHeight
+      const channelTop = channelBottom - channelHeight
+      for (const tick of ticks) {
+        const y = channelBottom - tick.fraction * channelHeight
+        const line = document.createElementNS('http://www.w3.org/2000/svg', 'line')
+        line.setAttribute('x1', '0')
+        line.setAttribute('x2', `${Waveform.SCALE_TICK_LENGTH}`)
+        line.setAttribute('y1', `${y}`)
+        line.setAttribute('y2', `${y}`)
+        const label = document.createElementNS('http://www.w3.org/2000/svg', 'text')
+        label.setAttribute('x', `${Waveform.SCALE_LABEL_OFFSET}`)
+        label.setAttribute(
+          'y',
+          `${Math.min(channelBottom - Waveform.SCALE_LABEL_HALF_HEIGHT, Math.max(channelTop + Waveform.SCALE_LABEL_HALF_HEIGHT, y))}`,
+        )
+        label.textContent = tick.label
+        scaleFragment.append(line, label)
+      }
+    }
+    this.spectrogramScaleGroupElement.replaceChildren(scaleFragment)
   }
 
   releaseClipViewController(controller: ClipViewController) {
