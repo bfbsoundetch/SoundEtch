@@ -22,10 +22,16 @@ export class BottomPanelController {
   private readonly bodyElement = document.createElement('div')
   private readonly backButton = document.createElement('button')
   private readonly closeButton = document.createElement('button')
+  private readonly resizeHandle = document.createElement('div')
+  private readonly topElement = document.getElementById('topdiv')!
+  private readonly applicationHeader = document.querySelector<HTMLElement>('.header-container')!
   private onBack: (() => Promise<void> | void) | null = null
   private onClose: (() => Promise<void> | void) | null = null
   private owner: object | null = null
   private isOpen = false
+  private expanded = false
+  private cancelResize: (() => void) | null = null
+  private refreshResize: (() => void) | null = null
 
   private constructor() {
     this.root.id = 'bottom-panel'
@@ -33,6 +39,95 @@ export class BottomPanelController {
 
     const header = document.createElement('div')
     header.className = 'bottom-panel-header'
+
+    this.resizeHandle.className = 'bottom-panel-resize-handle'
+    this.resizeHandle.tabIndex = -1
+    this.resizeHandle.title = 'Drag to switch between half and full height'
+    this.resizeHandle.setAttribute('role', 'separator')
+    this.resizeHandle.setAttribute('aria-label', 'Resize bottom panel')
+    this.resizeHandle.setAttribute('aria-orientation', 'horizontal')
+    this.resizeHandle.setAttribute('aria-controls', 'bottom-panel')
+    this.resizeHandle.setAttribute('aria-valuemin', '0')
+    this.resizeHandle.setAttribute('aria-valuemax', '100')
+    this.resizeHandle.addEventListener('keydown', (event) => {
+      if (!this.isOpen || event.altKey || event.ctrlKey || event.metaKey) {
+        return
+      }
+      switch (event.key) {
+        case 'ArrowUp':
+        case 'End':
+          this.expanded = true
+          break
+        case 'ArrowDown':
+        case 'Home':
+          this.expanded = false
+          break
+        default:
+          return
+      }
+      this.cancelResize?.()
+      this.resizePanel()
+      event.preventDefault()
+      event.stopPropagation()
+    })
+    header.addEventListener('pointerdown', (event) => {
+      if (
+        !this.isOpen ||
+        event.button !== 0 ||
+        !event.isPrimary ||
+        (event.target instanceof Element && event.target.closest('button'))
+      ) {
+        return
+      }
+      this.cancelResize?.()
+      event.preventDefault()
+      event.stopPropagation()
+      this.resizeHandle.focus({ preventScroll: true })
+      const pointerId = event.pointerId
+      const startY = event.clientY
+      const startHeight = this.root.getBoundingClientRect().height
+      const grabOffset = startY - (window.innerHeight - startHeight)
+      let currentY = startY
+      let expandOnRelease = this.expanded
+      const refreshResize = () => this.resizePanel(window.innerHeight - currentY + grabOffset)
+      header.setPointerCapture(pointerId)
+      this.root.classList.add('resizing')
+      // Freeze a running snap animation before following the pointer.
+      this.resizePanel(startHeight)
+      const resize = (moveEvent: PointerEvent) => {
+        if (moveEvent.pointerId !== pointerId) return
+        currentY = moveEvent.clientY
+        const distance = startY - currentY
+        // Keep the drag's intent independent of layout and release coordinates.
+        expandOnRelease = Math.abs(distance) >= 24 ? distance > 0 : this.expanded
+        refreshResize()
+      }
+      const stopResize = () => {
+        this.cancelResize = null
+        this.refreshResize = null
+        // Flush the drag preview so the transition starts at its visible height.
+        this.root.getBoundingClientRect()
+        this.root.classList.remove('resizing')
+        window.removeEventListener('pointermove', resize, true)
+        window.removeEventListener('pointerup', finishResize, true)
+        window.removeEventListener('pointercancel', finishResize, true)
+        window.removeEventListener('blur', stopResize)
+        if (header.hasPointerCapture(pointerId)) header.releasePointerCapture(pointerId)
+        this.resizePanel()
+      }
+      const finishResize = (endEvent: PointerEvent) => {
+        if (endEvent.pointerId !== pointerId) return
+        if (endEvent.type === 'pointerup') this.expanded = expandOnRelease
+        stopResize()
+      }
+      this.cancelResize = stopResize
+      this.refreshResize = refreshResize
+      // Capture loss on the moving header must not discard the eventual release.
+      window.addEventListener('pointermove', resize, true)
+      window.addEventListener('pointerup', finishResize, true)
+      window.addEventListener('pointercancel', finishResize, true)
+      window.addEventListener('blur', stopResize)
+    })
 
     const headingGroup = document.createElement('div')
     headingGroup.className = 'bottom-panel-heading'
@@ -77,11 +172,21 @@ export class BottomPanelController {
     this.closeButton.appendChild(closeIcon)
     this.closeButton.addEventListener('click', () => this.close())
 
-    header.append(this.backButton, headingGroup, this.closeButton)
+    header.append(this.resizeHandle, this.backButton, headingGroup, this.closeButton)
 
     this.bodyElement.className = 'bottom-panel-body'
     this.root.append(header, this.bodyElement)
     document.body.appendChild(this.root)
+
+    const updateLayout = () => {
+      if (this.refreshResize) {
+        this.refreshResize()
+      } else {
+        this.resizePanel(undefined, true)
+      }
+    }
+    window.addEventListener('resize', updateLayout)
+    new ResizeObserver(updateLayout).observe(this.applicationHeader)
   }
 
   open(options: BottomPanelOptions) {
@@ -97,8 +202,9 @@ export class BottomPanelController {
     this.setSubtitle(options.subtitle)
     this.setBody(options.body)
     this.root.classList.add('open')
-    document.getElementById('topdiv')!.style.height = '50vh'
     this.isOpen = true
+    this.resizeHandle.tabIndex = 0
+    this.resizePanel()
   }
 
   setTitle(title: string) {
@@ -113,10 +219,35 @@ export class BottomPanelController {
     this.bodyElement.replaceChildren(body)
   }
 
+  private resizePanel(requestedHeight?: number, immediate = false): void {
+    if (!this.isOpen) return
+    // Layout changes must not animate through or over the application header.
+    if (immediate) this.root.classList.add('layout-resize')
+    const viewportHeight = window.innerHeight
+    const maximumHeight = Math.max(0, viewportHeight - this.applicationHeader.getBoundingClientRect().bottom)
+    const minimumHeight = Math.min(viewportHeight / 2, maximumHeight)
+    // Intermediate heights are only a drag preview, never retained panel state.
+    const height =
+      requestedHeight === undefined
+        ? (this.expanded ? maximumHeight : minimumHeight)
+        : Math.max(minimumHeight, Math.min(maximumHeight, requestedHeight))
+    this.root.style.height = `${height}px`
+    this.topElement.style.height = `${viewportHeight - height}px`
+    this.root.classList.toggle('expanded', height === maximumHeight)
+    this.resizeHandle.setAttribute('aria-valuenow', this.expanded ? '100' : '0')
+    this.resizeHandle.setAttribute('aria-valuetext', this.expanded ? 'Full height' : 'Half height')
+    if (immediate) {
+      this.root.getBoundingClientRect()
+      this.root.classList.remove('layout-resize')
+    }
+  }
+
   hide() {
+    this.cancelResize?.()
     this.root.classList.remove('open')
-    document.getElementById('topdiv')!.style.height = '100vh'
+    this.topElement.style.height = '100vh'
     this.isOpen = false
+    this.resizeHandle.tabIndex = -1
   }
 
   close(owner?: object): void {
