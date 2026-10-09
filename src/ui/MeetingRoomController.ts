@@ -1,6 +1,6 @@
 import { RemoteMediaClient3, type RecordingActivity, type State } from '../remote/RemoteMediaClient3'
 import { MediaStreamButtonController } from './MediaStreamButtonController'
-import { PeakMeterController } from './PeakMeterController'
+import { SpeakerMeterController } from './SpeakerMeterController'
 import { Direction, ErrorBubbleController } from './ErrorBubbleController'
 import { NotificationsController } from './NotificationsController'
 import { AudioInputs } from '../audioinputs/AudioInputs'
@@ -17,7 +17,7 @@ enum VideoLayout {
 }
 
 class VideoContainer {
-  private peakMeter: PeakMeterController | null = null
+  private speakerMeter: SpeakerMeterController | null = null
   private readonly recordingActivityElement = document.createElement('div')
   private recordingActivityToken = 0
   private recordingActivityTimeout: number | null = null
@@ -39,24 +39,24 @@ class VideoContainer {
     this.divElement.appendChild(this.recordingActivityElement)
   }
 
-  startPeakMeter(audioInput: AudioInput) {
+  startSpeakerMeter(audioInput: AudioInput) {
     if (!this.audioElement) {
       return null
     }
-    if (!this.peakMeter) {
-      this.peakMeter = new PeakMeterController(this.audioElement, audioInput)
+    if (!this.speakerMeter) {
+      this.speakerMeter = new SpeakerMeterController(this.audioElement, audioInput)
     }
-    this.peakMeter!.draw(this.peakMeter!)
+    this.speakerMeter!.draw(this.speakerMeter!)
     this.audioElement!.style.display = 'inline-block'
   }
 
-  stopPeakMeter() {
-    if (!this.peakMeter) {
+  stopSpeakerMeter() {
+    if (!this.speakerMeter) {
       return
     }
-    this.peakMeter.remove()
-    this.peakMeter.stop()
-    this.peakMeter = null
+    this.speakerMeter.remove()
+    this.speakerMeter.stop()
+    this.speakerMeter = null
     this.audioElement!.style.display = 'none'
   }
 
@@ -214,9 +214,9 @@ export class MeetingRoomController {
         }
       } else {
         if (added) {
-          this.selfVideoContainer.startPeakMeter(AudioInputs.localAVDevice!)
+          this.selfVideoContainer.startSpeakerMeter(AudioInputs.localAVDevice!)
         } else {
-          this.selfVideoContainer.stopPeakMeter()
+          this.selfVideoContainer.stopSpeakerMeter()
         }
       }
     })
@@ -487,14 +487,15 @@ export class MeetingRoomController {
         }
         this.guestContainers[i].vidElement.poster = this.getSvgPosterForUser(state.members[i].username, false)
         this.guestContainers[i].setRecordingActivity(state.members[i].username, state.members[i].recordingActivity)
-        // this.guestContainers[i].startPeakMeter(
-        //   AudioInputs.remoteStreams.get({ username: state.members[i].username, isScreenShare: false })!,
-        // )
+        const remoteAudioInput = AudioInputs.getRemoteStreamForUser(state.members[i].peerId, false)
+        if (remoteAudioInput) {
+          this.guestContainers[i].startSpeakerMeter(remoteAudioInput)
+        }
         this.guestContainers[i].isActive = true
       } else {
         this.guestContainers[i].vidElement.srcObject = null
         this.guestContainers[i].vidElement.poster = ''
-        this.guestContainers[i].stopPeakMeter()
+        this.guestContainers[i].stopSpeakerMeter()
         this.guestContainers[i].clearRecordingActivity()
         this.guestContainers[i].isActive = false
       }
@@ -531,7 +532,7 @@ export class MeetingRoomController {
     this.screenVideoContainer.isActive = false
     for (const guestContainer of this.guestContainers) {
       guestContainer.vidElement.srcObject = null
-      guestContainer.stopPeakMeter()
+      guestContainer.stopSpeakerMeter()
       guestContainer.clearRecordingActivity()
       guestContainer.isActive = false
     }

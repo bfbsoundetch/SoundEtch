@@ -74,24 +74,8 @@ export class AudioInputs {
     return result
   }
 
-  static addRemoteAudioSource(username: string, isScreenShare: boolean) {
-    const newInput = new MediaStreamInput(
-      `${username.replaceAll(' ', '.')}-${isScreenShare ? 'screen' : ''}`,
-      username,
-      false,
-    )
-    AudioInputs.remoteStreams.set(`${username}::${isScreenShare}`, newInput)
-    AudioInputs.notifyListeners()
-    return newInput
-  }
-
-  static removeRemoteAudioSource(username: string, isScreenShare: boolean) {
-    AudioInputs.remoteStreams.delete(`${username}::${isScreenShare}`)
-    AudioInputs.notifyListeners()
-  }
-
-  static getRemoteStreamForUser(username: string, isScreenShare: boolean) {
-    return this.remoteStreams.get(`${username}::${isScreenShare}`)
+  static getRemoteStreamForUser(id: string, isScreenShare: boolean) {
+    return this.remoteStreams.get(id)
   }
 
   static getRemoteInputs() {
