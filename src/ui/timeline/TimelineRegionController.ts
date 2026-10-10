@@ -209,15 +209,11 @@ export class TimelineRegionController extends TrackListItemController {
     })
     rect.setAttribute('height', `${waveform.fullHeight}`)
 
-    leftExpand.style.cursor = 'col-resize'
-    leftExpand.style.strokeWidth = '10'
-    leftExpand.style.strokeOpacity = '0'
+    leftExpand.classList.add('waveform-selection-handle')
     leftExpand.setAttribute('y1', '0')
     leftExpand.setAttribute('y2', `${waveform.fullHeight}`)
 
-    rightExpand.style.cursor = 'col-resize'
-    rightExpand.style.strokeWidth = '10'
-    rightExpand.style.strokeOpacity = '0'
+    rightExpand.classList.add('waveform-selection-handle')
     rightExpand.setAttribute('y1', '0')
     rightExpand.setAttribute('y2', `${waveform.fullHeight}`)
 

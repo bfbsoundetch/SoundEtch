@@ -17,12 +17,6 @@
     //     event.returnValue = 'Are you sure you want to quit?'
     //     return true
     // })
-    function toggleMenuOpenedState() {
-      const openButtonDisplay = document.getElementById('main-menu-open-button').style.display
-      document.getElementById('main-menu-open-button').style.display =
-        document.getElementById('main-menu-close-button').style.display
-      document.getElementById('main-menu-close-button').style.display = openButtonDisplay
-    }
     async function audioFileLocalHandler() {
       const inputForm = document.getElementById('audio-file-local')
       if (inputForm.files.length == 1) {
@@ -42,18 +36,10 @@
       const localSection = document.getElementById('add-clip-local-section')
       const remoteSection = document.getElementById('add-clip-remote-section')
       const existingSection = document.getElementById('add-clip-existing-section')
-      if (sourceType === 'local') {
-        localSection.style.display = 'block'
-        remoteSection.style.display = 'none'
-        existingSection.style.display = 'none'
-      } else if (sourceType === 'remote') {
-        localSection.style.display = 'none'
-        remoteSection.style.display = 'flex'
-        existingSection.style.display = 'none'
-      } else {
-        localSection.style.display = 'none'
-        remoteSection.style.display = 'none'
-        existingSection.style.display = 'flex'
+      localSection.hidden = sourceType !== 'local'
+      remoteSection.hidden = sourceType !== 'remote'
+      existingSection.hidden = sourceType === 'local' || sourceType === 'remote'
+      if (!existingSection.hidden) {
         window.addClipController?.refreshExistingClips()
       }
     }
@@ -109,12 +95,6 @@
           showDialog(document.getElementById('meeting-room'))
         }
       }
-      const menuDropdown = document.getElementById('menu-dropdown')
-
-      menuDropdown.addEventListener('toggle', () => {
-        toggleMenuOpenedState()
-      })
-
       document.querySelectorAll('dialog.overlay').forEach((dialogElement) => {
         dialogElement.addEventListener('click', (event) => {
           if (event.target === dialogElement && !dialogElement.classList.contains('no-backdrop-close')) {
@@ -150,8 +130,7 @@
         if (keysDown['Control'] && keysDown['`']) {
           const chatLogElement = document.getElementById('log')
           if (chatLogElement) {
-            const newDisplayState = chatLogElement?.style.display == 'none' ? 'block' : 'none'
-            chatLogElement.style.display = newDisplayState
+            chatLogElement.hidden = !chatLogElement.hidden
           }
         }
       }
@@ -168,7 +147,7 @@
           <svg id="main-menu-open-button" viewBox="0 0 500 500" aria-hidden="true">
             <use xlink:href="#menu-hamburger" />
           </svg>
-          <svg style="display: none" id="main-menu-close-button" viewBox="0 0 500 500" aria-hidden="true">
+          <svg id="main-menu-close-button" viewBox="0 0 500 500" aria-hidden="true">
             <use xlink:href="#menu-close" />
           </svg>
         </button>
@@ -217,7 +196,7 @@
           <button class="menu-item clickable" onclick="window.open('about.html', '_blank')">About</button>
         </div>
         <div id="title">
-          <svg style="height: 100%" viewBox="0 0 600 100" role="img" aria-label="SoundEtch">
+          <svg viewBox="0 0 600 100" role="img" aria-label="SoundEtch">
             <use xlink:href="#logo" />
           </svg>
         </div>
@@ -226,7 +205,7 @@
             <svg class="header-button record" viewBox="0 0 500 500" aria-hidden="true">
               <use xlink:href="#record" />
             </svg>
-            <svg class="header-button play" viewBox="0 0 500 500" style="opacity: 0" aria-hidden="true">
+            <svg class="header-button play" viewBox="0 0 500 500" aria-hidden="true">
               <use xlink:href="#play" />
             </svg>
             <span>Record</span>
@@ -235,7 +214,7 @@
             <svg class="header-button play" viewBox="0 0 500 500" aria-hidden="true">
               <use xlink:href="#play" />
             </svg>
-            <svg class="header-button pause" viewBox="0 0 500 500" style="opacity: 0" aria-hidden="true">
+            <svg class="header-button pause" viewBox="0 0 500 500" aria-hidden="true">
               <use xlink:href="#pause" />
             </svg>
             <span>Play</span>
@@ -244,7 +223,7 @@
             <svg class="header-button plus" viewBox="0 0 500 500" aria-hidden="true">
               <use xlink:href="#audio-file" />
             </svg>
-            <svg class="header-button stop" viewBox="0 0 500 500" style="opacity: 0" aria-hidden="true">
+            <svg class="header-button stop" viewBox="0 0 500 500" aria-hidden="true">
               <use xlink:href="#stop" />
             </svg>
             <span>Add Clip...</span>
@@ -274,10 +253,10 @@
           </button>
         </div>
       </div>
-      <div id="welcome" role="main" style="display: none">
+      <div id="welcome" role="main" hidden>
         <div>
-          <h1 style="font-size: xxx-large; text-align: center">Welcome!</h1>
-          <h2 style="text-align: center">Try one of these to get started:</h2>
+          <h1>Welcome!</h1>
+          <h2>Try one of these to get started:</h2>
         </div>
         <button id="welcome-mic" class="welcome-button clickable">
           <div class="welcome-header">
@@ -288,7 +267,7 @@
               <use xlink:href="#record" />
             </svg>
           </div>
-          <div style="text-align: left">Record from microphone</div>
+          <div class="welcome-description">Record from microphone</div>
         </button>
         <button id="welcome-screen" class="welcome-button clickable">
           <div class="welcome-header">
@@ -322,7 +301,6 @@
         <div id="timeline">
           <svg
             id="timeline-svg"
-            style="height: 100%; width: 100%; user-select: none"
             xmlns="http://www.w3.org/2000/svg"
             aria-hidden="true"
           >
@@ -384,24 +362,14 @@
           </div>
           <svg
             id="position-marker"
-            style="position: absolute; width: 100%; right: 0; top: 4rem; pointer-events: none; user-select: none"
             xmlns="http://www.w3.org/2000/svg"
             aria-hidden="true"
           >
-            <line id="position-line" x1="150" y1="30" x2="150" y2="600" stroke-width="4"></line>
+            <line id="position-line" x1="150" y1="30" x2="150" y2="600"></line>
             <text
               id="pointer-position-text"
-              stroke="none"
               x="0"
               y="15"
-              dominant-baseline="middle"
-              text-anchor="middle"
-              style="
-                font-family: 'Courier New', Courier, monospace;
-                font-size: 18px;
-                font-weight: bold;
-                color: var(--color);
-              "
             ></text>
           </svg>
         </div>
@@ -443,14 +411,14 @@
           </button>
           <input type="file" id="audio-file-local" accept="audio/*" hidden onchange="audioFileLocalHandler()" />
         </div>
-        <div id="add-clip-remote-section" class="add-clip-url-option" style="display: none">
+        <div id="add-clip-remote-section" class="add-clip-url-option" hidden>
           <label for="audio-file-url">From URL</label>
           <input type="text" id="audio-file-url" placeholder="https://example.com/audio-file.wav" />
           <button class="bordered clickable add-clip-option" onclick="audioFileRemoteHandler()">
             Load remote file
           </button>
         </div>
-        <div id="add-clip-existing-section" class="add-clip-existing-option" style="display: none">
+        <div id="add-clip-existing-section" class="add-clip-existing-option" hidden>
           <div id="add-clip-existing-list"></div>
           <button
             id="add-clip-open-clip-manager-button"
@@ -475,22 +443,22 @@
         </button>
         <div id="vids" class="meeting-solo">
           <div id="self-meeting" class="vid-div">
-            <video id="self-vid" style="display: inline-block"></video>
+            <video id="self-vid"></video>
             <div id="self-meeting-peak" class="meeting-peak-meter-div"></div>
           </div>
           <div id="screen-share-meeting" class="vid-div">
-            <video id="screen-share-vid" style="display: inline-block"></video>
+            <video id="screen-share-vid"></video>
           </div>
           <div id="guest-one-meeting" class="vid-div">
-            <video id="guest-one-vid" style="display: inline-block"></video>
+            <video id="guest-one-vid"></video>
             <div id="guest-one-meeting-peak" class="meeting-peak-meter-div"></div>
           </div>
           <div id="guest-two-meeting" class="vid-div">
-            <video id="guest-two-vid" style="display: inline-block"></video>
+            <video id="guest-two-vid"></video>
             <div id="guest-two-meeting-peak" class="meeting-peak-meter-div"></div>
           </div>
           <div id="guest-three-meeting" class="vid-div">
-            <video id="guest-three-vid" style="display: inline-block"></video>
+            <video id="guest-three-vid"></video>
             <div id="guest-three-meeting-peak" class="meeting-peak-meter-div"></div>
           </div>
         </div>
@@ -519,8 +487,8 @@
               <span>Camera</span>
             </button>
           </div>
-          <div id="meeting-room-setup" style="user-select: none; padding: 0.25rem">
-            <div style="grid-area: username-form; position: relative; display: grid; gap: 0.25rem">
+          <div id="meeting-room-setup">
+            <div class="meeting-username-form">
               <label for="username-form" class="meeting-username-label">Your name</label>
               <input
                 type="text"
@@ -533,7 +501,6 @@
                 size="16"
                 aria-describedby="username-form-hint"
                 placeholder="Enter Your Name"
-                style="font-size: x-large; box-sizing: border-box; width: 100%; height: 100%; text-align: center"
                 oninput="this.value = this.value.replace(/[^a-zA-Z0-9 \-_]/g, '')"
               />
               <p id="username-form-hint" class="meeting-username-hint">
@@ -543,14 +510,6 @@
             <button
               id="enter-meeting-room-button"
               class="meeting-button tooltipped clickable"
-              style="
-                user-select: none;
-                grid-area: create-button;
-                display: grid;
-                align-items: center;
-                justify-content: center;
-                position: relative;
-              "
               onclick="meetingRoomController.createMeeting()"
             >
               Create Meeting
@@ -570,7 +529,7 @@
             <svg class="header-button record" viewBox="0 0 500 500" aria-hidden="true">
               <use xlink:href="#record" />
             </svg>
-            <svg class="header-button play" viewBox="0 0 500 500" style="opacity: 0" aria-hidden="true">
+            <svg class="header-button play" viewBox="0 0 500 500" aria-hidden="true">
               <use xlink:href="#play" />
             </svg>
             <span>Record</span>
@@ -971,7 +930,7 @@
           </div>
         </div>
 
-        <div id="video-options-container" class="export-options-container">
+        <div id="video-options-container" class="export-options-container" hidden>
           <div class="export-option-row">
             <div class="radio-group">
               <label id="video-preset-label">Video Shape</label>
@@ -988,7 +947,7 @@
         <details class="export-advanced-section">
           <summary>Advanced</summary>
 
-          <div id="wav-options-container" class="export-options-container">
+          <div id="wav-options-container" class="export-options-container" hidden>
             <div class="export-option-row">
               <label for="wav-sample-format">Sample Format</label>
               <select id="wav-sample-format">
@@ -1016,7 +975,7 @@
             </div>
           </div>
 
-          <div id="flac-options-container" class="export-options-container">
+          <div id="flac-options-container" class="export-options-container" hidden>
             <div class="export-option-row">
               <label for="flac-bit-depth">Bit Depth</label>
               <select id="flac-bit-depth">
@@ -1050,7 +1009,7 @@
               </div>
             </div>
           </div>
-          <div id="mp3-options-container" class="export-options-container">
+          <div id="mp3-options-container" class="export-options-container" hidden>
             <div class="export-option-row">
               <div class="radio-group">
                 <label id="mp3-mode-label">Bitrate Mode</label>
@@ -1063,9 +1022,9 @@
               </div>
             </div>
 
-            <div id="mp3-cbr-options" class="export-option-row" style="display: block">
+            <div id="mp3-cbr-options" class="export-option-row">
               <label for="mp3-cbr-bitrate">Bitrate</label>
-              <select id="mp3-cbr-bitrate" style="margin-top: 0.5rem">
+              <select id="mp3-cbr-bitrate">
                 <option value="8">8 kbps</option>
                 <option value="16">16 kbps</option>
                 <option value="24">24 kbps</option>
@@ -1085,12 +1044,11 @@
               </select>
             </div>
 
-            <div id="mp3-vbr-options" class="export-option-row" style="display: block" hidden>
+            <div id="mp3-vbr-options" class="export-option-row" hidden>
               <label for="vbr-quality-slider">Quality (0 for best sound, 9 for smallest file)</label>
               <input
                 type="range"
                 id="vbr-quality-slider"
-                style="margin-top: 0.5rem"
                 value="2"
                 min="0"
                 max="9"
@@ -1116,7 +1074,7 @@
               </select>
             </div>
           </div>
-          <div id="opus-options-container" class="export-options-container">
+          <div id="opus-options-container" class="export-options-container" hidden>
             <div class="export-option-row">
               <label for="opus-application">Application</label>
               <select id="opus-application">
@@ -1217,60 +1175,53 @@
       A selects the track. Delete cuts the selection. Plus and minus zoom. Shift plus F10 opens the actions menu.
     </p>
   </body>
-  <svg xmlns="http://www.w3.org/2000/svg" style="height: 0; position: absolute; width: 0">
+  <svg xmlns="http://www.w3.org/2000/svg" id="icon-sprite">
     <defs>
       <pattern id="hatch" width="5" height="3" patternUnits="userSpaceOnUse" patternTransform="rotate(30 50 50)">
-        <line stroke-width="2px" y2="5" />
+        <line  y2="5" />
       </pattern>
       <g id="menu-hamburger" viewBox="0 0 500 500">
-        <line style="stroke: currentColor; stroke-width: 50" x1="50" y1="250" x2="450" y2="250" />
-        <line style="stroke: currentColor; stroke-width: 50" x1="50" y1="100" x2="450" y2="100" />
-        <line style="stroke: currentColor; stroke-width: 50" x1="50" y1="400" x2="450" y2="400" />
+        <line  x1="50" y1="250" x2="450" y2="250" />
+        <line  x1="50" y1="100" x2="450" y2="100" />
+        <line  x1="50" y1="400" x2="450" y2="400" />
       </g>
       <g id="menu-close" viewBox="0 0 500 500">
-        <line style="stroke: currentColor; stroke-width: 50" x1="100" y1="400" x2="400" y2="100" />
-        <line style="stroke: currentColor; stroke-width: 50" x1="100" y1="100" x2="400" y2="400" />
+        <line  x1="100" y1="400" x2="400" y2="100" />
+        <line  x1="100" y1="100" x2="400" y2="400" />
       </g>
       <g id="arrow-right" viewBox="0 0 500 500">
         <line
-          style="fill: none; stroke: currentColor; stroke-linecap: round; stroke-width: 45"
           x1="75"
           y1="250"
           x2="425"
           y2="250"
         />
         <polyline
-          style="fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 45"
           points="280 100 425 250 280 400"
         />
       </g>
       <g id="arrow-block-right" viewBox="0 0 500 500">
         <path
           d="M 45 200 H 255 V 100 L 455 250 L 255 400 V 300 H 45 V 200 Z"
-          style="fill: currentColor; stroke: currentColor; stroke-linejoin: round; stroke-width: 14px"
         />
       </g>
       <g id="panel-expand" viewBox="0 0 500 500">
         <polyline
-          style="fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 45"
           points="130 165 250 45 370 165"
         />
         <line
-          style="fill: none; stroke: currentColor; stroke-linecap: round; stroke-width: 45"
           x1="250"
           y1="45"
           x2="250"
           y2="250"
         />
         <line
-          style="fill: none; stroke: currentColor; stroke-linecap: round; stroke-width: 45"
           x1="60"
           y1="345"
           x2="440"
           y2="345"
         />
         <line
-          style="fill: none; stroke: currentColor; stroke-linecap: round; stroke-width: 45"
           x1="60"
           y1="455"
           x2="440"
@@ -1279,25 +1230,21 @@
       </g>
       <g id="panel-restore" viewBox="0 0 500 500">
         <line
-          style="fill: none; stroke: currentColor; stroke-linecap: round; stroke-width: 45"
           x1="60"
           y1="45"
           x2="440"
           y2="45"
         />
         <line
-          style="fill: none; stroke: currentColor; stroke-linecap: round; stroke-width: 45"
           x1="250"
           y1="140"
           x2="250"
           y2="345"
         />
         <polyline
-          style="fill: none; stroke: currentColor; stroke-linecap: round; stroke-linejoin: round; stroke-width: 45"
           points="130 225 250 345 370 225"
         />
         <line
-          style="fill: none; stroke: currentColor; stroke-linecap: round; stroke-width: 45"
           x1="60"
           y1="455"
           x2="440"
@@ -1305,21 +1252,19 @@
         />
       </g>
       <g id="stop" viewBox="0 0 500 500">
-        <polygon style="fill: rgba(0, 0, 0, 0.3); stroke-width: 30" points="50 450 50 50 450 50 450 450" />
+        <polygon  points="50 450 50 50 450 50 450 450" />
       </g>
       <g id="pause" viewBox="0 0 500 500">
-        <polygon style="fill: currentColor" points="100 450 100 50 200 50 200 450" />
-        <polygon style="fill: currentColor" points="300 450 300 50 400 50 400 450" />
+        <polygon  points="100 450 100 50 200 50 200 450" />
+        <polygon  points="300 450 300 50 400 50 400 450" />
       </g>
       <g id="sine-wave" viewBox="0 0 500 500">
         <path
-          style="fill: none; stroke: currentColor; stroke-width: 30px; stroke-linecap: round"
           d="M 10 250 C 200 -300 300 800 490 250"
         ></path>
       </g>
       <g id="record" viewBox="0 0 500 500">
         <ellipse
-          style="fill: hsla(0, 100%, 35%, 0.3); stroke-width: 30; stroke: var(--record-button-red)"
           cx="250"
           cy="250"
           rx="200"
@@ -1328,13 +1273,11 @@
       </g>
       <g id="play" viewBox="0 0 500 500">
         <polygon
-          style="fill: hsla(147, 74%, 35%, 0.3); stroke-width: 30; stroke: var(--play-button-green)"
           points="50 450 50 50 450 250"
         />
       </g>
       <g id="microphone" viewBox="0 0 500 500">
         <line
-          style="fill: currentColor; stroke: currentColor; stroke-width: 50px"
           x1="250"
           y1="425"
           x2="250"
@@ -1347,10 +1290,10 @@
           height="25"
           rx="2"
           ry="2"
-          style="stroke: currentColor; fill: currentColor; stroke-width: 10px"
+          class="microphone-base"
           transform="matrix(1, 0, 0, -1, 0, 0)"
         />
-        <path style="stroke: currentColor; fill: none; stroke-width: 30px" d="M 160 250 A 90 90 0 0 0 340 250"></path>
+        <path  d="M 160 250 A 90 90 0 0 0 340 250"></path>
         <rect
           x="225"
           y="75"
@@ -1358,18 +1301,12 @@
           height="180"
           rx="2"
           ry="2"
-          style="
-            stroke-linecap: round;
-            paint-order: stroke markers;
-            stroke: currentColor;
-            stroke-width: 50px;
-            fill: currentColor;
-          "
+          class="microphone-capsule"
         />
       </g>
       <g id="phone" viewBox="0 0 500 500">
         <path
-          stroke="currentColor"
+          class="phone-handset"
           d="M137.5 225c37.5 72.9 85.4 120.8 158.3 158.3l52.1-52.1c6.2-6.2 16.7-8.3 25-6.2
             27.1 8.3 54.2 12.5 83.3 12.5 14.6 0 22.9 10.4 22.9 22.9v83.3c0 14.6-10.4 22.9-22.9 22.9
             C227.1 466.7 33.3 272.9 33.3 43.8 33.3 31.2 43.8 20.8 56.2 20.8h83.3c14.6 0 22.9 10.4 22.9 22.9
@@ -1377,84 +1314,76 @@
           transform="scale(.5)"
         />
         <ellipse
-          style="fill: currentColor; stroke: currentColor; stroke-width: 10px"
           cx="375"
           cy="100"
           rx="55"
           ry="60"
         ></ellipse>
         <path
-          style="fill: currentColor; stroke: currentColor; stroke-width: 10px"
+          class="phone-person"
           d="M 260 230 C 265 150 485 150 490 230"
         ></path>
         <ellipse
-          style="fill: currentColor; stroke: currentColor; stroke-width: 10px"
           cx="125"
           cy="350"
           rx="55"
           ry="60"
         ></ellipse>
         <path
-          style="fill: currentColor; stroke: currentColor; stroke-width: 10px"
+          class="phone-person"
           d="M 10 490 C 15 400 235 400 240 490"
         ></path>
       </g>
       <g id="meeting" viewBox="0 0 500 500">
-        <line style="stroke: currentColor; stroke-width: 10px" x1="250" y1="0" x2="250" y2="500"></line>
-        <line style="stroke: currentColor; stroke-width: 10px" x1="0" y1="250" x2="500" y2="250"></line>
+        <line  x1="250" y1="0" x2="250" y2="500"></line>
+        <line  x1="0" y1="250" x2="500" y2="250"></line>
         <ellipse
-          style="fill: currentColor; stroke: currentColor; stroke-width: 10px"
           cx="125"
           cy="100"
           rx="55"
           ry="60"
         ></ellipse>
         <ellipse
-          style="fill: currentColor; stroke: currentColor; stroke-width: 10px"
           cx="375"
           cy="100"
           rx="55"
           ry="60"
         ></ellipse>
         <path
-          style="fill: currentColor; stroke: currentColor; stroke-width: 10px"
           d="M 10 230 C 15 150 235 150 240 230"
         ></path>
         <path
-          style="fill: currentColor; stroke: currentColor; stroke-width: 10px"
           d="M 260 230 C 265 150 485 150 490 230"
         ></path>
         <ellipse
-          style="fill: currentColor; stroke: currentColor; stroke-width: 10px"
           cx="125"
           cy="350"
           rx="55"
           ry="60"
         ></ellipse>
         <path
-          style="fill: currentColor; stroke: currentColor; stroke-width: 10px"
           d="M 10 490 C 15 400 235 400 240 490"
         ></path>
       </g>
       <g id="browser-tab" viewBox="0 0 500 500">
         <path
-          style="fill: rgba(0, 0, 0, 0); stroke: currentColor; stroke-linejoin: round; stroke-width: 28px"
+          class="browser-tab-outline"
           d="M 0 450 L 60 450 A 60 60 0 0 0 120 390 L 120 110 A 60 60 0 0 1 180 50 L 500 50"
         ></path>
-        <polygon style="fill: currentColor; stroke: currentColor" points="200 230 200 270 270 320 270 180"></polygon>
-        <path style="fill: none; stroke: currentColor; stroke-width: 28px" d="M 315 200 A 75 75 0 0 1 315 300"></path>
-        <path style="fill: none; stroke: currentColor; stroke-width: 28px" d="M 365 170 A 120 120 0 0 1 365 330"></path>
-        <line style="stroke: currentColor; stroke-width: 20px" x1="0" y1="70" x2="130" y2="70"></line>
+        <polygon  points="200 230 200 270 270 320 270 180"></polygon>
+        <path class="audio-wave" d="M 315 200 A 75 75 0 0 1 315 300"></path>
+        <path class="audio-wave" d="M 365 170 A 120 120 0 0 1 365 330"></path>
+        <line  x1="0" y1="70" x2="130" y2="70"></line>
       </g>
       <g id="audio-file" viewBox="0 0 500 500">
         <polygon
-          style="stroke: currentColor; fill: none; stroke-width: 30"
+          class="audio-file-outline"
           points="60 120 60 470 440 470 440 10 170 10"
         ></polygon>
-        <polyline style="stroke: currentColor; fill: none; stroke-width: 30" points="60 120 170 120 170 10"></polyline>
-        <polygon style="fill: currentColor; stroke: currentColor" points="135 230 135 270 205 320 205 180"></polygon>
-        <path style="fill: none; stroke: currentColor; stroke-width: 28px" d="M 250 200 A 75 75 0 0 1 250 300"></path>
-        <path style="fill: none; stroke: currentColor; stroke-width: 28px" d="M 300 170 A 120 120 0 0 1 300 330"></path>
+        <polyline  points="60 120 170 120 170 10"></polyline>
+        <polygon class="audio-speaker" points="135 230 135 270 205 320 205 180"></polygon>
+        <path  d="M 250 200 A 75 75 0 0 1 250 300"></path>
+        <path  d="M 300 170 A 120 120 0 0 1 300 330"></path>
       </g>
       <g id="camera" viewBox="0 0 500 500">
         <rect
@@ -1464,10 +1393,8 @@
           height="235"
           rx="2"
           ry="2"
-          style="stroke: currentColor; stroke-miterlimit: 1; stroke-width: 20px"
         />
         <polygon
-          style="stroke: currentColor; stroke-miterlimit: 1; stroke-width: 20px"
           points="300 245 465 165 465 335"
         />
       </g>
@@ -1479,12 +1406,11 @@
           height="270"
           rx="2"
           ry="2"
-          style="stroke: currentColor; fill: none; stroke-width: 35px"
         />
         <use href="#arrow-block-right" transform="matrix(0, -0.4, 0.4, 0, 150, 342)" />
       </g>
       <g id="slash" viewBox="0 0 500 500">
-        <line style="stroke: var(--record-button-red); stroke-width: 60" x1="50" y1="450" x2="450" y2="50"></line>
+        <line  x1="50" y1="450" x2="450" y2="50"></line>
       </g>
       <g id="trash" viewBox="0 0 500 500">
         <rect
@@ -1494,32 +1420,26 @@
           height="60"
           rx="4"
           ry="4"
-          style="stroke: currentColor; fill: none; stroke-width: 25px"
         />
         <polyline
-          style="stroke: currentColor; fill: none; stroke-linejoin: round; stroke-width: 25px"
           points="170 100 170 50 330 50 330 100"
         />
         <polyline
-          style="stroke: currentColor; fill: none; stroke-linejoin: round; stroke-width: 25px"
           points="100 170 130 450 370 450 400 170"
         />
         <line
-          style="fill: none; stroke: currentColor; stroke-linecap: round; stroke-width: 25px"
           x1="190"
           y1="220"
           x2="190"
           y2="380"
         />
         <line
-          style="fill: none; stroke: currentColor; stroke-linecap: round; stroke-width: 25px"
           x1="250"
           y1="220"
           x2="250"
           y2="380"
         />
         <line
-          style="fill: none; stroke: currentColor; stroke-linecap: round; stroke-width: 25px"
           x1="310"
           y1="220"
           x2="310"
@@ -1532,7 +1452,7 @@
           y="75"
           width="50"
           height="360"
-          style="transform-box: fill-box; transform-origin: 50% 50%; stroke: currentColor; fill: none"
+          class="pencil-body"
           transform="rotate(45)"
         ></rect>
         <rect
@@ -1540,16 +1460,14 @@
           y="40"
           width="50"
           height="35"
-          style="stroke-width: 1; transform-box: fill-box; transform-origin: 50% 50%; stroke: currentColor; fill: none"
+          class="pencil-eraser"
           transform="matrix(0.707107, 0.707107, -0.707107, 0.707107, 140, 57.5)"
         ></rect>
         <path
-          style="transform-box: fill-box; transform-origin: 50% 50%; stroke: currentColor; fill: none"
           d="M 124.599 373.058 L 99.599 438.058 L 74.599 373.058"
           transform="matrix(0.707107, 0.707107, -0.707107, 0.707107, -0.000002, 0)"
         ></path>
         <line
-          style="stroke-width: 3px; stroke: currentColor; fill: none"
           x1="81.138"
           y1="424.09"
           x2="77.431"
@@ -1557,20 +1475,20 @@
         ></line>
       </g>
       <g id="scissors" viewBox="0 0 500 500">
-        <circle cx="100" cy="175" r="40" style="fill: none; stroke: currentColor; stroke-width: 35px"></circle>
-        <path d="M 135 305 L 435 125" style="stroke: currentColor; stroke-width: 33px"></path>
-        <path d="M 135 195 L 435 375" style="stroke: currentColor; stroke-width: 35px"></path>
-        <circle cx="100" cy="325" r="40" style="fill: none; stroke: currentColor; stroke-width: 35px"></circle>
+        <circle cx="100" cy="175" r="40" ></circle>
+        <path d="M 135 305 L 435 125" class="scissors-upper-blade"></path>
+        <path d="M 135 195 L 435 375" class="scissors-lower-blade"></path>
+        <circle cx="100" cy="325" r="40" ></circle>
       </g>
       <g id="plus" viewBox="0 0 500 500">
-        <path d="M 0 250 L 500 250" style="stroke: currentColor; stroke-width: 30"></path>
-        <path d="M 250 0 L 250 500" style="stroke: currentColor; stroke-width: 30"></path>
+        <path d="M 0 250 L 500 250" ></path>
+        <path d="M 250 0 L 250 500" ></path>
       </g>
       <g id="minus" viewBox="0 0 500 500">
-        <path d="M 0 250 L 500 250" style="stroke: currentColor; stroke-width: 30"></path>
+        <path d="M 0 250 L 500 250" ></path>
       </g>
       <g id="loading" viewBox="0 0 500 500">
-        <path style="fill: none; stroke: rgb(0, 0, 0); stroke-width: 50px" d="M 250 0 A 250 250 0 1 1 0 250">
+        <path  d="M 250 0 A 250 250 0 1 1 0 250">
           <animateTransform
             attributeName="transform"
             attributeType="XML"
@@ -1583,26 +1501,12 @@
         </path>
       </g>
       <g id="three-dots" viewBox="0 0 500 500">
-        <ellipse style="fill: currentColor" cx="250" cy="100" rx="50" ry="50"></ellipse>
-        <ellipse style="fill: currentColor" cx="250" cy="250" rx="50" ry="50"></ellipse>
-        <ellipse style="fill: currentColor" cx="250" cy="400" rx="50" ry="50"></ellipse>
+        <ellipse  cx="250" cy="100" rx="50" ry="50"></ellipse>
+        <ellipse  cx="250" cy="250" rx="50" ry="50"></ellipse>
+        <ellipse  cx="250" cy="400" rx="50" ry="50"></ellipse>
       </g>
       <g id="logo" viewBox="0 0 600 100">
         <text
-          style="
-            fill: white;
-            font-family: Georgia;
-            font-size: 90;
-            font-variant: small-caps;
-            font-weight: 700;
-            text-anchor: middle;
-            dominant-baseline: middle;
-            letter-spacing: 5.6px;
-            paint-order: stroke;
-            stroke: black;
-            stroke-width: 7;
-            white-space: pre;
-          "
           x="300"
           y="60"
         >
@@ -1612,46 +1516,36 @@
       <g
         id="link-icon"
         viewBox="0 0 24 24"
-        fill="none"
-        stroke="currentColor"
-        stroke-width="3"
-        stroke-linecap="round"
-        stroke-linejoin="round"
       >
         <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>
         <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
       </g>
       <g id="automation" viewBox="0 0 500 500">
         <ellipse
-          style="stroke: currentColor; fill: none; stroke-width: 32px"
           cx="70"
           cy="250"
           rx="50"
           ry="50"
         ></ellipse>
         <ellipse
-          style="stroke: currentColor; fill: none; stroke-width: 32px"
           cx="250"
           cy="160"
           rx="50"
           ry="50"
         ></ellipse>
         <ellipse
-          style="stroke: currentColor; fill: none; stroke-width: 32px"
           cx="420"
           cy="330"
           rx="50"
           ry="50"
         ></ellipse>
         <line
-          style="fill: none; stroke: currentColor; stroke-width: 32px"
           x1="114.72"
           y1="227.64"
           x2="205.28"
           y2="182.36"
         ></line>
         <line
-          style="fill: none; stroke: currentColor; stroke-width: 32px"
           x1="285.35"
           y1="195.35"
           x2="384.65"

@@ -18,6 +18,8 @@ Use each track's options menu (three dots) to switch between its waveform and a 
 
 Open **Settings** from the application menu to configure spectrogram rendering and analysis. Settings are grouped into collapsed, expandable sections. Color schemes include Viridis (default), Magma, Inferno, and Grayscale. FFT size (default 2,048 samples), analysis window (Blackman, Blackman-Harris, or Hann), hop size (512 samples), mel-frequency bands (128), the color scheme, and the minimum-level slider (default -96 dB) are saved in the browser and apply to all spectrogram tracks. Analysis changes clear the in-memory spectrogram tile cache; changing only the color scheme redraws cached tiles without recomputing them. Audio and waveform rendering are unchanged.
 
+Static `index.html` presentation and timeline styling live in `index.css`, including the reusable SVG icon sprite. Visibility uses semantic attributes and state selectors; controllers retain runtime geometry and bind dynamic colors through CSS custom properties. The favicon's embedded SVG keeps its own styles because it is a separate document. The ruler's `--timeline-label-font-size` also drives its tick-spacing and keyboard-step calculations.
+
 The **Downloaded models** settings section reports the persistent browser-cache footprint of DeepFilterNet, Granite, and Silero VAD separately. **Unload** removes that model's cached files, including stale Granite or VAD revision caches, without interrupting a model runtime already in use. The browser downloads those files again when a later runtime needs them.
 
 ## Keyboard and assistive technology

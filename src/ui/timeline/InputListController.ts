@@ -16,14 +16,14 @@ export class InputListController {
         case AudioState.RECORDING:
         case AudioState.PLAYING_PAUSED:
         case AudioState.RECORDING_PAUSED:
-          this.inputInfoListElement.style.display = 'none'
-          this.inputListElement.style.display = 'none'
+          this.inputInfoListElement.hidden = true
+          this.inputListElement.hidden = true
           break
         case AudioState.MONITORING:
         case AudioState.MONITORING_PAUSED:
         case AudioState.STOPPED:
-          this.inputInfoListElement.style.display = ''
-          this.inputListElement.style.display = ''
+          this.inputInfoListElement.hidden = false
+          this.inputListElement.hidden = false
           break
       }
     })
@@ -93,19 +93,11 @@ class AudioInputController {
     this.inputInfoDiv.style.height = `${7 * audioInput.channelCount + 1.5}rem`
 
     const inputName = document.createElement('div')
-    inputName.style.padding = '.25rem'
-    inputName.style.boxSizing = 'border-box'
-    inputName.style.maxHeight = '3em'
-    inputName.style.overflow = 'hidden'
-    inputName.style.wordBreak = 'break-all'
-    inputName.style.gridArea = 'name'
+    inputName.className = 'input-name'
     inputName.innerText = audioInput.name
 
     const inputIconSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
-    inputIconSvg.style.height = '1em'
-    inputIconSvg.style.width = '1em'
-    inputIconSvg.style.display = 'inline'
-    inputIconSvg.style.verticalAlign = 'middle'
+    inputIconSvg.classList.add('input-icon')
     inputIconSvg.setAttribute('viewBox', '0 0 500 500')
     const inputIconUse = document.createElementNS('http://www.w3.org/2000/svg', 'use')
     inputIconSvg.setAttribute('role', 'img')
@@ -127,8 +119,6 @@ class AudioInputController {
     const muteButton = document.createElement('button')
     muteButton.type = 'button'
     muteButton.className = 'clickable mute-button'
-    muteButton.style.gridArea = 'mute'
-    muteButton.style.justifySelf = 'start'
     muteButton.innerText = 'mute'
     muteButton.setAttribute('aria-label', `Mute ${audioInput.name}`)
     const muteOnClick = () => {
@@ -145,7 +135,7 @@ class AudioInputController {
     muteButton.onclick = muteOnClick
 
     const peakMeterDiv = document.createElement('div')
-    peakMeterDiv.style.gridArea = 'meter'
+    peakMeterDiv.className = 'input-peak-meter'
 
     inputIconSvg.appendChild(inputIconUse)
     this.inputInfoDiv.appendChild(inputName)

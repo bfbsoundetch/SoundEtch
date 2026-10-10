@@ -71,15 +71,15 @@ export class PublishProjectController {
 
   handleFormatSwitch(newFormat: Format) {
     this.formatContainerMap.forEach((element, format) => {
-      element.style.display = format === newFormat ? 'flex' : 'none'
+      element.hidden = format !== newFormat
     })
-    this.channelCountContainer.style.display = newFormat === Format.VIDEO ? 'none' : 'flex'
-    this.advancedSection.style.display = newFormat === Format.VIDEO ? 'none' : 'flex'
+    this.channelCountContainer.hidden = newFormat === Format.VIDEO
+    this.advancedSection.hidden = newFormat === Format.VIDEO
   }
 
   handleMp3ModeSwitch(newMode: Mp3Mode) {
     this.mp3ModeContainerMap.forEach((element, mode) => {
-      element.style.display = mode !== newMode ? 'none' : 'block'
+      element.hidden = mode !== newMode
     })
   }
 

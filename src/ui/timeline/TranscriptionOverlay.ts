@@ -157,7 +157,7 @@ export class TranscriptionOverlayController extends TrackListItemController {
       label.foreignObject.setAttribute('y', '0')
       label.foreignObject.setAttribute('width', `${Math.max(0, rangeEndX - rangeStartX)}`)
       label.foreignObject.setAttribute('height', `${Math.max(0, laneHeight)}`)
-      label.foreignObject.style.display = ''
+      label.foreignObject.removeAttribute('hidden')
       if (label.content.textContent !== range.text) {
         label.content.textContent = range.text
       }
@@ -175,7 +175,7 @@ export class TranscriptionOverlayController extends TrackListItemController {
     }
     this.boundaryPathElement.setAttribute('d', boundaryPath)
     for (let index = projected.length; index < this.labels.length; ++index) {
-      this.labels[index].foreignObject.style.display = 'none'
+      this.labels[index].foreignObject.setAttribute('hidden', '')
     }
 
     this.cache = {

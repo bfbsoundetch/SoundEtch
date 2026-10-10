@@ -135,16 +135,11 @@ export class Waveform extends TrackListItemController {
     this.topSvgElement.appendChild(this.clipViewGroupElement)
     this.topSvgElement.appendChild(this.topGroupElement)
 
-    this.axesPathElement.style.strokeWidth = '2'
-    this.axesPathElement.style.stroke = 'currentColor'
-    this.axesPathElement.style.fill = 'none'
     this.topSvgElement.appendChild(this.axesPathElement)
     this.axesPathElement.classList.add('waveform-axes-path')
     this.axesPathElement.setAttribute('aria-hidden', 'true')
 
-    this.channelSeparatorPathElement.style.strokeWidth = '1'
-    this.channelSeparatorPathElement.style.stroke = 'currentColor'
-    this.channelSeparatorPathElement.style.fill = 'none'
+    this.channelSeparatorPathElement.classList.add('waveform-channel-separator')
     this.channelSeparatorPathElement.setAttribute('aria-hidden', 'true')
     this.topSvgElement.appendChild(this.channelSeparatorPathElement)
     this.topSvgElement.appendChild(this.aboveClipViewGroupElement)
@@ -266,7 +261,7 @@ export class Waveform extends TrackListItemController {
         const newStart = this.msToSamples(ms)
         void this.replaceClipView(
           clipView,
-          new ClipView(clipView.clip, clipView.offset, newStart, clipView.viewLength),
+          new ClipView(clipView.clip, clipView.offset, newStart, clipView.length),
           'move clip view',
           `Moved clip to ${TimeUtils.toSpokenString(this.samplesToMs(newStart))}`,
         )
@@ -350,7 +345,6 @@ export class Waveform extends TrackListItemController {
     const spectrogramMode = mode === 'spectrogram'
     this.div.classList.toggle('spectrogram-mode', spectrogramMode)
     this.div.classList.toggle('spectrogram-fallback-visible', spectrogramMode)
-    this.axesPathElement.style.visibility = spectrogramMode ? 'hidden' : ''
     for (const controller of this.getClipViewControllers()) {
       controller.setDisplayMode(mode)
       if (spectrogramMode) controller.updateSpectrogramFallbackFill()
@@ -424,9 +418,6 @@ export class Waveform extends TrackListItemController {
       this.topSvgElement = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
       this.topSvgElement.setAttribute('xmlns', 'http://www.w3.org/2000/svg')
       this.topSvgElement.id = `waveform-parent-${this.track.id}`
-      this.topSvgElement.style.height = '100%'
-      this.topSvgElement.style.width = '100%'
-      this.topSvgElement.style.display = 'block'
       this.div.appendChild(this.topSvgElement)
     }
     this.topSvgElement.setAttribute('viewBox', `0 0 ${this.width} ${this.fullHeight}`)
@@ -478,7 +469,7 @@ export class Waveform extends TrackListItemController {
     this.transcriptionLaneElement.setAttribute('y', `${this.transcriptionLaneTop}`)
     this.transcriptionLaneElement.setAttribute('width', `${this.width}`)
     this.transcriptionLaneElement.setAttribute('height', `${this.transcriptionLaneHeight}`)
-    this.transcriptionLaneElement.style.display = this.transcriptionLaneHeight > 0 ? '' : 'none'
+    this.transcriptionLaneElement.toggleAttribute('hidden', this.transcriptionLaneHeight === 0)
     this.spectrogramCanvas.style.height = `${this.transcriptionLaneTop}px`
   }
 
@@ -762,11 +753,7 @@ export class ClipViewController extends TrackListItemController {
     this.headerTitleElement.appendChild(this.headerTitleDivElement)
     this.headerTitleElement.setAttribute('aria-hidden', 'true')
     this.endCrossFadeHeaderTitleElement.setAttribute('aria-hidden', 'true')
-    this.headerTitleDivElement.style.overflow = 'hidden'
-    this.headerTitleDivElement.style.textOverflow = 'clip'
-    this.headerTitleDivElement.style.whiteSpace = 'nowrap'
-    this.headerTitleDivElement.style.marginLeft = '.1rem'
-    this.headerTitleDivElement.style.color = 'var(--waveform-header-text)'
+    this.headerTitleElement.classList.add('clip-view-header-title')
 
     this.waveform.clipViewGroupElement.appendChild(this.clipElementsGroup)
     this.waveform.aboveClipViewGroupElement.appendChild(this.handleElementsGroup)
@@ -779,7 +766,7 @@ export class ClipViewController extends TrackListItemController {
     this.rectElement.setAttribute('y', `${Waveform.HEADER_HEIGHT}`)
     this.rectElement.setAttribute('height', `${this.waveformHeight}`)
     this.rectElement.classList = 'waveform-rect'
-    this.rectElement.style.fill = this.color
+    this.rectElement.style.setProperty('--waveform-color', this.color)
     this.rectElement.addEventListener('dblclick', (event) => {
       trackListController.selectClipView(clipView, this.waveform)
       event.stopPropagation()
@@ -789,30 +776,21 @@ export class ClipViewController extends TrackListItemController {
     this.spectrogramFallbackElement.setAttribute('y', `${Waveform.HEADER_HEIGHT}`)
     this.spectrogramFallbackElement.setAttribute('height', `${this.waveformHeight}`)
     this.spectrogramFallbackElement.classList.add('spectrogram-fallback')
-    this.spectrogramFallbackElement.style.pointerEvents = 'none'
     this.updateSpectrogramFallbackFill()
 
     this.headerElement.setAttribute('y', '0')
     this.headerElement.height.baseVal.value = Waveform.HEADER_HEIGHT
-    this.headerElement.style.fill = 'var(--waveform-header-bg)'
-    this.headerElement.style.strokeWidth = '2'
+    this.headerElement.classList.add('clip-view-header')
     this.headerTitleElement.y.baseVal.value = 0
     this.headerTitleElement.height.baseVal.value = Waveform.HEADER_HEIGHT
-    this.headerTitleElement.style.fill = 'none'
+    this.endCrossFadeHeaderElement.classList.add('clip-view-crossfade-header')
     this.endCrossFadeHeaderElement.setAttribute('y', '0')
     this.endCrossFadeHeaderElement.setAttribute('height', `${Waveform.HEADER_HEIGHT}`)
-    this.endCrossFadeHeaderElement.style.fill = 'var(--waveform-header-text)'
     this.endCrossFadeHeaderTitleDivElement.textContent = 'crossfade'
-    this.endCrossFadeHeaderTitleDivElement.style.overflow = 'hidden'
-    this.endCrossFadeHeaderTitleDivElement.style.textOverflow = 'clip'
-    this.endCrossFadeHeaderTitleDivElement.style.whiteSpace = 'nowrap'
-    this.endCrossFadeHeaderTitleDivElement.style.textAlign = 'center'
-    this.endCrossFadeHeaderTitleDivElement.style.color = 'var(--waveform-header-bg)'
-    this.endCrossFadeHeaderTitleDivElement.style.outline = '1px'
+    this.endCrossFadeHeaderTitleElement.classList.add('clip-view-crossfade-header-title')
     this.endCrossFadeHeaderTitleElement.appendChild(this.endCrossFadeHeaderTitleDivElement)
     this.endCrossFadeHeaderTitleElement.y.baseVal.value = 0
     this.endCrossFadeHeaderTitleElement.height.baseVal.value = Waveform.HEADER_HEIGHT
-    this.endCrossFadeHeaderTitleElement.style.pointerEvents = 'none'
 
     const infoButton = this.infoButton
     infoButton.type = 'button'
@@ -832,11 +810,11 @@ export class ClipViewController extends TrackListItemController {
     this.handleElementsGroup.appendChild(this.leftHandle)
     this.leftHandle.setAttribute('y1', '0')
     this.leftHandle.setAttribute('y2', `${this.waveform.getHeight() + Waveform.HEADER_HEIGHT}`)
-    this.leftHandle.classList = 'clip-view-handle'
+    this.leftHandle.classList = 'clip-view-handle clip-view-handle-left'
 
     this.leftHandle.setAttribute('x1', '0')
     this.leftHandle.setAttribute('x2', '0')
-    this.leftHandle.style.cursor = this.clipView.offset > 0 ? 'ew-resize' : 'e-resize'
+    this.leftHandle.classList.toggle('clip-view-handle-trimmed', this.clipView.offset > 0)
 
     this.leftHandle.addEventListener('mousedown', this.leftHandleMouseDownListener)
     this.rightHandle.addEventListener('mousedown', this.rightHandleMouseDownListener)
@@ -844,9 +822,9 @@ export class ClipViewController extends TrackListItemController {
     this.handleElementsGroup.appendChild(this.rightHandle)
     this.rightHandle.setAttribute('y1', '0')
     this.rightHandle.setAttribute('y2', `${this.waveform.getHeight() + Waveform.HEADER_HEIGHT}`)
-    this.rightHandle.classList = 'clip-view-handle'
+    this.rightHandle.classList = 'clip-view-handle clip-view-handle-right'
 
-    this.rightHandle.style.cursor = this.clipView.length < this.clipView.clip.length ? 'ew-resize' : 'w-resize'
+    this.rightHandle.classList.toggle('clip-view-handle-trimmed', this.clipView.length < this.clipView.clip.length)
 
     this.clipElementsGroup.appendChild(this.endCrossFadeHeaderElement)
     this.clipElementsGroup.appendChild(this.endCrossFadeHeaderTitleElement)
@@ -860,10 +838,9 @@ export class ClipViewController extends TrackListItemController {
     )
 
     this.svgPathElement.classList = 'waveform-path'
-    this.startCrossFadePathElement.classList = 'waveform-path'
-    this.endCrossFadePathElement.classList = 'waveform-path'
-    this.startCrossFadePathElement.style.opacity = '.4'
-    this.endCrossFadePathElement.style.opacity = '.4'
+    this.startCrossFadePathElement.classList = 'waveform-path waveform-crossfade-path'
+    this.endCrossFadePathElement.classList = 'waveform-path waveform-crossfade-path'
+    this.fullClipGrayFilter.classList.add('clip-view-trim-overlay')
 
     this.headerElement.addEventListener('mousedown', (event) => {
       if (event.button == 0 && event.buttons == 1) {
@@ -873,8 +850,6 @@ export class ClipViewController extends TrackListItemController {
     this.headerElement.addEventListener('contextmenu', (event) => {
       event.stopPropagation()
     })
-    this.headerElement.style.cursor = 'grab'
-    this.headerTitleElement.style.pointerEvents = 'none'
     this.rectElement.addEventListener('contextmenu', (event) => {
       event.preventDefault()
       event.stopPropagation()
@@ -914,16 +889,15 @@ export class ClipViewController extends TrackListItemController {
   }
 
   updateSpectrogramFallbackFill(): void {
-    this.spectrogramFallbackElement.style.fill = this.waveform.spectrogramFallbackColor
+    this.spectrogramFallbackElement.style.setProperty(
+      '--spectrogram-fallback-color',
+      this.waveform.spectrogramFallbackColor,
+    )
   }
 
   setDisplayMode(mode: TrackDisplayMode): void {
     const spectrogramMode = mode === 'spectrogram'
     this.rectElement.classList.toggle('spectrogram-hit-rect', spectrogramMode)
-    this.rectElement.style.fill = spectrogramMode ? 'transparent' : this.color
-    this.svgPathElement.style.visibility = spectrogramMode ? 'hidden' : ''
-    this.startCrossFadePathElement.style.visibility = spectrogramMode ? 'hidden' : ''
-    this.endCrossFadePathElement.style.visibility = spectrogramMode ? 'hidden' : ''
   }
 
   getSpectrogramPlacement(): SpectrogramClipPlacement {
@@ -1119,15 +1093,7 @@ export class ClipViewController extends TrackListItemController {
     this.startCrossFadePathElement.setAttribute('d', startCrossFadePath)
     this.endCrossFadePathElement.setAttribute('d', endCrossFadePath)
 
-    if (this.samplesPerUnit < 2) {
-      this.startCrossFadePathElement.style.strokeWidth = '2'
-      this.svgPathElement.style.strokeWidth = '2'
-      this.endCrossFadePathElement.style.strokeWidth = '2'
-    } else {
-      this.startCrossFadePathElement.style.strokeWidth = '1'
-      this.svgPathElement.style.strokeWidth = '1'
-      this.endCrossFadePathElement.style.strokeWidth = '1'
-    }
+    this.clipElementsGroup.classList.toggle('waveform-sample-detail', this.samplesPerUnit < 2)
   }
 
   reset() {
@@ -1205,7 +1171,7 @@ export class ClipViewController extends TrackListItemController {
   }
 
   async finishClipViewResize(shift: number) {
-    this.rightHandle.style.opacity = '0'
+    this.rightHandle.dataset.active = 'false'
     let newClipView: ClipView
     switch (this.resizeInfo!.side) {
       case 'left': {
@@ -1271,8 +1237,6 @@ export class ClipViewController extends TrackListItemController {
     this.fullClipGrayFilter.y.baseVal.value = Waveform.HEADER_HEIGHT
     this.fullClipGrayFilter.height.baseVal.value = this.waveformHeight
 
-    this.fullClipGrayFilter.style.fill = '#00000040'
-    this.fullClipGrayFilter.style.stroke = 'none'
     this.drawTranscriptionOverlay(this.getSampleForXValue(0), this.getSampleForXValue(this.waveform.width))
     if (this.waveform.displayMode === 'waveform') {
       void this.drawWaveform(this.translation * this.samplesPerUnit, this.getSampleForXValue(this.waveform.width), true)
@@ -1281,7 +1245,7 @@ export class ClipViewController extends TrackListItemController {
       this.waveform.requestSpectrogramDraw()
     }
 
-    this.leftHandle.style.opacity = '1'
+    this.leftHandle.dataset.active = 'true'
     this.trackListController.pointerStateManager.startResizingClipView(this)
   }
 
@@ -1311,10 +1275,8 @@ export class ClipViewController extends TrackListItemController {
     this.fullClipGrayFilter.width.baseVal.value = maxRightShift
     this.fullClipGrayFilter.y.baseVal.value = Waveform.HEADER_HEIGHT
     this.fullClipGrayFilter.height.baseVal.value = this.waveformHeight
-    this.fullClipGrayFilter.style.fill = '#00000040'
-    this.fullClipGrayFilter.style.stroke = 'none'
 
-    this.rightHandle.style.opacity = '1'
+    this.rightHandle.dataset.active = 'true'
     this.trackListController.pointerStateManager.startResizingClipView(this)
   }
 }

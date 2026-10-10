@@ -54,16 +54,16 @@ export class PositionMarkerController extends TrackListItemController {
       }
       position = AudioControl.startPosition
       this.positionLineSvg.classList = 'blink'
-      this.positionTimeText.style.color = 'var(--color)'
+      this.positionTimeText.dataset.audioState = AudioState.STOPPED
     } else {
       position = AudioControl.audioContext!.getPosition()
       this.positionLineSvg.classList = ''
       switch (AudioControl.getState()) {
         case AudioState.PLAYING:
-          this.positionTimeText.style.color = 'var(--play-button-green)'
+          this.positionTimeText.dataset.audioState = AudioState.PLAYING
           break
         case AudioState.RECORDING:
-          this.positionTimeText.style.color = 'var(--record-button-red)'
+          this.positionTimeText.dataset.audioState = AudioState.RECORDING
           break
       }
     }
@@ -73,9 +73,6 @@ export class PositionMarkerController extends TrackListItemController {
 
     this.positionLineSvg.x1.baseVal.value = this.x
     this.positionLineSvg.x2.baseVal.value = this.x
-
-    this.positionLineSvg.style.visibility = 'visible'
-    this.positionTimeText.style.visibility = 'visible'
 
     const time = TimeUtils.positionToString(realPosition, this.trackListController.sampleRate, true)
     this.positionTimeText.innerHTML = time

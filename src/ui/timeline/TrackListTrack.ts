@@ -37,13 +37,7 @@ export class TrackListTrack {
     trackHeading.className = 'track-heading'
 
     const trackTitle = document.createElement('div')
-    trackTitle.style.padding = '.25rem'
-    trackTitle.style.textWrap = 'pretty'
-    trackTitle.style.width = '100%'
-    trackTitle.style.boxSizing = 'border-box'
-    trackTitle.style.height = '100%'
-    trackTitle.style.overflow = 'hidden'
-    trackTitle.style.wordBreak = 'break-all'
+    trackTitle.className = 'track-title'
     trackTitle.innerText = track.name
     trackTitle.id = `track-title-${track.id}`
     this.trackInfoDiv.setAttribute('role', 'group')
@@ -66,12 +60,6 @@ export class TrackListTrack {
     const deleteTrackButton = document.createElement('button')
     deleteTrackButton.type = 'button'
     deleteTrackButton.className = 'clickable track-delete-button'
-    deleteTrackButton.style.height = '1.5rem'
-    deleteTrackButton.style.width = '1.5rem'
-    deleteTrackButton.style.flex = '0 0 1'
-    deleteTrackButton.style.gridArea = 'delete'
-    deleteTrackButton.style.alignSelf = 'center'
-    deleteTrackButton.style.justifySelf = 'center'
     deleteTrackButton.appendChild(createSvgIcon('trash'))
     const updateDeleteButtonName = () => {
       deleteTrackButton.title = `Delete ${track.name}`
@@ -81,13 +69,6 @@ export class TrackListTrack {
     this.trackInfoDiv.appendChild(deleteTrackButton)
 
     const effectButton = document.createElement('button')
-    effectButton.style.gridArea = 'effects'
-    effectButton.style.width = '100%'
-    effectButton.style.boxSizing = 'border-box'
-    effectButton.style.font = 'inherit'
-    effectButton.style.minWidth = '0'
-    effectButton.style.textAlign = 'center'
-    effectButton.style.objectFit = 'contain'
     effectButton.classList = 'track-effect-selector clickable'
     effectButton.innerText = 'Effects'
     effectButton.addEventListener('click', () => {
@@ -121,20 +102,14 @@ export class TrackListTrack {
     this.trackInfoDiv.appendChild(mixControls)
 
     const gainSliderParent = document.createElement('div')
-    gainSliderParent.style.width = '100%'
-    gainSliderParent.style.display = 'grid'
-    gainSliderParent.style.gridArea = 'gain'
-    gainSliderParent.style.position = 'relative'
-    gainSliderParent.style.padding = '0 .25rem'
-    gainSliderParent.style.boxSizing = 'border-box'
+    gainSliderParent.className = 'track-slider-controls track-gain-controls'
     this.trackInfoDiv.appendChild(gainSliderParent)
 
     const gainSlider = document.createElement('input')
     gainSlider.type = 'range'
+    gainSlider.className = 'track-slider'
     gainSlider.min = '-36'
     gainSlider.max = '36'
-    gainSlider.style.width = '100%'
-    gainSlider.style.accentColor = 'var(--color)'
     const initialGainNumber = 20 * Math.log10(track.getGain())
     gainSlider.value = `${initialGainNumber}`
     const gainOutput = document.createElement('output')
@@ -168,20 +143,14 @@ export class TrackListTrack {
     gainSliderParent.appendChild(gainOutput)
 
     const panSliderParent = document.createElement('div')
-    panSliderParent.style.width = '100%'
-    panSliderParent.style.display = 'grid'
-    panSliderParent.style.gridArea = 'pan'
-    panSliderParent.style.position = 'relative'
-    panSliderParent.style.padding = '0 .25rem'
-    panSliderParent.style.boxSizing = 'border-box'
+    panSliderParent.className = 'track-slider-controls track-pan-controls'
     this.trackInfoDiv.appendChild(panSliderParent)
 
     const panSlider = document.createElement('input')
     panSlider.type = 'range'
+    panSlider.className = 'track-slider'
     panSlider.min = '-10'
     panSlider.max = '10'
-    panSlider.style.width = '100%'
-    panSlider.style.accentColor = 'var(--color)'
     const initialPanValue = track.getPan()
     panSlider.value = `${initialPanValue * 10}`
     const panOutput = document.createElement('output')
@@ -219,7 +188,6 @@ export class TrackListTrack {
 
     const peakMeterDiv = document.createElement('div')
     peakMeterDiv.className = 'track-peak-meter'
-    peakMeterDiv.style.gridArea = 'peak'
     this.trackInfoDiv.appendChild(peakMeterDiv)
     this.peakMeter = new PeakMeterController(peakMeterDiv, track, false, track.getChannelCount())
     this.peakMeter.svg.setAttribute('preserveAspectRatio', 'none')
@@ -276,9 +244,6 @@ export class TrackListTrack {
     div.contentEditable = 'true'
     div.setAttribute('role', 'textbox')
     div.setAttribute('aria-label', 'Track name')
-    div.style.maxHeight = '100%'
-    div.style.height = '100%'
-    div.style.overflow = 'scroll'
     div.focus()
 
     // Save on Enter or blur
@@ -490,9 +455,6 @@ export class TrackListTrack {
     div.removeAttribute('role')
     div.removeAttribute('aria-label')
     const newName = div.innerText
-    div.style.maxHeight = '4.5em'
-    div.style.height = ''
-    div.style.overflow = 'hidden'
     div.scrollTo({
       top: 0,
     })

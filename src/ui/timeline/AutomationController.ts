@@ -108,7 +108,7 @@ export class AutomationController extends TrackListItemController {
       this.pointElements.push(circleElement)
 
       const labelElement = document.createElementNS('http://www.w3.org/2000/svg', 'text')
-      labelElement.style.pointerEvents = 'none'
+      labelElement.classList.add('automation-point-label')
       labelElement.textContent = this.parameterMetadata.displayValue(point.startValue)
       this.groupElement.appendChild(labelElement)
       this.pointLabelElements.push(labelElement)
@@ -117,12 +117,12 @@ export class AutomationController extends TrackListItemController {
       const labelWidth = labelElement.getComputedTextLength()
       const placeLeft = x + labelGap + labelWidth > this.width
       labelElement.setAttribute('x', `${placeLeft ? x - labelGap : x + labelGap}`)
-      labelElement.setAttribute('text-anchor', placeLeft ? 'end' : 'start')
+      labelElement.classList.toggle('automation-point-label-left', placeLeft)
 
       const labelHeight = labelElement.getBBox().height
       const placeBelow = y - labelGap - labelHeight < this.topOffset
       labelElement.setAttribute('y', `${placeBelow ? y + labelGap : y - labelGap}`)
-      labelElement.setAttribute('dominant-baseline', placeBelow ? 'hanging' : 'auto')
+      labelElement.classList.toggle('automation-point-label-below', placeBelow)
     }
     this.syncPointEditor()
   }

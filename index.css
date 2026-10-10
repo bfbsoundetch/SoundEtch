@@ -225,6 +225,10 @@ body {
   border: 1px solid transparent;
 }
 
+#title > svg {
+  height: 100%;
+}
+
 dialog.overlay {
   border: none;
   padding: 0;
@@ -273,6 +277,25 @@ dialog.overlay[open] {
     'lists';
   overscroll-behavior: none;
   overflow-y: scroll;
+}
+
+#timeline-body[hidden],
+#welcome[hidden],
+#input-info-list[hidden],
+#input-list[hidden] {
+  display: none;
+}
+
+#add-clip-local-section[hidden],
+#add-clip-remote-section[hidden],
+#add-clip-existing-section[hidden],
+#publish-project-modal .export-options-container[hidden],
+#publish-project-modal #channel-count-container[hidden],
+#publish-project-modal .export-advanced-section[hidden],
+#mp3-cbr-options[hidden],
+#mp3-vbr-options[hidden],
+#log[hidden] {
+  display: none;
 }
 
 .clickable {
@@ -383,6 +406,13 @@ dialog.overlay[open] {
   position: absolute;
   height: 80%;
   transition: opacity 0.15s ease;
+}
+
+#first-header-button .header-button.play,
+#second-header-button .header-button.pause,
+#third-header-button .header-button.stop,
+#meeting-record-button .header-button.play {
+  opacity: 0;
 }
 
 .meeting-icon {
@@ -733,6 +763,19 @@ body.tooltips-dismissed :is(.tooltipped span, .slider-value) {
   overscroll-behavior: none;
 }
 
+#welcome h1 {
+  font-size: xxx-large;
+}
+
+#welcome h1,
+#welcome h2 {
+  text-align: center;
+}
+
+.welcome-description {
+  text-align: left;
+}
+
 .welcome-button {
   height: auto;
   min-height: 4rem;
@@ -810,6 +853,10 @@ body.tooltips-dismissed :is(.tooltipped span, .slider-value) {
 }
 
 .add-clip-option {
+  display: block;
+}
+
+#add-clip-local-section {
   display: block;
 }
 
@@ -939,6 +986,261 @@ svg {
   stroke: currentColor;
 }
 
+#icon-sprite {
+  height: 0;
+  position: absolute;
+  width: 0;
+}
+
+#hatch > line {
+  stroke-width: 2px;
+}
+
+#menu-hamburger > line,
+#menu-close > line {
+  stroke: currentColor;
+  stroke-width: 50;
+}
+
+#arrow-right > line,
+#panel-expand > line,
+#panel-restore > line {
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-width: 45;
+}
+
+#arrow-right > polyline,
+#panel-expand > polyline,
+#panel-restore > polyline {
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 45;
+}
+
+#arrow-block-right > path {
+  fill: currentColor;
+  stroke: currentColor;
+  stroke-linejoin: round;
+  stroke-width: 14px;
+}
+
+#stop > polygon {
+  fill: rgba(0, 0, 0, 0.3);
+  stroke-width: 30;
+}
+
+#pause > polygon,
+#three-dots > ellipse {
+  fill: currentColor;
+}
+
+#sine-wave > path {
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-width: 30px;
+}
+
+#record > ellipse {
+  fill: hsla(0, 100%, 35%, 0.3);
+  stroke: var(--record-button-red);
+  stroke-width: 30;
+}
+
+#play > polygon {
+  fill: hsla(147, 74%, 35%, 0.3);
+  stroke: var(--play-button-green);
+  stroke-width: 30;
+}
+
+#microphone > line {
+  fill: currentColor;
+  stroke: currentColor;
+  stroke-width: 50px;
+}
+
+#microphone > .microphone-base,
+#phone > ellipse,
+#phone > .phone-person,
+#meeting > ellipse,
+#meeting > path {
+  fill: currentColor;
+  stroke: currentColor;
+  stroke-width: 10px;
+}
+
+#microphone > path {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 30px;
+}
+
+#microphone > .microphone-capsule {
+  fill: currentColor;
+  paint-order: stroke markers;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-width: 50px;
+}
+
+#phone > .phone-handset {
+  stroke: currentColor;
+}
+
+#meeting > line {
+  stroke: currentColor;
+  stroke-width: 10px;
+}
+
+#browser-tab > .browser-tab-outline {
+  fill: rgba(0, 0, 0, 0);
+  stroke: currentColor;
+  stroke-linejoin: round;
+  stroke-width: 28px;
+}
+
+#browser-tab > polygon,
+#audio-file > .audio-speaker {
+  fill: currentColor;
+  stroke: currentColor;
+}
+
+#browser-tab > .audio-wave,
+#audio-file > path {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 28px;
+}
+
+#browser-tab > line {
+  stroke: currentColor;
+  stroke-width: 20px;
+}
+
+#audio-file > .audio-file-outline,
+#audio-file > polyline {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 30;
+}
+
+#camera > rect,
+#camera > polygon {
+  stroke: currentColor;
+  stroke-miterlimit: 1;
+  stroke-width: 20px;
+}
+
+#screen-share > rect,
+#scissors > circle {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 35px;
+}
+
+#slash > line {
+  stroke: var(--record-button-red);
+  stroke-width: 60;
+}
+
+#trash > rect {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 25px;
+}
+
+#trash > polyline {
+  fill: none;
+  stroke: currentColor;
+  stroke-linejoin: round;
+  stroke-width: 25px;
+}
+
+#trash > line {
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-width: 25px;
+}
+
+#pencil > .pencil-body,
+#pencil > path {
+  fill: none;
+  stroke: currentColor;
+  transform-box: fill-box;
+  transform-origin: 50% 50%;
+}
+
+#pencil > .pencil-eraser {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 1;
+  transform-box: fill-box;
+  transform-origin: 50% 50%;
+}
+
+#pencil > line {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 3px;
+}
+
+#scissors > .scissors-upper-blade {
+  stroke: currentColor;
+  stroke-width: 33px;
+}
+
+#scissors > .scissors-lower-blade {
+  stroke: currentColor;
+  stroke-width: 35px;
+}
+
+#plus > path,
+#minus > path {
+  stroke: currentColor;
+  stroke-width: 30;
+}
+
+#loading > path {
+  fill: none;
+  stroke: rgb(0, 0, 0);
+  stroke-width: 50px;
+}
+
+#logo > text {
+  dominant-baseline: middle;
+  fill: white;
+  font-family: Georgia;
+  font-size: 90px;
+  font-variant: small-caps;
+  font-weight: 700;
+  letter-spacing: 5.6px;
+  paint-order: stroke;
+  stroke: black;
+  stroke-width: 7;
+  text-anchor: middle;
+  white-space: pre;
+}
+
+#link-icon {
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-linejoin: round;
+  stroke-width: 3;
+}
+
+#automation > ellipse,
+#automation > line {
+  fill: none;
+  stroke: currentColor;
+  stroke-width: 32px;
+}
+
 #clock {
   padding: 1rem;
   position: relative;
@@ -979,6 +1281,10 @@ video {
   transition: all 0.25s ease-in-out;
 }
 
+.vid-div > video {
+  display: inline-block;
+}
+
 .meeting-recording-activity {
   position: absolute;
   top: 0.75rem;
@@ -1016,6 +1322,8 @@ video {
 }
 
 #meeting-room-setup {
+  user-select: none;
+  padding: 0.25rem;
   font-size: larger;
   display: grid;
   gap: 0.25rem;
@@ -1030,6 +1338,18 @@ video {
   min-height: 6rem;
   flex: 1;
   position: relative;
+}
+
+.meeting-username-form {
+  grid-area: username-form;
+  position: relative;
+  display: grid;
+  gap: 0.25rem;
+}
+
+#enter-meeting-room-button {
+  grid-area: create-button;
+  justify-content: center;
 }
 
 .meeting-username-label {
@@ -1259,6 +1579,36 @@ video {
 
 #position-marker {
   z-index: 2;
+  position: absolute;
+  width: 100%;
+  right: 0;
+  top: 4rem;
+  pointer-events: none;
+  user-select: none;
+}
+
+#position-line {
+  stroke-width: 4;
+  visibility: visible;
+}
+
+#pointer-position-text {
+  font-family: 'Courier New', Courier, monospace;
+  font-size: 18px;
+  font-weight: bold;
+  dominant-baseline: middle;
+  text-anchor: middle;
+  stroke: none;
+  visibility: visible;
+  color: var(--color);
+}
+
+#pointer-position-text[data-audio-state='playing'] {
+  color: var(--play-button-green);
+}
+
+#pointer-position-text[data-audio-state='recording'] {
+  color: var(--record-button-red);
 }
 
 #timeline-area {
@@ -1292,6 +1642,63 @@ video {
   overflow-y: hidden;
   display: inline-block;
   grid-area: timeline;
+}
+
+#timeline-svg {
+  --timeline-label-font-size: 17px;
+  height: 100%;
+  width: 100%;
+  user-select: none;
+}
+
+.timeline-main-line {
+  stroke-width: 2;
+  stroke: currentColor;
+  fill: none;
+}
+
+.timeline-tick-label,
+.timeline-selection-label {
+  font-family: 'Courier New', Courier, monospace;
+  dominant-baseline: middle;
+  text-anchor: middle;
+  stroke: none;
+}
+
+.timeline-tick-label {
+  font-size: var(--timeline-label-font-size);
+}
+
+.timeline-tick-label.is-inactive {
+  visibility: hidden;
+}
+
+.timeline-selection-lines {
+  stroke-width: 2;
+}
+
+.timeline-selection-handle,
+.waveform-selection-handle {
+  stroke-width: 10;
+  stroke-opacity: 0;
+}
+
+.timeline-selection-handle {
+  cursor: ew-resize;
+  user-select: none;
+}
+
+.waveform-selection-handle {
+  cursor: col-resize;
+}
+
+.timeline-selection-label {
+  font-size: 18px;
+  font-weight: bold;
+}
+
+.timeline-selection-label.is-obscured {
+  opacity: 0.2;
 }
 
 #timeline-view-controls {
@@ -1357,6 +1764,31 @@ video {
   box-sizing: border-box;
   padding: 0.25rem;
   background-color: var(--alt-background);
+}
+
+.input-name {
+  padding: 0.25rem;
+  box-sizing: border-box;
+  max-height: 3em;
+  overflow: hidden;
+  word-break: break-all;
+  grid-area: name;
+}
+
+.input-icon {
+  height: 1em;
+  width: 1em;
+  display: inline;
+  vertical-align: middle;
+}
+
+.input-info > .mute-button {
+  grid-area: mute;
+  justify-self: start;
+}
+
+.input-peak-meter {
+  grid-area: meter;
 }
 
 #track-list {
@@ -1463,6 +1895,55 @@ video {
   gap: 0.25rem;
 }
 
+.track-title {
+  padding: 0.25rem;
+  text-wrap: pretty;
+  width: 100%;
+  box-sizing: border-box;
+  height: 100%;
+  overflow: hidden;
+  word-break: break-all;
+}
+
+.track-title[contenteditable='true'] {
+  max-height: 100%;
+  overflow: scroll;
+}
+
+.track-title[contenteditable='false'] {
+  max-height: 4.5em;
+  height: auto;
+}
+
+.track-delete-button {
+  height: 1.5rem;
+  width: 1.5rem;
+  grid-area: delete;
+  align-self: center;
+  justify-self: center;
+}
+
+.track-slider-controls {
+  width: 100%;
+  display: grid;
+  position: relative;
+  padding: 0 0.25rem;
+  box-sizing: border-box;
+}
+
+.track-gain-controls {
+  grid-area: gain;
+}
+
+.track-pan-controls {
+  grid-area: pan;
+}
+
+.track-slider {
+  width: 100%;
+  accent-color: var(--color);
+}
+
 .track-display-mode-menu-button {
   display: grid;
   place-items: center;
@@ -1532,6 +2013,7 @@ video {
 }
 
 .track-peak-meter {
+  grid-area: peak;
   height: 100%;
   width: 100%;
   min-height: 0;
@@ -1551,8 +2033,30 @@ video {
 }
 
 .waveform > svg {
+  height: 100%;
+  width: 100%;
+  display: block;
   position: relative;
   z-index: 1;
+}
+
+.waveform-axes-path,
+.waveform-channel-separator {
+  stroke: currentColor;
+  fill: none;
+}
+
+.waveform-axes-path {
+  stroke-width: 2;
+}
+
+.waveform-channel-separator {
+  stroke-width: 1;
+}
+
+.spectrogram-mode .waveform-axes-path,
+.spectrogram-mode .waveform-path {
+  visibility: hidden;
 }
 
 .track-timeline-control {
@@ -1613,7 +2117,7 @@ video {
 
 .spectrogram-fallback {
   display: none;
-  fill: #440154;
+  fill: var(--spectrogram-fallback-color, #440154);
   stroke: none;
   pointer-events: none;
 }
@@ -1622,8 +2126,8 @@ video {
   display: block;
 }
 
-.spectrogram-hit-rect {
-  fill: transparent !important;
+.waveform-rect.spectrogram-hit-rect {
+  fill: transparent;
 }
 
 .track-resize-handle {
@@ -1783,6 +2287,21 @@ video {
   stroke-width: 3;
   cursor: move;
 }
+
+.automation-point-label {
+  pointer-events: none;
+  text-anchor: start;
+  dominant-baseline: auto;
+}
+
+.automation-point-label-left {
+  text-anchor: end;
+}
+
+.automation-point-label-below {
+  dominant-baseline: hanging;
+}
+
 .automation-point-editor {
   box-sizing: border-box;
   width: 100%;
@@ -1940,6 +2459,7 @@ video {
 }
 
 .go-to-time-caption {
+  grid-row: 1;
   font-family: 'Courier New', Courier, monospace;
   font-size: 0.8rem;
   text-align: center;
@@ -1947,6 +2467,8 @@ video {
 }
 
 .go-to-time-input {
+  grid-row: 2;
+  width: 4ch;
   box-sizing: border-box;
   font-family: 'Courier New', Courier, monospace;
   font-size: 1.2rem;
@@ -1956,6 +2478,42 @@ video {
   border: solid 1px var(--color);
   border-radius: 0.25rem;
   padding: 0.25rem 0;
+}
+
+.go-to-time-input[data-field='milliseconds'] {
+  width: 5ch;
+}
+
+.go-to-time-caption[data-field='hours'],
+.go-to-time-input[data-field='hours'] {
+  grid-column: 1;
+}
+
+.go-to-time-caption[data-field='minutes'],
+.go-to-time-input[data-field='minutes'] {
+  grid-column: 3;
+}
+
+.go-to-time-caption[data-field='seconds'],
+.go-to-time-input[data-field='seconds'] {
+  grid-column: 5;
+}
+
+.go-to-time-caption[data-field='milliseconds'],
+.go-to-time-input[data-field='milliseconds'] {
+  grid-column: 7;
+}
+
+.go-to-time-separator[data-field='hours'] {
+  grid-column: 2;
+}
+
+.go-to-time-separator[data-field='minutes'] {
+  grid-column: 4;
+}
+
+.go-to-time-separator[data-field='seconds'] {
+  grid-column: 6;
 }
 
 .go-to-time-input::-webkit-outer-spin-button,
@@ -1970,6 +2528,7 @@ video {
 }
 
 .go-to-time-separator {
+  grid-row: 2;
   color: var(--color);
   font-family: 'Courier New', Courier, monospace;
   font-size: 1.2rem;
@@ -2088,6 +2647,14 @@ video {
   shape-rendering: crispEdges;
 }
 
+.waveform-sample-detail .waveform-path {
+  stroke-width: 2;
+}
+
+.waveform-crossfade-path {
+  opacity: 0.4;
+}
+
 .transcription-lane {
   fill: var(--alt-background);
   stroke: color-mix(in srgb, var(--color) 55%, transparent);
@@ -2116,6 +2683,11 @@ video {
   pointer-events: none;
 }
 
+.transcription-lane[hidden],
+.transcription-range-label[hidden] {
+  display: none;
+}
+
 .transcription-range-label > div {
   width: 100%;
   height: 100%;
@@ -2136,6 +2708,13 @@ video {
 }
 
 .track-effect-selector {
+  grid-area: effects;
+  width: 100%;
+  box-sizing: border-box;
+  font: inherit;
+  min-width: 0;
+  text-align: center;
+  object-fit: contain;
   border: 1px solid var(--color);
   background: var(--bg-color);
   color: var(--color);
@@ -2149,7 +2728,49 @@ video {
 }
 
 .waveform-rect {
-  fill: rgba(0, 0, 0, 0.1);
+  fill: var(--waveform-color, rgba(0, 0, 0, 0.1));
+  stroke: none;
+}
+
+.clip-view-header {
+  fill: var(--waveform-header-bg);
+  stroke-width: 2;
+  cursor: grab;
+}
+
+.clip-view-header-title {
+  fill: none;
+  pointer-events: none;
+}
+
+.clip-view-crossfade-header {
+  fill: var(--waveform-header-text);
+}
+
+.clip-view-crossfade-header-title {
+  pointer-events: none;
+}
+
+.clip-view-header-title > div,
+.clip-view-crossfade-header-title > div {
+  overflow: hidden;
+  text-overflow: clip;
+  white-space: nowrap;
+}
+
+.clip-view-header-title > div {
+  margin-left: 0.1rem;
+  color: var(--waveform-header-text);
+}
+
+.clip-view-crossfade-header-title > div {
+  text-align: center;
+  color: var(--waveform-header-bg);
+  outline: 1px;
+}
+
+.clip-view-trim-overlay {
+  fill: #00000040;
   stroke: none;
 }
 
@@ -2170,6 +2791,18 @@ video {
   width: 75%;
 }
 
+#main-menu-close-button {
+  display: none;
+}
+
+.header-container:has(#menu-dropdown:popover-open) #main-menu-open-button {
+  display: none;
+}
+
+.header-container:has(#menu-dropdown:popover-open) #main-menu-close-button {
+  display: block;
+}
+
 .clip-view-handle {
   stroke-width: 6;
   opacity: 0;
@@ -2178,6 +2811,26 @@ video {
 .clip-view-handle:hover {
   /* transition: opacity 50ms 0ms; */
   opacity: 1;
+}
+
+.clip-view-handle-left {
+  cursor: e-resize;
+}
+
+.clip-view-handle-right {
+  cursor: w-resize;
+}
+
+.clip-view-handle-trimmed {
+  cursor: ew-resize;
+}
+
+.clip-view-handle[data-active='true'] {
+  opacity: 1;
+}
+
+.clip-view-handle[data-active='false'] {
+  opacity: 0;
 }
 
 .clip-view-info-button {
@@ -2783,8 +3436,18 @@ body:has(.bottom-panel.resizing, .bottom-panel.layout-resize) #topdiv,
   position: relative;
 }
 
+#mp3-cbr-options,
+#mp3-vbr-options {
+  display: block;
+}
+
+#mp3-cbr-bitrate,
+#vbr-quality-slider {
+  margin-top: 0.5rem;
+}
+
 .export-options-container {
-  display: none;
+  display: flex;
   flex-direction: column;
   gap: 0.75rem;
   width: 100%;
@@ -3169,6 +3832,11 @@ input::placeholder {
 }
 
 #username-form {
+  font-size: x-large;
+  box-sizing: border-box;
+  width: 100%;
+  height: 100%;
+  text-align: center;
   border: 1px solid var(--color);
   color: inherit;
   background: var(--bg-color);

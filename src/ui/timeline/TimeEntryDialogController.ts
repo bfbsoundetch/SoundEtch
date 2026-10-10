@@ -26,17 +26,15 @@ export class TimeEntryDialogController {
 
     const fieldsRow = document.createElement('div')
     fieldsRow.className = 'go-to-time-fields'
-    const digitCounts = [2, 2, 2, 3]
     const separators = [':', ':', '.', '']
-    for (let i = 0; i < digitCounts.length; ++i) {
+    for (let i = 0; i < TimeEntryDialogController.FIELD_CAPTIONS.length; ++i) {
       const caption = document.createElement('span')
       caption.className = 'go-to-time-caption'
       caption.textContent = TimeEntryDialogController.FIELD_CAPTIONS[i]
-      caption.style.gridArea = `1 / ${i * 2 + 1}`
+      caption.dataset.field = TimeEntryDialogController.FIELD_LABELS[i].toLowerCase()
       fieldsRow.appendChild(caption)
 
-      const field = this.createField(i, digitCounts[i])
-      field.style.gridArea = `2 / ${i * 2 + 1}`
+      const field = this.createField(i)
       this.fields.push(field)
       fieldsRow.appendChild(field)
 
@@ -44,7 +42,7 @@ export class TimeEntryDialogController {
         const separator = document.createElement('span')
         separator.className = 'go-to-time-separator'
         separator.textContent = separators[i]
-        separator.style.gridArea = `2 / ${i * 2 + 2}`
+        separator.dataset.field = TimeEntryDialogController.FIELD_LABELS[i].toLowerCase()
         fieldsRow.appendChild(separator)
       }
     }
@@ -109,14 +107,14 @@ export class TimeEntryDialogController {
     this.dialog.remove()
   }
 
-  private createField(fieldIndex: number, digitCount: number): HTMLInputElement {
+  private createField(fieldIndex: number): HTMLInputElement {
     const field = document.createElement('input')
     field.className = 'go-to-time-input'
     field.type = 'number'
     field.min = '0'
     field.step = '1'
     field.value = '0'
-    field.style.width = `${digitCount + 2}ch`
+    field.dataset.field = TimeEntryDialogController.FIELD_LABELS[fieldIndex].toLowerCase()
     field.setAttribute(
       'aria-label',
       `${TimeEntryDialogController.FIELD_LABELS[fieldIndex]} (${TimeEntryDialogController.FIELD_CAPTIONS[fieldIndex]})`,

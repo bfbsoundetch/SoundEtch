@@ -4,7 +4,6 @@ import { TrackListController } from './TrackListController'
 import { TrackListItemController } from './TrackListItemController'
 
 export class TimelineController extends TrackListItemController {
-  private readonly LABEL_FONT_SIZE = 17
   private readonly TICK_MARKS = [
     new TickMarkBucket(1, 1),
     new TickMarkBucket(10, 10),
@@ -22,6 +21,9 @@ export class TimelineController extends TrackListItemController {
   ]
 
   readonly svg = document.getElementById('timeline-svg') as unknown as SVGSVGElement
+  private readonly labelFontSize = parseFloat(
+    getComputedStyle(this.svg).getPropertyValue('--timeline-label-font-size'),
+  )
   private readonly majorTicks = document.getElementById('timeline-major-ticks') as unknown as SVGPathElement
   private readonly minorTicks = document.getElementById('timeline-minor-ticks') as unknown as SVGPathElement
   private readonly tickLabels = new Array<SVGTextElement>()
@@ -41,9 +43,7 @@ export class TimelineController extends TrackListItemController {
   constructor(trackListController: TrackListController) {
     super(trackListController)
 
-    this.mainLine.style.strokeWidth = '2'
-    this.mainLine.style.stroke = 'currentColor'
-    this.mainLine.style.fill = 'none'
+    this.mainLine.classList.add('timeline-main-line')
     this.mainLine.setAttribute('x1', '0')
     this.mainLine.setAttribute('y1', `${this.height / 1.5}`)
     this.mainLine.setAttribute('x2', `${this.width}`)
@@ -71,7 +71,7 @@ export class TimelineController extends TrackListItemController {
     if (!this.msPerUnit) {
       return
     }
-    const bucket = this.getTickMarkBucket(this.LABEL_FONT_SIZE * 0.6 * 14)
+    const bucket = this.getTickMarkBucket(this.labelFontSize * 0.6 * 14)
     const increment = bucket.majorIntervalMs / this.msPerUnit
 
     const timelineOffset = 14 * this.trackListController.rootFontSize // width of 'info' column
@@ -91,17 +91,13 @@ export class TimelineController extends TrackListItemController {
       } else {
         tickText = document.createElementNS('http://www.w3.org/2000/svg', 'text')
         tickText.setAttribute('y', `${this.height / 2}`)
-        tickText.style.fontFamily = "'Courier New', Courier, monospace"
-        tickText.style.fontSize = this.LABEL_FONT_SIZE + 'px'
-        tickText.style.dominantBaseline = 'middle'
-        tickText.style.textAnchor = 'middle'
-        tickText.style.stroke = 'none'
+        tickText.classList.add('timeline-tick-label')
         this.svg.appendChild(tickText)
         this.tickLabels.push(tickText)
       }
       const x = offset + i * increment
       tickText.setAttribute('x', `${x}`)
-      tickText.style.visibility = 'visible'
+      tickText.classList.remove('is-inactive')
       tickText.innerHTML = TimeUtils.toString(tickMarkTime + i * bucket.majorIntervalMs, true)
 
       majorTickPathParts.push(`M ${x} ${this.height / 1.5} L ${x} ${this.height}`)
@@ -112,8 +108,8 @@ export class TimelineController extends TrackListItemController {
       }
     }
 
-    while (++textIndex < this.tickLabels.length && this.tickLabels[textIndex].style.visibility == 'visible') {
-      this.tickLabels[textIndex].style.visibility = 'hidden'
+    while (++textIndex < this.tickLabels.length && !this.tickLabels[textIndex].classList.contains('is-inactive')) {
+      this.tickLabels[textIndex].classList.add('is-inactive')
     }
     this.majorTicks.setAttribute('d', majorTickPathParts.join(' '))
     this.minorTicks.setAttribute('d', minorTickPathParts.join(' '))
@@ -129,37 +125,21 @@ export class TimelineController extends TrackListItemController {
         rightLabel: document.createElementNS('http://www.w3.org/2000/svg', 'text'),
       }
 
-      this.selectionElements.lines.style.strokeWidth = '2'
+      this.selectionElements.lines.classList.add('timeline-selection-lines')
 
-      this.selectionElements.leftExpand.style.cursor = 'ew-resize'
-      this.selectionElements.leftExpand.style.userSelect = 'none'
-      this.selectionElements.leftExpand.style.strokeWidth = '10'
-      this.selectionElements.leftExpand.style.strokeOpacity = '0'
+      this.selectionElements.leftExpand.classList.add('timeline-selection-handle')
       this.selectionElements.leftExpand.setAttribute('y1', '30')
       this.selectionElements.leftExpand.setAttribute('y2', `${this.height}`)
 
-      this.selectionElements.rightExpand.style.cursor = 'ew-resize'
-      this.selectionElements.rightExpand.style.userSelect = 'none'
-      this.selectionElements.rightExpand.style.strokeWidth = '10'
-      this.selectionElements.rightExpand.style.strokeOpacity = '0'
+      this.selectionElements.rightExpand.classList.add('timeline-selection-handle')
       this.selectionElements.rightExpand.setAttribute('y1', '30')
       this.selectionElements.rightExpand.setAttribute('y2', `${this.height}`)
 
       this.selectionElements.leftLabel.setAttribute('y', '15')
-      this.selectionElements.leftLabel.style.stroke = 'none'
-      this.selectionElements.leftLabel.style.dominantBaseline = 'middle'
-      this.selectionElements.leftLabel.style.textAnchor = 'middle'
-      this.selectionElements.leftLabel.style.fontFamily = "'Courier New', Courier, monospace"
-      this.selectionElements.leftLabel.style.fontSize = '18px'
-      this.selectionElements.leftLabel.style.fontWeight = 'bold'
+      this.selectionElements.leftLabel.classList.add('timeline-selection-label')
 
       this.selectionElements.rightLabel.setAttribute('y', '15')
-      this.selectionElements.rightLabel.style.stroke = 'none'
-      this.selectionElements.rightLabel.style.dominantBaseline = 'middle'
-      this.selectionElements.rightLabel.style.textAnchor = 'middle'
-      this.selectionElements.rightLabel.style.fontFamily = "'Courier New', Courier, monospace"
-      this.selectionElements.rightLabel.style.fontSize = '18px'
-      this.selectionElements.rightLabel.style.fontWeight = 'bold'
+      this.selectionElements.rightLabel.classList.add('timeline-selection-label')
 
       this.selectionElements.leftExpand.addEventListener('mousedown', (event) => {
         if (event.buttons == 1 && event.button == 0) {
@@ -226,27 +206,20 @@ export class TimelineController extends TrackListItemController {
     this.selectionElements.leftLabel.setAttribute('x', `${startX - labelPush}`)
     this.selectionElements.rightLabel.setAttribute('x', `${endX + labelPush}`)
 
-    if (
+    this.selectionElements.rightLabel.classList.toggle(
+      'is-obscured',
       this.svg.checkIntersection(
         this.selectionElements.rightLabel,
         this.trackListController.positionMarkerController.getLabelBoundingBox(),
-      )
-    ) {
-      this.selectionElements.rightLabel.style.opacity = '.2'
-    } else {
-      this.selectionElements.rightLabel.style.opacity = '1'
-    }
-
-    if (
+      ),
+    )
+    this.selectionElements.leftLabel.classList.toggle(
+      'is-obscured',
       this.svg.checkIntersection(
         this.selectionElements.leftLabel,
         this.trackListController.positionMarkerController.getLabelBoundingBox(),
-      )
-    ) {
-      this.selectionElements.leftLabel.style.opacity = '.2'
-    } else {
-      this.selectionElements.leftLabel.style.opacity = '1'
-    }
+      ),
+    )
   }
 
   removeSelection() {
@@ -261,7 +234,7 @@ export class TimelineController extends TrackListItemController {
 
   /** Keyboard step sizes in samples, matching the ruler's minor and major tick intervals. */
   getKeyboardSteps(): { minor: number; major: number } {
-    const bucket = this.getTickMarkBucket(this.LABEL_FONT_SIZE * 0.6 * 14)
+    const bucket = this.getTickMarkBucket(this.labelFontSize * 0.6 * 14)
     const toSamples = (ms: number) => Math.max(1, Math.round((ms * this.sampleRate) / 1000))
     return {
       minor: toSamples(bucket.majorIntervalMs / bucket.ticksPerMajorInterval),

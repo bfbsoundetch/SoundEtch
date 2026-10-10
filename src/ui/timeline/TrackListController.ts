@@ -961,11 +961,11 @@ export class TrackListController {
       project.getClips().length == 0 &&
       AudioControl.getState() == AudioState.STOPPED
     ) {
-      document.getElementById('timeline-body')!.style.display = 'none'
-      document.getElementById('welcome')!.style.display = ''
+      document.getElementById('timeline-body')!.hidden = true
+      document.getElementById('welcome')!.hidden = false
     } else {
-      document.getElementById('timeline-body')!.style.display = ''
-      document.getElementById('welcome')!.style.display = 'none'
+      document.getElementById('timeline-body')!.hidden = false
+      document.getElementById('welcome')!.hidden = true
       this.resizeCallback()
     }
   }
