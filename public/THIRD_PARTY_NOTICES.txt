@@ -46,9 +46,10 @@ https://huggingface.co/ibm-granite/granite-speech-5.0-470m-turboctc
 Browser export pinned to Space revision 245e1e52c6fc01ba065c35b4af884d89cdca60de:
 https://huggingface.co/spaces/ibm-granite/granite-speech-streaming-webgpu/tree/245e1e52c6fc01ba065c35b4af884d89cdca60de/onnx-ctc
 
-public/granite/granite_timing_v2_q4f16.onnx is derived at build time by scripts/prepare-granite-timing.mjs from that pinned Apache-2.0 Space export. Reproduce it with: yarn prepare:timing
+The application's existing public/granite/granite_timing_v2_q4f16.onnx is derived from that pinned Space export by scripts/prepare-granite-timing.mjs. Running yarn prepare:timing now stages a notice-bearing publication candidate at tmp/granite-publish/onnx-ctc/granite_timing_v2_q4f16.onnx; it does not overwrite the application's existing graph.
 
-The model and pinned browser export are provided under the Apache License 2.0:
+The base model declares Apache License 2.0, and the pinned Space UI labels the model Apache 2.0. Redistribution scope for the selected Space export/support files requires confirmation before publishing the staged bundle:
+https://huggingface.co/spaces/ibm-granite/granite-speech-streaming-webgpu/discussions/2
 https://www.apache.org/licenses/LICENSE-2.0
 
 Silero VAD

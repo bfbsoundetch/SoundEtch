@@ -7,11 +7,12 @@ import schema from '../node_modules/onnxruntime-web/lib/onnxjs/ort-schema/protob
 
 const { onnx } = schema
 const root = resolve(dirname(fileURLToPath(import.meta.url)), '..')
-const sourcePath = resolve(root, 'public/granite/ctc_conformer_q4f16.onnx')
 const timingVersion = '2'
-const targetPath = resolve(root, `public/granite/granite_timing_v${timingVersion}_q4f16.onnx`)
+const targetPath = resolve(root, `tmp/granite-publish/onnx-ctc/granite_timing_v${timingVersion}_q4f16.onnx`)
 const sourceUrl =
   'https://huggingface.co/spaces/ibm-granite/granite-speech-streaming-webgpu/resolve/245e1e52c6fc01ba065c35b4af884d89cdca60de/onnx-ctc/ctc_conformer_q4f16.onnx'
+const modificationNotice =
+  'Modified by SoundEtch from the IBM Granite Speech q4f16 ONNX export in ibm-granite/granite-speech-streaming-webgpu at revision 245e1e52c6fc01ba065c35b4af884d89cdca60de. Adds frame_ids, token_ids, ctc_scores, and vocab_log_probs outputs and prunes unused graph components. Reuses the original external-weight file ctc_conformer_q4f16.onnx.data.'
 const externalWeights = 'ctc_conformer_q4f16.onnx.data'
 const prefix = `/soundetch_timing_v${timingVersion}/`
 const versionKey = 'soundetch.timing_version'
@@ -245,6 +246,7 @@ function prune(graph) {
 
 function checkConverted(model) {
   checkCore(model, true)
+  assert(model.docString.endsWith(modificationNotice), 'Missing SoundEtch modification notice')
   assert.equal(
     model.metadataProps.filter((entry) => entry.key === versionKey).length,
     1,
@@ -293,8 +295,6 @@ async function readOptional(path) {
 }
 
 async function readSource() {
-  const local = await readOptional(sourcePath)
-  if (local) return local
   const response = await fetch(sourceUrl)
   assert(response.ok, `Failed to fetch source graph: ${response.status} ${response.statusText}`)
   return Buffer.from(await response.arrayBuffer())
@@ -325,6 +325,7 @@ if (args[0] === '--verify') {
   model.graph.output = expectedOutputs
   model.metadataProps.push(onnx.StringStringEntryProto.fromObject({ key: versionKey, value: timingVersion }))
   prune(model.graph)
+  model.docString = [model.docString, modificationNotice].filter(Boolean).join('\n\n')
   checkConverted(model)
   assert.deepEqual(externalLocations(model.graph), originalLocations, 'External weight locations changed')
 

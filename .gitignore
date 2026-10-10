@@ -3,3 +3,6 @@ node_modules
 build
 server
 **/.DS_Store
+/tmp/granite-publish/
+/tmp/hf-publish-venv/
+/tmp/granite-verify/

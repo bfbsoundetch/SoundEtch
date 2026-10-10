@@ -57,3 +57,131 @@ Transcription logs timestamped `[Granite]` diagnostics to the browser console at
 Audio imports wait for browser-storage writer initialization before streaming decoded samples, so a first import in a fresh browser profile cannot complete as an empty clip.
 
 Regeneration replaces every transcript word that intersects the selected clip-source interval, including a word that straddles a selection boundary, while preserving transcript ranges wholly outside it. Repeated placements of one clip share the same clip-owned transcript. Granite emits one sharp CTC spike per word, usually near its onset, so word timing combines that spike with speech activity (the speech mask plus energy relative to nearby speech). A word starts at its spike, or 64 ms before speech resumes when its spike sits in a pause; it ends where its speech stops, bridging quiet stretches of up to 96 ms (stop closures) or up to 192 ms while the word is still shorter than its letters suggest (quiet fricatives such as the /st/ of "states"). Granite emits a word once it has identified it, so a word of six or more letters can spike well after it begins, such as on the "-lation" of "legislation". The derived timing graph therefore also exports Granite's non-blank vocabulary distribution: when the word's own prefix pieces ("legisl", "ag" for "agriculture") hold at least 40% of it, and more than the previous word's pieces, at least three 80 ms frames before the spike (and from the second frame after the previous word's spike), the word starts in the middle of the first such frame. An end never passes the next word's start or a length cap of 90 ms per letter (at least 300 ms). Granite can also emit a segment's first word in the silence at the segment's start (the 750 ms VAD pre-roll or a 20-second chunk's leading pause); such a word starts at the nearest supported speech before the next word, or, when the next word's spike already sits where speech begins, at that speech. Boundaries are estimates on 32 ms acoustic frames, not phoneme-accurate alignments.
+
+## Granite model-bundle publication
+
+`yarn prepare:timing` always derives the timing graph from IBM Space revision `245e1e52c6fc01ba065c35b4af884d89cdca60de` and atomically stages it at `tmp/granite-publish/onnx-ctc/granite_timing_v2_q4f16.onnx`. It preserves upstream metadata/notices and appends SoundEtch's modification notice. It no longer reads a local source graph or writes into `public/granite/`. The existing application-hosted graph and runtime download URLs remain in place until a complete remote bundle passes anonymous pinned-download verification.
+
+### Current publication hold
+
+- **Redistribution entitlement:** the base model declares Apache-2.0 and the Space UI labels the model Apache 2.0, but those statements do not explicitly document the selected support files' redistribution scope. [A scoped clarification request is open with IBM](https://huggingface.co/spaces/ibm-granite/granite-speech-streaming-webgpu/discussions/2). Establish entitlement for all selected export/support files and SoundEtch's modifications before upload.
+
+No model repository has been created or uploaded by this preparation. The authenticated publishing account reported by `hf auth whoami` is `soundetch`; authentication is not a substitute for redistribution entitlement.
+
+The reproduced graph size/hash have been explicitly approved. Structural verification passes at 1,691 nodes, the exact modification notice matches, and the staged graph is protobuf-identical to the existing graph after adding that notice. The release check below enforces the approved values without padding the file or changing the notice.
+
+### Stage and verify
+
+From the project root, install the official publishing CLI into an isolated environment:
+
+```sh
+python3 -m venv tmp/hf-publish-venv
+tmp/hf-publish-venv/bin/python -m pip install --upgrade huggingface_hub
+export PATH="$PWD/tmp/hf-publish-venv/bin:$PATH"
+yarn prepare:timing
+hf download ibm-granite/granite-speech-streaming-webgpu \
+  onnx-ctc/ctc_conformer_q4f16.onnx.data \
+  onnx-ctc/frontend_config.json onnx-ctc/mel_filters.bin \
+  onnx-ctc/stft_window.bin onnx-ctc/vocab.json \
+  --repo-type space \
+  --revision 245e1e52c6fc01ba065c35b4af884d89cdca60de \
+  --local-dir tmp/granite-publish
+node scripts/prepare-granite-timing.mjs --verify \
+  tmp/granite-publish/onnx-ctc/granite_timing_v2_q4f16.onnx
+wc -c tmp/granite-publish/onnx-ctc/*
+shasum -a 256 tmp/granite-publish/onnx-ctc/*
+```
+
+The current staging directory includes the six runtime files and complete root `LICENSE`, `NOTICE`, and `README.md` model card. The model card records the approved staging sizes/hashes, frontend/vocabulary requirements, four outputs, external-weight basename, provenance, and the licensing hold. `--verify` checks graph structure and the exact modification notice, not the release hash; run the following release check too. It validates all six files against the approved size/hash manifest and rejects unexpected upload files. Abort publication on any mismatch.
+
+```sh
+tmp/hf-publish-venv/bin/python - <<'PY'
+import hashlib
+from pathlib import Path
+
+stage = Path('tmp/granite-publish')
+expected = {
+    'granite_timing_v2_q4f16.onnx': (575061, '051cfe5a5fc10ae37f1ebea08dc5db428e89d9ceef88610faf5ebb8abfedea0b'),
+    'ctc_conformer_q4f16.onnx.data': (311533568, 'bee3e56bee49991233ca64e755438d1dfbd90600d90af16b9e0388cca7294dbc'),
+    'frontend_config.json': (303, '34b6d5aace683c15c8d74f6c1be6194bcd61347540ed3a0e45bbd171ba8df2a3'),
+    'mel_filters.bin': (82240, '3e5145f681dd30339bb9ea60b366d78ff971de6aa0d210b45b4adcf859bb177d'),
+    'stft_window.bin': (2048, 'b318e8ace5febc3997eb190be755063577693ed06da87629172c9b6913448e41'),
+    'vocab.json': (177439, '738b24db3fb10d903b969273f206600917222001f3f161dbe2bbe7eb7dce1268'),
+}
+release_files = {'LICENSE', 'NOTICE', 'README.md'} | {f'onnx-ctc/{name}' for name in expected}
+actual_files = {
+    path.relative_to(stage).as_posix() for path in stage.rglob('*')
+    if path.is_file() and not path.relative_to(stage).as_posix().startswith('.cache/huggingface/')
+}
+assert actual_files == release_files, actual_files ^ release_files
+for name, (size, digest) in expected.items():
+    path = stage / 'onnx-ctc' / name
+    assert path.stat().st_size == size, f'Size mismatch: {name}'
+    with path.open('rb') as stream:
+        assert hashlib.file_digest(stream, 'sha256').hexdigest() == digest, f'Hash mismatch: {name}'
+    print(f'Approved release manifest matches: onnx-ctc/{name}')
+print('Artifact checks passed; they do not establish redistribution permission.')
+PY
+```
+
+Only `tmp/granite-publish/`, `tmp/hf-publish-venv/`, and `tmp/granite-verify/` are newly ignored; other `tmp/` content is not blanket-ignored. Before upload, require exactly the six files under `onnx-ctc/`, the three root release files, and CLI-generated `.cache/huggingface/` metadata. The CLI automatically excludes its download cache from uploads. Never include the virtual environment, publishing credentials, original graph, Space UI/application, punctuator, ONNX Runtime binaries, or Silero VAD.
+
+### Publish only after licensing and artifact checks pass
+
+Preserve any additional applicable upstream notices established during licensing clarification. Resolve the staged model card/NOTICE publication-hold statements only when their prerequisites are satisfied and the final inventory/hashes have been verified.
+
+Authenticate only on the publishing machine (`hf auth login` if necessary), then run `hf auth whoami`. Default to that account's personal namespace; use an organization only when expressly selected and writable. Never put a publisher token in browser code or a `VITE_` variable.
+
+For the currently authenticated personal account:
+
+```sh
+export HF_NAMESPACE=soundetch
+export HF_REPO="$HF_NAMESPACE/soundetch-granite-speech-5.0-470m-turboctc-onnx"
+hf repos create "$HF_REPO" --repo-type model --public
+hf upload "$HF_REPO" tmp/granite-publish . --repo-type model \
+  --commit-message "Publish SoundEtch Granite timing v2 q4f16"
+hf models info "$HF_REPO" --json
+```
+
+Keep the repository public and ungated. If it already exists, verify that it is the intended model and already has the required visibility before reusing it. Do not expose a private repository or delete unrelated remote content. For an unrelated-name collision, append `-soundetch-timing-v2`; if that also collides, append the lowest unused integer suffix starting at `-2`. Permission errors do not justify changing ownership.
+
+Record the full 40-character upload commit SHA from the upload result and model metadata, confirm it identifies that upload commit, and export it as `PUBLISHED_SHA`. Do not use floating `main` or a placeholder SHA.
+
+### Anonymous release proof
+
+After a real upload, run this from the project root with `HF_REPO` and `PUBLISHED_SHA` exported. Explicit anonymous access and forced downloads prevent uploader authentication or a preexisting download cache from substituting for public accessibility:
+
+```sh
+tmp/hf-publish-venv/bin/python - <<'PY'
+import filecmp
+import os
+import re
+from pathlib import Path
+from huggingface_hub import HfApi, hf_hub_download
+
+repo = os.environ['HF_REPO']
+sha = os.environ['PUBLISHED_SHA']
+assert re.fullmatch(r'[0-9a-f]{40}', sha), sha
+info = HfApi(token=False).model_info(repo, revision=sha, files_metadata=True)
+assert info.private is False and info.gated is False
+assert info.sha == sha
+stage = Path('tmp/granite-publish/onnx-ctc')
+remote = {item.rfilename: item for item in info.siblings}
+for name in ('granite_timing_v2_q4f16.onnx', 'ctc_conformer_q4f16.onnx.data',
+             'frontend_config.json', 'mel_filters.bin', 'stft_window.bin', 'vocab.json'):
+    source = stage / name
+    path = f'onnx-ctc/{name}'
+    assert remote[path].size == source.stat().st_size, path
+    downloaded = hf_hub_download(repo_id=repo, filename=path, revision=sha,
+                                token=False, force_download=True,
+                                local_dir='tmp/granite-verify')
+    assert filecmp.cmp(source, downloaded, shallow=False), path
+    print(f'Public pinned download matches staging: {path}')
+PY
+node scripts/prepare-granite-timing.mjs --verify \
+  tmp/granite-verify/onnx-ctc/granite_timing_v2_q4f16.onnx
+```
+
+Only after this proof may the application use the actual model repository ID and full published SHA for all six Granite downloads, change the expected graph byte count to the verified final size, and remove the app-hosted graph. Preserve the pinned IBM generator provenance, exact external-weight basename, Cache Storage behavior, and separate VAD/runtime sources. Verify the actual cross-origin-isolated `/soundetch/` browser surface with timed transcription, six cold HF requests, a reload with six persistent-cache hits and no Granite transfers, Settings cache accounting, then Granite-only Unload/reload/redownload with VAD still cached. None of those cutover/browser checks has been performed while publication is held.
+
+Use the official [CLI](https://huggingface.co/docs/huggingface_hub/guides/cli), [upload](https://huggingface.co/docs/huggingface_hub/guides/upload), and [model-card](https://huggingface.co/docs/hub/model-cards) documentation. Public storage is [best-effort](https://huggingface.co/docs/hub/storage-limits), with anonymous-download [rate limits](https://huggingface.co/docs/hub/rate-limits). Preserve revisions used by released clients; later releases need a complete compatible bundle and an intentional SHA/cache-revision update.
