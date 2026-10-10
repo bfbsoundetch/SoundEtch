@@ -18,12 +18,17 @@ export class SileroVad {
     return new SileroVad(session)
   }
 
-  async computeProbabilities(audio: Float32Array, continueWhile: () => void = () => undefined): Promise<Float32Array> {
+  async computeProbabilities(
+    audio: Float32Array,
+    continueWhile: () => void = () => undefined,
+    onProgress: (progress: number) => void = () => undefined,
+  ): Promise<Float32Array> {
     const totalFrames = Math.ceil(audio.length / SILERO_VAD_FRAME_SAMPLES)
     const probabilities = new Float32Array(totalFrames)
     if (totalFrames === 0) {
       return probabilities
     }
+    const progressInterval = Math.max(1, Math.ceil(totalFrames / 50))
 
     const frame = new Float32Array(SILERO_VAD_FRAME_SAMPLES)
     const input = new ort.Tensor('float32', frame, [1, SILERO_VAD_FRAME_SAMPLES])
@@ -44,6 +49,9 @@ export class SileroVad {
         outputs.output.dispose()
         state.dispose()
         state = nextState
+        if (frameIndex % progressInterval === 0 || frameIndex === totalFrames - 1) {
+          onProgress((frameIndex + 1) / totalFrames)
+        }
       }
     } finally {
       state.dispose()

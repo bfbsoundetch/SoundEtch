@@ -248,18 +248,27 @@ async function processTranscription(command: TranscribeCommand): Promise<void> {
   )
   let completedSourceSamples = 0
   const results = new Array<Extract<TranscriptionWorkerMessage, { type: 'complete' }>['results'][number]>()
-  postProgress(command.requestId, {
-    stage: 'transcribing',
-    progress: 0,
-    backend: runtime.backend,
-  })
 
   for (const [intervalIndex, interval] of command.intervals.entries()) {
     assertRequestActive(command.requestId)
     const intervalLabel = `Interval ${intervalIndex + 1}/${command.intervals.length}`
+    postProgress(command.requestId, {
+      stage: 'segmenting',
+      progress: 0,
+      backend: runtime.backend,
+    })
     const audio = await traceStage(`${intervalLabel} audio read`, () => readSelectedAudio16k(command, interval))
     const vadProbabilities = await traceStage(`${intervalLabel} Silero VAD`, () =>
-      runtime.vad.computeProbabilities(audio, () => assertRequestActive(command.requestId)),
+      runtime.vad.computeProbabilities(
+        audio,
+        () => assertRequestActive(command.requestId),
+        (progress) =>
+          postProgress(command.requestId, {
+            stage: 'segmenting',
+            progress,
+            backend: runtime.backend,
+          }),
+      ),
     )
     const { speechRegions, segments } = segmentSpeechFromVadProbabilities(vadProbabilities, audio.length)
     graniteLog(`${intervalLabel}: ${(audio.length / GRANITE_SAMPLE_RATE).toFixed(1)} s, ${segments.length} segments`)
@@ -272,6 +281,11 @@ async function processTranscription(command: TranscribeCommand): Promise<void> {
     )
     const ranges = new Array<TranscribedRange>()
     const intervalSourceSamples = interval.endSample - interval.startSample
+    postProgress(command.requestId, {
+      stage: 'transcribing',
+      progress: completedSourceSamples / Math.max(1, totalSourceSamples),
+      backend: runtime.backend,
+    })
     for (const [segmentIndex, segment] of segments.entries()) {
       assertRequestActive(command.requestId)
       ranges.push(

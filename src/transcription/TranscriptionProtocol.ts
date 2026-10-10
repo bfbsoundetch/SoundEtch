@@ -28,7 +28,7 @@ export interface TranscribeCommand {
 export type TranscriptionWorkerCommand = TranscribeCommand
 
 export interface TranscriptionProgress {
-  readonly stage: 'download' | 'loading' | 'transcribing'
+  readonly stage: 'download' | 'loading' | 'segmenting' | 'transcribing'
   readonly progress: number
   readonly backend?: TranscriptionBackend
 }

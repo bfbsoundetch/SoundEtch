@@ -819,6 +819,9 @@ export class TrackListController {
           case 'loading':
             title = `Loading Granite speech model (${progress.backend ?? 'WebGPU/WASM'})…`
             break
+          case 'segmenting':
+            title = 'Finding speech segments (VAD)…'
+            break
           case 'transcribing':
             title = `Generating transcription (${progress.backend ?? 'WebGPU/WASM'})…`
             break
