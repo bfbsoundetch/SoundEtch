@@ -58,7 +58,14 @@ export class PositionMarkerController extends TrackListItemController {
     } else {
       position = AudioControl.audioContext!.getPosition()
       this.positionLineSvg.classList = ''
-      this.positionTimeText.style.color = 'var(--play-button-green)'
+      switch (AudioControl.getState()) {
+        case AudioState.PLAYING:
+          this.positionTimeText.style.color = 'var(--play-button-green)'
+          break
+        case AudioState.RECORDING:
+          this.positionTimeText.style.color = 'var(--record-button-red)'
+          break
+      }
     }
 
     const realPosition = positionOverride ?? position
