@@ -1914,7 +1914,6 @@ video {
 
 .go-to-time-dialog {
   border: solid 1px var(--color);
-  border-radius: 0.5rem;
   background-color: var(--menu-bg);
   color: var(--color);
   padding: 1.5rem;
