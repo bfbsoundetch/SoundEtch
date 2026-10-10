@@ -2,6 +2,16 @@
 
 Web audio recorder and editor
 
+## Video export
+
+Choose **Video - MP4 Visualizer** in Publish Settings to export a 1920×1080 YouTube or 1080×1920 TikTok video at 60 fps. Both layouts show one oscilloscope trace from the final rendered mix, including track gain, pan, mute/solo, and effects.
+
+Each frame plots every signed PCM sample in its approximately 16.67 ms window. Windows remain contiguous across render chunks, selected-region exports start at the selected sample, and the last window contains only the remaining samples. The fixed ±1 full-scale grid preserves level changes; silence is flat. Stereo uses the mono fold-down `(L + R) / 2`, so opposite-phase channels cancel in the trace while the exported audio remains stereo.
+
+Only track names and amplitude-axis ticks are labeled; no mix or timing text appears below the oscilloscope. Export progress advances after each encoded video frame, even within a large audio-render chunk, and reaches 100% only after MP4 finalization.
+
+The trace uses pre-AAC PCM. MP4 audio still uses the browser's AAC encoder or the existing AAC fallback; encoder priming/padding can introduce playback delay and a padded audio tail.
+
 ## Timeline display modes
 
 Use each track's three-dots menu to switch between its waveform and a WebGPU-rendered spectrogram. The selected mode is session-only and resets to the waveform when a project is opened or the page is reloaded. If WebGPU is unavailable, the spectrogram view keeps its editing overlays on the selected color scheme's minimum-dB background; switching back to the waveform remains available.

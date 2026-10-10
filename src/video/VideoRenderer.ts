@@ -12,13 +12,12 @@ import {
   type VideoCodec,
 } from 'mediabunny'
 import { registerAacEncoder } from '@mediabunny/aac-encoder'
-import { Project } from '../project/Project'
 import { ProjectManager } from '../project/ProjectManager'
 import { Track } from '../project/Track'
-import { SummaryGenerator } from '../project/SummaryGenerator'
 import type { SelectedRegion } from '../playback/Player'
 import { createRenderingArgument } from '../rendering/RenderingArgumentFactory'
 import { RenderingEncodingPortMessage, RenderingWorkerStartMessage } from '../rendering/RenderingWorkerProtocol'
+import { OscilloscopeFrames } from './OscilloscopeFrames'
 
 export type VideoExportPresetName = 'youtube' | 'tiktok'
 
@@ -31,18 +30,7 @@ type VideoExportPreset = {
   videoBitrate: number
 }
 
-type VideoVisualData = {
-  mixColumns: Float32Array
-  tracks: Array<TrackVisualData>
-}
-
-type TrackVisualData = {
-  name: string
-  columns: Float32Array
-}
-
 const AUDIO_BITRATE = 192_000
-const VISUAL_COLUMN_CAP = 2400
 
 export const VIDEO_EXPORT_PRESETS: Record<VideoExportPresetName, VideoExportPreset> = {
   youtube: {
@@ -50,16 +38,16 @@ export const VIDEO_EXPORT_PRESETS: Record<VideoExportPresetName, VideoExportPres
     shapeName: 'hamburger',
     width: 1920,
     height: 1080,
-    frameRate: 30,
-    videoBitrate: 8_000_000,
+    frameRate: 60,
+    videoBitrate: 12_000_000,
   },
   tiktok: {
     label: 'TikTok',
     shapeName: 'hotdog',
     width: 1080,
     height: 1920,
-    frameRate: 30,
-    videoBitrate: 8_000_000,
+    frameRate: 60,
+    videoBitrate: 12_000_000,
   },
 }
 
@@ -99,15 +87,6 @@ export class VideoRenderer {
 
     try {
       VideoRenderer.setProcessingProgress(0.01)
-      const visualData = await VideoRenderer.createVisualData(
-        project,
-        startPosition,
-        projectLength,
-        tracks,
-        preset,
-        signal,
-      )
-      VideoRenderer.setProcessingProgress(0.05)
 
       const channelCount = VideoRenderer.getOutputChannelCount(tracks)
       const videoCodec = await VideoRenderer.getVideoCodec(preset)
@@ -149,33 +128,24 @@ export class VideoRenderer {
       output.setMetadataTags({ title: project.title })
 
       await output.start()
-
-      let audioProgress = 0
-      let videoProgress = 0
-      const updateProgress = () => {
-        VideoRenderer.setProcessingProgress(0.05 + 0.95 * (audioProgress * 0.45 + videoProgress * 0.55))
-      }
+      VideoRenderer.setProcessingProgress(0.05)
 
       const argument = createRenderingArgument(project, channelCount, startPosition, projectLength, tracks)
-      await Promise.all([
-        VideoRenderer.pipeRenderedAudioToSource(argument, audioSource, signal, (progress) => {
-          audioProgress = progress
-          updateProgress()
-        }),
-        VideoRenderer.renderVideoFrames(
-          project,
-          preset,
-          visualData,
-          videoSource,
-          context,
-          projectLength,
-          signal,
-          (progress) => {
-            videoProgress = progress
-            updateProgress()
-          },
-        ),
-      ])
+      const scope = new OscilloscopeFrames(project.sampleRate, preset.frameRate, projectLength, channelCount)
+      const duration = projectLength / project.sampleRate
+      const trackNames = tracks.map((track) => track.name)
+      await VideoRenderer.pipeRenderedAudioToSource(argument, audioSource, signal, async (audio) => {
+        await scope.addAudio(audio, async (samples, sampleCount, frame) => {
+          VideoRenderer.throwIfAborted(signal)
+          const timestamp = frame / preset.frameRate
+          const frameDuration = Math.min(1 / preset.frameRate, duration - timestamp)
+          VideoRenderer.drawFrame(context, preset, samples, sampleCount, trackNames)
+          await videoSource.add(timestamp, frameDuration, { keyFrame: frame % (preset.frameRate * 2) === 0 })
+          // Report completed video work within each audio chunk; leave 5% for finalization.
+          VideoRenderer.setProcessingProgress(0.05 + 0.9 * Math.min(1, (timestamp + frameDuration) / duration))
+        })
+      })
+      videoSource.close()
 
       VideoRenderer.throwIfAborted(signal)
       await output.finalize()
@@ -194,93 +164,11 @@ export class VideoRenderer {
     VideoRenderer.cancelExportCallback?.()
   }
 
-  private static async createVisualData(
-    project: Project,
-    startPosition: number,
-    projectLength: number,
-    tracks: Array<Track>,
-    preset: VideoExportPreset,
-    signal: AbortSignal,
-  ): Promise<VideoVisualData> {
-    const columnCount = Math.min(preset.width, VISUAL_COLUMN_CAP)
-    const samplesPerColumn = Math.max(1, Math.ceil(projectLength / columnCount))
-    const trackVisuals = tracks.map((track) => {
-      return {
-        name: track.name,
-        columns: new Float32Array(columnCount),
-      }
-    })
-    const projectEnd = startPosition + projectLength
-
-    for (let trackIndex = 0; trackIndex < tracks.length; ++trackIndex) {
-      const track = tracks[trackIndex]
-      const trackColumns = trackVisuals[trackIndex].columns
-      VideoRenderer.throwIfAborted(signal)
-      for (const clipView of track.clipViews) {
-        const visibleStart = Math.max(startPosition, clipView.startPosition)
-        const visibleEnd = Math.min(projectEnd, clipView.getEndPosition())
-        if (visibleEnd <= visibleStart) {
-          continue
-        }
-
-        const clipStart = clipView.offset + visibleStart - clipView.startPosition
-        const clipEnd = clipView.offset + visibleEnd - clipView.startPosition
-        const summary = await SummaryGenerator.summarizeClipChannel(
-          clipView.clip,
-          Math.max(0, clipStart),
-          Math.min(clipView.clip.length, clipEnd),
-          samplesPerColumn,
-        )
-        const startColumn = Math.floor((visibleStart - startPosition) / samplesPerColumn)
-        const trackGain = project.isTrackAudible(track) ? Math.max(0, track.getGain()) : 0
-
-        for (let channel = 0; channel < summary.length; ++channel) {
-          const channelSummary = summary[channel]
-          if (!channelSummary) {
-            continue
-          }
-          for (let i = 0; i < channelSummary.length; i += 2) {
-            const column = startColumn + i / 2
-            if (column < 0 || column >= trackColumns.length) {
-              continue
-            }
-            const amplitude = Math.max(Math.abs(channelSummary[i] ?? 0), Math.abs(channelSummary[i + 1] ?? 0))
-            trackColumns[column] = Math.max(trackColumns[column], Math.min(1, amplitude * trackGain))
-          }
-        }
-      }
-    }
-
-    const mixColumns = new Float32Array(columnCount)
-    for (const trackVisual of trackVisuals) {
-      for (let i = 0; i < mixColumns.length; ++i) {
-        mixColumns[i] = Math.max(mixColumns[i], trackVisual.columns[i])
-      }
-    }
-
-    let peak = 0
-    for (const value of mixColumns) {
-      peak = Math.max(peak, value)
-    }
-
-    const normalization = Math.max(0.15, peak)
-    for (let i = 0; i < mixColumns.length; ++i) {
-      mixColumns[i] = Math.min(1, mixColumns[i] / normalization)
-    }
-    for (const trackVisual of trackVisuals) {
-      for (let i = 0; i < trackVisual.columns.length; ++i) {
-        trackVisual.columns[i] = Math.min(1, trackVisual.columns[i] / normalization)
-      }
-    }
-
-    return { mixColumns, tracks: trackVisuals }
-  }
-
   private static async pipeRenderedAudioToSource(
     argument: RenderingWorkerStartMessage['argument'],
     audioSource: AudioSampleSource,
     signal: AbortSignal,
-    onProgress: (progress: number) => void,
+    onAudio: (audio: Float32Array) => Promise<void>,
   ): Promise<void> {
     const renderingWorker = new Worker('./assets/renderingWorker.js', { type: 'module' })
     const channel = new MessageChannel()
@@ -322,14 +210,16 @@ export class VideoRenderer {
           .then(async () => {
             VideoRenderer.throwIfAborted(signal)
             if (message.type === 'audio') {
-              await VideoRenderer.addAudioChunkToSource(message, audioSource, argument, writtenFrames)
+              const audio = new Float32Array(message.buffer, 0, message.length)
+              await Promise.all([
+                VideoRenderer.addAudioChunkToSource(audio, audioSource, argument, writtenFrames),
+                onAudio(audio),
+              ])
               writtenFrames += message.length / argument.channelCount
-              onProgress(Math.min(1, writtenFrames / argument.length))
               return
             }
 
             audioSource.close()
-            onProgress(1)
             complete()
           })
           .catch(fail)
@@ -345,16 +235,15 @@ export class VideoRenderer {
   }
 
   private static async addAudioChunkToSource(
-    message: Extract<RenderingEncodingPortMessage, { type: 'audio' }>,
+    audio: Float32Array,
     audioSource: AudioSampleSource,
     argument: RenderingWorkerStartMessage['argument'],
     startFrame: number,
   ) {
-    if (message.length === 0) {
+    if (audio.length === 0) {
       return
     }
 
-    const audio = new Float32Array(message.buffer, 0, message.length)
     const sample = new AudioSample({
       data: audio,
       format: 'f32',
@@ -362,90 +251,73 @@ export class VideoRenderer {
       sampleRate: argument.sampleRate,
       timestamp: startFrame / argument.sampleRate,
     })
-    await audioSource.add(sample)
-    sample.close()
-  }
-
-  private static async renderVideoFrames(
-    project: Project,
-    preset: VideoExportPreset,
-    visualData: VideoVisualData,
-    videoSource: CanvasSource,
-    context: CanvasRenderingContext2D,
-    projectLength: number,
-    signal: AbortSignal,
-    onProgress: (progress: number) => void,
-  ) {
-    const duration = projectLength / project.sampleRate
-    const frameDuration = 1 / preset.frameRate
-    const frameCount = Math.max(1, Math.ceil(duration * preset.frameRate))
-
-    for (let frame = 0; frame < frameCount; ++frame) {
-      VideoRenderer.throwIfAborted(signal)
-      const timestamp = frame / preset.frameRate
-      const actualDuration = Math.min(frameDuration, Math.max(0, duration - timestamp))
-      if (actualDuration <= 0) {
-        break
-      }
-
-      VideoRenderer.drawFrame(context, preset, visualData, timestamp, duration)
-      if (frame % Math.round(preset.frameRate * 2) === 0) {
-        await videoSource.add(timestamp, actualDuration, { keyFrame: true })
-      } else {
-        await videoSource.add(timestamp, actualDuration)
-      }
-      onProgress((frame + 1) / frameCount)
+    try {
+      await audioSource.add(sample)
+    } finally {
+      sample.close()
     }
-
-    videoSource.close()
-    onProgress(1)
   }
 
   private static drawFrame(
     context: CanvasRenderingContext2D,
     preset: VideoExportPreset,
-    visualData: VideoVisualData,
-    timestamp: number,
-    duration: number,
+    samples: Float32Array,
+    sampleCount: number,
+    trackNames: Array<string>,
   ) {
     const width = preset.width
     const height = preset.height
-    const progress = duration <= 0 ? 0 : Math.min(1, timestamp / duration)
-    const currentColumn = VideoRenderer.getColumnForProgress(visualData.mixColumns, progress)
-    const loudestTrackIndex = VideoRenderer.getLoudestTrackIndex(visualData, currentColumn)
-    const currentAmplitude = VideoRenderer.getSmoothedAmplitude(visualData.mixColumns, currentColumn, 4)
+    const left = width * 0.07
+    const right = width * 0.93
+    const center = height * 0.52
+    const amplitudeScale = height * (width > height ? 0.28 : 0.22)
+    let peak = 0
+    for (let i = 0; i < sampleCount; ++i) {
+      peak = Math.max(peak, Math.abs(samples[i]))
+    }
 
-    context.clearRect(0, 0, width, height)
     const background = context.createLinearGradient(0, 0, width, height)
     background.addColorStop(0, '#111827')
     background.addColorStop(0.48, '#1e1b4b')
     background.addColorStop(1, '#020617')
     context.fillStyle = background
     context.fillRect(0, 0, width, height)
+    VideoRenderer.drawGlow(context, width, height, Math.min(1, peak))
 
-    VideoRenderer.drawGrid(context, width, height, timestamp)
-    VideoRenderer.drawGlow(context, width, height, currentAmplitude)
-    VideoRenderer.drawFastOscilloscope(context, width, height, visualData, progress, timestamp, loudestTrackIndex)
-    VideoRenderer.drawSpectralBars(context, width, height, visualData, progress, timestamp)
-    VideoRenderer.drawTrackNames(context, width, height, visualData, currentColumn, loudestTrackIndex)
-  }
-
-  private static drawGrid(context: CanvasRenderingContext2D, width: number, height: number, timestamp: number) {
     context.save()
-    context.strokeStyle = 'rgba(148, 163, 184, 0.12)'
+    context.strokeStyle = 'rgba(148, 163, 184, 0.15)'
     context.lineWidth = 1
-    const spacing = Math.max(48, Math.min(width, height) / 12)
-    const offset = (timestamp * spacing * 0.8) % spacing
     context.beginPath()
-    for (let x = -spacing + offset; x < width + spacing; x += spacing) {
-      context.moveTo(x, 0)
-      context.lineTo(x, height)
+    for (let division = 0; division <= 10; ++division) {
+      const x = left + ((right - left) * division) / 10
+      context.moveTo(x, center - amplitudeScale)
+      context.lineTo(x, center + amplitudeScale)
     }
-    for (let y = -spacing; y < height + spacing; y += spacing) {
-      context.moveTo(0, y)
-      context.lineTo(width, y)
+    for (let division = -4; division <= 4; ++division) {
+      const y = center + (amplitudeScale * division) / 4
+      context.moveTo(left, y)
+      context.lineTo(right, y)
     }
     context.stroke()
+    context.strokeStyle = 'rgba(148, 163, 184, 0.4)'
+    context.beginPath()
+    context.moveTo(left, center)
+    context.lineTo(right, center)
+    context.stroke()
+    context.restore()
+
+    VideoRenderer.drawOscilloscope(context, samples, sampleCount, left, right, center, amplitudeScale, height)
+    VideoRenderer.drawTrackNames(context, width, height, trackNames)
+
+    context.save()
+    const fontSize = Math.round(Math.min(width, height) * 0.021)
+    context.font = `${fontSize}px system-ui, -apple-system, BlinkMacSystemFont, sans-serif`
+    context.fillStyle = 'rgba(203, 213, 225, 0.7)'
+    context.textAlign = 'right'
+    context.textBaseline = 'middle'
+    context.fillText('+1', left - fontSize * 0.6, center - amplitudeScale)
+    context.fillText('0', left - fontSize * 0.6, center)
+    context.fillText('−1', left - fontSize * 0.6, center + amplitudeScale)
     context.restore()
   }
 
@@ -462,113 +334,42 @@ export class VideoRenderer {
     context.restore()
   }
 
-  private static drawFastOscilloscope(
+  private static drawOscilloscope(
     context: CanvasRenderingContext2D,
-    width: number,
+    samples: Float32Array,
+    sampleCount: number,
+    left: number,
+    right: number,
+    center: number,
+    amplitudeScale: number,
     height: number,
-    visualData: VideoVisualData,
-    progress: number,
-    timestamp: number,
-    loudestTrackIndex: number,
   ) {
-    const left = width * 0.07
-    const right = width * 0.93
-    const scopeWidth = right - left
-    const center = height * (width > height ? 0.49 : 0.45)
-    const amplitudeScale = height * (width > height ? 0.25 : 0.2)
-    const columns = loudestTrackIndex >= 0 ? visualData.tracks[loudestTrackIndex].columns : visualData.mixColumns
-    const currentColumn = VideoRenderer.getColumnForProgress(columns, progress)
-    const windowColumns = Math.max(18, Math.min(96, Math.round(columns.length * 0.035)))
-    const points = width > height ? 760 : 540
-
     context.save()
+    // Keep a fixed full-scale display; do not normalize away gain changes or invent signal outside the window.
+    context.beginPath()
+    context.rect(left, center - amplitudeScale, right - left, amplitudeScale * 2)
+    context.clip()
     context.lineJoin = 'round'
     context.lineCap = 'round'
-
-    context.strokeStyle = 'rgba(148, 163, 184, 0.18)'
-    context.lineWidth = Math.max(1, height * 0.0012)
     context.beginPath()
-    context.moveTo(left, center)
-    context.lineTo(right, center)
-    context.stroke()
-
-    context.beginPath()
-    for (let i = 0; i < points; ++i) {
-      const normalized = i / (points - 1)
-      const sourceIndex = Math.round(currentColumn + (normalized - 0.5) * windowColumns)
-      const envelope = VideoRenderer.getSmoothedAmplitude(columns, sourceIndex, 2)
-      const mixEnvelope = VideoRenderer.getSmoothedAmplitude(visualData.mixColumns, sourceIndex, 2)
-      const amplitude = Math.max(envelope, mixEnvelope * 0.35)
-      const carrier = Math.sin(i * 0.18 + timestamp * 42)
-      const harmonic = Math.sin(i * 0.047 - timestamp * 27) * 0.38
-      const jitter = Math.sin(i * 0.011 + timestamp * 91) * 0.12
-      const x = left + normalized * scopeWidth
-      const y = center + (carrier + harmonic + jitter) * amplitude * amplitudeScale
+    const step = (right - left) / Math.max(1, sampleCount - 1)
+    for (let i = 0; i < sampleCount; ++i) {
+      const x = left + i * step
+      const y = center - samples[i] * amplitudeScale
       if (i === 0) {
         context.moveTo(x, y)
       } else {
         context.lineTo(x, y)
       }
     }
-
-    context.shadowColor = 'rgba(34, 211, 238, 0.95)'
-    context.shadowBlur = Math.max(18, height * 0.025)
-    context.strokeStyle = 'rgba(125, 211, 252, 0.92)'
-    context.lineWidth = Math.max(3, height * 0.005)
-    context.stroke()
-
-    context.shadowBlur = 0
-    context.strokeStyle = 'rgba(244, 114, 182, 0.68)'
-    context.lineWidth = Math.max(1.5, height * 0.002)
-    context.beginPath()
-    for (let i = 0; i < points; ++i) {
-      const normalized = i / (points - 1)
-      const sourceIndex = Math.round(currentColumn + (normalized - 0.5) * windowColumns * 0.7)
-      const amplitude = VideoRenderer.getSmoothedAmplitude(visualData.mixColumns, sourceIndex, 3)
-      const x = left + normalized * scopeWidth
-      const y = center + Math.sin(i * 0.13 - timestamp * 54) * amplitude * amplitudeScale * 0.62
-      if (i === 0) {
-        context.moveTo(x, y)
-      } else {
-        context.lineTo(x, y)
-      }
+    if (sampleCount === 1) {
+      context.lineTo(right, center - samples[0] * amplitudeScale)
     }
+    context.shadowColor = 'rgba(34, 211, 238, 0.8)'
+    context.shadowBlur = Math.max(6, height * 0.008)
+    context.strokeStyle = '#7dd3fc'
+    context.lineWidth = Math.max(2, height * 0.002)
     context.stroke()
-    context.restore()
-  }
-
-  private static drawSpectralBars(
-    context: CanvasRenderingContext2D,
-    width: number,
-    height: number,
-    visualData: VideoVisualData,
-    progress: number,
-    timestamp: number,
-  ) {
-    const columns = visualData.mixColumns
-    const barCount = width > height ? 84 : 52
-    const bandWidth = width * 0.76
-    const left = (width - bandWidth) / 2
-    const baseline = height * (width > height ? 0.82 : 0.76)
-    const maxHeight = height * (width > height ? 0.16 : 0.24)
-    const playheadColumn = progress * (columns.length - 1)
-
-    context.save()
-    context.globalCompositeOperation = 'lighter'
-    for (let i = 0; i < barCount; ++i) {
-      const normalizedPosition = i / Math.max(1, barCount - 1)
-      const wobble = Math.sin(timestamp * 9 + i * 0.47) * 2
-      const relativeIndex = (normalizedPosition - 0.5) * barCount * 0.9 + wobble
-      const sourceIndex = Math.min(columns.length - 1, Math.max(0, Math.round(playheadColumn + relativeIndex)))
-      const amplitude = columns[sourceIndex] ?? 0
-      const easedAmplitude = Math.pow(amplitude, 0.72)
-      const barHeight = Math.max(3, easedAmplitude * maxHeight)
-      const x = left + normalizedPosition * bandWidth
-      const barWidth = Math.max(4, bandWidth / barCount / 2)
-      const hue = 185 + normalizedPosition * 120
-      context.fillStyle = `hsla(${hue}, 95%, ${58 + easedAmplitude * 20}%, ${0.28 + easedAmplitude * 0.54})`
-      context.fillRect(x - barWidth / 2, baseline - barHeight / 2, barWidth, barHeight)
-    }
     context.restore()
   }
 
@@ -576,95 +377,38 @@ export class VideoRenderer {
     context: CanvasRenderingContext2D,
     width: number,
     height: number,
-    visualData: VideoVisualData,
-    currentColumn: number,
-    loudestTrackIndex: number,
+    trackNames: Array<string>,
   ) {
-    if (loudestTrackIndex < 0 || visualData.tracks.length === 0) {
-      return
-    }
-
-    const visibleTrackIndexes = VideoRenderer.getVisibleTrackIndexes(visualData.tracks.length, loudestTrackIndex)
-    const x = width * 0.07
-    const yStart = height * (width > height ? 0.09 : 0.07)
-    const fontSize = Math.round(height * (width > height ? 0.025 : 0.018))
+    const fontSize = Math.round(Math.min(width, height) * 0.023)
     const rowHeight = fontSize * 1.65
     const paddingX = fontSize * 0.75
+    const left = width * 0.07
+    const right = width * 0.93
+    let x = left
+    let y = height * 0.08
 
     context.save()
     context.textBaseline = 'middle'
-    visibleTrackIndexes.forEach((trackIndex, visibleIndex) => {
-      const track = visualData.tracks[trackIndex]
-      const isLoudest = trackIndex === loudestTrackIndex
-      const amplitude = VideoRenderer.getSmoothedAmplitude(track.columns, currentColumn, 3)
-      const text = VideoRenderer.truncateText(track.name, isLoudest ? 34 : 26)
-      context.font = `${isLoudest ? 800 : 600} ${isLoudest ? fontSize * 1.18 : fontSize}px system-ui, -apple-system, BlinkMacSystemFont, sans-serif`
-      const textWidth = context.measureText(text).width
-      const pillWidth = textWidth + paddingX * 2
-      const y = yStart + visibleIndex * rowHeight
-      const radius = rowHeight * 0.45
-
+    context.font = `600 ${fontSize}px system-ui, -apple-system, BlinkMacSystemFont, sans-serif`
+    for (let index = 0; index < Math.min(8, trackNames.length); ++index) {
+      const text = VideoRenderer.truncateText(trackNames[index], 34)
+      const pillWidth = context.measureText(text).width + paddingX * 2
+      if (x + pillWidth > right && x > left) {
+        x = left
+        y += rowHeight * 1.25
+      }
+      if (y + rowHeight > height * 0.22) {
+        break
+      }
       context.beginPath()
-      context.roundRect(x, y - rowHeight * 0.45, pillWidth, rowHeight * 0.9, radius)
-      context.fillStyle = isLoudest ? `rgba(34, 211, 238, ${0.22 + amplitude * 0.5})` : 'rgba(15, 23, 42, 0.36)'
+      context.roundRect(x, y - rowHeight * 0.45, pillWidth, rowHeight * 0.9, rowHeight * 0.45)
+      context.fillStyle = 'rgba(15, 23, 42, 0.5)'
       context.fill()
-
-      if (isLoudest) {
-        context.strokeStyle = 'rgba(226, 232, 240, 0.7)'
-        context.lineWidth = Math.max(1, height * 0.0015)
-        context.stroke()
-      }
-
-      context.fillStyle = isLoudest ? 'rgba(248, 250, 252, 0.96)' : 'rgba(203, 213, 225, 0.48)'
+      context.fillStyle = 'rgba(226, 232, 240, 0.8)'
       context.fillText(text, x + paddingX, y)
-    })
+      x += pillWidth + paddingX
+    }
     context.restore()
-  }
-
-  private static getColumnForProgress(columns: Float32Array, progress: number): number {
-    return Math.min(columns.length - 1, Math.max(0, Math.round(progress * (columns.length - 1))))
-  }
-
-  private static getSmoothedAmplitude(columns: Float32Array, column: number, radius: number): number {
-    if (columns.length === 0) {
-      return 0
-    }
-
-    let amplitude = 0
-    const start = Math.max(0, column - radius)
-    const end = Math.min(columns.length - 1, column + radius)
-    for (let i = start; i <= end; ++i) {
-      amplitude = Math.max(amplitude, columns[i] ?? 0)
-    }
-    return amplitude
-  }
-
-  private static getLoudestTrackIndex(visualData: VideoVisualData, currentColumn: number): number {
-    let loudestIndex = -1
-    let loudestAmplitude = 0
-    for (let i = 0; i < visualData.tracks.length; ++i) {
-      const amplitude = VideoRenderer.getSmoothedAmplitude(visualData.tracks[i].columns, currentColumn, 4)
-      if (amplitude > loudestAmplitude) {
-        loudestAmplitude = amplitude
-        loudestIndex = i
-      }
-    }
-    return loudestIndex
-  }
-
-  private static getVisibleTrackIndexes(trackCount: number, loudestTrackIndex: number): Array<number> {
-    const maxVisible = 8
-    if (trackCount <= maxVisible) {
-      return new Array(trackCount).fill(0).map((_, index) => index)
-    }
-
-    const indexes = [loudestTrackIndex]
-    for (let i = 0; i < trackCount && indexes.length < maxVisible; ++i) {
-      if (i !== loudestTrackIndex) {
-        indexes.push(i)
-      }
-    }
-    return indexes
   }
 
   private static truncateText(text: string, maxLength: number): string {
