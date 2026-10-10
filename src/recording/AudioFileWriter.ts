@@ -27,6 +27,7 @@ export class AudioFileWriter {
 
   stop() {
     this.stopped = true
+    this.resume()
   }
 
   pause() {
