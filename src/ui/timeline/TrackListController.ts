@@ -396,10 +396,12 @@ export class TrackListController {
             waveform.setDisplayMode(mode)
           },
           hasTranscript: () => getTrackTranscriptEntries(track).length > 0,
+          isTranscriptOpen: () => this.transcriptPanelController?.track === track,
           onShowTranscript: () => {
             const entry = getTrackTranscriptEntries(track)[0]
             if (entry) this.openTrackTranscript(track, entry)
           },
+          onHideTranscript: () => this.transcriptPanelController?.close(),
           onChangeHeight: (deltaRem) => this.changeTrackHeight(trackInfoDiv, waveformDiv, waveform, deltaRem),
         })
         this.addTrackResizeHandles(trackInfoDiv, waveformDiv, waveform)

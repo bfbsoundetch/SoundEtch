@@ -2323,12 +2323,9 @@ body:has(.bottom-panel.resizing, .bottom-panel.layout-resize) #topdiv,
   transform: rotate(180deg);
 }
 
-.bottom-panel-size-icon {
-  transform: rotate(-90deg);
-}
-
-.bottom-panel-size.expanded .bottom-panel-size-icon {
-  transform: rotate(90deg);
+.bottom-panel-size.expanded .bottom-panel-expand-icon,
+.bottom-panel-size:not(.expanded) .bottom-panel-restore-icon {
+  display: none;
 }
 
 .bottom-panel-subtitle {
@@ -2405,6 +2402,11 @@ body:has(.bottom-panel.resizing, .bottom-panel.layout-resize) #topdiv,
   background-color: var(--alt-background);
   color: var(--color);
   width: fit-content;
+}
+
+.bottom-panel-header-buttons {
+  display: flex;
+  align-self: stretch;
 }
 
 .bottom-panel-close,

@@ -1,4 +1,4 @@
-import { createArrowIcon } from './SvgIcon'
+import { createArrowIcon, createSvgIcon } from './SvgIcon'
 
 export type BottomPanelOptions = {
   owner: object
@@ -181,14 +181,22 @@ export class BottomPanelController {
 
     this.sizeButton.type = 'button'
     this.sizeButton.className = 'clickable bottom-panel-size'
-    this.sizeButton.appendChild(createArrowIcon('line', { className: 'bottom-panel-size-icon' }))
+    this.sizeButton.append(
+      createSvgIcon('panel-expand', { className: 'bottom-panel-expand-icon' }),
+      createSvgIcon('panel-restore', { className: 'bottom-panel-restore-icon' }),
+    )
     this.sizeButton.addEventListener('click', () => {
       this.expanded = !this.expanded
       this.cancelResize?.()
       this.resizePanel()
     })
 
-    header.append(this.resizeHandle, this.backButton, headingGroup, this.sizeButton, this.closeButton)
+    // Adjacent buttons share one divider, so the header's flex gap must not separate them.
+    const headerButtons = document.createElement('div')
+    headerButtons.className = 'bottom-panel-header-buttons'
+    headerButtons.append(this.sizeButton, this.closeButton)
+
+    header.append(this.resizeHandle, this.backButton, headingGroup, headerButtons)
 
     this.bodyElement.className = 'bottom-panel-body'
     this.root.append(header, this.bodyElement)

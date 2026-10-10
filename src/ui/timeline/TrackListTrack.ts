@@ -14,7 +14,9 @@ let nextDisplayModeMenuId = 0
 export type TrackMenuActions = {
   onDisplayModeChange: (mode: TrackDisplayMode) => void
   hasTranscript: () => boolean
+  isTranscriptOpen: () => boolean
   onShowTranscript: () => void
+  onHideTranscript: () => void
   onChangeHeight: (deltaRem: number) => void
 }
 
@@ -365,10 +367,20 @@ export class TrackListTrack {
       onRename()
     })
     const transcriptItem = createItem('Show transcript', 'menuitem')
-    transcriptItem.hidden = !actions.hasTranscript()
+    // Reflects whether this track's transcript is showing each time the menu opens.
+    const refreshTranscriptItem = () => {
+      const open = actions.isTranscriptOpen()
+      transcriptItem.textContent = open ? 'Hide transcript' : 'Show transcript'
+      transcriptItem.hidden = !open && !actions.hasTranscript()
+    }
+    refreshTranscriptItem()
     transcriptItem.addEventListener('click', () => {
       closeMenu()
-      actions.onShowTranscript()
+      if (actions.isTranscriptOpen()) {
+        actions.onHideTranscript()
+      } else {
+        actions.onShowTranscript()
+      }
     })
     const increaseHeightItem = createItem('Increase track height', 'menuitem')
     increaseHeightItem.addEventListener('click', () => {
@@ -387,7 +399,7 @@ export class TrackListTrack {
 
     button.addEventListener('click', (event) => {
       event.stopPropagation()
-      transcriptItem.hidden = !actions.hasTranscript()
+      refreshTranscriptItem()
     })
 
     const updateAccessibleName = () => {
@@ -437,7 +449,7 @@ export class TrackListTrack {
     button.addEventListener('keydown', (event) => {
       if (event.key != 'ArrowDown' && event.key != 'ArrowUp') return
       event.preventDefault()
-      transcriptItem.hidden = !actions.hasTranscript()
+      refreshTranscriptItem()
       if (!popover.matches(':popover-open')) {
         popover.showPopover()
         button.setAttribute('aria-expanded', 'true')
