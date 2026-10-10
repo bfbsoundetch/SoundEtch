@@ -689,6 +689,7 @@ export class ClipViewController extends TrackListItemController {
     this.headerTitleElement.style.pointerEvents = 'none'
     this.rectElement.addEventListener('contextmenu', (event) => {
       event.preventDefault()
+      event.stopPropagation()
       this.waveformContextMenu.draw(event.clientX, event.clientY)
     })
     this.rectElement.addEventListener('mouseenter', (mouseEvent) => {

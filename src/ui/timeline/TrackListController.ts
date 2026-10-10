@@ -297,6 +297,7 @@ export class TrackListController {
         const waveformDiv = document.createElement('div')
         waveformDiv.addEventListener('contextmenu', (mouseEvent) => {
           mouseEvent.preventDefault()
+          mouseEvent.stopPropagation()
           this.timelineUnselectionContextMenu.draw(mouseEvent.clientX, mouseEvent.clientY)
         })
         waveformDiv.style.height = `${7 * track.getChannelCount() + 1.5}rem`
