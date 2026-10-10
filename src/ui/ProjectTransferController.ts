@@ -58,6 +58,7 @@ export class ProjectTransferController {
       }
     } finally {
       this.setBusy(false)
+      if (this.dialog.open) this.exportButton.focus()
     }
   }
 
@@ -81,6 +82,7 @@ export class ProjectTransferController {
       this.showError(error)
     } finally {
       this.setBusy(false)
+      if (this.dialog.open) this.importButton.focus()
     }
   }
 

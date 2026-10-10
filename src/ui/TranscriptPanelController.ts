@@ -37,6 +37,7 @@ export class TranscriptPanelController {
   private nextPlaybackIndex = 0
   private lastPlaybackSample: number | null = null
   private firstPlayingElement: HTMLSpanElement | null = null
+  private keyboardAnchor: number | null = null
 
   constructor(private readonly trackListController: TrackListController) {}
 
@@ -126,6 +127,7 @@ export class TranscriptPanelController {
       }
       const element = document.createElement('span')
       element.className = 'transcript-word'
+      element.tabIndex = -1
       element.textContent = entry.text
       paragraph.append(element)
       return { entry, element }
@@ -186,6 +188,7 @@ export class TranscriptPanelController {
     for (const binding of this.playingBindings) {
       if (binding.entry.endSample <= sample) {
         binding.element.classList.remove('playing')
+        binding.element.removeAttribute('aria-current')
         this.playingBindings.delete(binding)
       } else {
         first ??= binding.element
@@ -200,6 +203,7 @@ export class TranscriptPanelController {
       const binding = this.bindings[this.nextPlaybackIndex++]
       if (sample < binding.entry.endSample) {
         binding.element.classList.add('playing')
+        binding.element.setAttribute('aria-current', 'true')
         this.playingBindings.add(binding)
         first ??= binding.element
       }
@@ -213,7 +217,10 @@ export class TranscriptPanelController {
   }
 
   private clearPlayback(): void {
-    for (const binding of this.playingBindings) binding.element.classList.remove('playing')
+    for (const binding of this.playingBindings) {
+      binding.element.classList.remove('playing')
+      binding.element.removeAttribute('aria-current')
+    }
     this.playingBindings.clear()
     this.nextPlaybackIndex = 0
     this.lastPlaybackSample = null
@@ -264,6 +271,7 @@ export class TranscriptPanelController {
       { signal },
     )
     document.addEventListener('mouseup', (event) => this.handleMouseUp(event), { signal })
+    this.content!.addEventListener('keydown', (event) => this.handleKeyDown(event), { signal })
     window.addEventListener(
       'blur',
       () => {
@@ -393,16 +401,63 @@ export class TranscriptPanelController {
         }
         this.publish(words)
       } else if (!gesture.moved && gesture.binding) {
-        const sample = gesture.binding.entry.startSample
-        if (this.canWriteSelection()) {
-          this.trackListController.clearSelection()
-          AudioControl.startPosition = sample
-        }
-        this.reveal(sample)
+        this.seekTo(gesture.binding)
       }
     } finally {
       this.gesture = null
       this.trackListController.pointerStateManager.finishSelectingTranscript()
+    }
+  }
+
+  private seekTo(binding: Binding): void {
+    const sample = binding.entry.startSample
+    if (this.canWriteSelection()) {
+      this.trackListController.clearSelection()
+      AudioControl.startPosition = sample
+    }
+    this.reveal(sample)
+  }
+
+  private handleKeyDown(event: KeyboardEvent): void {
+    const bindings = this.bindings
+    if (event.altKey || event.ctrlKey || event.metaKey || bindings.length === 0) return
+    const current = bindings.findIndex((b) => b.element === document.activeElement)
+    if ((event.key === 'Enter' || event.key === ' ') && current >= 0) {
+      event.preventDefault()
+      this.seekTo(bindings[current])
+      return
+    }
+    const last = bindings.length - 1
+    const initial = current < 0 ? Math.max(0, bindings.findIndex((b) => b.element.classList.contains('playing'))) : -1
+    let next: number
+    switch (event.key) {
+      case 'ArrowRight':
+      case 'ArrowDown':
+        next = current < 0 ? initial : Math.min(last, current + 1)
+        break
+      case 'ArrowLeft':
+      case 'ArrowUp':
+        next = current < 0 ? initial : Math.max(0, current - 1)
+        break
+      case 'Home':
+        next = 0
+        break
+      case 'End':
+        next = last
+        break
+      default:
+        return
+    }
+    event.preventDefault()
+    bindings[next].element.focus()
+    if (event.shiftKey) {
+      const anchor = (this.keyboardAnchor ??= current < 0 ? next : current)
+      const low = Math.min(anchor, next)
+      const high = Math.max(anchor, next)
+      this.selectNativeRange(bindings[low], bindings[high], next < anchor)
+      this.publish(bindings.slice(low, high + 1))
+    } else {
+      this.keyboardAnchor = null
     }
   }
 

@@ -11,6 +11,12 @@ export class ProjectModalController {
   private readonly newProjectButton = document.getElementById('project-manager-new-button') as HTMLButtonElement
   private readonly listContainer = document.getElementById('project-manager-list') as HTMLDivElement
   private projectIdToEditAfterRefresh: number | undefined = undefined
+  private pendingFocus: { projectId?: number; rowIndex: number; selector: string } | null = null
+  private static readonly ROW_BUTTON_SELECTORS = [
+    '.project-manager-open-button',
+    '.project-manager-rename-button',
+    '.project-manager-delete-button',
+  ]
 
   constructor() {
     this.openButton.onclick = () => void this.open()
@@ -33,6 +39,7 @@ export class ProjectModalController {
   }
 
   private async refresh() {
+    this.capturePendingFocus()
     const activeProject = await ProjectManager.getActiveProject()
     const projects = await ProjectManager.getProjects()
     const projectIdToEdit = this.projectIdToEditAfterRefresh
@@ -43,6 +50,7 @@ export class ProjectModalController {
       const emptyState = document.createElement('p')
       emptyState.innerText = 'No projects yet.'
       this.listContainer.appendChild(emptyState)
+      this.restorePendingFocus()
       return
     }
 
@@ -51,16 +59,56 @@ export class ProjectModalController {
         this.appendProjectRow(project, project.id == activeProject.id, project.id == projectIdToEdit),
       ),
     )
+    this.restorePendingFocus()
+  }
+
+  private capturePendingFocus() {
+    const focused = document.activeElement
+    if (this.pendingFocus !== null || !(focused instanceof HTMLElement) || !this.listContainer.contains(focused)) {
+      return
+    }
+    const row = focused.closest<HTMLElement>('.project-manager-row')
+    const selector = ProjectModalController.ROW_BUTTON_SELECTORS.find((s) => focused.matches(s))
+    if (!row || !selector) {
+      return
+    }
+    const projectId = row.dataset.projectId === undefined ? undefined : Number(row.dataset.projectId)
+    this.pendingFocus = { projectId, rowIndex: Array.from(this.listContainer.children).indexOf(row), selector }
+  }
+
+  private restorePendingFocus() {
+    const pending = this.pendingFocus
+    this.pendingFocus = null
+    if (!pending) {
+      return
+    }
+    const rows = Array.from(this.listContainer.querySelectorAll<HTMLElement>('.project-manager-row'))
+    let row =
+      pending.projectId === undefined ? undefined : rows.find((r) => r.dataset.projectId == String(pending.projectId))
+    if (!row && rows.length > 0) {
+      row = rows[Math.min(Math.max(pending.rowIndex, 0), rows.length - 1)]
+    }
+    if (!row) {
+      this.newProjectButton.focus()
+      return
+    }
+    let target = row.querySelector<HTMLButtonElement>(pending.selector)
+    if (!target || target.disabled) {
+      target = row.querySelector<HTMLButtonElement>('button:not(:disabled)')
+    }
+    target?.focus()
   }
 
   private async appendProjectRow(project: Project, isActiveProject: boolean, editImmediately: boolean) {
     const row = document.createElement('div')
     row.className = isActiveProject ? 'project-manager-row project-manager-row-active' : 'project-manager-row'
+    row.dataset.projectId = String(project.id)
 
     const nameElement = document.createElement('div')
     nameElement.className = 'project-manager-name'
     const titleElement = document.createElement('div')
     titleElement.className = 'project-manager-title-text'
+    titleElement.id = `project-title-${project.id}`
     titleElement.innerText = project.title
     nameElement.appendChild(titleElement)
     if (isActiveProject) {
@@ -88,19 +136,32 @@ export class ProjectModalController {
     actionsElement.className = 'project-manager-actions'
 
     const openButton = document.createElement('button')
-    openButton.className = 'bordered clickable project-manager-action-button'
+    openButton.className = 'bordered clickable project-manager-action-button project-manager-open-button'
     openButton.innerText = isActiveProject ? 'Open' : 'Open project'
     openButton.type = 'button'
     openButton.disabled = isActiveProject
     openButton.onclick = () => void this.openProject(project, openButton)
+    openButton.setAttribute('aria-describedby', titleElement.id)
+
+    const renameButton = document.createElement('button')
+    renameButton.className = 'bordered clickable project-manager-action-button project-manager-rename-button'
+    renameButton.type = 'button'
+    renameButton.innerText = 'Rename'
+    renameButton.setAttribute('aria-describedby', titleElement.id)
+    renameButton.onclick = () => {
+      titleEditStart = project.title
+      this.makeEditable(titleElement)
+      this.selectElementText(titleElement)
+    }
 
     const deleteButton = document.createElement('button')
     deleteButton.className = 'bordered clickable project-manager-action-button project-manager-delete-button'
     deleteButton.innerText = 'Delete'
     deleteButton.type = 'button'
+    deleteButton.setAttribute('aria-describedby', titleElement.id)
     deleteButton.onclick = () => void this.deleteProject(project, deleteButton)
 
-    actionsElement.append(openButton, deleteButton)
+    actionsElement.append(openButton, renameButton, deleteButton)
     row.append(nameElement, metaGrid, actionsElement)
 
     this.listContainer.appendChild(row)
@@ -164,14 +225,24 @@ export class ProjectModalController {
     }
 
     try {
+      const row = button.closest('.project-manager-row')
+      this.pendingFocus = {
+        rowIndex: row ? Array.from(this.listContainer.children).indexOf(row) : 0,
+        selector: '.project-manager-delete-button',
+      }
       button.disabled = true
       const activeProject = await ProjectManager.getActiveProject()
-      if (project.id == activeProject.id) {
+      const isActive = project.id == activeProject.id
+      if (isActive) {
         await AudioControl.stop()
         editorHistory.clear()
       }
       await ProjectManager.deleteProject(project)
+      if (!isActive) {
+        await this.refresh()
+      }
     } catch (error) {
+      this.pendingFocus = null
       this.showError(error)
       button.disabled = false
     }
@@ -180,17 +251,19 @@ export class ProjectModalController {
   private makeEditable(element: HTMLElement) {
     element.contentEditable = 'true'
     element.classList.add('project-manager-title-editing')
+    element.setAttribute('role', 'textbox')
+    element.setAttribute('aria-label', 'Project name')
     element.focus()
     element.onkeydown = (event) => {
-      if (event.key == 'Enter') {
-        event.preventDefault()
-        element.blur()
+      if (event.key != 'Enter' && event.key != 'Escape') {
+        return
       }
+      event.preventDefault()
       if (event.key == 'Escape') {
-        event.preventDefault()
         element.innerText = element.dataset.editStart ?? element.innerText
-        element.blur()
       }
+      element.blur()
+      element.closest('.project-manager-row')?.querySelector<HTMLElement>('.project-manager-rename-button')?.focus()
     }
     element.dataset.editStart = element.innerText
   }
@@ -202,6 +275,8 @@ export class ProjectModalController {
     element.contentEditable = 'false'
     element.classList.remove('project-manager-title-editing')
     element.onkeydown = null
+    element.removeAttribute('role')
+    element.removeAttribute('aria-label')
     delete element.dataset.editStart
 
     const newTitle = element.innerText.trim()

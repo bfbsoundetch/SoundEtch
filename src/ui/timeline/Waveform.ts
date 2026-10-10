@@ -2,9 +2,19 @@ import { Track } from '../../project/Track'
 import { ClipView, cloneClipViewWithNewStartPosition } from '../../project/ClipView'
 import { TrackListItemController } from './TrackListItemController'
 import { TrackListController } from './TrackListController'
-import { ContextMenuController, ContextMenuItem } from '../../ui/ContextMenuController'
+import {
+  ContextMenuController,
+  ContextMenuItem,
+  ContextMenuSeparator,
+  type ContextMenuTarget,
+} from '../../ui/ContextMenuController'
 import { SummaryGenerator } from '../../project/SummaryGenerator'
-import { ReplaceClipViewCommand, SetTrackClipViewsCommand, clipViewsEqual } from '../undo/UndoableActions'
+import {
+  RemoveClipViewCommand,
+  ReplaceClipViewCommand,
+  SetTrackClipViewsCommand,
+  clipViewsEqual,
+} from '../undo/UndoableActions'
 import { TimelineRegionController } from './TimelineRegionController'
 import { createSvgIcon } from '../SvgIcon'
 import type { TrackDisplayMode } from './TrackDisplayMode'
@@ -17,6 +27,11 @@ import { getSpectrogramScaleTicks } from './spectrogram/SpectrogramTiling'
 import { spectrogramSettings } from './spectrogram/SpectrogramSettings'
 import { TRANSCRIPTION_LANE_HEIGHT, TranscriptionOverlayController } from './TranscriptionOverlay'
 import { getTrackTranscriptEntries, type TrackTranscriptEntry } from '../transcript/TrackTranscript'
+import { NotificationsController } from '../NotificationsController'
+import { announce } from '../LiveAnnouncer'
+import { TimeUtils } from '../../global/TimeUtils'
+
+let nextClipMenuId = 0
 
 /** Handles displaying a track's waveform. */
 export class Waveform extends TrackListItemController {
@@ -52,6 +67,7 @@ export class Waveform extends TrackListItemController {
   private currentDisplayMode: TrackDisplayMode = 'waveform'
   private spectrogramScaleLayoutKey = ''
   private readonly removeSpectrogramSettingsListener: () => void
+  private readonly clipContextMenu: ContextMenuController
 
   getHeight() {
     return this.height
@@ -114,6 +130,7 @@ export class Waveform extends TrackListItemController {
     })
 
     this.transcriptionLaneElement.classList.add('transcription-lane')
+    this.transcriptionLaneElement.setAttribute('aria-hidden', 'true')
     this.topSvgElement.appendChild(this.transcriptionLaneElement)
     this.topSvgElement.appendChild(this.clipViewGroupElement)
     this.topSvgElement.appendChild(this.topGroupElement)
@@ -123,13 +140,16 @@ export class Waveform extends TrackListItemController {
     this.axesPathElement.style.fill = 'none'
     this.topSvgElement.appendChild(this.axesPathElement)
     this.axesPathElement.classList.add('waveform-axes-path')
+    this.axesPathElement.setAttribute('aria-hidden', 'true')
 
     this.channelSeparatorPathElement.style.strokeWidth = '1'
     this.channelSeparatorPathElement.style.stroke = 'currentColor'
     this.channelSeparatorPathElement.style.fill = 'none'
+    this.channelSeparatorPathElement.setAttribute('aria-hidden', 'true')
     this.topSvgElement.appendChild(this.channelSeparatorPathElement)
     this.topSvgElement.appendChild(this.aboveClipViewGroupElement)
     this.spectrogramScaleGroupElement.classList.add('spectrogram-scale')
+    this.spectrogramScaleGroupElement.setAttribute('aria-hidden', 'true')
     this.topSvgElement.appendChild(this.spectrogramScaleGroupElement)
     this.removeSpectrogramSettingsListener = spectrogramSettings.addChangeListener(() => {
       if (this.currentDisplayMode === 'spectrogram') this.drawSpectrogramScale()
@@ -137,6 +157,183 @@ export class Waveform extends TrackListItemController {
     this.resizeObserver = new ResizeObserver(() => this.resize())
     this.resizeObserver.observe(this.div)
     if (initialDisplayMode === 'spectrogram') this.setDisplayMode(initialDisplayMode)
+    this.clipContextMenu = this.createClipContextMenu()
+  }
+
+  openClipContextMenu(x: number, y: number, target?: ContextMenuTarget): void {
+    this.clipContextMenu.draw(x, y, target)
+  }
+
+  clipViewAt(sample: number): ClipView | null {
+    return (
+      this.track.clipViews.find((clipView) => clipView.startPosition <= sample && sample < clipView.getEndPosition()) ??
+      null
+    )
+  }
+
+  private createClipContextMenu(): ContextMenuController {
+    const withClip = (action: (clipView: ClipView, sample: number) => unknown) => (_: number, sample: number) => {
+      const clipView = this.clipViewAt(sample)
+      if (clipView === null) return
+      return action(clipView, sample)
+    }
+    return new ContextMenuController(
+      `clip-contextmenu-${++nextClipMenuId}`,
+      'Clip actions',
+      this.trackListController.pointerStateManager,
+      new ContextMenuItem(
+        'Split here',
+        withClip((clipView, sample) => this.splitClipView(clipView, sample)),
+      ),
+      new ContextMenuItem(
+        'Move clip to time…',
+        withClip((clipView) => this.openMoveClipDialog(clipView)),
+      ),
+      new ContextMenuItem(
+        'Set clip start…',
+        withClip((clipView) => this.openClipStartDialog(clipView)),
+      ),
+      new ContextMenuItem(
+        'Set clip end…',
+        withClip((clipView) => this.openClipEndDialog(clipView)),
+      ),
+      new ContextMenuItem(
+        'Move to new track',
+        withClip((clipView) => {
+          void this.trackListController.transferClipViewToNewTrack(this.track, clipView, 0)
+        }),
+      ),
+      new ContextMenuItem(
+        'Select clip',
+        withClip((clipView) => this.trackListController.selectClipView(clipView, this)),
+      ),
+      new ContextMenuItem(
+        'Clip info…',
+        withClip((clipView) => (window as any).clipManagerController?.openClipInfo?.(clipView.clip)),
+      ),
+      new ContextMenuSeparator(),
+      new ContextMenuItem(
+        'Delete clip',
+        withClip(async (clipView) => {
+          await this.trackListController.history.execute(new RemoveClipViewCommand(clipView, this.track))
+          announce(`Deleted clip ${clipView.clip.name}`)
+        }),
+      ),
+    )
+  }
+
+  private samplesToMs(samples: number): number {
+    return Math.round((samples * 1000) / this.sampleRate)
+  }
+
+  private msToSamples(ms: number): number {
+    return Math.round((ms * this.sampleRate) / 1000)
+  }
+
+  private positionString(samples: number): string {
+    return TimeUtils.positionToString(samples, this.sampleRate, true)
+  }
+
+  private async splitClipView(clipView: ClipView, position: number) {
+    const clipViewIndex = this.track.clipViews.indexOf(clipView)
+    if (clipViewIndex < 0) {
+      return
+    }
+    if (position <= clipView.startPosition || position >= clipView.getEndPosition()) {
+      return
+    }
+    const firstLength = position - clipView.startPosition
+    const firstNewClipView = new ClipView(clipView.clip, clipView.offset, clipView.startPosition, firstLength)
+    const secondNewClipView = new ClipView(
+      clipView.clip,
+      clipView.offset + firstLength,
+      position,
+      clipView.length - firstLength,
+    )
+    const oldClipViews = this.track.clipViews.slice()
+    const newClipViews = oldClipViews.slice()
+    newClipViews.splice(clipViewIndex, 1, firstNewClipView, secondNewClipView)
+    await this.trackListController.history.execute(new SetTrackClipViewsCommand(this.track, oldClipViews, newClipViews))
+    announce('Split clip')
+  }
+
+  private openMoveClipDialog(clipView: ClipView) {
+    this.trackListController.openTimeEntry({
+      title: 'Move clip to time',
+      submitLabel: 'Move',
+      initialMs: this.samplesToMs(clipView.startPosition),
+      onSubmit: (ms) => {
+        const newStart = this.msToSamples(ms)
+        void this.replaceClipView(
+          clipView,
+          new ClipView(clipView.clip, clipView.offset, newStart, clipView.viewLength),
+          'move clip view',
+          `Moved clip to ${TimeUtils.toSpokenString(this.samplesToMs(newStart))}`,
+        )
+      },
+    })
+  }
+
+  private openClipStartDialog(clipView: ClipView) {
+    this.trackListController.openTimeEntry({
+      title: 'Set clip start',
+      submitLabel: 'Set',
+      initialMs: this.samplesToMs(clipView.startPosition),
+      onSubmit: (ms) => {
+        const newStart = this.msToSamples(ms)
+        const shift = newStart - clipView.startPosition
+        if (shift < -clipView.offset || shift >= clipView.length) {
+          const min = this.positionString(clipView.startPosition - clipView.offset)
+          const max = this.positionString(clipView.getEndPosition() - 1)
+          NotificationsController.showShortDurationMessage(`The clip can start between ${min} and ${max}.`)
+          return
+        }
+        void this.replaceClipView(
+          clipView,
+          new ClipView(clipView.clip, clipView.offset + shift, clipView.startPosition + shift, clipView.length - shift),
+          'resize clip view',
+          `Clip starts at ${TimeUtils.toSpokenString(this.samplesToMs(newStart))}`,
+        )
+      },
+    })
+  }
+
+  private openClipEndDialog(clipView: ClipView) {
+    this.trackListController.openTimeEntry({
+      title: 'Set clip end',
+      submitLabel: 'Set',
+      initialMs: this.samplesToMs(clipView.getEndPosition()),
+      onSubmit: (ms) => {
+        const newEnd = this.msToSamples(ms)
+        const newLength = newEnd - clipView.startPosition
+        const maxLength = clipView.clip.length - clipView.offset
+        if (newLength <= 0 || newLength > maxLength) {
+          const min = this.positionString(clipView.startPosition + 1)
+          const max = this.positionString(clipView.startPosition + maxLength)
+          NotificationsController.showShortDurationMessage(`The clip can end between ${min} and ${max}.`)
+          return
+        }
+        void this.replaceClipView(
+          clipView,
+          new ClipView(clipView.clip, clipView.offset, clipView.startPosition, newLength),
+          'resize clip view',
+          `Clip ends at ${TimeUtils.toSpokenString(this.samplesToMs(newEnd))}`,
+        )
+      },
+    })
+  }
+
+  private async replaceClipView(old: ClipView, replacement: ClipView, description: string, announcement: string) {
+    const index = this.track.clipViews.indexOf(old)
+    if (index < 0 || clipViewsEqual(old, replacement)) {
+      return
+    }
+    if (!this.track.canReplaceClipView(index, replacement)) {
+      NotificationsController.showShortDurationMessage('That would overlap another clip on this track.')
+      return
+    }
+    await this.trackListController.history.execute(new ReplaceClipViewCommand(this.track, old, replacement, description))
+    announce(announcement)
   }
 
   get displayMode(): TrackDisplayMode {
@@ -209,6 +406,7 @@ export class Waveform extends TrackListItemController {
     if (this.spectrogramDrawFrame !== 0) cancelAnimationFrame(this.spectrogramDrawFrame)
     this.spectrogramDrawFrame = 0
     this.removeSpectrogramSettingsListener()
+    this.clipContextMenu.remove()
     this.resizeObserver.disconnect()
     this.trackRenderer?.destroy()
     this.trackRenderer = null
@@ -539,7 +737,7 @@ export class ClipViewController extends TrackListItemController {
   private readonly headerTitleDivElement = document.createElement('div')
   private readonly endCrossFadeHeaderTitleDivElement = document.createElement('div')
 
-  private readonly waveformContextMenu: ContextMenuController
+  private readonly infoButton = document.createElement('button')
   private pathElementTranslation = 0
   private fullClipPreview = false
   private readonly transcriptionOverlay: TranscriptionOverlayController
@@ -562,6 +760,8 @@ export class ClipViewController extends TrackListItemController {
 
     this.headerTitleDivElement.innerText = this.clipView.clip.name
     this.headerTitleElement.appendChild(this.headerTitleDivElement)
+    this.headerTitleElement.setAttribute('aria-hidden', 'true')
+    this.endCrossFadeHeaderTitleElement.setAttribute('aria-hidden', 'true')
     this.headerTitleDivElement.style.overflow = 'hidden'
     this.headerTitleDivElement.style.textOverflow = 'clip'
     this.headerTitleDivElement.style.whiteSpace = 'nowrap'
@@ -614,7 +814,7 @@ export class ClipViewController extends TrackListItemController {
     this.endCrossFadeHeaderTitleElement.height.baseVal.value = Waveform.HEADER_HEIGHT
     this.endCrossFadeHeaderTitleElement.style.pointerEvents = 'none'
 
-    const infoButton = document.createElement('button')
+    const infoButton = this.infoButton
     infoButton.type = 'button'
     infoButton.className = 'clip-view-info-button clickable'
     infoButton.title = 'Clip info'
@@ -665,18 +865,6 @@ export class ClipViewController extends TrackListItemController {
     this.startCrossFadePathElement.style.opacity = '.4'
     this.endCrossFadePathElement.style.opacity = '.4'
 
-    this.waveformContextMenu = new ContextMenuController(
-      `clip-view-${clipViewIndex}-contextmenu`,
-      this.trackListController.pointerStateManager,
-      new ContextMenuItem('Split', (_, sample) => this.splitThisClipView(sample)),
-      new ContextMenuItem('Clip info...', () => {
-        ;(window as any).clipManagerController?.openClipInfo?.(this.clipView.clip)
-      }),
-      new ContextMenuItem('______', () => {}, false),
-      new ContextMenuItem('Delete', () => {
-        console.error(clipViewIndex)
-      }),
-    )
     this.headerElement.addEventListener('mousedown', (event) => {
       if (event.button == 0 && event.buttons == 1) {
         this.startClipViewMove(this, event)
@@ -690,7 +878,7 @@ export class ClipViewController extends TrackListItemController {
     this.rectElement.addEventListener('contextmenu', (event) => {
       event.preventDefault()
       event.stopPropagation()
-      this.waveformContextMenu.draw(event.clientX, event.clientY)
+      this.waveform.openClipContextMenu(event.clientX, event.clientY)
     })
     this.rectElement.addEventListener('mouseenter', (mouseEvent) => {
       this.trackListController.pointerStateManager.setPointedOverClipView(this)
@@ -775,32 +963,9 @@ export class ClipViewController extends TrackListItemController {
     this.trackListController.pointerStateManager.startMovingClipView(this, startMouseEvent.clientX)
   }
 
-  private async splitThisClipView(position: number) {
-    const clipView = this.waveform.track.clipViews[this.clipViewIndex]
-    if (!clipView) {
-      return
-    }
-    if (position <= clipView.startPosition || position >= clipView.getEndPosition()) {
-      return
-    }
-    const firstLength = position - clipView.startPosition
-    const firstNewClipView = new ClipView(clipView.clip, clipView.offset, clipView.startPosition, firstLength)
-    const secondNewClipView = new ClipView(
-      clipView.clip,
-      clipView.offset + firstLength,
-      position,
-      clipView.length - firstLength,
-    )
-    const oldClipViews = this.waveform.track.clipViews.slice()
-    const newClipViews = oldClipViews.slice()
-    newClipViews.splice(this.clipViewIndex, 1, firstNewClipView, secondNewClipView)
-    await this.trackListController.history.execute(
-      new SetTrackClipViewsCommand(this.waveform.track, oldClipViews, newClipViews),
-    )
-  }
-
   drawBoundingBox(startSample: number, endSample: number) {
     this.headerTitleDivElement.innerText = this.clipView.clip.name
+    this.infoButton.setAttribute('aria-label', `View info for ${this.clipView.clip.name}`)
     this.rectElement.height.baseVal.value = this.waveformHeight
     this.leftHandle.y2.baseVal.value = this.waveform.transcriptionLaneTop
     this.rightHandle.y2.baseVal.value = this.waveform.transcriptionLaneTop
@@ -842,6 +1007,8 @@ export class ClipViewController extends TrackListItemController {
     this.headerTitleElement.width.baseVal.value = Math.max(0, width - Waveform.HEADER_HEIGHT)
     this.headerInfoElement.x.baseVal.value = x + this.headerTitleElement.clientWidth
     this.headerInfoElement.width.baseVal.value = Math.min(Waveform.HEADER_HEIGHT, width)
+    const infoX = this.headerInfoElement.x.baseVal.value
+    this.infoButton.tabIndex = infoX < 0 || infoX > this.waveform.width - Waveform.HEADER_HEIGHT ? -1 : 0
   }
 
   private drawTranscriptionOverlay(viewportStartSample: number, viewportEndSample: number): void {
@@ -987,7 +1154,6 @@ export class ClipViewController extends TrackListItemController {
     this.transcriptionOverlay.remove()
     this.clipElementsGroup.remove()
     this.handleElementsGroup.remove()
-    this.waveformContextMenu.remove()
   }
 
   resize() {

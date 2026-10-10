@@ -121,7 +121,9 @@ export class NoiseReductionEffect implements EffectModule {
     const updateDraft = (parameters: Readonly<DeepFilterParameters>) => {
       draft = { ...parameters }
       for (const control of controls) {
-        inputs.get(control.key)!.value = String(draft[control.key])
+        const input = inputs.get(control.key)!
+        input.value = String(draft[control.key])
+        input.setAttribute('aria-valuetext', control.display(draft[control.key]))
         outputs.get(control.key)!.textContent = control.display(draft[control.key])
       }
       applyButton.disabled = applying || parametersEqual(draft, effect.state)
@@ -135,16 +137,20 @@ export class NoiseReductionEffect implements EffectModule {
       const value = document.createElement('span')
       value.className = 'effect-parameter-value'
       const output = document.createElement('output')
+      output.setAttribute('aria-hidden', 'true')
       const input = document.createElement('input')
       input.type = 'range'
       input.min = String(control.minimum)
       input.max = String(control.maximum)
       input.step = String(control.step)
+      input.setAttribute('aria-label', control.label)
+      input.setAttribute('aria-valuetext', control.display(draft[control.key]))
       input.addEventListener(
         'input',
         () => {
           draft[control.key] = Number(input.value)
           output.textContent = control.display(draft[control.key])
+          input.setAttribute('aria-valuetext', control.display(draft[control.key]))
           applyButton.disabled = applying || parametersEqual(draft, this.state)
         },
         { signal: context.signal },

@@ -4,7 +4,7 @@ export class MediaStreamButtonController {
   private readonly iconSvg: SVGSVGElement
 
   constructor(
-    mainElement: HTMLElement | SVGSVGElement,
+    private readonly mainElement: HTMLElement | SVGSVGElement,
     private readonly mediaType: 'audio' | 'video',
     isScreenShare: boolean,
   ) {
@@ -50,6 +50,7 @@ export class MediaStreamButtonController {
   }
 
   private toggleSlashIcon(add: boolean) {
+    this.mainElement.setAttribute('aria-pressed', String(!add))
     const uses = this.iconSvg.getElementsByTagName('use')
     if (!add && uses.length == 2) {
       this.iconSvg.replaceChildren(uses.item(0)!)

@@ -1,6 +1,7 @@
 import { AudioInputs } from '../audioinputs/AudioInputs'
 import { AudioControl, AudioState } from '../audiocontext/AudioControl'
 import type { RecordingActivity } from '../remote/RemoteMediaClient3'
+import { announce } from './LiveAnnouncer'
 
 export class RecordButtonController {
   private static readonly COUNTDOWN_VALUES = ['3', '2', '1']
@@ -38,7 +39,8 @@ export class RecordButtonController {
     this.button.getElementsByTagName('span')[0].innerText = hasAvailableAudioInputs
       ? 'Record'
       : 'Nothing to record. Enable a mic or screen share.'
-    this.button.disabled = !hasAvailableAudioInputs
+    this.button.disabled = false
+    this.button.setAttribute('aria-disabled', String(!hasAvailableAudioInputs))
     this.button.className = `${this.baseClassName} tooltipped${hasAvailableAudioInputs ? ' clickable' : ' record-button-unavailable'}`
     this.button.onclick = hasAvailableAudioInputs
       ? this.hasRemoteAudioInputs()
@@ -58,6 +60,7 @@ export class RecordButtonController {
     this.isCountingDown = false
     this.recordingActivityListener?.({ state: 'idle', countdownId: countdownId })
     this.hideCountdown()
+    announce('Recording countdown canceled')
     if (this.isStoppedState(AudioControl.getState())) {
       this.configureStoppedState()
     }
@@ -70,6 +73,7 @@ export class RecordButtonController {
     }
 
     this.isCountingDown = true
+    announce(`Recording starts in ${RecordButtonController.COUNTDOWN_VALUES.length} seconds`)
     const countdownToken = ++this.countdownToken
     this.button.disabled = false
     this.button.className = `${this.baseClassName} record-button-counting-down`
@@ -85,6 +89,7 @@ export class RecordButtonController {
         return
       }
       this.countdownElement.innerText = countdownValue
+      this.button.setAttribute('aria-label', `Recording starts in ${countdownValue}`)
       await new Promise((resolve) => window.setTimeout(resolve, 1000))
     }
 
@@ -135,6 +140,7 @@ export class RecordButtonController {
   private hideCountdown() {
     this.button.classList.remove('record-button-counting-down')
     this.countdownElement.innerText = ''
+    this.button.removeAttribute('aria-label')
   }
 
   private isStoppedState(state: AudioState) {

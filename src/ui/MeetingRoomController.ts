@@ -9,6 +9,7 @@ import { LocalMediaStreams } from '../mediastreams/LocalMediaStreams'
 import { Logger } from '../global/Logger'
 import { AudioControl, AudioState } from '../audiocontext/AudioControl'
 import { RecordButtonController } from './RecordButtonController'
+import { announce } from './LiveAnnouncer'
 
 enum VideoLayout {
   SPOTLIGHT = 'spotlight',
@@ -22,6 +23,7 @@ class VideoContainer {
   private recordingActivityToken = 0
   private recordingActivityTimeout: number | null = null
   private recordingActivityKey: string | null = null
+  private recordingState: RecordingActivity['state'] = 'idle'
   isActive = false
 
   constructor(
@@ -34,9 +36,25 @@ class VideoContainer {
       this.vidElement.play()
     }
     this.divElement.onclick = () => meetingRoomController.spotlightElement(this)
+    this.divElement.tabIndex = 0
+    this.divElement.setAttribute('role', 'button')
+    this.divElement.addEventListener('keydown', (event) => {
+      if (event.key === 'Enter' || event.key === ' ') {
+        event.preventDefault()
+        meetingRoomController.spotlightElement(this)
+      }
+    })
     this.recordingActivityElement.className = 'meeting-recording-activity'
     this.recordingActivityElement.style.display = 'none'
     this.divElement.appendChild(this.recordingActivityElement)
+  }
+
+  setName(name: string | null) {
+    if (name) {
+      this.divElement.setAttribute('aria-label', `Spotlight ${name}`)
+    } else {
+      this.divElement.removeAttribute('aria-label')
+    }
   }
 
   startSpeakerMeter(audioInput: AudioInput) {
@@ -67,6 +85,19 @@ class VideoContainer {
     }
 
     this.recordingActivityKey = recordingActivityKey
+    const previousState = this.recordingState
+    this.recordingState = recordingActivity.state
+    switch (recordingActivity.state) {
+      case 'countdown':
+        announce(`${username} starts recording in ${Math.ceil(recordingActivity.durationMs / 1000)} seconds`)
+        break
+      case 'recording':
+        announce(`${username} is recording`)
+        break
+      case 'idle':
+        if (previousState !== 'idle') announce(`${username} stopped recording`)
+        break
+    }
     this.clearRecordingActivityTimeout()
     const recordingActivityToken = ++this.recordingActivityToken
 
@@ -85,6 +116,7 @@ class VideoContainer {
 
   clearRecordingActivity() {
     this.recordingActivityKey = null
+    this.recordingState = 'idle'
     this.clearRecordingActivityTimeout()
     ++this.recordingActivityToken
     this.hideRecordingActivity()
@@ -136,7 +168,7 @@ class VideoContainer {
 
 export class MeetingRoomController {
   private videoLayout = VideoLayout.GRID
-  private usernameForm = document.getElementById('username-form') as HTMLFormElement
+  private usernameForm = document.getElementById('username-form') as HTMLInputElement
   private enterMeetingButton = document.getElementById('enter-meeting-room-button') as HTMLButtonElement
   private meetingRecordButton = document.getElementById('meeting-record-button') as HTMLButtonElement
   private localRecordingActivity: RecordingActivity = { state: 'idle', countdownId: null }
@@ -153,7 +185,10 @@ export class MeetingRoomController {
     'MeetingUsername',
     this.usernameForm.parentElement as HTMLDivElement,
   )
-  private readonly enterMeetingErrorBubble = new ErrorBubbleController('EnterMeetingButton', this.enterMeetingButton)
+  private readonly enterMeetingErrorBubble = new ErrorBubbleController(
+    'EnterMeetingButton',
+    this.enterMeetingButton.parentElement as HTMLElement,
+  )
   private readonly micButtonController: MediaStreamButtonController
   private readonly videoButtonController: MediaStreamButtonController
   private readonly logger = new Logger('MeetingRoomController')
@@ -204,6 +239,7 @@ export class MeetingRoomController {
     this.applyVideoLayout()
     this.selfVideoContainer.isActive = true
     this.guestContainers.forEach((c) => (c.isActive = false))
+    this.updateContainerInertness()
 
     LocalMediaStreams.registerAVDeviceListener((added, track) => {
       if (track.kind == 'video') {
@@ -237,6 +273,64 @@ export class MeetingRoomController {
       }
     })
     this.updateLayoutSelectionUi()
+    this.selfVideoContainer.setName('your video')
+    this.screenVideoContainer.setName('screen share')
+    this.usernameForm.addEventListener('input', () => {
+      this.usernameForm.removeAttribute('aria-invalid')
+      this.usernameForm.setAttribute('aria-describedby', 'username-form-hint')
+      this.usernameErrorBubble.hide()
+    })
+
+    const layoutMenu = document.getElementById('meeting-layout-menu')!
+    const settingsButton = document.getElementById('meeting-settings-button')!
+    const options = Array.from(layoutMenu.querySelectorAll<HTMLButtonElement>('.meeting-layout-option'))
+    layoutMenu.addEventListener('keydown', (event) => {
+      const current = options.indexOf(document.activeElement as HTMLButtonElement)
+      let next: number | null = null
+      switch (event.key) {
+        case 'ArrowDown':
+          next = (current + 1) % options.length
+          break
+        case 'ArrowUp':
+          next = (current - 1 + options.length) % options.length
+          break
+        case 'Home':
+          next = 0
+          break
+        case 'End':
+          next = options.length - 1
+          break
+        case 'Escape':
+          event.preventDefault()
+          this.closeLayoutMenu()
+          settingsButton.focus()
+          return
+      }
+      if (next !== null) {
+        event.preventDefault()
+        options[next]?.focus()
+      }
+    })
+    settingsButton.addEventListener('keydown', (event) => {
+      if (event.key !== 'ArrowDown' && event.key !== 'ArrowUp') return
+      event.preventDefault()
+      if (!layoutMenu.classList.contains('open')) this.toggleLayoutMenu()
+      options[event.key === 'ArrowDown' ? 0 : options.length - 1]?.focus()
+    })
+    document.getElementById('meeting-link-menu')!.addEventListener('keydown', (event) => {
+      if (event.key !== 'Escape') return
+      event.preventDefault()
+      this.closeLinkMenu()
+      document.getElementById('open-meeting-link-button')!.focus()
+    })
+    const layoutSelector = document.getElementById('meeting-layout-selector')!
+    layoutSelector.addEventListener('focusout', (event) => {
+      if (!layoutSelector.contains(event.relatedTarget as Node | null)) this.closeLayoutMenu()
+    })
+    const linkSelector = document.getElementById('meeting-link-selector')!
+    linkSelector.addEventListener('focusout', (event) => {
+      if (!linkSelector.contains(event.relatedTarget as Node | null)) this.closeLinkMenu()
+    })
   }
 
   async createMeeting(): Promise<boolean> {
@@ -246,7 +340,7 @@ export class MeetingRoomController {
     }
     const username = this.usernameForm.value
     if (!username || (username as string).trim().length == 0) {
-      this.usernameErrorBubble.showError('Please enter your name', 2000)
+      this.showUsernameRequired()
       return false
     }
     this.remoteMediaClient = new RemoteMediaClient3(username)
@@ -273,7 +367,7 @@ export class MeetingRoomController {
       }
       const username = this.usernameForm.value
       if (!username || (username as string).trim().length == 0) {
-        this.usernameErrorBubble.showError('Please enter your name', 2000)
+        this.showUsernameRequired()
         return false
       }
 
@@ -291,6 +385,13 @@ export class MeetingRoomController {
     return false
   }
 
+  private showUsernameRequired() {
+    this.usernameForm.setAttribute('aria-invalid', 'true')
+    this.usernameForm.setAttribute('aria-describedby', 'username-form-hint error-bubble-MeetingUsername')
+    this.usernameErrorBubble.showError('Please enter your name')
+    this.usernameForm.focus()
+  }
+
   async amInRoom() {
     return this.remoteMediaClient?.amInRoom() ?? false
   }
@@ -302,6 +403,9 @@ export class MeetingRoomController {
     layoutMenu.classList.toggle('open', shouldOpen)
     const layoutButton = document.getElementById('meeting-settings-button')!
     layoutButton.setAttribute('aria-expanded', shouldOpen ? 'true' : 'false')
+    if (shouldOpen) {
+      layoutMenu.querySelector<HTMLElement>('[aria-checked="true"]')?.focus()
+    }
   }
 
   closeLayoutMenu() {
@@ -325,6 +429,7 @@ export class MeetingRoomController {
   selectVideoLayout(layout: VideoLayout) {
     this.videoLayout = layout
     this.closeLayoutMenu()
+    document.getElementById('meeting-settings-button')!.focus()
     this.applyVideoLayout()
   }
 
@@ -416,6 +521,7 @@ export class MeetingRoomController {
     }
     this.firstContainer.divElement.classList.add('first-meeting-container')
     this.updateLayoutSelectionUi()
+    this.updateContainerInertness()
   }
 
   spotlightElement(videoContainer: VideoContainer) {
@@ -427,6 +533,13 @@ export class MeetingRoomController {
     videoContainer.divElement.style.top = ''
     videoContainer.divElement.style.left = ''
     this.firstContainer = videoContainer
+    this.updateContainerInertness()
+  }
+
+  private updateContainerInertness() {
+    for (const c of this.containers()) {
+      c.divElement.inert = !c.isActive || c.divElement.classList.contains('meeting-hidden')
+    }
   }
 
   disconnect() {
@@ -486,6 +599,7 @@ export class MeetingRoomController {
           this.guestContainers[i].vidElement.load()
         }
         this.guestContainers[i].vidElement.poster = this.getSvgPosterForUser(state.members[i].username, false)
+        this.guestContainers[i].setName(state.members[i].username)
         this.guestContainers[i].setRecordingActivity(state.members[i].username, state.members[i].recordingActivity)
         const remoteAudioInput = AudioInputs.getRemoteStreamForUser(state.members[i].peerId, false)
         if (remoteAudioInput && remoteAudioInput.isActive) {
@@ -497,6 +611,7 @@ export class MeetingRoomController {
       } else {
         this.guestContainers[i].vidElement.srcObject = null
         this.guestContainers[i].vidElement.poster = ''
+        this.guestContainers[i].setName(null)
         this.guestContainers[i].stopSpeakerMeter()
         this.guestContainers[i].clearRecordingActivity()
         this.guestContainers[i].isActive = false
@@ -507,6 +622,15 @@ export class MeetingRoomController {
       this.firstContainer = this.screenVideoContainer.isActive ? this.screenVideoContainer : this.selfVideoContainer
     }
 
+    const oldPeerIds = new Set(this.currentState.members.map((m) => m.peerId))
+    const newPeerIds = new Set(state.members.map((m) => m.peerId))
+    const messages = [
+      ...state.members.filter((m) => !oldPeerIds.has(m.peerId)).map((m) => `${m.username} joined the meeting`),
+      ...this.currentState.members
+        .filter((m) => !newPeerIds.has(m.peerId))
+        .map((m) => `${m.username} left the meeting`),
+    ]
+    if (messages.length > 0) announce(messages.join('. '))
     this.currentState = { ...state, members: [...state.members] }
     this.applyVideoLayout()
     this.updateMeetingLinkUi()
@@ -550,6 +674,10 @@ export class MeetingRoomController {
       this.enterMeetingButton.onclick = () => this.createMeeting()
       this.enterMeetingButton.innerText = 'Create Meeting'
     }
+    if ((document.getElementById('meeting-room') as HTMLDialogElement).open) {
+      announce('Disconnected from the meeting')
+      this.usernameForm.focus()
+    }
   }
 
   private setUiForConnectedState() {
@@ -571,6 +699,8 @@ export class MeetingRoomController {
     this.closeLinkMenu()
     this.applyVideoLayout()
     this.updateMeetingLinkUi()
+    announce('Connected to the meeting')
+    document.getElementById('open-meeting-link-button')!.focus()
   }
 
   private updateLayoutSelectionUi() {
@@ -588,6 +718,11 @@ export class MeetingRoomController {
     const linkBox = document.getElementById('meeting-link-box') as HTMLDivElement
     const linkElement = document.getElementById('meeting-link') as HTMLButtonElement
     const meetingLink = this.getMeetingLink()
+    linkElement.setAttribute(
+      'aria-label',
+      meetingLink ? `Copy meeting link ${meetingLink}` : 'Meeting link is not available yet',
+    )
+    linkElement.title = 'Copy meeting link'
 
     if (!this.remoteMediaClient) {
       linkSelector.style.display = 'none'
@@ -652,6 +787,7 @@ export class MeetingRoomController {
         recordIcon.style.opacity = '0'
         label.innerText = 'Playing'
         this.meetingRecordButton.disabled = false
+        this.meetingRecordButton.setAttribute('aria-disabled', 'true')
         this.meetingRecordButton.className = 'meeting-button tooltipped animated-brightness'
         this.meetingRecordButton.onclick = () => {}
         this.meetingRecordButton.style.background = ''
@@ -662,6 +798,7 @@ export class MeetingRoomController {
         recordIcon.style.opacity = '1'
         label.innerText = 'Recording'
         this.meetingRecordButton.disabled = false
+        this.meetingRecordButton.setAttribute('aria-disabled', 'true')
         this.meetingRecordButton.className = 'meeting-button tooltipped animated-brightness'
         this.meetingRecordButton.onclick = () => {}
         this.meetingRecordButton.style.background = ''
@@ -672,6 +809,7 @@ export class MeetingRoomController {
         recordIcon.style.opacity = '0'
         label.innerText = 'Resume Playing'
         this.meetingRecordButton.disabled = false
+        this.meetingRecordButton.setAttribute('aria-disabled', 'false')
         this.meetingRecordButton.className = 'meeting-button tooltipped clickable'
         this.meetingRecordButton.onclick = AudioControl.unpause
         this.meetingRecordButton.style.background = ''
@@ -682,6 +820,7 @@ export class MeetingRoomController {
         recordIcon.style.opacity = '1'
         label.innerText = 'Resume Recording'
         this.meetingRecordButton.disabled = false
+        this.meetingRecordButton.setAttribute('aria-disabled', 'false')
         this.meetingRecordButton.className = 'meeting-button tooltipped clickable'
         this.meetingRecordButton.onclick = AudioControl.unpause
         this.meetingRecordButton.style.background = ''

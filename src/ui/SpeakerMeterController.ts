@@ -26,6 +26,7 @@ export class SpeakerMeterController {
   ) {
     this.svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
     parentDiv.appendChild(this.svg)
+    this.svg.setAttribute('aria-hidden', 'true')
     this.svg.setAttribute('viewBox', '0 0 500 500')
 
     const speaker = document.createElementNS('http://www.w3.org/2000/svg', 'polygon')

@@ -9,6 +9,7 @@ import { TimeUtils } from '../../global/TimeUtils'
 import { Track } from '../../project/Track'
 import { BottomPanelController } from '../BottomPanelController'
 import { NotificationsController } from '../NotificationsController'
+import { announce } from '../LiveAnnouncer'
 import { createArrowIcon, createSvgIcon } from '../SvgIcon'
 import { TrackListController } from '../timeline/TrackListController'
 import { editorHistory } from '../undo/EditorHistory'
@@ -26,6 +27,9 @@ type EffectViewSession = {
   unsubscribePlaybackChange: () => void
   closed: boolean
 }
+
+// Effects listed under several categories appear more than once in the catalog, so name ids need a counter.
+let nextCatalogNameId = 0
 
 export class EffectPanelController {
   private static instance: EffectPanelController | null = null
@@ -64,6 +68,7 @@ export class EffectPanelController {
     loadingElement.className = 'effect-panel-message'
     loadingElement.textContent = `Loading ${metadata.name}...`
     this.openSubview(metadata.name, track.name, loadingElement, track)
+    announce(`Loading ${metadata.name}`)
 
     try {
       const session = await this.startEffectSession(track, effectData)
@@ -274,17 +279,21 @@ export class EffectPanelController {
     range.max = '1'
     range.step = '0.001'
     range.value = String(this.clamp(metadata.normalize(initialValue), 0, 1))
+    range.setAttribute('aria-label', metadata.displayName)
+    range.setAttribute('aria-valuetext', metadata.displayValue(initialValue))
 
     const valueRow = document.createElement('span')
     valueRow.className = 'effect-parameter-value'
     const output = document.createElement('output')
     output.textContent = metadata.displayValue(initialValue)
+    output.setAttribute('aria-hidden', 'true')
     valueRow.appendChild(output)
 
     const applyValue = (value: number) => {
       const boundedValue = this.clamp(value, metadata.minValue, metadata.maxValue)
       range.value = String(this.clamp(metadata.normalize(boundedValue), 0, 1))
       output.textContent = metadata.displayValue(boundedValue)
+      range.setAttribute('aria-valuetext', metadata.displayValue(boundedValue))
       audioParameter.setValueAtTime(boundedValue, session.audioContext.currentTime)
       return boundedValue
     }
@@ -417,6 +426,7 @@ export class EffectPanelController {
   private createEffectChainItem(track: Track, index: number, effectData: EffectData, metadata: EffectMetadata | null) {
     const item = document.createElement('article')
     item.className = 'effect-list-item effect-chain-item effect-chain-effect'
+    item.dataset.instanceId = effectData.instanceId
     item.style.border = 'double'
 
     const openButton = document.createElement('button')
@@ -424,6 +434,8 @@ export class EffectPanelController {
     openButton.className = 'clickable effect-chain-open'
     const nameElement = document.createElement('strong')
     nameElement.textContent = metadata?.name ?? effectData.id
+    const nameId = `effect-chain-name-${effectData.instanceId}`
+    nameElement.id = nameId
     const typeElement = document.createElement('span')
     typeElement.textContent = 'Effect'
     openButton.append(nameElement, typeElement)
@@ -437,9 +449,11 @@ export class EffectPanelController {
     const controls = document.createElement('div')
     controls.className = 'effect-chain-controls'
     const moveLeftButton = this.createIconButton('Move effect left', 'arrow-right', 'effect-icon-left')
+    moveLeftButton.classList.add('effect-chain-move-left')
     moveLeftButton.disabled = index == 0
     moveLeftButton.addEventListener('click', () => void this.moveEffect(track, index, index - 1))
     const moveRightButton = this.createIconButton('Move effect right', 'arrow-right')
+    moveRightButton.classList.add('effect-chain-move-right')
     moveRightButton.disabled = index == track.effectRegions.length - 1
     moveRightButton.addEventListener('click', () => void this.moveEffect(track, index, index + 1))
     const removeButton = this.createIconButton('Remove effect', 'trash')
@@ -449,6 +463,9 @@ export class EffectPanelController {
     automationButton.disabled = !metadata?.parameters.length
     if (metadata?.parameters.length) {
       automationButton.addEventListener('click', () => this.openAutomationView(track, effectData, metadata))
+    }
+    for (const button of [moveLeftButton, moveRightButton, removeButton, automationButton]) {
+      button.setAttribute('aria-describedby', nameId)
     }
     controls.append(moveLeftButton, moveRightButton, removeButton, automationButton)
     item.append(openButton, controls)
@@ -499,8 +516,9 @@ export class EffectPanelController {
       const params = Object.fromEntries(
         metadata.parameters.map((parameter) => [parameter.id, new ParameterValueSequence(parameter.defaultValue)]),
       )
+      const instanceId = this.createInstanceId()
       newEffects.push({
-        instanceId: this.createInstanceId(),
+        instanceId,
         id: metadata.id,
         params,
         state: metadata.createDefaultState?.(),
@@ -510,6 +528,8 @@ export class EffectPanelController {
       )
       if (viewVersion == this.viewVersion) {
         await this.showTrackEffectsList(track)
+        this.chainItem(instanceId)?.querySelector<HTMLElement>('.effect-chain-open')?.focus()
+        announce(`Added ${metadata.name}`)
       }
     } finally {
       this.chainChangePending = false
@@ -537,6 +557,15 @@ export class EffectPanelController {
       await editorHistory.execute(new SetTrackEffectsCommand(track, oldEffects, newEffects, 'reorder track effects'))
       if (viewVersion == this.viewVersion) {
         await this.showTrackEffectsList(track)
+        const item = this.chainItem(effect.instanceId)
+        const moveButton = item?.querySelector<HTMLButtonElement>(
+          toIndex < fromIndex ? '.effect-chain-move-left' : '.effect-chain-move-right',
+        )
+        if (moveButton && !moveButton.disabled) {
+          moveButton.focus()
+        } else {
+          item?.querySelector<HTMLElement>('.effect-chain-open')?.focus()
+        }
       }
     } finally {
       this.chainChangePending = false
@@ -552,14 +581,28 @@ export class EffectPanelController {
     try {
       const oldEffects = cloneEffectData(track.effectRegions)
       const newEffects = cloneEffectData(oldEffects)
+      const removed = oldEffects[index]
+      const name = this.effectIndex.getEffectMetadataById(removed.id)?.name ?? removed.id
+      const neighbourId = (oldEffects[index + 1] ?? oldEffects[index - 1])?.instanceId
       newEffects.splice(index, 1)
       await editorHistory.execute(new SetTrackEffectsCommand(track, oldEffects, newEffects, 'remove track effect'))
       if (viewVersion == this.viewVersion) {
         await this.showTrackEffectsList(track)
+        const neighbour = neighbourId === undefined ? null : this.chainItem(neighbourId)
+        if (neighbour) {
+          neighbour.querySelector<HTMLElement>('.effect-chain-open')?.focus()
+        } else {
+          document.querySelector<HTMLElement>('#bottom-panel .effect-chain-add')?.focus()
+        }
+        announce(`Removed ${name}`)
       }
     } finally {
       this.chainChangePending = false
     }
+  }
+
+  private chainItem(instanceId: string) {
+    return document.querySelector<HTMLElement>(`#bottom-panel [data-instance-id="${CSS.escape(instanceId)}"]`)
   }
 
   private openAutomationView(track: Track, effectData: EffectData, metadata: EffectMetadata) {
@@ -619,6 +662,7 @@ export class EffectPanelController {
     const body = document.createElement('div')
     body.className = 'effect-panel-message'
     body.textContent = message
+    announce(`${title}. ${message}`, 'assertive')
     this.openSubview(title, track.name, body, track)
   }
 
@@ -640,6 +684,7 @@ export class EffectPanelController {
     })
 
     const [nameElement, descriptionElement] = this.getEffectDescriptionElements(metadata)
+    addEffectButton.setAttribute('aria-describedby', nameElement.id)
     listItemElement.append(nameElement, addEffectButton, descriptionElement)
     return listItemElement
   }
@@ -648,6 +693,7 @@ export class EffectPanelController {
     const nameElement = document.createElement('p')
     nameElement.className = 'effect-name'
     nameElement.textContent = metadata.name
+    nameElement.id = `effect-catalog-name-${metadata.id}-${++nextCatalogNameId}`
 
     const descriptionElement = document.createElement('p')
     descriptionElement.className = 'effect-description'

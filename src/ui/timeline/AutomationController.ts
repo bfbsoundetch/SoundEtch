@@ -5,6 +5,7 @@ import { cloneEffectData, SetTrackEffectsCommand } from '../effects/SetTrackEffe
 import { BottomPanelController } from '../BottomPanelController'
 import { TrackListItemController } from './TrackListItemController'
 import { TrackListController } from './TrackListController'
+import { AudioControl } from '../../audiocontext/AudioControl'
 const TRANSITION_TYPES: readonly TransitionType[] = ['linear', 'exponential', 'logarithmic', 'scurve']
 const TRANSITION_LABELS: Record<TransitionType, string> = {
   linear: 'Linear',
@@ -151,20 +152,25 @@ export class AutomationController extends TrackListItemController {
 
   addNewPoint(x: number, y: number) {
     const position = Math.max(0, this.getSampleForXValue(this.clamp(x, 0, this.width)))
-    const value = this.getValueForY(y)
+    this.insertPoint(position, this.getValueForY(y))
+  }
+
+  private insertPoint(sample: number, value: number): ParamValueTransition {
     let i = 0
     for (; i < this.paramVals.transitionSequence.length; ++i) {
-      if (this.paramVals.transitionSequence[i].startSample > position) {
+      if (this.paramVals.transitionSequence[i].startSample > sample) {
         break
       }
     }
-    this.paramVals.transitionSequence.splice(i, 0, {
-      startSample: position,
+    const point: ParamValueTransition = {
+      startSample: sample,
       startValue: value,
       type: 'linear',
-    })
+    }
+    this.paramVals.transitionSequence.splice(i, 0, point)
     this.draw()
     this.openPointEditor()
+    return point
   }
 
   private get paramVals(): ParameterValueSequence {
@@ -236,10 +242,25 @@ export class AutomationController extends TrackListItemController {
     body.className = 'automation-point-editor'
     this.pointEditorControls.clear()
     this.pointEditorTableBody = null
+    const addPointButton = document.createElement('button')
+    addPointButton.type = 'button'
+    addPointButton.className = 'bordered clickable automation-add-point-button'
+    addPointButton.textContent = 'Add point at cursor'
+    addPointButton.addEventListener('click', () => {
+      const sample = AudioControl.startPosition
+      const value =
+        this.paramVals.transitionSequence.findLast((transition) => transition.startSample <= sample)?.startValue ??
+        this.paramVals.initialValue
+      const oldEffects = cloneEffectData(this.track.effectRegions)
+      const point = this.insertPoint(sample, value)
+      void this.recordAppliedChange(oldEffects, `add ${this.parameterMetadata.displayName} automation point`)
+      this.pointEditorControls.get(point)?.position.focus()
+    })
+    body.appendChild(addPointButton)
     if (this.paramVals.transitionSequence.length == 0) {
       const message = document.createElement('p')
       message.className = 'automation-point-editor-empty'
-      message.textContent = 'Double-click the automation curve to add a point.'
+      message.textContent = 'Double-click the automation curve or choose Add point at cursor.'
       body.appendChild(message)
       return body
     }
@@ -268,7 +289,8 @@ export class AutomationController extends TrackListItemController {
 
   private createPointEditorRow(point: ParamValueTransition, index: number) {
     const row = document.createElement('tr')
-    const number = document.createElement('td')
+    const number = document.createElement('th')
+    number.scope = 'row'
 
     const positionCell = document.createElement('td')
     const position = document.createElement('input')
@@ -376,7 +398,7 @@ export class AutomationController extends TrackListItemController {
     this.bottomPanelController.setSubtitle(`${this.track.name} · ${points.length} points`)
     if (points.length == 0) {
       if (this.pointEditorControls.size > 0 || this.pointEditorTableBody) {
-        this.bottomPanelController.setBody(this.createPointEditor())
+        this.rebuildPointEditor()
       }
       return
     }
@@ -385,14 +407,26 @@ export class AutomationController extends TrackListItemController {
       this.pointEditorControls.size != points.length ||
       points.some((point) => !this.pointEditorControls.has(point))
     ) {
-      this.bottomPanelController.setBody(this.createPointEditor())
+      this.rebuildPointEditor()
       return
     }
+    const body = this.pointEditorTableBody
     points.forEach((point, index) => {
       const controls = this.pointEditorControls.get(point)!
       this.updatePointEditorControls(point, index, controls)
-      this.pointEditorTableBody!.appendChild(controls.row)
+      if (body.children[index] !== controls.row) {
+        const focused = controls.row.contains(document.activeElement) ? (document.activeElement as HTMLElement) : null
+        body.insertBefore(controls.row, body.children[index] ?? null)
+        focused?.focus()
+      }
     })
+  }
+
+  private rebuildPointEditor() {
+    const hadFocus =
+      document.querySelector('#bottom-panel .automation-point-editor')?.contains(document.activeElement) ?? false
+    this.bottomPanelController.setBody(this.createPointEditor())
+    if (hadFocus) document.querySelector<HTMLElement>('#bottom-panel .automation-add-point-button')?.focus()
   }
 
   private updatePointEditorControls(point: ParamValueTransition, index: number, controls: PointEditorControls) {
@@ -461,7 +495,7 @@ export class AutomationController extends TrackListItemController {
   private createAutomationScale(parameterMetadata: ParameterMetadata) {
     const scale = document.createElement('div')
     scale.className = 'automation-scale'
-    scale.setAttribute('aria-label', `${parameterMetadata.displayName} scale`)
+    this.scaleForeignObject.setAttribute('aria-hidden', 'true')
     const scaleValues = [...parameterMetadata.scaleValues].sort((a, b) => b - a)
     for (const value of scaleValues) {
       const tick = document.createElement('span')

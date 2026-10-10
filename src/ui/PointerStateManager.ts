@@ -218,7 +218,11 @@ export class PointerStateManager extends TrackListItemController {
             if (moveInfo.clipViewController.waveform != moveInfo.startWave) {
               moveInfo.clipViewController.switchParent(moveInfo.startWave)
             }
-            await this.trackListController.transferClipViewToNewTrack(moveInfo.clipViewController)
+            await this.trackListController.transferClipViewToNewTrack(
+              moveInfo.clipViewController.waveform.track,
+              moveInfo.clipViewController.clipView,
+              moveInfo.clipViewController.draggedShift,
+            )
           } else if (!this.activeWaveform) {
             if (moveInfo.clipViewController.waveform != moveInfo.startWave) {
               moveInfo.clipViewController.switchParent(moveInfo.startWave)
@@ -273,11 +277,11 @@ export class PointerStateManager extends TrackListItemController {
 
     const scrollListener = (event: WheelEvent) => {
       if (event.ctrlKey) {
-        ;(trackListController as any).zoom(event)
+        trackListController.zoomWithWheel(event)
         event.preventDefault()
         event.stopPropagation()
       } else if (event.deltaX) {
-        ;(trackListController as any).translate(event.deltaX)
+        trackListController.translate(event.deltaX)
         event.preventDefault()
         event.stopPropagation()
       }
@@ -400,6 +404,7 @@ export class PointerStateManager extends TrackListItemController {
     this.trackListController.clearSelection()
     this.timelineRegionController = null
     this.timelineAreaElement.style.cursor = 'col-resize'
+    this.trackListController.timelineKeyboard.refresh()
   }
 
   reset() {

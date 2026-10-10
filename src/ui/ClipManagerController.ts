@@ -4,6 +4,7 @@ import { ProjectManager } from '../project/ProjectManager'
 import { getClipDiskUsage, humanizeBytes } from './DiskUsage'
 import { editorHistory } from './undo/EditorHistory'
 import { NotificationsController } from './NotificationsController'
+import { announce } from './LiveAnnouncer'
 
 export class ClipManagerController {
   private readonly dialog = document.getElementById('clip-manager-modal') as HTMLDialogElement
@@ -16,6 +17,9 @@ export class ClipManagerController {
   private readonly metadataTitle = document.getElementById('clip-metadata-title') as HTMLHeadingElement
   private readonly metadataList = document.getElementById('clip-metadata-list') as HTMLDListElement
   private readonly metadataBackButton = document.getElementById('clip-metadata-back-button') as HTMLButtonElement
+  private readonly metadataRenameButton = document.getElementById('clip-metadata-rename-button') as HTMLButtonElement
+  private readonly titleElement = document.getElementById('clip-manager-modal-title') as HTMLHeadingElement
+  private readonly detailButtons = new Map<Clip, HTMLButtonElement>()
   private displayedClip: Clip | null = null
   private titleEditClip: Clip | null = null
   private titleEditStart = ''
@@ -25,6 +29,7 @@ export class ClipManagerController {
     this.deleteUnusedButton.onclick = () => void this.deleteUnusedClips()
     this.metadataBackButton.onclick = () => void this.hideMetadata()
     this.metadataTitle.addEventListener('dblclick', () => this.makeTitleEditable())
+    this.metadataRenameButton.onclick = () => this.makeTitleEditable()
     this.metadataTitle.addEventListener('blur', () => void this.saveTitleChanges())
   }
 
@@ -35,6 +40,7 @@ export class ClipManagerController {
   }
 
   private async refresh() {
+    this.detailButtons.clear()
     const project = await ProjectManager.getActiveProject()
     const clips = project.getClips()
     const unusedClipCount = this.getUnusedClips(project).length
@@ -67,14 +73,20 @@ export class ClipManagerController {
 
     this.deleteUnusedButton.disabled = true
     editorHistory.clear()
+    let deleted = false
     try {
       for (const clip of unusedClips) {
         await ProjectManager.deleteClip(clip)
       }
+      deleted = true
     } catch (error) {
       NotificationsController.showError(error instanceof Error ? error : new Error(String(error)))
     } finally {
       await this.refresh()
+    }
+    if (deleted) {
+      ;(this.listContainer.querySelector<HTMLElement>('.clip-manager-action-button') ?? this.titleElement).focus()
+      announce(`Deleted ${unusedClips.length} unused ${noun}`)
     }
   }
 
@@ -103,6 +115,7 @@ export class ClipManagerController {
     metadataButton.type = 'button'
     metadataButton.innerText = 'View details'
     metadataButton.addEventListener('click', () => this.openClipInfo(clip))
+    this.detailButtons.set(clip, metadataButton)
 
     const deleteButton = document.createElement('button')
     deleteButton.className = 'bordered clickable clip-manager-action-button clip-manager-delete-button'
@@ -112,10 +125,18 @@ export class ClipManagerController {
       if (!globalThis.confirm(`Delete \"${clip.name}\"? This removes all uses from every track.`)) {
         return
       }
+      const rowIndex = Array.from(this.listContainer.querySelectorAll('.clip-manager-row')).indexOf(row)
       deleteButton.disabled = true
       editorHistory.clear()
       await ProjectManager.deleteClip(clip)
       await this.refresh()
+      const rows = this.listContainer.querySelectorAll('.clip-manager-row')
+      if (rows.length > 0) {
+        rows[Math.min(rowIndex, rows.length - 1)].querySelector<HTMLElement>('.clip-manager-delete-button')?.focus()
+      } else {
+        this.titleElement.focus()
+      }
+      announce(`Deleted clip ${clip.name}`)
     })
 
     actionsElement.append(metadataButton, deleteButton)
@@ -142,8 +163,9 @@ export class ClipManagerController {
   }
 
   private async hideMetadata() {
-    await this.open()
     this.metadataDialog.close()
+    await this.open()
+    if (this.displayedClip) this.detailButtons.get(this.displayedClip)?.focus()
   }
 
   private makeTitleEditable() {
@@ -154,16 +176,20 @@ export class ClipManagerController {
     this.titleEditStart = this.displayedClip.name
     this.metadataTitle.contentEditable = 'true'
     this.metadataTitle.classList.add('clip-metadata-title-editing')
+    this.metadataTitle.setAttribute('role', 'textbox')
+    this.metadataTitle.setAttribute('aria-label', 'Clip name')
     this.metadataTitle.focus()
     this.metadataTitle.onkeydown = (event) => {
       if (event.key == 'Enter') {
         event.preventDefault()
         this.metadataTitle.blur()
+        this.metadataRenameButton.focus()
       }
       if (event.key == 'Escape') {
         event.preventDefault()
         this.metadataTitle.innerText = this.titleEditStart
         this.metadataTitle.blur()
+        this.metadataRenameButton.focus()
       }
     }
   }
@@ -178,6 +204,8 @@ export class ClipManagerController {
     this.metadataTitle.contentEditable = 'false'
     this.metadataTitle.classList.remove('clip-metadata-title-editing')
     this.metadataTitle.onkeydown = null
+    this.metadataTitle.removeAttribute('role')
+    this.metadataTitle.removeAttribute('aria-label')
     this.titleEditClip = null
 
     if (!newName || newName == oldName) {

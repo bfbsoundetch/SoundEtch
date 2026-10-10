@@ -1,13 +1,14 @@
 import { Logger } from '../global/Logger'
+import { announce } from './LiveAnnouncer'
 
 const enum Level {
-  ERROR = 5000,
+  ERROR = 0,
   LONG = 6000,
   SHORT = 3000,
 }
 
 export class Notification {
-  private timeout
+  private timeout: ReturnType<typeof setTimeout> | undefined
   private finished = false
 
   constructor(
@@ -17,6 +18,7 @@ export class Notification {
   ) {
     this.renderElement()
     this.timeout = this.startTimeout()
+    this.announce()
   }
 
   updateElement(element: HTMLDivElement) {
@@ -35,11 +37,25 @@ export class Notification {
     clearTimeout(this.timeout)
     this.renderElement()
     this.timeout = this.startTimeout()
+    this.announce()
+  }
+
+  pause() {
+    clearTimeout(this.timeout)
+    this.timeout = undefined
+  }
+
+  resume() {
+    if (!this.finished && this.timeout === undefined) this.timeout = this.startTimeout()
+  }
+
+  discard() {
+    clearTimeout(this.timeout)
+    this.finished = true
   }
 
   remove() {
-    this.element.style.opacity = '0'
-    this.element.style.pointerEvents = 'none'
+    hideNotificationElement(this.element)
     clearTimeout(this.timeout)
     this.finished = true
   }
@@ -48,7 +64,15 @@ export class Notification {
     return this.finished
   }
 
-  private startTimeout(): ReturnType<typeof setTimeout> {
+  private announce() {
+    announce(
+      this.level == Level.ERROR ? `Error: ${this.message}` : this.message,
+      this.level == Level.ERROR ? 'assertive' : 'polite',
+    )
+  }
+
+  private startTimeout(): ReturnType<typeof setTimeout> | undefined {
+    if (this.level == Level.ERROR) return undefined
     return setTimeout(() => {
       this.remove()
     }, this.level)
@@ -56,6 +80,7 @@ export class Notification {
 
   private renderElement() {
     this.element.style.opacity = '1'
+    this.element.inert = false
     this.element.style.pointerEvents = 'all'
     this.element.className = this.level == Level.ERROR ? 'notification-error' : 'notification-info'
     this.element.innerHTML = ''
@@ -63,6 +88,11 @@ export class Notification {
     const messageElement = document.createElement('span')
     messageElement.innerText = this.message
     messageElement.className = 'notification-message'
+    if (this.level == Level.ERROR) {
+      const prefix = document.createElement('strong')
+      prefix.textContent = 'Error: '
+      messageElement.prepend(prefix)
+    }
     this.element.appendChild(messageElement)
 
     const closeButton = document.createElement('button')
@@ -71,8 +101,18 @@ export class Notification {
     closeButton.type = 'button'
     closeButton.setAttribute('aria-label', 'Dismiss notification')
     closeButton.onclick = () => this.remove()
+    closeButton.onfocus = () => this.pause()
+    closeButton.onblur = () => this.resume()
+    this.element.onmouseenter = () => this.pause()
+    this.element.onmouseleave = () => this.resume()
     this.element.appendChild(closeButton)
   }
+}
+
+function hideNotificationElement(element: HTMLDivElement) {
+  element.style.opacity = '0'
+  element.inert = true
+  element.style.pointerEvents = 'none'
 }
 
 export class NotificationsController {
@@ -87,6 +127,7 @@ export class NotificationsController {
   private readonly htmlElements = new Array(this.size).fill(null).map((_) => {
     const element = document.createElement('div')
     element.style.opacity = '0'
+    element.inert = true
     this.parent.appendChild(element)
     return element
   })
@@ -97,6 +138,12 @@ export class NotificationsController {
     if (!this.parent.matches(':popover-open')) {
       this.parent.showPopover()
     }
+    document.addEventListener('keydown', (event) => {
+      if (event.key !== 'Escape') return
+      for (const notification of this.notifications) {
+        if (notification && !notification.isFinished()) notification.remove()
+      }
+    })
   }
 
   static showError(e: Error): Notification {
@@ -120,10 +167,14 @@ export class NotificationsController {
   }
 
   private showInternal(message: string, level: Level): Notification {
+    this.notifications[this.size - 1]?.discard()
     for (let i = this.size - 1; i > 0; --i) {
       this.notifications[i] = this.notifications[i - 1]
       if (this.notifications[i] && !this.notifications[i]?.isFinished()) {
         this.notifications[i].updateElement(this.htmlElements[i])
+      } else {
+        // A finished or empty slot must not keep showing the message that was rendered here before the shift.
+        hideNotificationElement(this.htmlElements[i])
       }
     }
 

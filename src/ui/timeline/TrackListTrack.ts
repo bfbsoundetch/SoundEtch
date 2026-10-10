@@ -7,8 +7,16 @@ import { PeakMeterController } from '../PeakMeterController'
 import { Project } from '../../project/Project'
 import type { TrackDisplayMode } from './TrackDisplayMode'
 import { createSvgIcon } from '../SvgIcon'
+import { announce } from '../LiveAnnouncer'
 
 let nextDisplayModeMenuId = 0
+
+export type TrackMenuActions = {
+  onDisplayModeChange: (mode: TrackDisplayMode) => void
+  hasTranscript: () => boolean
+  onShowTranscript: () => void
+  onChangeHeight: (deltaRem: number) => void
+}
 
 export class TrackListTrack {
   private readonly peakMeter: PeakMeterController
@@ -19,7 +27,7 @@ export class TrackListTrack {
     private readonly trackInfoDiv: HTMLDivElement,
     private readonly history: EditorHistory,
     initialDisplayMode: TrackDisplayMode,
-    onDisplayModeChange: (mode: TrackDisplayMode) => void,
+    actions: TrackMenuActions,
   ) {
     this.trackInfoDiv.classList = 'track-info tracklist-item'
 
@@ -35,31 +43,39 @@ export class TrackListTrack {
     trackTitle.style.overflow = 'hidden'
     trackTitle.style.wordBreak = 'break-all'
     trackTitle.innerText = track.name
+    trackTitle.id = `track-title-${track.id}`
+    this.trackInfoDiv.setAttribute('role', 'group')
+    this.trackInfoDiv.setAttribute('aria-labelledby', trackTitle.id)
 
     let titleEditStart = track.name
+    const trackMenu = this.createTrackMenu(track, initialDisplayMode, actions, () => {
+      titleEditStart = track.name
+      this.makeEditable(trackTitle, titleEditStart, trackMenu.button)
+    })
     trackTitle.addEventListener('dblclick', () => {
       titleEditStart = track.name
-      this.makeEditable(trackTitle)
+      this.makeEditable(trackTitle, titleEditStart, trackMenu.button)
     })
     trackTitle.addEventListener('blur', () => this.saveChanges(trackTitle, track, titleEditStart))
 
     trackHeading.appendChild(trackTitle)
     this.trackInfoDiv.appendChild(trackHeading)
 
-    const deleteTrackButton = document.createElement('div')
-    deleteTrackButton.className = 'clickable'
+    const deleteTrackButton = document.createElement('button')
+    deleteTrackButton.type = 'button'
+    deleteTrackButton.className = 'clickable track-delete-button'
     deleteTrackButton.style.height = '1.5rem'
     deleteTrackButton.style.width = '1.5rem'
     deleteTrackButton.style.flex = '0 0 1'
     deleteTrackButton.style.gridArea = 'delete'
     deleteTrackButton.style.alignSelf = 'center'
     deleteTrackButton.style.justifySelf = 'center'
-    const deleteTrackIcon = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
-    deleteTrackIcon.setAttribute('viewBox', '0 0 500 500')
-    const trashIcon = document.createElementNS('http://www.w3.org/2000/svg', 'use')
-    trashIcon.setAttributeNS('http://www.w3.org/1999/xlink', 'href', '#trash')
-    deleteTrackIcon.appendChild(trashIcon)
-    deleteTrackButton.appendChild(deleteTrackIcon)
+    deleteTrackButton.appendChild(createSvgIcon('trash'))
+    const updateDeleteButtonName = () => {
+      deleteTrackButton.title = `Delete ${track.name}`
+      deleteTrackButton.setAttribute('aria-label', `Delete track ${track.name}`)
+    }
+    updateDeleteButtonName()
     this.trackInfoDiv.appendChild(deleteTrackButton)
 
     const effectButton = document.createElement('button')
@@ -116,17 +132,18 @@ export class TrackListTrack {
     gainSlider.min = '-36'
     gainSlider.max = '36'
     gainSlider.style.width = '100%'
-    gainSlider.style.margin = 'auto'
     gainSlider.style.accentColor = 'var(--color)'
     const initialGainNumber = 20 * Math.log10(track.getGain())
     gainSlider.value = `${initialGainNumber}`
     const gainOutput = document.createElement('output')
     gainOutput.classList = 'slider-value'
-    this.updateGainOutput(gainOutput, initialGainNumber)
+    gainOutput.setAttribute('aria-hidden', 'true')
+    gainSlider.setAttribute('aria-label', `Gain for ${track.name}`)
+    this.updateGainOutput(gainOutput, gainSlider, initialGainNumber)
     gainSlider.oninput = () => {
       const gainNumber = Number(gainSlider.value)
       track.setGain(10 ** (gainNumber / 20))
-      this.updateGainOutput(gainOutput, gainNumber)
+      this.updateGainOutput(gainOutput, gainSlider, gainNumber)
     }
     let gainEditStart = track.getGain()
     const startGainEdit = () => {
@@ -145,12 +162,6 @@ export class TrackListTrack {
     gainSlider.addEventListener('change', () => {
       void commitGainEdit()
     })
-    gainSlider.addEventListener('mouseenter', () => {
-      gainOutput.style.opacity = '1'
-    })
-    gainSlider.addEventListener('mouseleave', () => {
-      gainOutput.style.opacity = '0'
-    })
     gainSliderParent.appendChild(gainSlider)
     gainSliderParent.appendChild(gainOutput)
 
@@ -168,20 +179,19 @@ export class TrackListTrack {
     panSlider.min = '-10'
     panSlider.max = '10'
     panSlider.style.width = '100%'
-    panSlider.style.margin = 'auto'
     panSlider.style.accentColor = 'var(--color)'
     const initialPanValue = track.getPan()
     panSlider.value = `${initialPanValue * 10}`
-    panSlider.style.background =
-      'repeating-linear-gradient(to right, #000, #000 10%, #000 10%, #000 11%, #000 11%, #000 20%)'
     const panOutput = document.createElement('output')
     panOutput.classList = 'slider-value'
-    this.updatePanOutput(panOutput, initialPanValue)
+    panOutput.setAttribute('aria-hidden', 'true')
+    panSlider.setAttribute('aria-label', `Pan for ${track.name}`)
+    this.updatePanOutput(panOutput, panSlider, initialPanValue)
 
     panSlider.oninput = () => {
       const value = Number(panSlider.value) / 10
       track.setPan(value)
-      this.updatePanOutput(panOutput, value)
+      this.updatePanOutput(panOutput, panSlider, value)
     }
     let panEditStart = track.getPan()
     const startPanEdit = () => {
@@ -200,17 +210,10 @@ export class TrackListTrack {
     panSlider.addEventListener('change', () => {
       void commitPanEdit()
     })
-    panSlider.addEventListener('mouseenter', () => {
-      panOutput.style.opacity = '1'
-    })
-    panSlider.addEventListener('mouseleave', () => {
-      panOutput.style.opacity = '0'
-    })
     panSliderParent.appendChild(panSlider)
     panSliderParent.appendChild(panOutput)
 
-    const displayModeMenu = this.createDisplayModeMenu(track, initialDisplayMode, onDisplayModeChange)
-    trackHeading.append(displayModeMenu.button, displayModeMenu.popover)
+    trackHeading.append(trackMenu.button, trackMenu.popover)
 
     const peakMeterDiv = document.createElement('div')
     peakMeterDiv.className = 'track-peak-meter'
@@ -219,6 +222,7 @@ export class TrackListTrack {
     this.peakMeter = new PeakMeterController(peakMeterDiv, track, false, track.getChannelCount())
     this.peakMeter.svg.setAttribute('preserveAspectRatio', 'none')
     this.peakMeter.draw(this.peakMeter)
+    this.peakMeter.setLabel(`Level meter for ${track.name}`)
 
     void ProjectManager.addTrackListener(track, () => {
       if (!trackTitle.isContentEditable) {
@@ -229,21 +233,34 @@ export class TrackListTrack {
       soloButton.title = `Solo ${track.name}`
       soloButton.setAttribute('aria-label', `Solo ${track.name}`)
       updateMixButtons()
-      displayModeMenu.updateAccessibleName()
+      updateDeleteButtonName()
+      trackMenu.updateAccessibleName()
+      gainSlider.setAttribute('aria-label', `Gain for ${track.name}`)
+      panSlider.setAttribute('aria-label', `Pan for ${track.name}`)
+      this.peakMeter.setLabel(`Level meter for ${track.name}`)
       const gainNumber = 20 * Math.log10(track.getGain())
       gainSlider.value = `${gainNumber}`
-      this.updateGainOutput(gainOutput, gainNumber)
+      this.updateGainOutput(gainOutput, gainSlider, gainNumber)
       const panValue = track.getPan()
       panSlider.value = `${panValue * 10}`
-      this.updatePanOutput(panOutput, panValue)
+      this.updatePanOutput(panOutput, panSlider, panValue)
     })
 
     deleteTrackButton.onclick = (event) => {
       if (!globalThis.confirm(`Are you sure you want to delete track \"${track.name}\"?`)) {
         return
       }
+      const tracks = this.project.getTracks()
+      const trackIndex = tracks.indexOf(track)
+      const neighbour = tracks[trackIndex + 1] ?? (trackIndex > 0 ? tracks[trackIndex - 1] : undefined)
       this.history.clear()
-      void ProjectManager.deleteTrack(track)
+      void ProjectManager.deleteTrack(track).then(() => {
+        const target = neighbour
+          ? document.querySelector<HTMLElement>(`#track-info-list [data-track-id="${neighbour.id}"] .track-delete-button`)
+          : document.getElementById('third-header-button')
+        target?.focus()
+        announce(`Deleted track ${track.name}`)
+      })
       event.stopPropagation()
       event.preventDefault()
     }
@@ -253,8 +270,10 @@ export class TrackListTrack {
     this.peakMeter.stop()
   }
 
-  private makeEditable(div: HTMLDivElement) {
+  private makeEditable(div: HTMLDivElement, oldName: string, returnFocusTo: HTMLElement) {
     div.contentEditable = 'true'
+    div.setAttribute('role', 'textbox')
+    div.setAttribute('aria-label', 'Track name')
     div.style.maxHeight = '100%'
     div.style.height = '100%'
     div.style.overflow = 'scroll'
@@ -265,6 +284,12 @@ export class TrackListTrack {
       if (e.key === 'Enter') {
         e.preventDefault()
         div.blur()
+        returnFocusTo.focus()
+      } else if (e.key === 'Escape') {
+        e.preventDefault()
+        div.innerText = oldName
+        div.blur()
+        returnFocusTo.focus()
       }
     }
   }
@@ -279,10 +304,11 @@ export class TrackListTrack {
     return button
   }
 
-  private createDisplayModeMenu(
+  private createTrackMenu(
     track: Track,
     initialDisplayMode: TrackDisplayMode,
-    onDisplayModeChange: (mode: TrackDisplayMode) => void,
+    actions: TrackMenuActions,
+    onRename: () => void,
   ) {
     const popover = document.createElement('div')
     popover.id = `track-display-mode-menu-${++nextDisplayModeMenuId}`
@@ -298,39 +324,77 @@ export class TrackListTrack {
     button.setAttribute('aria-controls', popover.id)
     button.setAttribute('popovertarget', popover.id)
     button.appendChild(createSvgIcon('three-dots'))
-    button.addEventListener('click', (event) => event.stopPropagation())
 
     const modes: ReadonlyArray<{ mode: TrackDisplayMode; label: string }> = [
       { mode: 'waveform', label: 'Waveform' },
       { mode: 'spectrogram', label: 'Spectrogram' },
     ]
     let currentDisplayMode = initialDisplayMode
+    const createItem = (label: string, role: 'menuitem' | 'menuitemradio') => {
+      const item = document.createElement('button')
+      item.type = 'button'
+      item.className = 'track-display-mode-option'
+      item.setAttribute('role', role)
+      item.tabIndex = -1
+      item.textContent = label
+      return item
+    }
+    const closeMenu = () => {
+      popover.hidePopover()
+      button.setAttribute('aria-expanded', 'false')
+    }
     const optionButtons = modes.map(({ mode, label }) => {
-      const option = document.createElement('button')
-      option.type = 'button'
-      option.className = 'track-display-mode-option'
-      option.setAttribute('role', 'menuitemradio')
-      option.textContent = label
+      const option = createItem(label, 'menuitemradio')
       option.addEventListener('click', () => {
         if (mode != currentDisplayMode) {
           currentDisplayMode = mode
           updateMenuState()
-          onDisplayModeChange(mode)
+          actions.onDisplayModeChange(mode)
         }
-        popover.hidePopover()
-        button.setAttribute('aria-expanded', 'false')
+        closeMenu()
         button.focus()
       })
       return option
     })
-    popover.append(...optionButtons)
+    const separator = document.createElement('div')
+    separator.setAttribute('role', 'separator')
+    separator.className = 'track-menu-separator'
+    const renameItem = createItem('Rename track…', 'menuitem')
+    renameItem.addEventListener('click', () => {
+      closeMenu()
+      onRename()
+    })
+    const transcriptItem = createItem('Show transcript', 'menuitem')
+    transcriptItem.hidden = !actions.hasTranscript()
+    transcriptItem.addEventListener('click', () => {
+      closeMenu()
+      actions.onShowTranscript()
+    })
+    const increaseHeightItem = createItem('Increase track height', 'menuitem')
+    increaseHeightItem.addEventListener('click', () => {
+      closeMenu()
+      actions.onChangeHeight(2)
+      button.focus()
+    })
+    const decreaseHeightItem = createItem('Decrease track height', 'menuitem')
+    decreaseHeightItem.addEventListener('click', () => {
+      closeMenu()
+      actions.onChangeHeight(-2)
+      button.focus()
+    })
+    popover.append(...optionButtons, separator, renameItem, transcriptItem, increaseHeightItem, decreaseHeightItem)
     popover.addEventListener('click', (event) => event.stopPropagation())
+
+    button.addEventListener('click', (event) => {
+      event.stopPropagation()
+      transcriptItem.hidden = !actions.hasTranscript()
+    })
 
     const updateAccessibleName = () => {
       const label = modes.find(({ mode }) => mode == currentDisplayMode)!.label
-      button.title = `Display mode: ${label}`
-      button.setAttribute('aria-label', `Display mode for ${track.name}: ${label}`)
-      popover.setAttribute('aria-label', `Display mode for ${track.name}`)
+      button.title = `Track options (display: ${label})`
+      button.setAttribute('aria-label', `Options for ${track.name}`)
+      popover.setAttribute('aria-label', `Options for ${track.name}`)
     }
     const updateMenuState = () => {
       updateAccessibleName()
@@ -357,36 +421,49 @@ export class TrackListTrack {
     popover.addEventListener('toggle', () => {
       const isOpen = popover.matches(':popover-open')
       button.setAttribute('aria-expanded', `${isOpen}`)
-      if (isOpen) positionPopover()
+      if (isOpen) {
+        positionPopover()
+        if (!popover.contains(document.activeElement)) {
+          optionButtons[modes.findIndex(({ mode }) => mode == currentDisplayMode)].focus()
+        }
+      }
+    })
+    popover.addEventListener('focusout', (event) => {
+      const next = event.relatedTarget as Node | null
+      if (!popover.matches(':popover-open')) return
+      if (next && (popover.contains(next) || next === button)) return
+      closeMenu()
     })
     button.addEventListener('keydown', (event) => {
       if (event.key != 'ArrowDown' && event.key != 'ArrowUp') return
       event.preventDefault()
+      transcriptItem.hidden = !actions.hasTranscript()
       if (!popover.matches(':popover-open')) {
         popover.showPopover()
         button.setAttribute('aria-expanded', 'true')
         positionPopover()
       }
-      const selectedIndex = modes.findIndex(({ mode }) => mode == currentDisplayMode)
-      optionButtons[event.key == 'ArrowUp' ? optionButtons.length - 1 : selectedIndex].focus()
+      const items = Array.from(popover.querySelectorAll<HTMLButtonElement>('button:not([hidden])'))
+      const checkedItem = optionButtons[modes.findIndex(({ mode }) => mode == currentDisplayMode)]
+      ;(event.key == 'ArrowUp' ? items[items.length - 1] : checkedItem).focus()
     })
     popover.addEventListener('keydown', (event) => {
-      const focusedIndex = optionButtons.indexOf(document.activeElement as HTMLButtonElement)
+      const items = Array.from(popover.querySelectorAll<HTMLButtonElement>('button:not([hidden])'))
+      const focusedIndex = items.indexOf(document.activeElement as HTMLButtonElement)
       let nextIndex: number | null = null
-      if (event.key == 'ArrowDown') nextIndex = (focusedIndex + 1) % optionButtons.length
-      if (event.key == 'ArrowUp') nextIndex = (focusedIndex - 1 + optionButtons.length) % optionButtons.length
+      if (event.key == 'ArrowDown') nextIndex = (focusedIndex + 1) % items.length
+      if (event.key == 'ArrowUp') nextIndex = (focusedIndex - 1 + items.length) % items.length
       if (event.key == 'Home') nextIndex = 0
-      if (event.key == 'End') nextIndex = optionButtons.length - 1
+      if (event.key == 'End') nextIndex = items.length - 1
       if (event.key == 'Escape') {
         event.preventDefault()
-        popover.hidePopover()
-        button.setAttribute('aria-expanded', 'false')
+        closeMenu()
         button.focus()
         return
       }
       if (nextIndex === null) return
       event.preventDefault()
-      optionButtons[nextIndex].focus()
+      items[nextIndex].focus()
     })
 
     updateMenuState()
@@ -398,8 +475,10 @@ export class TrackListTrack {
       return
     }
     div.contentEditable = 'false'
+    div.removeAttribute('role')
+    div.removeAttribute('aria-label')
     const newName = div.innerText
-    div.style.maxHeight = '3em'
+    div.style.maxHeight = '4.5em'
     div.style.height = ''
     div.style.overflow = 'hidden'
     div.scrollTo({
@@ -411,17 +490,16 @@ export class TrackListTrack {
     }
   }
 
-  private updateGainOutput(output: HTMLOutputElement, gainNumber: number) {
-    output.value = `gain: ${gainNumber > 0 ? '+' : ''}${gainNumber} dB`
+  private updateGainOutput(output: HTMLOutputElement, slider: HTMLInputElement, gainNumber: number) {
+    const r = Math.round(gainNumber * 10) / 10
+    const text = `${r > 0 ? '+' : ''}${r} dB`
+    output.value = `gain: ${text}`
+    slider.setAttribute('aria-valuetext', text)
   }
 
-  private updatePanOutput(output: HTMLOutputElement, value: number) {
-    if (value == 0) {
-      output.value = 'pan: centered'
-    } else if (value < 0) {
-      output.value = `pan: ${-value * 100}% left`
-    } else {
-      output.value = `pan: ${value * 100}% right`
-    }
+  private updatePanOutput(output: HTMLOutputElement, slider: HTMLInputElement, value: number) {
+    const text = value == 0 ? 'centered' : `${Math.round(Math.abs(value) * 100)}% ${value < 0 ? 'left' : 'right'}`
+    output.value = `pan: ${text}`
+    slider.setAttribute('aria-valuetext', text)
   }
 }

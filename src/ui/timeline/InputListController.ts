@@ -108,29 +108,37 @@ class AudioInputController {
     inputIconSvg.style.verticalAlign = 'middle'
     inputIconSvg.setAttribute('viewBox', '0 0 500 500')
     const inputIconUse = document.createElementNS('http://www.w3.org/2000/svg', 'use')
+    inputIconSvg.setAttribute('role', 'img')
     switch (type) {
       case AudioInputType.MIC:
         inputIconUse.setAttributeNS('http://www.w3.org/1999/xlink', 'href', '#microphone')
+        inputIconSvg.setAttribute('aria-label', 'Microphone')
         break
       case AudioInputType.SCREEN_SHARE:
         inputIconUse.setAttributeNS('http://www.w3.org/1999/xlink', 'href', '#screen-share')
+        inputIconSvg.setAttribute('aria-label', 'Screen share')
         break
       case AudioInputType.REMOTE:
         inputIconUse.setAttributeNS('http://www.w3.org/1999/xlink', 'href', '#meeting')
+        inputIconSvg.setAttribute('aria-label', 'Guest')
         break
     }
 
     const muteButton = document.createElement('button')
+    muteButton.type = 'button'
     muteButton.className = 'clickable mute-button'
     muteButton.style.gridArea = 'mute'
     muteButton.style.justifySelf = 'start'
     muteButton.innerText = 'mute'
+    muteButton.setAttribute('aria-label', `Mute ${audioInput.name}`)
     const muteOnClick = () => {
       audioInput.mute()
       muteButton.innerText = 'unmute'
+      muteButton.setAttribute('aria-label', `Unmute ${audioInput.name}`)
       muteButton.onclick = () => {
         audioInput.unmute()
         muteButton.innerText = 'mute'
+        muteButton.setAttribute('aria-label', `Mute ${audioInput.name}`)
         muteButton.onclick = muteOnClick
       }
     }
@@ -147,5 +155,6 @@ class AudioInputController {
 
     this.peakMeter = new PeakMeterController(peakMeterDiv, audioInput, true, audioInput.channelCount)
     this.peakMeter.draw(this.peakMeter)
+    this.peakMeter.setLabel(`${audioInput.name} input level`)
   }
 }

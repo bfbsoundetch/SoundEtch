@@ -95,6 +95,7 @@ export class TranscriptionOverlayController extends TrackListItemController {
   ) {
     super(trackListController)
     this.overlayElement.classList.add('transcription-overlay')
+    this.overlayElement.setAttribute('aria-hidden', 'true')
     this.boundaryPathElement.classList.add('transcription-range-boundaries')
     this.overlayElement.appendChild(this.boundaryPathElement)
     parentElement.appendChild(this.overlayElement)

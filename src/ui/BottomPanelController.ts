@@ -23,6 +23,7 @@ export class BottomPanelController {
   private readonly backButton = document.createElement('button')
   private readonly closeButton = document.createElement('button')
   private readonly resizeHandle = document.createElement('div')
+  private readonly sizeButton = document.createElement('button')
   private readonly topElement = document.getElementById('topdiv')!
   private readonly applicationHeader = document.querySelector<HTMLElement>('.header-container')!
   private onBack: (() => Promise<void> | void) | null = null
@@ -32,16 +33,22 @@ export class BottomPanelController {
   private expanded = false
   private cancelResize: (() => void) | null = null
   private refreshResize: (() => void) | null = null
+  private returnFocus: HTMLElement | null = null
 
   private constructor() {
     this.root.id = 'bottom-panel'
     this.root.className = 'bottom-panel'
+    this.root.inert = true
+    this.root.setAttribute('role', 'region')
+    this.root.setAttribute('aria-labelledby', 'bottom-panel-title')
+    this.titleElement.id = 'bottom-panel-title'
+    this.titleElement.tabIndex = -1
 
     const header = document.createElement('div')
     header.className = 'bottom-panel-header'
 
     this.resizeHandle.className = 'bottom-panel-resize-handle'
-    this.resizeHandle.tabIndex = -1
+    this.resizeHandle.tabIndex = 0
     this.resizeHandle.title = 'Drag to switch between half and full height'
     this.resizeHandle.setAttribute('role', 'separator')
     this.resizeHandle.setAttribute('aria-label', 'Resize bottom panel')
@@ -172,7 +179,16 @@ export class BottomPanelController {
     this.closeButton.appendChild(closeIcon)
     this.closeButton.addEventListener('click', () => this.close())
 
-    header.append(this.resizeHandle, this.backButton, headingGroup, this.closeButton)
+    this.sizeButton.type = 'button'
+    this.sizeButton.className = 'clickable bottom-panel-size'
+    this.sizeButton.appendChild(createArrowIcon('line', { className: 'bottom-panel-size-icon' }))
+    this.sizeButton.addEventListener('click', () => {
+      this.expanded = !this.expanded
+      this.cancelResize?.()
+      this.resizePanel()
+    })
+
+    header.append(this.resizeHandle, this.backButton, headingGroup, this.sizeButton, this.closeButton)
 
     this.bodyElement.className = 'bottom-panel-body'
     this.root.append(header, this.bodyElement)
@@ -190,6 +206,12 @@ export class BottomPanelController {
   }
 
   open(options: BottomPanelOptions) {
+    const previousFocus =
+      document.activeElement instanceof HTMLElement && document.activeElement !== document.body
+        ? document.activeElement
+        : null
+    const focusWasInside = previousFocus !== null && this.root.contains(previousFocus)
+    const opening = !this.isOpen || this.owner !== options.owner
     if (this.isOpen && this.owner !== options.owner) {
       this.close()
     }
@@ -203,8 +225,14 @@ export class BottomPanelController {
     this.setBody(options.body)
     this.root.classList.add('open')
     this.isOpen = true
-    this.resizeHandle.tabIndex = 0
+    this.root.inert = false
     this.resizePanel()
+    if (opening && !focusWasInside) {
+      this.returnFocus = previousFocus
+      this.titleElement.focus({ preventScroll: true })
+    } else if (focusWasInside && !this.root.contains(document.activeElement)) {
+      this.titleElement.focus({ preventScroll: true })
+    }
   }
 
   setTitle(title: string) {
@@ -236,6 +264,10 @@ export class BottomPanelController {
     this.root.classList.toggle('expanded', height === maximumHeight)
     this.resizeHandle.setAttribute('aria-valuenow', this.expanded ? '100' : '0')
     this.resizeHandle.setAttribute('aria-valuetext', this.expanded ? 'Full height' : 'Half height')
+    const sizeLabel = this.expanded ? 'Restore half height' : 'Expand to full height'
+    this.sizeButton.setAttribute('aria-label', sizeLabel)
+    this.sizeButton.title = sizeLabel
+    this.sizeButton.classList.toggle('expanded', this.expanded)
     if (immediate) {
       this.root.getBoundingClientRect()
       this.root.classList.remove('layout-resize')
@@ -247,13 +279,16 @@ export class BottomPanelController {
     this.root.classList.remove('open')
     this.topElement.style.height = '100vh'
     this.isOpen = false
-    this.resizeHandle.tabIndex = -1
+    this.root.inert = true
   }
 
   close(owner?: object): void {
     if (!this.isOpen || (owner !== undefined && owner !== this.owner)) {
       return
     }
+    const restore = this.root.contains(document.activeElement)
+    const target = this.returnFocus
+    this.returnFocus = null
     this.hide()
     const onClose = this.onClose
     this.onBack = null
@@ -264,5 +299,6 @@ export class BottomPanelController {
     } catch (error) {
       console.error('Bottom panel close action failed', error)
     }
+    if (restore && target?.isConnected) target.focus()
   }
 }

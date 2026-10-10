@@ -111,16 +111,11 @@ export class PublishProjectController {
         const percentage = ((slider.valueAsNumber - min) / (max - min)) * 100
         output.style.left = `calc(${percentage}% + (${9 - percentage * 0.18}px))`
         output.value = `${slider.value}${slider.dataset.outputSuffix ?? ''}`
+        slider.setAttribute('aria-valuetext', output.value)
       }
 
       updateOutput()
       slider.addEventListener('input', updateOutput)
-      slider.addEventListener('mouseenter', () => {
-        output.style.opacity = '1'
-      })
-      slider.addEventListener('mouseleave', () => {
-        output.style.opacity = '0'
-      })
     })
   }
 

@@ -1,4 +1,5 @@
 import { TimeUtils } from '../global/TimeUtils'
+import { announce } from './LiveAnnouncer'
 
 export class ProcessingModalController {
   private readonly dialog = document.getElementById('processing-modal') as HTMLDialogElement
@@ -11,6 +12,7 @@ export class ProcessingModalController {
 
   private onCancel: (() => void) | null = null
   private startTime = 0
+  private lastAnnouncedDecile = 0
 
   constructor() {
     this.cancelButton.addEventListener('click', () => this.cancel())
@@ -22,16 +24,18 @@ export class ProcessingModalController {
 
   show(title: string, onCancel: () => void) {
     this.onCancel = onCancel
+    this.dialog.showModal()
     this.startTime = Date.now()
     this.setTitle(title)
     this.setProgress(0)
-    this.dialog.showModal()
   }
 
   setTitle(title: string) {
     this.titleElement.textContent = title
     if (this.dialog.open) {
       this.startTime = Date.now()
+      this.lastAnnouncedDecile = 0
+      announce(title)
     }
   }
 
@@ -39,6 +43,11 @@ export class ProcessingModalController {
     const clamped = Math.min(1, Math.max(0, progress))
     this.progressBar.value = clamped * 100
     this.percentElement.textContent = `${Math.round(clamped * 100)}%`
+    const decile = Math.floor(clamped * 10)
+    if (this.dialog.open && decile > this.lastAnnouncedDecile) {
+      this.lastAnnouncedDecile = decile
+      announce(`${decile * 10}% complete`)
+    }
 
     const elapsedTime = Date.now() - this.startTime
     const totalTime = Math.round(elapsedTime / progress)

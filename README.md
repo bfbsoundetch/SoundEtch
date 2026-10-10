@@ -14,11 +14,21 @@ The trace uses pre-AAC PCM. MP4 audio still uses the browser's AAC encoder or th
 
 ## Timeline display modes
 
-Use each track's three-dots menu to switch between its waveform and a WebGPU-rendered spectrogram. The selected mode is session-only and resets to the waveform when a project is opened or the page is reloaded. If WebGPU is unavailable, the spectrogram view keeps its editing overlays on the selected color scheme's minimum-dB background; switching back to the waveform remains available.
+Use each track's options menu (three dots) to switch between its waveform and a WebGPU-rendered spectrogram, rename the track, open its transcript, or change its height. The selected mode is session-only and resets to the waveform when a project is opened or the page is reloaded. If WebGPU is unavailable, the spectrogram view keeps its editing overlays on the selected color scheme's minimum-dB background; switching back to the waveform remains available.
 
 Open **Settings** from the application menu to configure spectrogram rendering and analysis. Settings are grouped into collapsed, expandable sections. Color schemes include Viridis (default), Magma, Inferno, and Grayscale. FFT size (default 2,048 samples), analysis window (Blackman, Blackman-Harris, or Hann), hop size (512 samples), mel-frequency bands (128), the color scheme, and the minimum-level slider (default -96 dB) are saved in the browser and apply to all spectrogram tracks. Analysis changes clear the in-memory spectrogram tile cache; changing only the color scheme redraws cached tiles without recomputing them. Audio and waveform rendering are unchanged.
 
 The **Downloaded models** settings section reports the persistent browser-cache footprint of DeepFilterNet, Granite, and Silero VAD separately. **Unload** removes that model's cached files, including stale Granite or VAD revision caches, without interrupting a model runtime already in use. The browser downloads those files again when a later runtime needs them.
+
+## Keyboard and assistive technology
+
+Each track has a focusable timeline control. Left/Right move the cursor by one ruler tick, Page Up/Page Down by one labelled interval, and Home/End go to the start and end. Hold Shift to select; Alt+Shift+Up/Down adds the neighbouring track to the selection, Ctrl/⌘+A selects the whole track, Delete cuts the selection, Escape clears it, and +/− zoom around the cursor. Shift+F10 or the Menu key opens the menu a right-click opens there: selection actions, clip actions (split, move or trim by entering a time, move to a new track, select, info, delete), or paste and go-to-time on an empty stretch. The zoom, scroll, and **Go to time…** buttons above the track headers work with a single click.
+
+Ctrl/⌘+X cuts the timeline selection. Timeline copy, cut, paste, and undo shortcuts are ignored while focus is in a text field, a select, or an open dialog, and Ctrl/⌘+C copies selected text normally.
+
+In the **Transcript** panel, the arrow keys, Home, and End move between words, Shift extends the timeline selection word by word, and Enter or Space moves the cursor to the focused word.
+
+Screen readers hear status changes: transport state, recording countdowns, edits such as cut, paste, undo, and redo, notifications, processing progress in 10% steps, and meeting joins and departures. Error notifications stay until dismissed with their close button or Escape; other notifications pause while hovered or focused. Escape also hides an open tooltip.
 
 ## Transcription timeline overlays
 
@@ -30,7 +40,7 @@ Click a transcript interval in the timeline lane to open the read-only **Transcr
 
 Drag the shared bottom panel's top bar or centered grip to switch between half-screen height and full height below the main header. An upward drag of at least 24px selects full height; a downward drag of at least 24px selects half height, without needing to cross the midpoint. Smaller gestures keep the current size. The panel follows the pointer, then eases into its chosen size over 100ms on release while the timeline boundary moves with it; no intermediate height is retained. Full height has no panel shadow. Reduced-motion preferences disable the animation. Viewport/header changes update the bounds without cancelling an active drag, and tracking continues outside the moving header or after pointer-capture loss until release. A cancelled gesture or window focus loss restores the previously chosen size.
 
-Dragging downward stops at half height; only the close button dismisses the panel. The chosen half/full size is retained across view changes and reopening while the app stays open. With the grip focused, Up or End selects full height, and Down or Home selects half height.
+Dragging downward stops at half height; only the close button dismisses the panel. The chosen half/full size is retained across view changes and reopening while the app stays open. With the grip focused, Up or End selects full height, and Down or Home selects half height. The size button beside the close button switches between the two heights with one click.
 
 VAD-detected speech regions appear as separate paragraphs, including pauses whose inference padding overlaps. The 20-second inference chunks do not introduce paragraph breaks. Each word retains its source-region onset, preserving paragraph membership through trims, splits, repeated placements, persistence, and undo/redo. Previously generated transcripts without this metadata remain one paragraph until regenerated.
 

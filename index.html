@@ -1,14 +1,15 @@
 <!doctype html>
-<html>
+<html lang="en">
   <head>
+    <meta charset="UTF-8" />
     <link rel="stylesheet" href="index.css" />
     <link
       rel="icon"
       type="image/svg+xml"
       href="data:image/svg+xml,%3Csvg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 500 500'%3E%3Cstyle%3E svg %7B --c: rgb(0, 0, 0); --f: %2300000030; %7D @media (prefers-color-scheme: dark) %7B svg %7B --c: rgb(255,255,255); --f: %23FFFFFF30; %7D %7D %3C/style%3E%3Cpath style='fill: var(--f); stroke-width: 25px; stroke: var(--c);' d='M -5 125 A 225 225 0 0 1 100 250 A 225 225 0 0 1 540 250 A 225 225 0 0 1 100 250 A 225 225 0 0 1 -5 375'%3E%3C/path%3E%3Ctext style='fill: var(--c); font-family: Georgia; font-size: 60px; font-weight: 700; letter-spacing: 2px; white-space: pre;' x='390' y='260'%3ESE%3C/text%3E%3C/svg%3E"
     />
+    <title>SoundEtch</title>
   </head>
-  <title>SoundEtch</title>
   <script type="module" src="./src/WebEntrypoint.js"></script>
   <script type="module" src="./src/Global.ts"></script>
   <script>
@@ -121,12 +122,15 @@
           }
         })
       })
-    })
-    function closeOverlay() {
-      document.querySelectorAll('.overlay').forEach((overlay) => {
-        overlay.close()
+
+      document.addEventListener('keydown', (event) => {
+        if (event.key === 'Escape') {
+          document.body.classList.add('tooltips-dismissed')
+        }
       })
-    }
+      document.addEventListener('pointermove', () => document.body.classList.remove('tooltips-dismissed'))
+      document.addEventListener('focusin', () => document.body.classList.remove('tooltips-dismissed'))
+    })
     //For my testing. Open with Audacity: File > Import > Raw Data
     async function downloadClip(id) {
       const activeProject = ProjectManager.getActiveProject()
@@ -159,12 +163,12 @@
 
   <body>
     <div id="topdiv">
-      <div class="header-container">
-        <button class="menu-button clickable" id="menu-button" popovertarget="menu-dropdown">
-          <svg id="main-menu-open-button" viewBox="0 0 500 500">
+      <div class="header-container" role="banner">
+        <button class="menu-button clickable" id="menu-button" popovertarget="menu-dropdown" aria-label="Main menu">
+          <svg id="main-menu-open-button" viewBox="0 0 500 500" aria-hidden="true">
             <use xlink:href="#menu-hamburger" />
           </svg>
-          <svg style="display: none" id="main-menu-close-button" viewBox="0 0 500 500">
+          <svg style="display: none" id="main-menu-close-button" viewBox="0 0 500 500" aria-hidden="true">
             <use xlink:href="#menu-close" />
           </svg>
         </button>
@@ -174,15 +178,23 @@
             <button
               id="main-menu-edit-button"
               class="menu-item clickable main-menu-submenu-button"
-              aria-haspopup="menu"
               aria-expanded="false"
+              aria-controls="main-menu-edit-submenu-content"
             >
               <span>Edit</span>
               <span aria-hidden="true">&gt;</span>
             </button>
-            <div class="main-menu-submenu-content" role="menu">
-              <button id="main-menu-undo-button" class="menu-item clickable" role="menuitem">Undo</button>
-              <button id="main-menu-redo-button" class="menu-item clickable" role="menuitem">Redo</button>
+            <div id="main-menu-edit-submenu-content" class="main-menu-submenu-content">
+              <button id="main-menu-undo-button" class="menu-item clickable" aria-keyshortcuts="Control+Z Meta+Z">
+                Undo
+              </button>
+              <button
+                id="main-menu-redo-button"
+                class="menu-item clickable"
+                aria-keyshortcuts="Control+Shift+Z Meta+Shift+Z Control+Y"
+              >
+                Redo
+              </button>
             </div>
           </div>
           <button
@@ -205,47 +217,47 @@
           <button class="menu-item clickable" onclick="window.open('about.html', '_blank')">About</button>
         </div>
         <div id="title">
-          <svg style="height: 100%" viewBox="0 0 600 100">
+          <svg style="height: 100%" viewBox="0 0 600 100" role="img" aria-label="SoundEtch">
             <use xlink:href="#logo" />
           </svg>
         </div>
         <div id="project-header">
           <button id="first-header-button" class="project-button tooltipped clickable">
-            <svg class="header-button record" viewBox="0 0 500 500">
+            <svg class="header-button record" viewBox="0 0 500 500" aria-hidden="true">
               <use xlink:href="#record" />
             </svg>
-            <svg class="header-button play" viewBox="0 0 500 500" style="opacity: 0">
+            <svg class="header-button play" viewBox="0 0 500 500" style="opacity: 0" aria-hidden="true">
               <use xlink:href="#play" />
             </svg>
             <span>Record</span>
           </button>
           <button id="second-header-button" class="project-button tooltipped clickable">
-            <svg class="header-button play" viewBox="0 0 500 500">
+            <svg class="header-button play" viewBox="0 0 500 500" aria-hidden="true">
               <use xlink:href="#play" />
             </svg>
-            <svg class="header-button pause" viewBox="0 0 500 500" style="opacity: 0">
+            <svg class="header-button pause" viewBox="0 0 500 500" style="opacity: 0" aria-hidden="true">
               <use xlink:href="#pause" />
             </svg>
             <span>Play</span>
           </button>
           <button id="third-header-button" class="project-button tooltipped clickable">
-            <svg class="header-button plus" viewBox="0 0 500 500">
+            <svg class="header-button plus" viewBox="0 0 500 500" aria-hidden="true">
               <use xlink:href="#audio-file" />
             </svg>
-            <svg class="header-button stop" viewBox="0 0 500 500" style="opacity: 0">
+            <svg class="header-button stop" viewBox="0 0 500 500" style="opacity: 0" aria-hidden="true">
               <use xlink:href="#stop" />
             </svg>
             <span>Add Clip...</span>
           </button>
           <div></div>
           <button id="mic-button" class="project-button tooltipped clickable">
-            <svg class="header-button" viewBox="0 0 500 500">
+            <svg class="header-button" viewBox="0 0 500 500" aria-hidden="true">
               <use xlink:href="#microphone" />
             </svg>
             <span>Microphone</span>
           </button>
           <button id="capture-tab-button" class="project-button tooltipped clickable">
-            <svg class="header-button" viewBox="0 0 500 500">
+            <svg class="header-button" viewBox="0 0 500 500" aria-hidden="true">
               <use xlink:href="#browser-tab" />
             </svg>
             <span>Screen / Tab</span>
@@ -255,24 +267,24 @@
             class="project-button tooltipped clickable"
             onclick="showDialog(document.getElementById('meeting-room'))"
           >
-            <svg class="header-button" viewBox="0 0 500 500">
+            <svg class="header-button" viewBox="0 0 500 500" aria-hidden="true">
               <use xlink:href="#phone" />
             </svg>
             <span>Guests...</span>
           </button>
         </div>
       </div>
-      <div id="welcome" style="display: none">
+      <div id="welcome" role="main" style="display: none">
         <div>
           <h1 style="font-size: xxx-large; text-align: center">Welcome!</h1>
           <h2 style="text-align: center">Try one of these to get started:</h2>
         </div>
         <button id="welcome-mic" class="welcome-button clickable">
           <div class="welcome-header">
-            <svg class="welcome-icon" viewBox="0 0 500 500">
+            <svg class="welcome-icon" viewBox="0 0 500 500" aria-hidden="true">
               <use xlink:href="#microphone" />
             </svg>
-            <svg class="welcome-icon" viewBox="0 0 500 500">
+            <svg class="welcome-icon" viewBox="0 0 500 500" aria-hidden="true">
               <use xlink:href="#record" />
             </svg>
           </div>
@@ -280,10 +292,10 @@
         </button>
         <button id="welcome-screen" class="welcome-button clickable">
           <div class="welcome-header">
-            <svg class="welcome-icon" viewBox="0 0 500 500">
+            <svg class="welcome-icon" viewBox="0 0 500 500" aria-hidden="true">
               <use xlink:href="#browser-tab" />
             </svg>
-            <svg class="welcome-icon" viewBox="0 0 500 500">
+            <svg class="welcome-icon" viewBox="0 0 500 500" aria-hidden="true">
               <use xlink:href="#record" />
             </svg>
           </div>
@@ -291,7 +303,7 @@
         </button>
         <button id="welcome-file" class="welcome-button clickable">
           <div class="welcome-header">
-            <svg class="welcome-icon" viewBox="0 0 500 500">
+            <svg class="welcome-icon" viewBox="0 0 500 500" aria-hidden="true">
               <use xlink:href="#audio-file" />
             </svg>
           </div>
@@ -299,23 +311,67 @@
         </button>
         <button id="welcome-meet" class="welcome-button clickable">
           <div class="welcome-header">
-            <svg class="welcome-icon" viewBox="0 0 500 500">
+            <svg class="welcome-icon" viewBox="0 0 500 500" aria-hidden="true">
               <use xlink:href="#phone" />
             </svg>
           </div>
           <div>Start a meeting</div>
         </button>
       </div>
-      <div id="timeline-body">
+      <div id="timeline-body" role="main">
         <div id="timeline">
           <svg
             id="timeline-svg"
             style="height: 100%; width: 100%; user-select: none"
             xmlns="http://www.w3.org/2000/svg"
+            aria-hidden="true"
           >
             <path id="timeline-major-ticks"></path>
             <path id="timeline-minor-ticks"></path>
           </svg>
+        </div>
+        <div id="timeline-view-controls" role="group" aria-label="Timeline view">
+          <button
+            type="button"
+            id="timeline-zoom-out-button"
+            class="bordered clickable timeline-view-button"
+            aria-label="Zoom out"
+            title="Zoom out"
+          >
+            <svg viewBox="0 0 500 500" aria-hidden="true"><use xlink:href="#minus" /></svg>
+          </button>
+          <button
+            type="button"
+            id="timeline-zoom-in-button"
+            class="bordered clickable timeline-view-button"
+            aria-label="Zoom in"
+            title="Zoom in"
+          >
+            <svg viewBox="0 0 500 500" aria-hidden="true"><use xlink:href="#plus" /></svg>
+          </button>
+          <button
+            type="button"
+            id="timeline-scroll-left-button"
+            class="bordered clickable timeline-view-button"
+            aria-label="Scroll left"
+            title="Scroll left"
+          >
+            <svg class="timeline-scroll-left-icon" viewBox="0 0 500 500" aria-hidden="true">
+              <use xlink:href="#arrow-right" />
+            </svg>
+          </button>
+          <button
+            type="button"
+            id="timeline-scroll-right-button"
+            class="bordered clickable timeline-view-button"
+            aria-label="Scroll right"
+            title="Scroll right"
+          >
+            <svg viewBox="0 0 500 500" aria-hidden="true"><use xlink:href="#arrow-right" /></svg>
+          </button>
+          <button type="button" id="timeline-go-to-time-button" class="bordered clickable timeline-view-button">
+            Go to time…
+          </button>
         </div>
         <div id="input-track-lists">
           <div id="timeline-info-area">
@@ -330,6 +386,7 @@
             id="position-marker"
             style="position: absolute; width: 100%; right: 0; top: 4rem; pointer-events: none; user-select: none"
             xmlns="http://www.w3.org/2000/svg"
+            aria-hidden="true"
           >
             <line id="position-line" x1="150" y1="30" x2="150" y2="600" stroke-width="4"></line>
             <text
@@ -350,15 +407,19 @@
         </div>
       </div>
     </div>
-    <dialog id="add-clip-modal" class="overlay">
+    <dialog id="add-clip-modal" class="overlay" aria-labelledby="add-clip-modal-title">
       <div id="add-clip-modal-content" class="overlay-content" onclick="event.stopPropagation()">
-        <div class="overlay-close-button clickable" onclick="closeOverlay()">
-          <svg class="meeting-icon" viewBox="0 0 500 500">
-            <use xlink:href="#menu-close" />
-          </svg>
-        </div>
-        <h1>Add Clip</h1>
-        <div class="add-clip-source-toggle">
+        <button
+          type="button"
+          class="overlay-close-button clickable"
+          aria-label="Close add clip"
+          title="Close"
+          onclick="this.closest('dialog').close()"
+        >
+          <svg class="meeting-icon" viewBox="0 0 500 500" aria-hidden="true"><use xlink:href="#menu-close" /></svg>
+        </button>
+        <h1 id="add-clip-modal-title">Add Clip</h1>
+        <div class="add-clip-source-toggle" role="radiogroup" aria-label="Clip source">
           <label class="add-clip-source-option">
             <input type="radio" name="add-clip-source" checked onchange="setAddClipSource('local')" />
             Local file
@@ -373,7 +434,13 @@
           </label>
         </div>
         <div id="add-clip-local-section">
-          <label class="bordered clickable add-clip-option" for="audio-file-local">Choose local file...</label>
+          <button
+            type="button"
+            class="bordered clickable add-clip-option"
+            onclick="document.getElementById('audio-file-local').click()"
+          >
+            Choose local file...
+          </button>
           <input type="file" id="audio-file-local" accept="audio/*" hidden onchange="audioFileLocalHandler()" />
         </div>
         <div id="add-clip-remote-section" class="add-clip-url-option" style="display: none">
@@ -395,23 +462,17 @@
         </div>
       </div>
     </dialog>
-    <dialog id="about-modal" class="overlay">
-      <div id="about-modal-content" class="overlay-content" onclick="event.stopPropagation()">
-        <div class="overlay-close-button clickable" onclick="closeOverlay()">
-          <svg class="meeting-icon" viewBox="0 0 500 500">
-            <use xlink:href="#menu-close" />
-          </svg>
-        </div>
-        <h1>About SoundEtch</h1>
-      </div>
-    </dialog>
-    <dialog id="meeting-room" class="overlay">
+    <dialog id="meeting-room" class="overlay" aria-label="Meeting room">
       <div id="meeting-room-content" onclick="event.stopPropagation()">
-        <div class="overlay-close-button clickable" onclick="closeOverlay()">
-          <svg class="meeting-icon" viewBox="0 0 500 500">
-            <use xlink:href="#menu-close" />
-          </svg>
-        </div>
+        <button
+          type="button"
+          class="overlay-close-button clickable"
+          aria-label="Close meeting room"
+          title="Close"
+          onclick="this.closest('dialog').close()"
+        >
+          <svg class="meeting-icon" viewBox="0 0 500 500" aria-hidden="true"><use xlink:href="#menu-close" /></svg>
+        </button>
         <div id="vids" class="meeting-solo">
           <div id="self-meeting" class="vid-div">
             <video id="self-vid" style="display: inline-block"></video>
@@ -435,29 +496,32 @@
         </div>
         <div id="meeting-setup">
           <div id="meeting-device-setup-controls">
-            <div
+            <button
+              type="button"
               id="meeting-mic-button"
               class="meeting-button tooltipped clickable"
               onclick="LocalMediaStreams.startAudioDevice()"
             >
-              <svg class="meeting-icon" viewBox="0 0 500 500">
+              <svg class="meeting-icon" viewBox="0 0 500 500" aria-hidden="true">
                 <use xlink:href="#microphone" />
               </svg>
               <span>Microphone</span>
-            </div>
-            <div
+            </button>
+            <button
+              type="button"
               id="meeting-camera-button"
               class="meeting-button tooltipped clickable"
               onclick="LocalMediaStreams.startVideoDevice()"
             >
-              <svg class="meeting-icon" viewBox="0 0 500 500">
+              <svg class="meeting-icon" viewBox="0 0 500 500" aria-hidden="true">
                 <use xlink:href="#camera" />
               </svg>
               <span>Camera</span>
-            </div>
+            </button>
           </div>
           <div id="meeting-room-setup" style="user-select: none; padding: 0.25rem">
-            <div style="grid-area: username-form; position: relative">
+            <div style="grid-area: username-form; position: relative; display: grid; gap: 0.25rem">
+              <label for="username-form" class="meeting-username-label">Your name</label>
               <input
                 type="text"
                 name="Username"
@@ -467,11 +531,14 @@
                 minlength="4"
                 maxlength="32"
                 size="16"
-                title="Username"
+                aria-describedby="username-form-hint"
                 placeholder="Enter Your Name"
                 style="font-size: x-large; box-sizing: border-box; width: 100%; height: 100%; text-align: center"
                 oninput="this.value = this.value.replace(/[^a-zA-Z0-9 \-_]/g, '')"
               />
+              <p id="username-form-hint" class="meeting-username-hint">
+                Letters, numbers, spaces, hyphens and underscores.
+              </p>
             </div>
             <button
               id="enter-meeting-room-button"
@@ -491,33 +558,34 @@
           </div>
         </div>
         <div id="meeting-controls">
-          <div
+          <button
+            type="button"
             id="meeting-disconnect-button"
             class="meeting-button tooltipped clickable"
-            style="color: rgba(255, 100, 100)"
             onclick="meetingRoomController.disconnect()"
           >
             Disconnect
-          </div>
+          </button>
           <button id="meeting-record-button" type="button" class="meeting-button tooltipped clickable">
-            <svg class="header-button record" viewBox="0 0 500 500">
+            <svg class="header-button record" viewBox="0 0 500 500" aria-hidden="true">
               <use xlink:href="#record" />
             </svg>
-            <svg class="header-button play" viewBox="0 0 500 500" style="opacity: 0">
+            <svg class="header-button play" viewBox="0 0 500 500" style="opacity: 0" aria-hidden="true">
               <use xlink:href="#play" />
             </svg>
             <span>Record</span>
           </button>
-          <div
+          <button
+            type="button"
             id="meeting-screen-share-button"
             class="meeting-button tooltipped clickable"
             onclick="LocalMediaStreams.startCapturingTab()"
           >
-            <svg class="meeting-icon" viewBox="0 0 500 500">
+            <svg class="meeting-icon" viewBox="0 0 500 500" aria-hidden="true">
               <use xlink:href="#screen-share" />
             </svg>
             <span>Share Screen</span>
-          </div>
+          </button>
           <div id="meeting-link-selector" class="meeting-button meeting-control-menu-anchor">
             <button
               id="open-meeting-link-button"
@@ -527,13 +595,19 @@
               aria-controls="meeting-link-menu"
               onclick="meetingRoomController.toggleLinkMenu()"
             >
-              <svg class="meeting-icon" viewBox="0 0 24 24">
+              <svg class="meeting-icon" viewBox="0 0 24 24" aria-hidden="true">
                 <use xlink:href="#link-icon" />
               </svg>
+              <span>Meeting invite link</span>
             </button>
-            <div id="meeting-link-menu" class="meeting-controls-menu" role="menu" aria-label="Meeting invite link">
+            <div
+              id="meeting-link-menu"
+              class="meeting-controls-menu"
+              role="group"
+              aria-labelledby="meeting-link-heading"
+            >
               <div id="meeting-link-box" class="meeting-settings-box">
-                <div class="meeting-settings-heading">Meeting Invite Link</div>
+                <div id="meeting-link-heading" class="meeting-settings-heading">Meeting Invite Link</div>
                 <button
                   id="meeting-link"
                   type="button"
@@ -549,19 +623,22 @@
               type="button"
               class="meeting-control-icon-button tooltipped clickable"
               aria-expanded="false"
+              aria-haspopup="menu"
               aria-controls="meeting-layout-menu"
               onclick="meetingRoomController.toggleLayoutMenu()"
             >
-              <svg class="meeting-icon" viewBox="0 0 500 500">
+              <svg class="meeting-icon" viewBox="0 0 500 500" aria-hidden="true">
                 <use xlink:href="#three-dots" />
               </svg>
+              <span>Meeting layout</span>
             </button>
-            <div id="meeting-layout-menu" class="meeting-controls-menu" role="menu" aria-label="Meeting settings">
-              <div class="meeting-settings-heading">Select Layout</div>
+            <div id="meeting-layout-menu" class="meeting-controls-menu" role="menu" aria-label="Select layout">
+              <div class="meeting-settings-heading" aria-hidden="true">Select Layout</div>
               <button
                 id="meeting-layout-option-grid"
                 type="button"
                 class="meeting-layout-option clickable"
+                tabindex="-1"
                 role="menuitemradio"
                 aria-checked="false"
                 onclick="meetingRoomController.selectVideoLayout('grid')"
@@ -573,6 +650,7 @@
                 id="meeting-layout-option-spotlight"
                 type="button"
                 class="meeting-layout-option clickable"
+                tabindex="-1"
                 role="menuitemradio"
                 aria-checked="false"
                 onclick="meetingRoomController.selectVideoLayout('spotlight')"
@@ -584,6 +662,7 @@
                 id="meeting-layout-option-solo"
                 type="button"
                 class="meeting-layout-option clickable"
+                tabindex="-1"
                 role="menuitemradio"
                 aria-checked="false"
                 onclick="meetingRoomController.selectVideoLayout('solo')"
@@ -596,18 +675,22 @@
         </div>
       </div>
     </dialog>
-    <dialog id="logs-modal" class="overlay">
-      <div class="overlay-close-button clickable" onclick="closeOverlay()">
-        <svg class="meeting-icon" viewBox="0 0 500 500">
-          <use xlink:href="#menu-close" />
-        </svg>
-      </div>
+    <dialog id="logs-modal" class="overlay" aria-label="Logs">
+      <button
+        type="button"
+        class="overlay-close-button clickable"
+        aria-label="Close logs"
+        title="Close"
+        onclick="this.closest('dialog').close()"
+      >
+        <svg class="meeting-icon" viewBox="0 0 500 500" aria-hidden="true"><use xlink:href="#menu-close" /></svg>
+      </button>
       <div id="logs-modal-content" class="overlay-content">
         <div id="logs-modal-toolbar">
           <button id="logs-modal-refresh-button" class="bordered clickable logs-modal-button">Refresh</button>
           <button id="logs-modal-download-button" class="bordered clickable logs-modal-button">Download .txt</button>
         </div>
-        <pre id="logs-modal-content-text"></pre>
+        <pre id="logs-modal-content-text" tabindex="0" role="region" aria-label="Log output"></pre>
       </div>
     </dialog>
     <dialog id="settings-modal" class="overlay" aria-labelledby="settings-modal-title">
@@ -686,9 +769,9 @@
                   max="-1"
                   step="1"
                   value="-96"
-                  aria-describedby="spectrogram-min-db-description spectrogram-min-db-value"
+                  aria-describedby="spectrogram-min-db-description"
                 />
-                <output id="spectrogram-min-db-value" for="spectrogram-min-db" aria-live="polite">-96 dB</output>
+                <output id="spectrogram-min-db-value" for="spectrogram-min-db" aria-live="off">-96 dB</output>
               </div>
               <p id="spectrogram-min-db-description">Signals at or below this level use the background color.</p>
             </div>
@@ -705,25 +788,43 @@
                 <div>
                   <strong>DeepFilterNet</strong>
                   <p class="model-cache-description">Noise reduction model and runtime</p>
-                  <p class="model-cache-status" aria-live="polite">Checking…</p>
+                  <p id="model-cache-status-deepFilterNet" class="model-cache-status">Checking…</p>
                 </div>
-                <button class="bordered clickable model-cache-unload-button" type="button">Unload</button>
+                <button
+                  class="bordered clickable model-cache-unload-button"
+                  type="button"
+                  aria-describedby="model-cache-status-deepFilterNet"
+                >
+                  Unload
+                </button>
               </li>
               <li class="model-cache-row" data-model-cache-id="granite">
                 <div>
                   <strong>Granite</strong>
                   <p class="model-cache-description">English speech transcription model</p>
-                  <p class="model-cache-status" aria-live="polite">Checking…</p>
+                  <p id="model-cache-status-granite" class="model-cache-status">Checking…</p>
                 </div>
-                <button class="bordered clickable model-cache-unload-button" type="button">Unload</button>
+                <button
+                  class="bordered clickable model-cache-unload-button"
+                  type="button"
+                  aria-describedby="model-cache-status-granite"
+                >
+                  Unload
+                </button>
               </li>
               <li class="model-cache-row" data-model-cache-id="vad">
                 <div>
                   <strong>Silero VAD</strong>
                   <p class="model-cache-description">Voice activity detection model</p>
-                  <p class="model-cache-status" aria-live="polite">Checking…</p>
+                  <p id="model-cache-status-vad" class="model-cache-status">Checking…</p>
                 </div>
-                <button class="bordered clickable model-cache-unload-button" type="button">Unload</button>
+                <button
+                  class="bordered clickable model-cache-unload-button"
+                  type="button"
+                  aria-describedby="model-cache-status-vad"
+                >
+                  Unload
+                </button>
               </li>
             </ul>
           </div>
@@ -738,28 +839,36 @@
         </footer>
       </form>
     </dialog>
-    <dialog id="project-manager-modal" class="overlay">
-      <div class="overlay-close-button clickable" onclick="closeOverlay()">
-        <svg class="meeting-icon" viewBox="0 0 500 500">
-          <use xlink:href="#menu-close" />
-        </svg>
-      </div>
+    <dialog id="project-manager-modal" class="overlay" aria-labelledby="project-manager-modal-title">
+      <button
+        type="button"
+        class="overlay-close-button clickable"
+        aria-label="Close projects"
+        title="Close"
+        onclick="this.closest('dialog').close()"
+      >
+        <svg class="meeting-icon" viewBox="0 0 500 500" aria-hidden="true"><use xlink:href="#menu-close" /></svg>
+      </button>
       <div id="project-manager-modal-content" class="overlay-content" onclick="event.stopPropagation()">
         <div id="project-manager-header">
-          <h1>Projects</h1>
+          <h1 id="project-manager-modal-title">Projects</h1>
           <button id="project-manager-new-button" class="bordered clickable">Open New Project</button>
         </div>
         <div id="project-manager-list"></div>
       </div>
     </dialog>
-    <dialog id="project-transfer-modal" class="overlay">
-      <div class="overlay-close-button clickable" onclick="closeOverlay()">
-        <svg class="meeting-icon" viewBox="0 0 500 500">
-          <use xlink:href="#menu-close" />
-        </svg>
-      </div>
+    <dialog id="project-transfer-modal" class="overlay" aria-labelledby="project-transfer-modal-title">
+      <button
+        type="button"
+        class="overlay-close-button clickable"
+        aria-label="Close import and export"
+        title="Close"
+        onclick="this.closest('dialog').close()"
+      >
+        <svg class="meeting-icon" viewBox="0 0 500 500" aria-hidden="true"><use xlink:href="#menu-close" /></svg>
+      </button>
       <div id="project-transfer-modal-content" class="overlay-content" onclick="event.stopPropagation()">
-        <h1>Import / Export Project</h1>
+        <h1 id="project-transfer-modal-title">Import / Export Project</h1>
         <div id="project-transfer-options">
           <section class="project-transfer-option">
             <h2>Export current project</h2>
@@ -785,15 +894,19 @@
         <p id="project-transfer-status" role="status" aria-live="polite"></p>
       </div>
     </dialog>
-    <dialog id="clip-manager-modal" class="overlay">
-      <div class="overlay-close-button clickable" onclick="closeOverlay()">
-        <svg class="meeting-icon" viewBox="0 0 500 500">
-          <use xlink:href="#menu-close" />
-        </svg>
-      </div>
+    <dialog id="clip-manager-modal" class="overlay" aria-labelledby="clip-manager-modal-title">
+      <button
+        type="button"
+        class="overlay-close-button clickable"
+        aria-label="Close clip manager"
+        title="Close"
+        onclick="this.closest('dialog').close()"
+      >
+        <svg class="meeting-icon" viewBox="0 0 500 500" aria-hidden="true"><use xlink:href="#menu-close" /></svg>
+      </button>
       <div id="clip-manager-modal-content" class="overlay-content" onclick="event.stopPropagation()">
         <div id="clip-manager-header">
-          <h1>Manage Clips</h1>
+          <h1 id="clip-manager-modal-title" tabindex="-1">Manage Clips</h1>
           <button id="clip-manager-delete-unused-button" class="bordered clickable" type="button">
             Delete unused clips
           </button>
@@ -801,7 +914,7 @@
         <div id="clip-manager-list"></div>
       </div>
     </dialog>
-    <dialog id="clip-metadata-modal" class="overlay">
+    <dialog id="clip-metadata-modal" class="overlay" aria-labelledby="clip-metadata-title">
       <div id="clip-metadata-modal-content" class="overlay-content" onclick="event.stopPropagation()">
         <div id="clip-metadata-header">
           <button id="clip-metadata-back-button" class="clickable" type="button" aria-label="Back" title="Back">
@@ -810,6 +923,7 @@
             </svg>
           </button>
           <h1 id="clip-metadata-title"></h1>
+          <button id="clip-metadata-rename-button" class="bordered clickable" type="button">Rename</button>
         </div>
         <dl id="clip-metadata-list"></dl>
       </div>
@@ -821,14 +935,18 @@
         </button>
       </form>
     </dialog>
-    <dialog id="publish-project-modal" class="overlay">
-      <div class="overlay-close-button clickable" onclick="closeOverlay()">
-        <svg class="meeting-icon" viewBox="0 0 500 500">
-          <use xlink:href="#menu-close" />
-        </svg>
-      </div>
+    <dialog id="publish-project-modal" class="overlay" aria-labelledby="publish-project-modal-title">
+      <button
+        type="button"
+        class="overlay-close-button clickable"
+        aria-label="Close publish settings"
+        title="Close"
+        onclick="this.closest('dialog').close()"
+      >
+        <svg class="meeting-icon" viewBox="0 0 500 500" aria-hidden="true"><use xlink:href="#menu-close" /></svg>
+      </button>
       <div class="overlay-content">
-        <h1>Publish Settings</h1>
+        <h1 id="publish-project-modal-title">Publish Settings</h1>
 
         <div class="form-group">
           <label for="format">Publish Format</label>
@@ -843,8 +961,8 @@
 
         <div id="channel-count-container" class="form-group">
           <div class="radio-group">
-            <label>Channels</label>
-            <div class="radio-option">
+            <label id="channel-count-label">Channels</label>
+            <div class="radio-option" role="radiogroup" aria-labelledby="channel-count-label">
               <input type="radio" id="channel-count-mono" name="channel-count" value="1" checked />
               <label for="channel-count-mono">Mono</label>
               <input type="radio" id="channel-count-stereo" name="channel-count" value="2" />
@@ -856,8 +974,8 @@
         <div id="video-options-container" class="export-options-container">
           <div class="export-option-row">
             <div class="radio-group">
-              <label>Video Shape</label>
-              <div class="radio-option">
+              <label id="video-preset-label">Video Shape</label>
+              <div class="radio-option" role="radiogroup" aria-labelledby="video-preset-label">
                 <input type="radio" id="video-preset-youtube" name="video-preset" value="youtube" checked />
                 <label for="video-preset-youtube">Hamburger - YouTube 1920x1080</label>
                 <input type="radio" id="video-preset-tiktok" name="video-preset" value="tiktok" />
@@ -920,7 +1038,7 @@
                 data-output-suffix=" Hz"
               />
               <div class="slider-output-container">
-                <output class="slider-value">48000 Hz</output>
+                <output class="slider-value" aria-hidden="true">48000 Hz</output>
               </div>
             </div>
 
@@ -928,15 +1046,15 @@
               <label for="flac-compression">Compression Level (0 for fastest, 8 for smallest file)</label>
               <input type="range" id="flac-compression" value="5" min="0" max="8" step="1" />
               <div class="slider-output-container">
-                <output class="slider-value">5</output>
+                <output class="slider-value" aria-hidden="true">5</output>
               </div>
             </div>
           </div>
           <div id="mp3-options-container" class="export-options-container">
             <div class="export-option-row">
               <div class="radio-group">
-                <label>Bitrate Mode</label>
-                <div class="radio-option">
+                <label id="mp3-mode-label">Bitrate Mode</label>
+                <div class="radio-option" role="radiogroup" aria-labelledby="mp3-mode-label">
                   <input type="radio" id="mp3-mode-cbr" name="mp3-mode" value="cbr" checked />
                   <label for="mp3-mode-cbr">CBR</label>
                   <input type="radio" id="mp3-mode-vbr" name="mp3-mode" value="vbr" />
@@ -979,7 +1097,7 @@
                 step="1"
               />
               <div class="slider-output-container">
-                <output class="slider-value">2</output>
+                <output class="slider-value" aria-hidden="true">2</output>
               </div>
             </div>
 
@@ -1020,7 +1138,7 @@
                 data-output-suffix=" bps"
               />
               <div class="slider-output-container">
-                <output class="slider-value">128000 bps</output>
+                <output class="slider-value" aria-hidden="true">128000 bps</output>
               </div>
             </div>
 
@@ -1037,7 +1155,7 @@
               <label for="opus-complexity">Complexity (0 for fastest, 10 for best quality)</label>
               <input type="range" id="opus-complexity" value="5" min="0" max="10" step="1" />
               <div class="slider-output-container">
-                <output class="slider-value">5</output>
+                <output class="slider-value" aria-hidden="true">5</output>
               </div>
             </div>
 
@@ -1075,11 +1193,16 @@
         </button>
       </div>
     </dialog>
-    <dialog id="processing-modal" class="overlay no-backdrop-close">
+    <dialog id="processing-modal" class="overlay no-backdrop-close" aria-labelledby="processing-modal-title">
       <div id="processing-modal-content" class="overlay-content" onclick="event.stopPropagation()">
         <h1 id="processing-modal-title">Processing...</h1>
         <div id="processing-progress-row">
-          <progress id="processing-progress-bar" max="100" value="0"></progress>
+          <progress
+            id="processing-progress-bar"
+            max="100"
+            value="0"
+            aria-labelledby="processing-modal-title"
+          ></progress>
           <span id="processing-progress-percent">0%</span>
         </div>
         <div id="processing-elapsed-time">00:00:00</div>
@@ -1088,6 +1211,11 @@
       </div>
     </dialog>
     <div id="notification-parent" popover="manual"></div>
+    <p id="timeline-keyboard-help" class="visually-hidden">
+      Left and right arrows move the cursor; Page Up and Page Down move further; Home and End go to the start and end.
+      Hold Shift to select. Alt plus Shift plus up or down arrow adds a track to the selection. Control or Command plus
+      A selects the track. Delete cuts the selection. Plus and minus zoom. Shift plus F10 opens the actions menu.
+    </p>
   </body>
   <svg xmlns="http://www.w3.org/2000/svg" style="height: 0; position: absolute; width: 0">
     <defs>
@@ -1302,7 +1430,7 @@
         <use href="#arrow-block-right" transform="matrix(0, -0.4, 0.4, 0, 150, 342)" />
       </g>
       <g id="slash" viewBox="0 0 500 500">
-        <line style="stroke: rgba(255, 0, 0, 0.6); stroke-width: 60" x1="50" y1="450" x2="450" y2="50"></line>
+        <line style="stroke: var(--record-button-red); stroke-width: 60" x1="50" y1="450" x2="450" y2="50"></line>
       </g>
       <g id="trash" viewBox="0 0 500 500">
         <rect
@@ -1384,6 +1512,9 @@
         <path d="M 0 250 L 500 250" style="stroke: currentColor; stroke-width: 30"></path>
         <path d="M 250 0 L 250 500" style="stroke: currentColor; stroke-width: 30"></path>
       </g>
+      <g id="minus" viewBox="0 0 500 500">
+        <path d="M 0 250 L 500 250" style="stroke: currentColor; stroke-width: 30"></path>
+      </g>
       <g id="loading" viewBox="0 0 500 500">
         <path style="fill: none; stroke: rgb(0, 0, 0); stroke-width: 50px" d="M 250 0 A 250 250 0 1 1 0 250">
           <animateTransform
@@ -1438,35 +1569,35 @@
       </g>
       <g id="automation" viewBox="0 0 500 500">
         <ellipse
-          style="stroke: rgb(0, 0, 0); fill: none; stroke-width: 32px"
+          style="stroke: currentColor; fill: none; stroke-width: 32px"
           cx="70"
           cy="250"
           rx="50"
           ry="50"
         ></ellipse>
         <ellipse
-          style="stroke: rgb(0, 0, 0); fill: none; stroke-width: 32px"
+          style="stroke: currentColor; fill: none; stroke-width: 32px"
           cx="250"
           cy="160"
           rx="50"
           ry="50"
         ></ellipse>
         <ellipse
-          style="stroke: rgb(0, 0, 0); fill: none; stroke-width: 32px"
+          style="stroke: currentColor; fill: none; stroke-width: 32px"
           cx="420"
           cy="330"
           rx="50"
           ry="50"
         ></ellipse>
         <line
-          style="fill: none; stroke: rgb(0, 0, 0); stroke-width: 32px"
+          style="fill: none; stroke: currentColor; stroke-width: 32px"
           x1="114.72"
           y1="227.64"
           x2="205.28"
           y2="182.36"
         ></line>
         <line
-          style="fill: none; stroke: rgb(0, 0, 0); stroke-width: 32px"
+          style="fill: none; stroke: currentColor; stroke-width: 32px"
           x1="285.35"
           y1="195.35"
           x2="384.65"

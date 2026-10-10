@@ -1,4 +1,5 @@
 import { Logger } from '../global/Logger'
+import { announce } from './LiveAnnouncer'
 
 export enum Direction {
   UP,
@@ -17,6 +18,7 @@ export class ErrorBubbleController {
     private readonly parentDiv: HTMLElement,
   ) {
     this.errorSpan = document.createElement('span')
+    this.errorSpan.id = `error-bubble-${label}`
     this.errorSpan.className = 'error-span'
     this.errorSpan.style.opacity = '0'
     this.parentDiv.appendChild(this.errorSpan)
@@ -61,11 +63,17 @@ export class ErrorBubbleController {
     }
     errorSpan.innerText = message
     errorSpan.style.opacity = '1'
+    announce(message, 'assertive')
 
     if (timeoutMs > 0) {
-      this.timeout = setTimeout(() => {
-        this.errorSpan.style.opacity = '0'
-      }, timeoutMs) as unknown as number
+      this.timeout = setTimeout(() => this.hide(), timeoutMs) as unknown as number
     }
+  }
+
+  hide(): void {
+    if (this.timeout) clearTimeout(this.timeout)
+    this.timeout = null
+    this.errorSpan.style.opacity = '0'
+    this.errorSpan.textContent = ''
   }
 }

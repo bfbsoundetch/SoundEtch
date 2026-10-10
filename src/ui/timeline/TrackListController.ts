@@ -4,7 +4,7 @@ import { TimelineController } from './TimelineController'
 import { PositionMarkerController } from './PositionMarkerController'
 import { AudioControl, AudioState } from '../../audiocontext/AudioControl'
 import { KeyPressController } from '../KeyPressController'
-import { ContextMenuController, ContextMenuItem } from '../ContextMenuController'
+import { ContextMenuController, ContextMenuItem, ContextMenuSeparator } from '../ContextMenuController'
 import { PointerStateManager } from '../PointerStateManager'
 import { ClipView, cloneClipViewWithNewStartPosition } from '../../project/ClipView'
 import { Clipboard } from '../Clipboard'
@@ -27,7 +27,11 @@ import { ParameterMetadata } from '../../effects/ParameterMetadata'
 import { AutomationController } from './AutomationController'
 import { SpectrogramService } from './spectrogram/SpectrogramService'
 import type { TrackDisplayMode } from './TrackDisplayMode'
-import { GoToTimeController } from './GoToTimeController'
+import { TimeEntryDialogController } from './TimeEntryDialogController'
+import type { TimeEntryRequest } from './TimeEntryDialogController'
+import { TimelineKeyboardController } from './TimelineKeyboardController'
+import { announce } from '../LiveAnnouncer'
+import { TimeUtils } from '../../global/TimeUtils'
 import type { Clip } from '../../project/Clip'
 import { Transcriber } from '../../transcription/Transcriber'
 import {
@@ -38,6 +42,7 @@ import {
 import type { TranscriptionReplacement } from '../../transcription/TranscriptionSelection'
 import type { ProcessingModalController } from '../ProcessingModalController'
 import { TranscriptPanelController } from '../TranscriptPanelController'
+import { getTrackTranscriptEntries } from '../transcript/TrackTranscript'
 import type { TrackTranscriptEntry } from '../transcript/TrackTranscript'
 
 interface Selection {
@@ -95,9 +100,13 @@ export class TrackListController {
   readonly selectionController = new TimelineRegionController(
     false,
     (event: PointerEvent) => this.timelineSelectionContextMenu.draw(event.clientX, event.clientY),
-    (selection) => this.transcriptPanelController?.syncSelection(selection),
+    (selection) => {
+      this.transcriptPanelController?.syncSelection(selection)
+      this.timelineKeyboard.refresh()
+    },
     this,
   )
+  readonly timelineKeyboard = new TimelineKeyboardController(this)
 
   private readonly tracklistElement = document.getElementById('track-list')!
   private readonly tracklistInfoElement = document.getElementById('track-info-list')!
@@ -115,29 +124,47 @@ export class TrackListController {
 
   readonly timelineSelectionContextMenu = new ContextMenuController(
     'timeline-selection-contextmenu',
+    'Selection actions',
     this.pointerStateManager,
     new ContextMenuItem('Cut', () => this.sliceSelection(true)),
     new ContextMenuItem('Copy', () => this.sliceSelection(false)),
     new ContextMenuItem('Paste', (activeTrackIndex, startSample) => this.paste(activeTrackIndex, startSample)),
     new ContextMenuItem('Freeze', () => this.freezeSelection()),
     new ContextMenuItem('Generate transcription', () => this.generateTranscription()),
+    new ContextMenuSeparator(),
+    new ContextMenuItem('Set selection start here', (_, sample) => this.setSelectionEdge('start', sample)),
+    new ContextMenuItem('Set selection end here', (_, sample) => this.setSelectionEdge('end', sample)),
   )
 
-  private readonly timelineUnselectionContextMenu = new ContextMenuController(
+  readonly timelineUnselectionContextMenu = new ContextMenuController(
     'timeline-unselection-contextmenu',
+    'Timeline actions',
     this.pointerStateManager,
     new ContextMenuItem('Paste', (activeTrackIndex, startSample) => this.paste(activeTrackIndex, startSample)),
+    new ContextMenuItem('Select from cursor to here', (trackIndex, sample) => {
+      const waveform = this.waveforms[trackIndex]
+      if (sample === AudioControl.startPosition || !waveform) {
+        return
+      }
+      this.selectionController.setSelection(
+        Math.min(sample, AudioControl.startPosition),
+        Math.max(sample, AudioControl.startPosition),
+        new Set([waveform]),
+      )
+    }),
+    new ContextMenuSeparator(),
+    new ContextMenuItem('Go to cursor', () => this.goToSample(this.getCursorPosition() ?? 0)),
+    new ContextMenuItem('Go to time…', () => this.openGoToTime()),
   )
 
-  private readonly goToTimeController = new GoToTimeController((ms) =>
-    this.goToSample(Math.round((ms * this.sampleRate) / 1000)),
-  )
+  private readonly timeEntryDialog = new TimeEntryDialogController()
 
   private readonly timelineContextMenu = new ContextMenuController(
     'timeline-contextmenu',
+    'Ruler actions',
     this.pointerStateManager,
     new ContextMenuItem('Go to cursor', () => this.goToSample(this.getCursorPosition() ?? 0)),
-    new ContextMenuItem('Go to time', () => this.goToTimeController.open()),
+    new ContextMenuItem('Go to time…', () => this.openGoToTime()),
   )
 
   private readonly cursorPoint = new DOMPoint()
@@ -153,12 +180,15 @@ export class TrackListController {
     return this.cursorPoint.matrixTransform(this.positionMarkerController.positionMarkerSvg.getScreenCTM()!.inverse()).x
   }
 
-  private zoom(wheelEvent: WheelEvent) {
+  zoomWithWheel(wheelEvent: WheelEvent) {
     if (wheelEvent.deltaY == 0) {
       return
     }
-    const scaling = 1.01 ** wheelEvent.deltaY
-    if (this.msPerUnit * scaling < 0.001) {
+    this.zoomBy(1.01 ** wheelEvent.deltaY, this.mouseEventToSvgCoord(wheelEvent).x)
+  }
+
+  zoomBy(scaling: number, anchorX: number) {
+    if (!Number.isFinite(this.msPerUnit) || this.msPerUnit * scaling < 0.001) {
       return
     }
     this.msPerUnit *= scaling
@@ -167,14 +197,13 @@ export class TrackListController {
     // t + x = st + sx - sn
     // sn = (s-1)(t+x)
     // n = (t + x)(s - 1) / s
-    this.translationUnits -=
-      ((this.translationUnits + this.mouseEventToSvgCoord(wheelEvent).x) * (scaling - 1)) / scaling
+    this.translationUnits -= ((this.translationUnits + anchorX) * (scaling - 1)) / scaling
 
     this.translationUnits = Math.max(this.translationUnits, 0)
     this.draw()
   }
 
-  private translate(units: number) {
+  translate(units: number) {
     if (units == 0 || (this.translationUnits == 0 && units < 0)) {
       return
     }
@@ -185,15 +214,53 @@ export class TrackListController {
     this.draw()
   }
 
+  /** The x of the cursor when it is set and visible, else the middle of the view. */
+  private viewAnchorX() {
+    const cursor = this.getCursorPosition()
+    if (cursor !== null) {
+      const x = cursor / this.sampleScale - this.translationUnits
+      if (x >= 0 && x <= this.width) {
+        return x
+      }
+    }
+    return this.width / 2
+  }
+
+  openTimeEntry(request: TimeEntryRequest): void {
+    this.timeEntryDialog.open(request)
+  }
+
+  openGoToTime(): void {
+    this.openTimeEntry({
+      title: 'Go to time',
+      submitLabel: 'Go',
+      initialMs: Math.round(((this.getCursorPosition() ?? 0) * 1000) / this.sampleRate),
+      onSubmit: (ms) => this.goToSample(Math.round((ms * this.sampleRate) / 1000)),
+    })
+  }
+
   constructor() {
     document.getElementById('timeline')!.addEventListener('contextmenu', (event) => {
       event.preventDefault()
       this.timelineContextMenu.draw(event.clientX, event.clientY)
     })
+    document.getElementById('timeline-zoom-out-button')!.addEventListener('click', () => {
+      this.zoomBy(1.25, this.viewAnchorX())
+    })
+    document.getElementById('timeline-zoom-in-button')!.addEventListener('click', () => {
+      this.zoomBy(0.8, this.viewAnchorX())
+    })
+    document.getElementById('timeline-scroll-left-button')!.addEventListener('click', () => {
+      this.translate(-this.width / 4)
+    })
+    document.getElementById('timeline-scroll-right-button')!.addEventListener('click', () => {
+      this.translate(this.width / 4)
+    })
+    document.getElementById('timeline-go-to-time-button')!.addEventListener('click', () => this.openGoToTime())
 
     this.newTrackDropRegion.className = 'new-track-drop-region clickable'
     this.newTrackDropRegion.textContent = '+ new track'
-    this.newTrackDropRegion.setAttribute('aria-label', 'Drop clip to create a new track')
+    this.newTrackDropRegion.setAttribute('aria-hidden', 'true')
     this.newTrackDropRegion.hidden = true
     this.tracklistElement.appendChild(this.newTrackDropRegion)
 
@@ -239,6 +306,7 @@ export class TrackListController {
     })
 
     ProjectManager.addProjectListener((project) => {
+      const focusedTrack = this.timelineKeyboard.focusedWaveform()?.track
       this.showWelcomeOnEmptyProject()
       this.sampleRate = project.sampleRate
       if (this.renderedProjectId != project.id) {
@@ -321,9 +389,18 @@ export class TrackListController {
           displayMode,
           resizeTrackForTranscriptionLane,
         )
-        const trackListInfo = new TrackListInfo(project, track, trackInfoDiv, this.history, displayMode, (mode) => {
-          this.trackDisplayModes.set(track, mode)
-          waveform.setDisplayMode(mode)
+        this.timelineKeyboard.attach(waveform)
+        const trackListInfo = new TrackListInfo(project, track, trackInfoDiv, this.history, displayMode, {
+          onDisplayModeChange: (mode) => {
+            this.trackDisplayModes.set(track, mode)
+            waveform.setDisplayMode(mode)
+          },
+          hasTranscript: () => getTrackTranscriptEntries(track).length > 0,
+          onShowTranscript: () => {
+            const entry = getTrackTranscriptEntries(track)[0]
+            if (entry) this.openTrackTranscript(track, entry)
+          },
+          onChangeHeight: (deltaRem) => this.changeTrackHeight(trackInfoDiv, waveformDiv, waveform, deltaRem),
         })
         this.addTrackResizeHandles(trackInfoDiv, waveformDiv, waveform)
         nextWaveforms.push(waveform)
@@ -340,6 +417,10 @@ export class TrackListController {
       this.waveforms.splice(0, this.waveforms.length, ...nextWaveforms)
       this.tracklistInfoElement.replaceChildren(...infoDivs)
       this.tracklistElement.replaceChildren(...waveformDivs, this.newTrackDropRegion)
+      if (focusedTrack && document.activeElement === document.body) {
+        const focusedWaveform = this.waveforms.find((waveform) => waveform.track === focusedTrack)
+        if (focusedWaveform) this.timelineKeyboard.focus(focusedWaveform)
+      }
       this.waveforms.forEach((waveform) => waveform.draw())
       this.selectionController.remove()
       this.pointerStateManager.reset()
@@ -357,6 +438,20 @@ export class TrackListController {
   private getSpectrogramService(): SpectrogramService {
     this.spectrogramService ??= new SpectrogramService()
     return this.spectrogramService
+  }
+
+  private changeTrackHeight(
+    trackInfoDiv: HTMLDivElement,
+    waveformDiv: HTMLDivElement,
+    waveform: Waveform,
+    deltaRem: number,
+  ) {
+    const height = Math.max(
+      6 * this.rootFontSize + waveform.transcriptionLaneHeight,
+      waveformDiv.getBoundingClientRect().height + deltaRem * this.rootFontSize,
+    )
+    trackInfoDiv.style.height = `${height}px`
+    waveformDiv.style.height = `${height}px`
   }
 
   private addTrackResizeHandles(trackInfoDiv: HTMLDivElement, waveformDiv: HTMLDivElement, waveform: Waveform) {
@@ -399,6 +494,7 @@ export class TrackListController {
       const handle = document.createElement('div')
       handle.className = 'track-resize-handle'
       handle.title = 'Change track height'
+      handle.setAttribute('aria-hidden', 'true')
       handle.addEventListener('pointerdown', startResize)
       handle.addEventListener('click', (event) => event.stopPropagation())
       handle.addEventListener('dblclick', (event) => event.stopPropagation())
@@ -437,6 +533,20 @@ export class TrackListController {
     this.selectionController.setSelection(clipView.startPosition, clipView.getEndPosition(), new Set([waveform]))
   }
 
+  private setSelectionEdge(edge: 'start' | 'end', sample: number) {
+    const region = this.selectedRegion
+    if (!region) {
+      return
+    }
+    const start = edge == 'start' ? sample : region.startSample
+    const end = edge == 'end' ? sample : region.endSample
+    if (start >= end) {
+      NotificationsController.showShortDurationMessage('The selection start must be before its end.')
+      return
+    }
+    this.selectionController.updateRange(start, end)
+  }
+
   clearSelection() {
     this.selectionController.remove()
   }
@@ -454,6 +564,8 @@ export class TrackListController {
 
     for (const [trackId, candidate] of this.infoWaveformPairs) {
       const isActive = trackId == `${track.id}`
+      candidate.info.inert = !isActive
+      candidate.waveform.inert = !isActive
       candidate.info.classList.toggle('automation-dimmed', !isActive)
       candidate.waveform.classList.toggle('automation-dimmed', !isActive)
       candidate.waveform.classList.toggle('automation-active-waveform', isActive)
@@ -495,6 +607,8 @@ export class TrackListController {
     )
     this.automationMode = { controller, infoElement: pair.info, originalInfoElements }
     controller.draw()
+    pair.info.querySelector<HTMLSelectElement>('.automation-parameter-select')?.focus()
+    announce(`${parameterMetadata.displayName} automation for ${track.name}`)
   }
 
   exitAutomationMode() {
@@ -502,12 +616,16 @@ export class TrackListController {
     if (!mode) {
       return
     }
+    const hadFocus = mode.infoElement.contains(document.activeElement)
     mode.controller.remove()
     mode.infoElement.replaceChildren(...mode.originalInfoElements)
     for (const pair of this.infoWaveformPairs.values()) {
       pair.info.classList.remove('automation-dimmed')
+      pair.info.inert = false
+      pair.waveform.inert = false
       pair.waveform.classList.remove('automation-dimmed', 'automation-active-waveform')
     }
+    if (hadFocus) mode.infoElement.querySelector<HTMLElement>('.track-effect-selector')?.focus()
     this.automationMode = null
     this.pointerStateManager.stopAutomating()
   }
@@ -564,11 +682,9 @@ export class TrackListController {
     return panel
   }
 
-  async transferClipViewToNewTrack(clipViewController: ClipViewController) {
+  async transferClipViewToNewTrack(oldTrack: Track, oldClipView: ClipView, shift = 0) {
     const project = await ProjectManager.getActiveProject()
-    const oldWaveform = clipViewController.waveform
-    const oldClipView = oldWaveform.track.clipViews[clipViewController.clipViewIndex]
-    const clipView = cloneClipViewWithNewStartPosition(oldClipView, clipViewController.draggedShift)
+    const clipView = cloneClipViewWithNewStartPosition(oldClipView, shift)
     const trackNames = new Set(project.getTracks().map((track) => track.name))
     let trackNumber = project.getTracks().length + 1
     while (trackNames.has(`Track ${trackNumber}`)) {
@@ -576,15 +692,9 @@ export class TrackListController {
     }
     const newTrack = new Track(`Track ${trackNumber}`, clipView.clip.getChannelCount())
     await this.history.execute(
-      new MoveClipViewToNewTrackCommand(
-        project,
-        oldWaveform.track,
-        newTrack,
-        oldClipView,
-        clipView,
-        project.getTracks().length,
-      ),
+      new MoveClipViewToNewTrackCommand(project, oldTrack, newTrack, oldClipView, clipView, project.getTracks().length),
     )
+    announce(`Moved clip to ${newTrack.name}`)
   }
 
   async transferClipViewBetweenTracks(clipViewController: ClipViewController, oldWaveform: Waveform) {
@@ -618,6 +728,9 @@ export class TrackListController {
     })
     Clipboard.copiedClipViews = newClipboard
     Clipboard.copyStartPosition = selection.startSample
+    announce(
+      `${del ? 'Cut' : 'Copied'} ${TimeUtils.toSpokenString(((selection.endSample - selection.startSample) * 1000) / this.sampleRate)}`,
+    )
     if (del && undoCommands.length > 0) {
       await this.history.recordApplied(new BatchCommand(undoCommands, del ? 'cut' : 'copy'))
     }
@@ -640,6 +753,7 @@ export class TrackListController {
       for (const clipView of clipViews) {
         const newClipView = cloneClipViewWithNewStartPosition(clipView, startPositionDelta)
         if (!track.canAddClipView(newClipView)) {
+          NotificationsController.showShortDurationMessage('Cannot paste here: the clips would overlap existing clips.')
           return
         }
         undoCommands.push(new AddClipViewCommand(newClipView, track))
@@ -647,6 +761,8 @@ export class TrackListController {
     }
     if (undoCommands.length > 0) {
       await this.history.execute(new BatchCommand(undoCommands, 'paste'))
+      const n = undoCommands.length
+      announce(`Pasted ${n} ${n == 1 ? 'clip' : 'clips'}`)
     }
   }
 
@@ -753,6 +869,7 @@ export class TrackListController {
     this.selectionController.draw()
     this.positionMarkerController.draw()
     this.transcriptPanelController?.syncPlayback()
+    this.timelineKeyboard.refresh()
   }
 
   private handleKeyDown(event: KeyboardEvent) {
@@ -764,8 +881,23 @@ export class TrackListController {
       return
     }
     if (!event.shiftKey && event.code == 'KeyC') {
+      if (!this.selectionController.selectedRegion || document.getSelection()?.isCollapsed === false) {
+        return
+      }
       event.preventDefault()
       this.sliceSelection(false)
+      return
+    }
+    if (!event.shiftKey && event.code == 'KeyX') {
+      if (
+        !this.selectionController.selectedRegion ||
+        document.getSelection()?.isCollapsed === false ||
+        !this.canEdit()
+      ) {
+        return
+      }
+      event.preventDefault()
+      void this.sliceSelection(true)
       return
     }
     if (!event.shiftKey && event.code == 'KeyV') {
@@ -777,6 +909,7 @@ export class TrackListController {
         return
       }
       const trackIndex =
+        this.timelineKeyboard.focusedWaveform()?.index ??
         this.pointerStateManager.getActiveTrack()?.index ??
         this.waveforms.find((waveform) => this.selectionController?.isInRegion(waveform))?.index ??
         0
@@ -789,9 +922,9 @@ export class TrackListController {
         return
       }
       if (event.shiftKey) {
-        this.history.redo()
+        void this.redo()
       } else {
-        this.history.undo()
+        void this.undo()
       }
       return
     }
@@ -800,8 +933,20 @@ export class TrackListController {
       if (!this.canEdit()) {
         return
       }
-      this.history.redo()
+      void this.redo()
     }
+  }
+
+  private async undo() {
+    const action = this.history.undoActionString
+    await this.history.undo()
+    if (action) announce(`Undid ${action}`)
+  }
+
+  private async redo() {
+    const action = this.history.redoActionString
+    await this.history.redo()
+    if (action) announce(`Redid ${action}`)
   }
 
   private async showWelcomeOnEmptyProject() {
@@ -820,7 +965,7 @@ export class TrackListController {
     }
   }
 
-  private canEdit() {
+  canEdit() {
     return (
       !this.automationMode &&
       (AudioControl.getState() == AudioState.STOPPED ||
@@ -834,6 +979,9 @@ export class TrackListController {
       return false
     }
     if (target.isContentEditable || target.tagName == 'TEXTAREA') {
+      return true
+    }
+    if (target instanceof HTMLSelectElement || target.closest('dialog[open]')) {
       return true
     }
     if (target instanceof HTMLInputElement) {

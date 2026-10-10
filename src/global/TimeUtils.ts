@@ -47,4 +47,19 @@ export class TimeUtils {
     }
     return sign + daysString + hoursString + minutesString + secondsString
   }
+
+  /** Converts milliseconds to words for assistive technology, e.g. "1 minute 1.25 seconds". */
+  static toSpokenString(ms: number): string {
+    const total = Math.max(0, Math.round(ms))
+    const hours = Math.floor(total / 3_600_000)
+    const minutes = Math.floor((total % 3_600_000) / 60_000)
+    const seconds = (total % 60_000) / 1000
+    const parts: string[] = []
+    if (hours > 0) parts.push(`${hours} ${hours === 1 ? 'hour' : 'hours'}`)
+    if (minutes > 0) parts.push(`${minutes} ${minutes === 1 ? 'minute' : 'minutes'}`)
+    if (seconds > 0 || parts.length === 0) {
+      parts.push(`${String(Number(seconds.toFixed(3)))} ${seconds === 1 ? 'second' : 'seconds'}`)
+    }
+    return parts.join(' ')
+  }
 }

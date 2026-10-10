@@ -10,6 +10,8 @@ export class PeakMeterController {
   private readonly peakRects = new Array<SVGRectElement>()
   private readonly peakLines = new Array<SVGLineElement>()
   private stopped = false
+  private label: string | null = null
+  private clipping = false
 
   constructor(
     parentDiv: HTMLDivElement,
@@ -21,6 +23,7 @@ export class PeakMeterController {
     showScale = false,
   ) {
     this.svg = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
+    this.svg.setAttribute('aria-hidden', 'true')
     parentDiv.appendChild(this.svg)
     this.svg.setAttribute(
       'viewBox',
@@ -68,6 +71,13 @@ export class PeakMeterController {
     }
   }
 
+  setLabel(label: string): void {
+    this.label = label
+    this.svg.removeAttribute('aria-hidden')
+    this.svg.setAttribute('role', 'img')
+    this.svg.setAttribute('aria-label', this.clipping ? `${label}, clipping` : label)
+  }
+
   drawScale() {
     const zeroLine = document.createElementNS('http://www.w3.org/2000/svg', 'line') as unknown as SVGLineElement
     this.svg.appendChild(zeroLine)
@@ -107,6 +117,7 @@ export class PeakMeterController {
     if (this.stopped) {
       return
     }
+    let clipping = false
     for (let channel = 0; channel < this.channelCount; ++channel) {
       const level = self.analyzable.getLevel(channel)
       const peak = self.analyzable.getPeak(channel)
@@ -116,10 +127,17 @@ export class PeakMeterController {
       this.levelRects[channel].style.transform = `translate${this.horizontal ? 'X' : 'Y'}(${(1 - levelScale) * 100}%)`
       const peakScale = this.scaledValue(peak)
       this.peakRects[channel].style.transform = `translate${this.horizontal ? 'X' : 'Y'}(${(1 - peakScale) * 100}%)`
-      this.peakRects[channel].style.color = peak > 0.0 ? 'rgb(255,0,0)' : 'var(--color)'
-      this.peakLines[channel].style.color = heldPeak > 0.0 ? 'rgb(255,0,0)' : 'var(--color)'
+      this.peakRects[channel].style.color = peak > 0.0 ? 'var(--meter-clip)' : 'var(--color)'
+      this.peakLines[channel].style.color = heldPeak > 0.0 ? 'var(--meter-clip)' : 'var(--color)'
+      if (heldPeak > 0.0) clipping = true
       const heldPeakScale = this.scaledValue(heldPeak)
       this.peakLines[channel].style.transform = `translate${this.horizontal ? 'X' : 'Y'}(${(1 - heldPeakScale) * 100}%)`
+    }
+    if (clipping !== this.clipping) {
+      this.clipping = clipping
+      if (this.label !== null) {
+        this.svg.setAttribute('aria-label', clipping ? `${this.label}, clipping` : this.label)
+      }
     }
     requestAnimationFrame((_) => self.draw(self))
   }

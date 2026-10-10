@@ -259,6 +259,16 @@ export class TimelineController extends TrackListItemController {
     this.selectionElements = null
   }
 
+  /** Keyboard step sizes in samples, matching the ruler's minor and major tick intervals. */
+  getKeyboardSteps(): { minor: number; major: number } {
+    const bucket = this.getTickMarkBucket(this.LABEL_FONT_SIZE * 0.6 * 14)
+    const toSamples = (ms: number) => Math.max(1, Math.round((ms * this.sampleRate) / 1000))
+    return {
+      minor: toSamples(bucket.majorIntervalMs / bucket.ticksPerMajorInterval),
+      major: toSamples(bucket.majorIntervalMs),
+    }
+  }
+
   private getTickMarkBucket(labelWidth: number): TickMarkBucket {
     return (
       this.TICK_MARKS.find((bucket) => labelWidth && bucket.majorIntervalMs / this.msPerUnit > labelWidth) ??
