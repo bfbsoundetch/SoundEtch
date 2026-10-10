@@ -239,6 +239,9 @@ export class TrackListTrack {
     })
 
     deleteTrackButton.onclick = (event) => {
+      if (!globalThis.confirm(`Are you sure you want to delete track \"${track.name}\"?`)) {
+        return
+      }
       this.history.clear()
       void ProjectManager.deleteTrack(track)
       event.stopPropagation()
