@@ -685,6 +685,7 @@ dialog.overlay[open] {
   gap: 1rem;
   font-size: larger;
   margin: 1rem;
+  border: dashed 1px;
 }
 
 .welcome-header {
