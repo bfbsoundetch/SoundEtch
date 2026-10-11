@@ -72,7 +72,7 @@ export class TranscriptPanelController {
     )
     if (binding) {
       this.selectNativeRange(binding, binding)
-      binding.element.scrollIntoView({ block: 'nearest', inline: 'nearest' })
+      binding.element.scrollIntoView({ block: 'center', inline: 'nearest' })
     }
   }
 
