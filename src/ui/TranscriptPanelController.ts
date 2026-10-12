@@ -5,9 +5,11 @@ import type { Track } from '../project/Track'
 import type { TranscribedRange } from '../project/Transcription'
 import { BottomPanelController } from './BottomPanelController'
 import type { TrackListController } from './timeline/TrackListController'
+import { formatTranscriptParagraph } from './transcript/TranscriptFormatting'
 import {
   getTrackTranscriptEntries,
   getTranscriptEntriesInRange,
+  splitTranscriptParagraphs,
   type TrackTranscriptEntry,
 } from './transcript/TrackTranscript'
 
@@ -110,29 +112,28 @@ export class TranscriptPanelController {
     }))
     this.content.setAttribute('aria-label', `Transcript for ${track.name}`)
     this.shell.setSubtitle(track.name)
-    const entries = getTrackTranscriptEntries(track)
-    let paragraph = document.createElement('p')
-    const paragraphs = [paragraph]
-    this.bindings = entries.map((entry, i) => {
-      const previous = entries[i - 1]
-      if (
-        previous &&
-        (entry.speechStartSample !== previous.speechStartSample ||
-          (entry.speechStartSample !== undefined && entry.clipView.clip !== previous.clipView.clip))
-      ) {
-        paragraph = document.createElement('p')
-        paragraphs.push(paragraph)
-      } else if (i > 0) {
-        paragraph.append(' ')
-      }
-      const element = document.createElement('span')
-      element.className = 'transcript-word'
-      element.tabIndex = -1
-      element.textContent = entry.text
-      paragraph.append(element)
-      return { entry, element }
+    const bindings: Binding[] = []
+    const sampleRate = this.trackListController.sampleRate
+    const paragraphs = splitTranscriptParagraphs(getTrackTranscriptEntries(track)).map((entries) => {
+      const paragraph = document.createElement('p')
+      formatTranscriptParagraph(entries, sampleRate).forEach((word, i) => {
+        if (i > 0) paragraph.append(' ')
+        const element = document.createElement('span')
+        element.className = 'transcript-word'
+        element.tabIndex = -1
+        element.textContent = word.text
+        paragraph.append(element)
+        if (word.punctuation) paragraph.append(word.punctuation)
+        bindings.push({ entry: entries[i], element })
+      })
+      return paragraph
     })
-    if (this.bindings.length === 0) paragraph.textContent = 'No transcript on this track.'
+    this.bindings = bindings
+    if (paragraphs.length === 0) {
+      const empty = document.createElement('p')
+      empty.textContent = 'No transcript on this track.'
+      paragraphs.push(empty)
+    }
     this.content.replaceChildren(...paragraphs)
     this.firstHighlighted = null
     this.syncSelection(this.trackListController.selectedRegion)

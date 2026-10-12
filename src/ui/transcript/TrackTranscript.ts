@@ -49,6 +49,22 @@ export function getTrackTranscriptEntries(track: Track): TrackTranscriptEntry[] 
   )
 }
 
+/** Groups sorted entries into one paragraph per VAD speech region. */
+export function splitTranscriptParagraphs(entries: readonly TrackTranscriptEntry[]): TrackTranscriptEntry[][] {
+  const paragraphs: TrackTranscriptEntry[][] = []
+  entries.forEach((entry, i) => {
+    const previous = entries[i - 1]
+    if (
+      !previous ||
+      entry.speechStartSample !== previous.speechStartSample ||
+      (entry.speechStartSample !== undefined && entry.clipView.clip !== previous.clipView.clip)
+    )
+      paragraphs.push([entry])
+    else paragraphs[paragraphs.length - 1].push(entry)
+  })
+  return paragraphs
+}
+
 export function getTranscriptEntriesInRange(
   entries: readonly TrackTranscriptEntry[],
   startSample: number,
