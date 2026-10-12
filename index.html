@@ -299,11 +299,7 @@
       </div>
       <div id="timeline-body" role="main">
         <div id="timeline">
-          <svg
-            id="timeline-svg"
-            xmlns="http://www.w3.org/2000/svg"
-            aria-hidden="true"
-          >
+          <svg id="timeline-svg" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
             <path id="timeline-major-ticks"></path>
             <path id="timeline-minor-ticks"></path>
           </svg>
@@ -360,17 +356,9 @@
             <div id="input-list"></div>
             <div id="track-list"></div>
           </div>
-          <svg
-            id="position-marker"
-            xmlns="http://www.w3.org/2000/svg"
-            aria-hidden="true"
-          >
+          <svg id="position-marker" xmlns="http://www.w3.org/2000/svg" aria-hidden="true">
             <line id="position-line" x1="150" y1="30" x2="150" y2="600"></line>
-            <text
-              id="pointer-position-text"
-              x="0"
-              y="15"
-            ></text>
+            <text id="pointer-position-text" x="0" y="15"></text>
           </svg>
         </div>
       </div>
@@ -1046,14 +1034,7 @@
 
             <div id="mp3-vbr-options" class="export-option-row" hidden>
               <label for="vbr-quality-slider">Quality (0 for best sound, 9 for smallest file)</label>
-              <input
-                type="range"
-                id="vbr-quality-slider"
-                value="2"
-                min="0"
-                max="9"
-                step="1"
-              />
+              <input type="range" id="vbr-quality-slider" value="2" min="0" max="9" step="1" />
               <div class="slider-output-container">
                 <output class="slider-value" aria-hidden="true">2</output>
               </div>
@@ -1178,111 +1159,54 @@
   <svg xmlns="http://www.w3.org/2000/svg" id="icon-sprite">
     <defs>
       <pattern id="hatch" width="5" height="3" patternUnits="userSpaceOnUse" patternTransform="rotate(30 50 50)">
-        <line  y2="5" />
+        <line y2="5" />
       </pattern>
       <g id="menu-hamburger" viewBox="0 0 500 500">
-        <line  x1="50" y1="250" x2="450" y2="250" />
-        <line  x1="50" y1="100" x2="450" y2="100" />
-        <line  x1="50" y1="400" x2="450" y2="400" />
+        <line x1="50" y1="250" x2="450" y2="250" />
+        <line x1="50" y1="100" x2="450" y2="100" />
+        <line x1="50" y1="400" x2="450" y2="400" />
       </g>
       <g id="menu-close" viewBox="0 0 500 500">
-        <line  x1="100" y1="400" x2="400" y2="100" />
-        <line  x1="100" y1="100" x2="400" y2="400" />
+        <line x1="100" y1="400" x2="400" y2="100" />
+        <line x1="100" y1="100" x2="400" y2="400" />
       </g>
       <g id="arrow-right" viewBox="0 0 500 500">
-        <line
-          x1="75"
-          y1="250"
-          x2="425"
-          y2="250"
-        />
-        <polyline
-          points="280 100 425 250 280 400"
-        />
+        <line x1="75" y1="250" x2="425" y2="250" />
+        <polyline points="280 100 425 250 280 400" />
       </g>
       <g id="arrow-block-right" viewBox="0 0 500 500">
-        <path
-          d="M 45 200 H 255 V 100 L 455 250 L 255 400 V 300 H 45 V 200 Z"
-        />
+        <path d="M 45 200 H 255 V 100 L 455 250 L 255 400 V 300 H 45 V 200 Z" />
       </g>
       <g id="panel-expand" viewBox="0 0 500 500">
-        <polyline
-          points="130 165 250 45 370 165"
-        />
-        <line
-          x1="250"
-          y1="45"
-          x2="250"
-          y2="250"
-        />
-        <line
-          x1="60"
-          y1="345"
-          x2="440"
-          y2="345"
-        />
-        <line
-          x1="60"
-          y1="455"
-          x2="440"
-          y2="455"
-        />
+        <polyline points="130 165 250 45 370 165" />
+        <line x1="250" y1="45" x2="250" y2="250" />
+        <line x1="60" y1="345" x2="440" y2="345" />
+        <line x1="60" y1="455" x2="440" y2="455" />
       </g>
       <g id="panel-restore" viewBox="0 0 500 500">
-        <line
-          x1="60"
-          y1="45"
-          x2="440"
-          y2="45"
-        />
-        <line
-          x1="250"
-          y1="140"
-          x2="250"
-          y2="345"
-        />
-        <polyline
-          points="130 225 250 345 370 225"
-        />
-        <line
-          x1="60"
-          y1="455"
-          x2="440"
-          y2="455"
-        />
+        <line x1="60" y1="45" x2="440" y2="45" />
+        <line x1="250" y1="140" x2="250" y2="345" />
+        <polyline points="130 225 250 345 370 225" />
+        <line x1="60" y1="455" x2="440" y2="455" />
       </g>
       <g id="stop" viewBox="0 0 500 500">
-        <polygon  points="50 450 50 50 450 50 450 450" />
+        <polygon points="50 450 50 50 450 50 450 450" />
       </g>
       <g id="pause" viewBox="0 0 500 500">
-        <polygon  points="100 450 100 50 200 50 200 450" />
-        <polygon  points="300 450 300 50 400 50 400 450" />
+        <polygon points="100 450 100 50 200 50 200 450" />
+        <polygon points="300 450 300 50 400 50 400 450" />
       </g>
       <g id="sine-wave" viewBox="0 0 500 500">
-        <path
-          d="M 10 250 C 200 -300 300 800 490 250"
-        ></path>
+        <path d="M 10 250 C 200 -300 300 800 490 250"></path>
       </g>
       <g id="record" viewBox="0 0 500 500">
-        <ellipse
-          cx="250"
-          cy="250"
-          rx="200"
-          ry="200"
-        />
+        <ellipse cx="250" cy="250" rx="200" ry="200" />
       </g>
       <g id="play" viewBox="0 0 500 500">
-        <polygon
-          points="50 450 50 50 450 250"
-        />
+        <polygon points="50 450 50 50 450 250" />
       </g>
       <g id="microphone" viewBox="0 0 500 500">
-        <line
-          x1="250"
-          y1="425"
-          x2="250"
-          y2="345"
-        />
+        <line x1="250" y1="425" x2="250" y2="345" />
         <rect
           x="150"
           y="-450"
@@ -1293,16 +1217,8 @@
           class="microphone-base"
           transform="matrix(1, 0, 0, -1, 0, 0)"
         />
-        <path  d="M 160 250 A 90 90 0 0 0 340 250"></path>
-        <rect
-          x="225"
-          y="75"
-          width="50"
-          height="180"
-          rx="2"
-          ry="2"
-          class="microphone-capsule"
-        />
+        <path d="M 160 250 A 90 90 0 0 0 340 250"></path>
+        <rect x="225" y="75" width="50" height="180" rx="2" ry="2" class="microphone-capsule" />
       </g>
       <g id="phone" viewBox="0 0 500 500">
         <path
@@ -1313,148 +1229,59 @@
             0 29.2 4.2 56.2 12.5 83.3 2.1 8.3 0 18.8-6.2 25z"
           transform="scale(.5)"
         />
-        <ellipse
-          cx="375"
-          cy="100"
-          rx="55"
-          ry="60"
-        ></ellipse>
-        <path
-          class="phone-person"
-          d="M 260 230 C 265 150 485 150 490 230"
-        ></path>
-        <ellipse
-          cx="125"
-          cy="350"
-          rx="55"
-          ry="60"
-        ></ellipse>
-        <path
-          class="phone-person"
-          d="M 10 490 C 15 400 235 400 240 490"
-        ></path>
+        <ellipse cx="375" cy="100" rx="55" ry="60"></ellipse>
+        <path class="phone-person" d="M 260 230 C 265 150 485 150 490 230"></path>
+        <ellipse cx="125" cy="350" rx="55" ry="60"></ellipse>
+        <path class="phone-person" d="M 10 490 C 15 400 235 400 240 490"></path>
       </g>
       <g id="meeting" viewBox="0 0 500 500">
-        <line  x1="250" y1="0" x2="250" y2="500"></line>
-        <line  x1="0" y1="250" x2="500" y2="250"></line>
-        <ellipse
-          cx="125"
-          cy="100"
-          rx="55"
-          ry="60"
-        ></ellipse>
-        <ellipse
-          cx="375"
-          cy="100"
-          rx="55"
-          ry="60"
-        ></ellipse>
-        <path
-          d="M 10 230 C 15 150 235 150 240 230"
-        ></path>
-        <path
-          d="M 260 230 C 265 150 485 150 490 230"
-        ></path>
-        <ellipse
-          cx="125"
-          cy="350"
-          rx="55"
-          ry="60"
-        ></ellipse>
-        <path
-          d="M 10 490 C 15 400 235 400 240 490"
-        ></path>
+        <line x1="250" y1="0" x2="250" y2="500"></line>
+        <line x1="0" y1="250" x2="500" y2="250"></line>
+        <ellipse cx="125" cy="100" rx="55" ry="60"></ellipse>
+        <ellipse cx="375" cy="100" rx="55" ry="60"></ellipse>
+        <path d="M 10 230 C 15 150 235 150 240 230"></path>
+        <path d="M 260 230 C 265 150 485 150 490 230"></path>
+        <ellipse cx="125" cy="350" rx="55" ry="60"></ellipse>
+        <path d="M 10 490 C 15 400 235 400 240 490"></path>
       </g>
       <g id="browser-tab" viewBox="0 0 500 500">
         <path
           class="browser-tab-outline"
           d="M 0 450 L 60 450 A 60 60 0 0 0 120 390 L 120 110 A 60 60 0 0 1 180 50 L 500 50"
         ></path>
-        <polygon  points="200 230 200 270 270 320 270 180"></polygon>
+        <polygon points="200 230 200 270 270 320 270 180"></polygon>
         <path class="audio-wave" d="M 315 200 A 75 75 0 0 1 315 300"></path>
         <path class="audio-wave" d="M 365 170 A 120 120 0 0 1 365 330"></path>
-        <line  x1="0" y1="70" x2="130" y2="70"></line>
+        <line x1="0" y1="70" x2="130" y2="70"></line>
       </g>
       <g id="audio-file" viewBox="0 0 500 500">
-        <polygon
-          class="audio-file-outline"
-          points="60 120 60 470 440 470 440 10 170 10"
-        ></polygon>
-        <polyline  points="60 120 170 120 170 10"></polyline>
+        <polygon class="audio-file-outline" points="60 120 60 470 440 470 440 10 170 10"></polygon>
+        <polyline points="60 120 170 120 170 10"></polyline>
         <polygon class="audio-speaker" points="135 230 135 270 205 320 205 180"></polygon>
-        <path  d="M 250 200 A 75 75 0 0 1 250 300"></path>
-        <path  d="M 300 170 A 120 120 0 0 1 300 330"></path>
+        <path d="M 250 200 A 75 75 0 0 1 250 300"></path>
+        <path d="M 300 170 A 120 120 0 0 1 300 330"></path>
       </g>
       <g id="camera" viewBox="0 0 500 500">
-        <rect
-          x="35"
-          y="130"
-          width="300"
-          height="235"
-          rx="2"
-          ry="2"
-        />
-        <polygon
-          points="300 245 465 165 465 335"
-        />
+        <rect x="35" y="130" width="300" height="235" rx="2" ry="2" />
+        <polygon points="300 245 465 165 465 335" />
       </g>
       <g id="screen-share" viewBox="0 0 500 500">
-        <rect
-          x="18"
-          y="112"
-          width="465"
-          height="270"
-          rx="2"
-          ry="2"
-        />
+        <rect x="18" y="112" width="465" height="270" rx="2" ry="2" />
         <use href="#arrow-block-right" transform="matrix(0, -0.4, 0.4, 0, 150, 342)" />
       </g>
       <g id="slash" viewBox="0 0 500 500">
-        <line  x1="50" y1="450" x2="450" y2="50"></line>
+        <line x1="50" y1="450" x2="450" y2="50"></line>
       </g>
       <g id="trash" viewBox="0 0 500 500">
-        <rect
-          x="70"
-          y="100"
-          width="360"
-          height="60"
-          rx="4"
-          ry="4"
-        />
-        <polyline
-          points="170 100 170 50 330 50 330 100"
-        />
-        <polyline
-          points="100 170 130 450 370 450 400 170"
-        />
-        <line
-          x1="190"
-          y1="220"
-          x2="190"
-          y2="380"
-        />
-        <line
-          x1="250"
-          y1="220"
-          x2="250"
-          y2="380"
-        />
-        <line
-          x1="310"
-          y1="220"
-          x2="310"
-          y2="380"
-        />
+        <rect x="70" y="100" width="360" height="60" rx="4" ry="4" />
+        <polyline points="170 100 170 50 330 50 330 100" />
+        <polyline points="100 170 130 450 370 450 400 170" />
+        <line x1="190" y1="220" x2="190" y2="380" />
+        <line x1="250" y1="220" x2="250" y2="380" />
+        <line x1="310" y1="220" x2="310" y2="380" />
       </g>
       <g id="pencil" viewBox="0 0 500 500">
-        <rect
-          x="225"
-          y="75"
-          width="50"
-          height="360"
-          class="pencil-body"
-          transform="rotate(45)"
-        ></rect>
+        <rect x="225" y="75" width="50" height="360" class="pencil-body" transform="rotate(45)"></rect>
         <rect
           x="225"
           y="40"
@@ -1467,28 +1294,23 @@
           d="M 124.599 373.058 L 99.599 438.058 L 74.599 373.058"
           transform="matrix(0.707107, 0.707107, -0.707107, 0.707107, -0.000002, 0)"
         ></path>
-        <line
-          x1="81.138"
-          y1="424.09"
-          x2="77.431"
-          y2="428.149"
-        ></line>
+        <line x1="81.138" y1="424.09" x2="77.431" y2="428.149"></line>
       </g>
       <g id="scissors" viewBox="0 0 500 500">
-        <circle cx="100" cy="175" r="40" ></circle>
+        <circle cx="100" cy="175" r="40"></circle>
         <path d="M 135 305 L 435 125" class="scissors-upper-blade"></path>
         <path d="M 135 195 L 435 375" class="scissors-lower-blade"></path>
-        <circle cx="100" cy="325" r="40" ></circle>
+        <circle cx="100" cy="325" r="40"></circle>
       </g>
       <g id="plus" viewBox="0 0 500 500">
-        <path d="M 0 250 L 500 250" ></path>
-        <path d="M 250 0 L 250 500" ></path>
+        <path d="M 0 250 L 500 250"></path>
+        <path d="M 250 0 L 250 500"></path>
       </g>
       <g id="minus" viewBox="0 0 500 500">
-        <path d="M 0 250 L 500 250" ></path>
+        <path d="M 0 250 L 500 250"></path>
       </g>
       <g id="loading" viewBox="0 0 500 500">
-        <path  d="M 250 0 A 250 250 0 1 1 0 250">
+        <path d="M 250 0 A 250 250 0 1 1 0 250">
           <animateTransform
             attributeName="transform"
             attributeType="XML"
@@ -1501,56 +1323,23 @@
         </path>
       </g>
       <g id="three-dots" viewBox="0 0 500 500">
-        <ellipse  cx="250" cy="100" rx="50" ry="50"></ellipse>
-        <ellipse  cx="250" cy="250" rx="50" ry="50"></ellipse>
-        <ellipse  cx="250" cy="400" rx="50" ry="50"></ellipse>
+        <ellipse cx="250" cy="100" rx="50" ry="50"></ellipse>
+        <ellipse cx="250" cy="250" rx="50" ry="50"></ellipse>
+        <ellipse cx="250" cy="400" rx="50" ry="50"></ellipse>
       </g>
       <g id="logo" viewBox="0 0 600 100">
-        <text
-          x="300"
-          y="60"
-        >
-          SoundEtch
-        </text>
+        <text x="300" y="60">SoundEtch</text>
       </g>
-      <g
-        id="link-icon"
-        viewBox="0 0 24 24"
-      >
+      <g id="link-icon" viewBox="0 0 24 24">
         <path d="M10 13a5 5 0 0 0 7.54.54l3-3a5 5 0 0 0-7.07-7.07l-1.72 1.71"></path>
         <path d="M14 11a5 5 0 0 0-7.54-.54l-3 3a5 5 0 0 0 7.07 7.07l1.71-1.71"></path>
       </g>
       <g id="automation" viewBox="0 0 500 500">
-        <ellipse
-          cx="70"
-          cy="250"
-          rx="50"
-          ry="50"
-        ></ellipse>
-        <ellipse
-          cx="250"
-          cy="160"
-          rx="50"
-          ry="50"
-        ></ellipse>
-        <ellipse
-          cx="420"
-          cy="330"
-          rx="50"
-          ry="50"
-        ></ellipse>
-        <line
-          x1="114.72"
-          y1="227.64"
-          x2="205.28"
-          y2="182.36"
-        ></line>
-        <line
-          x1="285.35"
-          y1="195.35"
-          x2="384.65"
-          y2="294.65"
-        ></line>
+        <ellipse cx="70" cy="250" rx="50" ry="50"></ellipse>
+        <ellipse cx="250" cy="160" rx="50" ry="50"></ellipse>
+        <ellipse cx="420" cy="330" rx="50" ry="50"></ellipse>
+        <line x1="114.72" y1="227.64" x2="205.28" y2="182.36"></line>
+        <line x1="285.35" y1="195.35" x2="384.65" y2="294.65"></line>
       </g>
     </defs>
   </svg>

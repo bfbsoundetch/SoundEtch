@@ -91,7 +91,9 @@ test('VAD segmentation keeps leading speech and clamps pre-speech padding to the
   // Speech from the very first frame: the old energy gate consumed an
   // unconditional calibration window and dropped leading words.
   const probabilities = new Float32Array(32).fill(0.9)
-  expect(segmentSpeechFromVadProbabilities(probabilities, 512 * 32).segments).toEqual([{ startSample: 0, endSample: 16_384 }])
+  expect(segmentSpeechFromVadProbabilities(probabilities, 512 * 32).segments).toEqual([
+    { startSample: 0, endSample: 16_384 },
+  ])
 })
 
 test('VAD segmentation closes a region after redemption, pads the end, and splits distant speech', () => {
@@ -113,13 +115,17 @@ test('VAD segmentation keeps speech through a dip shorter than redemption', () =
   const probabilities = new Float32Array(40)
   probabilities.fill(0.9)
   probabilities.fill(0.0, 12, 22)
-  expect(segmentSpeechFromVadProbabilities(probabilities, 512 * 40).segments).toEqual([{ startSample: 0, endSample: 20_480 }])
+  expect(segmentSpeechFromVadProbabilities(probabilities, 512 * 40).segments).toEqual([
+    { startSample: 0, endSample: 20_480 },
+  ])
 })
 
 test('VAD segmentation drops sub-minimum blips and covers the interval as a fallback', () => {
   const probabilities = new Float32Array(40)
   probabilities.fill(0.9, 5, 8)
-  expect(segmentSpeechFromVadProbabilities(probabilities, 512 * 40).segments).toEqual([{ startSample: 0, endSample: 20_480 }])
+  expect(segmentSpeechFromVadProbabilities(probabilities, 512 * 40).segments).toEqual([
+    { startSample: 0, endSample: 20_480 },
+  ])
 })
 
 test('audio without detected speech remains covered and every inference segment is capped at 20 seconds', () => {

@@ -429,7 +429,13 @@ export class TranscriptPanelController {
       return
     }
     const last = bindings.length - 1
-    const initial = current < 0 ? Math.max(0, bindings.findIndex((b) => b.element.classList.contains('playing'))) : -1
+    const initial =
+      current < 0
+        ? Math.max(
+            0,
+            bindings.findIndex((b) => b.element.classList.contains('playing')),
+          )
+        : -1
     let next: number
     switch (event.key) {
       case 'ArrowRight':

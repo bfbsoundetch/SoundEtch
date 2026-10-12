@@ -265,7 +265,9 @@ export class BottomPanelController {
     // Intermediate heights are only a drag preview, never retained panel state.
     const height =
       requestedHeight === undefined
-        ? (this.expanded ? maximumHeight : minimumHeight)
+        ? this.expanded
+          ? maximumHeight
+          : minimumHeight
         : Math.max(minimumHeight, Math.min(maximumHeight, requestedHeight))
     this.root.style.height = `${height}px`
     this.topElement.style.height = `${viewportHeight - height}px`

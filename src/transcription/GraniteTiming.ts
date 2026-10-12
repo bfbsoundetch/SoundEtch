@@ -607,14 +607,12 @@ export function timedWordsToTranscribedRanges(
     let regionIndex = 0
     let speechStartSample = selectedRange.startSample + Math.round(speechRegions[0].startSample * sampleRatio)
     for (const range of ranges) {
-      const midpoint16kSample =
-        ((range.startSample + range.endSample) / 2 - selectedRange.startSample) / sampleRatio
+      const midpoint16kSample = ((range.startSample + range.endSample) / 2 - selectedRange.startSample) / sampleRatio
       // Words in padding belong to the nearest speech region, not the previous
       // paragraph merely because their timing precedes Silero's detected onset.
       while (
         regionIndex + 1 < speechRegions.length &&
-        midpoint16kSample >=
-          (speechRegions[regionIndex].endSample + speechRegions[regionIndex + 1].startSample) / 2
+        midpoint16kSample >= (speechRegions[regionIndex].endSample + speechRegions[regionIndex + 1].startSample) / 2
       ) {
         regionIndex += 1
         speechStartSample = selectedRange.startSample + Math.round(speechRegions[regionIndex].startSample * sampleRatio)

@@ -19,6 +19,32 @@ import { AddClipController } from './ui/AddClipController.ts'
 import { WelcomePageController } from './ui/WelcomePageController.ts'
 import { SettingsController } from './ui/SettingsController.ts'
 
+// Last-resort surface for errors that escape local handling, e.g. a failed dynamic
+// import inside an async event handler: such rejections are otherwise silent.
+let reportingSurfacedError = false
+function reportSurfacedError(error) {
+  // showError touches the DOM; if it itself throws inside these listeners the new
+  // uncaught error would re-enter this function and recurse until stack overflow.
+  if (reportingSurfacedError) return
+  reportingSurfacedError = true
+  try {
+    NotificationsController.showError(error instanceof Error ? error : new Error(String(error)))
+  } finally {
+    reportingSurfacedError = false
+  }
+}
+
+window.addEventListener('unhandledrejection', (event) => {
+  event.preventDefault()
+  reportSurfacedError(event.reason)
+})
+
+// Resource-load failures do not bubble, so a non-capture listener only sees uncaught script errors.
+window.addEventListener('error', (event) => {
+  event.preventDefault()
+  reportSurfacedError(event.error ?? new Error(event.message || 'Unknown error'))
+})
+
 window.AudioInputs = AudioInputs
 window.LocalMediaStreams = LocalMediaStreams
 window.Project = Project

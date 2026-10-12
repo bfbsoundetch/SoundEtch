@@ -21,9 +21,7 @@ export class TimelineController extends TrackListItemController {
   ]
 
   readonly svg = document.getElementById('timeline-svg') as unknown as SVGSVGElement
-  private readonly labelFontSize = parseFloat(
-    getComputedStyle(this.svg).getPropertyValue('--timeline-label-font-size'),
-  )
+  private readonly labelFontSize = parseFloat(getComputedStyle(this.svg).getPropertyValue('--timeline-label-font-size'))
   private readonly majorTicks = document.getElementById('timeline-major-ticks') as unknown as SVGPathElement
   private readonly minorTicks = document.getElementById('timeline-minor-ticks') as unknown as SVGPathElement
   private readonly tickLabels = new Array<SVGTextElement>()

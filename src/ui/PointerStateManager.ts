@@ -89,7 +89,10 @@ export class PointerStateManager extends TrackListItemController {
     )
     document.addEventListener('mousemove', (event) => {
       const pending = this.pendingTranscript
-      if (pending && (Math.abs(event.clientX - pending.clientX) >= 2 || Math.abs(event.clientY - pending.clientY) >= 2)) {
+      if (
+        pending &&
+        (Math.abs(event.clientX - pending.clientX) >= 2 || Math.abs(event.clientY - pending.clientY) >= 2)
+      ) {
         pending.cancelled = true
       }
     })
@@ -204,8 +207,7 @@ export class PointerStateManager extends TrackListItemController {
         case State.SELECTING:
           if (this.selectingTranscript) {
             this.finishSelectingTranscript()
-          }
-          else this.changeState(State.DEFAULT)
+          } else this.changeState(State.DEFAULT)
           break
         case State.MOVING_CLIPVIEW: {
           const droppedOnNewTrack = this.trackListController.isPointInNewTrackDropRegion(

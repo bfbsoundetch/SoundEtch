@@ -111,8 +111,16 @@ test('regeneration detects changed VAD paragraphs even when word text and timing
     { startSample: 0, endSample: 50, ranges: [current[0], { ...current[1], speechStartSample: 25 }] },
   ])
   expect(transcriptionRangesEqual(current, replacement)).toBe(false)
-  expect(transcriptionRangesEqual(current, current.map((range) => ({ ...range })))).toBe(true)
   expect(
-    transcriptionRangesEqual(current, current.map(({ text, startSample, endSample }) => ({ text, startSample, endSample }))),
+    transcriptionRangesEqual(
+      current,
+      current.map((range) => ({ ...range })),
+    ),
+  ).toBe(true)
+  expect(
+    transcriptionRangesEqual(
+      current,
+      current.map(({ text, startSample, endSample }) => ({ text, startSample, endSample })),
+    ),
   ).toBe(false)
 })

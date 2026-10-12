@@ -226,7 +226,9 @@ export class TrackListTrack {
       this.history.clear()
       void ProjectManager.deleteTrack(track).then(() => {
         const target = neighbour
-          ? document.querySelector<HTMLElement>(`#track-info-list [data-track-id="${neighbour.id}"] .track-delete-button`)
+          ? document.querySelector<HTMLElement>(
+              `#track-info-list [data-track-id="${neighbour.id}"] .track-delete-button`,
+            )
           : document.getElementById('third-header-button')
         target?.focus()
         announce(`Deleted track ${track.name}`)

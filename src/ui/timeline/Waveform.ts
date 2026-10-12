@@ -327,7 +327,9 @@ export class Waveform extends TrackListItemController {
       NotificationsController.showShortDurationMessage('That would overlap another clip on this track.')
       return
     }
-    await this.trackListController.history.execute(new ReplaceClipViewCommand(this.track, old, replacement, description))
+    await this.trackListController.history.execute(
+      new ReplaceClipViewCommand(this.track, old, replacement, description),
+    )
     announce(announcement)
   }
 
