@@ -124,6 +124,7 @@ export class NotificationsController {
 
   private size = 4
   private readonly parent = document.getElementById('notification-parent') as HTMLDivElement
+  private hostDialog: HTMLDialogElement | null = null
   private readonly htmlElements = new Array(this.size).fill(null).map((_) => {
     const element = document.createElement('div')
     element.style.opacity = '0'
@@ -180,9 +181,44 @@ export class NotificationsController {
 
     const notif = new Notification(this.htmlElements[0], message, level)
     this.notifications[0] = notif
-    // put the notifications above any modals
-    this.parent.parentElement!.appendChild(this.parent)
-    this.parent.showPopover()
+    this.moveParentAboveModals()
     return notif
+  }
+
+  // Chromium paints every popover below open modal dialogs, regardless of the order in
+  // which they entered the top layer. While a modal dialog is open the notification host
+  // therefore has to live inside that dialog; otherwise it stays a popover, re-shown so
+  // it also stays above popover UI that was shown earlier.
+  private moveParentAboveModals() {
+    const dialog = document.querySelector<HTMLDialogElement>('dialog:modal')
+    if (dialog) {
+      if (this.hostDialog !== dialog) {
+        this.releaseHostDialog()
+        this.hostDialog = dialog
+        dialog.appendChild(this.parent)
+        dialog.addEventListener('close', this.hostDialogClosed)
+      }
+      if (this.parent.matches(':popover-open')) {
+        this.parent.hidePopover()
+      }
+    } else {
+      if (this.hostDialog) {
+        this.releaseHostDialog()
+        document.body.appendChild(this.parent)
+      }
+      this.parent.hidePopover()
+      this.parent.showPopover()
+    }
+  }
+
+  private readonly hostDialogClosed = () => {
+    this.releaseHostDialog()
+    document.body.appendChild(this.parent)
+    this.parent.showPopover()
+  }
+
+  private releaseHostDialog() {
+    this.hostDialog?.removeEventListener('close', this.hostDialogClosed)
+    this.hostDialog = null
   }
 }

@@ -2573,6 +2573,7 @@ video {
   border: none;
   padding: 0;
   background: transparent;
+  z-index: 999;
 }
 
 .notification-info {
