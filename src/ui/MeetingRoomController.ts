@@ -497,25 +497,39 @@ export class MeetingRoomController {
                 container.divElement.style.left = ''
               }
             }
-            for (const container of [this.guestContainers[1], this.guestContainers[2]]) {
-              container.divElement.classList = 'vid-div meeting-hidden'
-            }
+            this.guestContainers[1].divElement.classList = 'vid-div meeting-hidden'
+            this.guestContainers[2].divElement.classList = 'vid-div meeting-hidden'
             break
-          case 2:
-          case 3:
+          case 2: {
+            let i = 1
+            for (const container of [this.selfVideoContainer, this.guestContainers[0], this.guestContainers[1]]) {
+              container.divElement.classList = 'vid-div meeting-grid-third'
+              container.divElement.style.top = ''
+              if (container != this.firstContainer) {
+                container.divElement.style.left = `${i*33}%`
+                ++i
+              } else {
+                container.divElement.style.left = ''
+              }
+            }
+            this.guestContainers[2].divElement.classList = 'vid-div meeting-hidden'
+            break
+          }
+          case 3: {
             let i = 1
             for (const container of [this.selfVideoContainer, ...this.guestContainers]) {
               container.divElement.classList = 'vid-div meeting-grid-quarter'
               if (container != this.firstContainer) {
                 container.divElement.style.top = `${Math.floor(i / 2) * 50}%`
                 container.divElement.style.left = `${(i % 2) * 50}%`
+                ++i
               } else {
                 container.divElement.style.top = ''
                 container.divElement.style.left = ''
               }
-              ++i
             }
             break
+          }
         }
         break
     }
@@ -585,8 +599,6 @@ export class MeetingRoomController {
     } else {
       this.screenVideoContainer.vidElement.srcObject = null
       this.screenVideoContainer.isActive = false
-      this.videoLayout = VideoLayout.GRID
-      this.applyVideoLayout()
     }
     for (let i = 0; i < this.guestContainers.length; ++i) {
       if (state.members.length > i) {
@@ -595,7 +607,13 @@ export class MeetingRoomController {
           this.guestContainers[i].vidElement.srcObject = mediaStream
         }
         const videoTrack = mediaStream.getVideoTracks()[0]
-        if (!videoTrack) {
+        if (videoTrack) {
+          if ((videoTrack.getSettings().aspectRatio ?? 0) < 1) {
+            this.guestContainers[i].vidElement.style.objectFit = 'contain'
+          } else {
+            this.guestContainers[i].vidElement.style.objectFit = 'cover'
+          }
+        } else {
           this.guestContainers[i].vidElement.load()
         }
         this.guestContainers[i].vidElement.poster = this.getSvgPosterForUser(state.members[i].username, false)

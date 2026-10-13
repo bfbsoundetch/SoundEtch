@@ -1371,6 +1371,11 @@ video {
   height: 100%;
 }
 
+.meeting-grid-third {
+  width: 33%;
+  height: 100%;
+}
+
 .meeting-grid-quarter {
   width: 50%;
   height: 50%;

@@ -85,7 +85,7 @@ export class AudioFileWriter {
     } else if (this.pausePromise) {
       await this.pausePromise
     } else {
-      this.logger.log('Underrun detected while recording.')
+      this.logger.debug('Underrun detected while recording.')
     }
     return true
   }
