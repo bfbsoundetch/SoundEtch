@@ -1,6 +1,7 @@
 export const DEEP_FILTER_CACHE_NAME = 'soundetch-cache'
 
-export const GRANITE_MODEL_REVISION = '245e1e52c6fc01ba065c35b4af884d89cdca60de'
+export const GRANITE_MODEL_REPO_ID = 'soundetch/soundetch-granite-speech-5.0-470m-turboctc-onnx'
+export const GRANITE_MODEL_REVISION = 'ececda74536f9576a87a5d3e4371f4bb4fe83c98'
 export const GRANITE_MODEL_CACHE_NAME = `soundetch-granite-ctc-${GRANITE_MODEL_REVISION}`
 export const GRANITE_TIMING_GRAPH_FILE = 'granite_timing_v2_q4f16.onnx'
 export const GRANITE_MODEL_DATA_FILE = 'ctc_conformer_q4f16.onnx.data'
@@ -10,7 +11,7 @@ export const SILERO_VAD_CACHE_NAME = `soundetch-silero-vad-${SILERO_VAD_REVISION
 export const SILERO_VAD_FILE = 'silero-vad.onnx'
 
 export const TRANSCRIPTION_ASSET_BYTES = {
-  [GRANITE_TIMING_GRAPH_FILE]: 574_715,
+  [GRANITE_TIMING_GRAPH_FILE]: 575_061,
   [GRANITE_MODEL_DATA_FILE]: 311_533_568,
   'frontend_config.json': 303,
   'mel_filters.bin': 82_240,

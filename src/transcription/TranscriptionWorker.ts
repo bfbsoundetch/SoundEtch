@@ -11,6 +11,7 @@ import { FileSystemUtils } from '../filesystem/FileSystemUtils'
 import {
   GRANITE_MODEL_CACHE_NAME as MODEL_CACHE_NAME,
   GRANITE_MODEL_DATA_FILE as MODEL_DATA_FILE,
+  GRANITE_MODEL_REPO_ID as MODEL_REPO_ID,
   GRANITE_MODEL_REVISION as MODEL_REVISION,
   GRANITE_TIMING_GRAPH_FILE as TIMING_GRAPH_FILE,
   SILERO_VAD_CACHE_NAME as VAD_CACHE_NAME,
@@ -61,7 +62,7 @@ import {
 } from './GraniteDiagnostics'
 import { SileroVad } from './SileroVad'
 
-const MODEL_BASE_URL = `https://huggingface.co/spaces/ibm-granite/granite-speech-streaming-webgpu/resolve/${MODEL_REVISION}/onnx-ctc/`
+const MODEL_BASE_URL = `https://huggingface.co/${MODEL_REPO_ID}/resolve/${MODEL_REVISION}/onnx-ctc/`
 const AUDIO_READ_CHUNK_FRAMES = 65_536
 const APP_BASE_PATH = import.meta.env.BASE_URL.endsWith('/') ? import.meta.env.BASE_URL : `${import.meta.env.BASE_URL}/`
 const SOXR_WASM_URL = new URL('soxr_wasm.wasm', new URL(APP_BASE_PATH, globalThis.location.origin)).href
@@ -76,7 +77,7 @@ interface PinnedAssetSource {
 const ASSET_NAMES = Object.keys(ASSET_MANIFEST) as AssetName[]
 const ASSET_SOURCES: Record<AssetName, PinnedAssetSource> = {
   [TIMING_GRAPH_FILE]: {
-    url: APP_BASE_PATH + 'granite/' + TIMING_GRAPH_FILE,
+    url: MODEL_BASE_URL + TIMING_GRAPH_FILE,
     cacheName: MODEL_CACHE_NAME,
   },
   [MODEL_DATA_FILE]: { url: MODEL_BASE_URL + MODEL_DATA_FILE, cacheName: MODEL_CACHE_NAME },
@@ -631,7 +632,7 @@ async function transcribeGraniteSegment(
       !vocabularyLogProbs ||
       vocabularyLogProbs.dims.length !== 2
     ) {
-      throw new Error('Granite timing export is missing. Run: yarn prepare:timing')
+      throw new Error('Granite timing export is incompatible with this SoundEtch version')
     }
 
     const realOutputFrames = graniteRealOutputFrames(input.realFrames)
