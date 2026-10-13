@@ -31,6 +31,13 @@ type EffectViewSession = {
 // Effects listed under several categories appear more than once in the catalog, so name ids need a counter.
 let nextCatalogNameId = 0
 
+// Keeps the human context ("what failed") in front of the underlying error message
+// so the notification shows the cause instead of a bare generic sentence.
+function withCause(context: string, error: unknown): Error {
+  const cause = error instanceof Error ? error.message : String(error)
+  return new Error(`${context}: ${cause}`)
+}
+
 export class EffectPanelController {
   private static instance: EffectPanelController | null = null
 
@@ -348,8 +355,7 @@ export class EffectPanelController {
         await editorHistory.execute(new SetTrackEffectsCommand(session.track, oldEffects, newEffects, description))
       } catch (error) {
         await this.refreshOwnedEffectView()
-        console.error('Failed to save effect settings', error)
-        NotificationsController.showErrorMessage('Could not persist the latest effect setting.')
+        NotificationsController.showError(withCause('Could not persist the latest effect setting', error))
       }
     }
     const result = session.commitQueue.then(commit)
@@ -678,8 +684,7 @@ export class EffectPanelController {
       addEffectButton.disabled = true
       void this.addEffect(track, metadata).catch((error) => {
         addEffectButton.disabled = false
-        console.error('Failed to add effect', error)
-        NotificationsController.showErrorMessage('Could not add the effect.')
+        NotificationsController.showError(withCause('Could not add the effect', error))
       })
     })
 

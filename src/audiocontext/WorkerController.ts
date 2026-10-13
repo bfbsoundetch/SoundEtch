@@ -1,5 +1,6 @@
 import { JobType } from './ControllableWorkerJob'
 import { Logger } from '../global/Logger'
+import { NotificationsController } from '../ui/NotificationsController'
 import { AudioControl } from './AudioControl'
 
 export class WorkerController {
@@ -40,11 +41,13 @@ export class WorkerController {
           break
         case 'error':
           {
+            this.logger.errorMessage('Worker reported an audio processing error')
+            NotificationsController.showErrorMessage('Audio processing failed.')
             const audioContext = this.audioWorkletNodes[0]?.context
-            if ((audioContext as any)?.close) {
-              await (audioContext as any).close()
-            } else {
-              await (audioContext as any).suspend()
+            if (audioContext !== undefined && 'close' in audioContext) {
+              await (audioContext as AudioContext).close()
+            } else if (audioContext !== undefined && 'suspend' in audioContext) {
+              await (audioContext as AudioContext).suspend()
             }
           }
           break
@@ -65,8 +68,8 @@ export class WorkerController {
         }
       }
       node.addEventListener('processorerror', (e) => {
-        this.logger.errorMessage(e.error?.toString?.() ?? String(e.error))
-        ;(audioContext as any)?.close?.() ?? (audioContext as any)?.suspend()
+        NotificationsController.showErrorMessage('Audio processing failed.')
+        context.close?.() ?? context.suspend()
       })
     })
     context.addEventListener('statechange', () => {

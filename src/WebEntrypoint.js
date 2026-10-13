@@ -21,6 +21,23 @@ import { SettingsController } from './ui/SettingsController.ts'
 
 // Last-resort surface for errors that escape local handling, e.g. a failed dynamic
 // import inside an async event handler: such rejections are otherwise silent.
+const BENIGN_ERROR_PATTERNS = [
+  // A ResizeObserver callback changed layout after notifications were delivered; the
+  // observer re-runs next frame by spec. Chromium reports it as an uncaught error,
+  // but it is not an application failure and must not alarm the user.
+  /^ResizeObserver loop (completed with undelivered notifications|limit exceeded)\.?$/,
+  // Cross-origin scripts (including browser extensions) throw errors the page cannot
+  // inspect ("Script error."). Nothing in them is actionable by the app or the user.
+  /^Script error\.?$/,
+]
+function isBenignSurfacedError(error) {
+  // User-initiated cancellations (file picker, clipboard, aborted requests) reject with
+  // AbortError; call sites that handle them specially already filter them locally.
+  if (error != null && error.name === 'AbortError') return true
+  const message = error instanceof Error ? error.message : String(error)
+  return BENIGN_ERROR_PATTERNS.some((pattern) => pattern.test(message))
+}
+
 let reportingSurfacedError = false
 function reportSurfacedError(error) {
   // showError touches the DOM; if it itself throws inside these listeners the new
@@ -36,13 +53,16 @@ function reportSurfacedError(error) {
 
 window.addEventListener('unhandledrejection', (event) => {
   event.preventDefault()
+  if (isBenignSurfacedError(event.reason)) return
   reportSurfacedError(event.reason)
 })
 
 // Resource-load failures do not bubble, so a non-capture listener only sees uncaught script errors.
 window.addEventListener('error', (event) => {
   event.preventDefault()
-  reportSurfacedError(event.error ?? new Error(event.message || 'Unknown error'))
+  const error = event.error ?? new Error(event.message || 'Unknown error')
+  if (isBenignSurfacedError(error)) return
+  reportSurfacedError(error)
 })
 
 window.AudioInputs = AudioInputs
@@ -67,23 +87,54 @@ window.WelcomePageController = WelcomePageController
 window.SettingsController = SettingsController
 
 // These interaction boundaries keep publishing, project transfer, recording, and conferencing out of the initial chunk.
-let publishProjectControllerPromise
-window.loadPublishProjectController = () =>
-  (publishProjectControllerPromise ??= import('./ui/PublishProjectController.ts').then(
-    ({ PublishProjectController }) => (window.publishProjectController ??= new PublishProjectController()),
-  ))
+// A failed dynamic import (e.g. a missing chunk after a deploy) must not stay cached:
+// the memo is cleared on rejection so the next call retries the load instead of
+// returning the same stale rejection until a full page reload.
+function lazyImport(load, create) {
+  let promise
+  let failures = 0
+  let reloadHintShown = false
+  return () =>
+    (promise ??= load()
+      .then(create)
+      .then(
+        (value) => {
+          failures = 0
+          return value
+        },
+        (error) => {
+          promise = undefined
+          failures += 1
+          // Chromium keeps a failed dynamic import in its per-document module map, so an
+          // in-page retry cannot re-fetch that URL; after a redeploy the only recovery is
+          // a reload. Say so once instead of letting the user retry in vain.
+          if (failures >= 2 && !reloadHintShown) {
+            reloadHintShown = true
+            NotificationsController.showErrorMessage(
+              'Loading keeps failing. Reload the page to get the latest version.',
+            )
+          }
+          throw error
+        },
+      ))
+}
 
-let projectTransferControllerPromise
-window.loadProjectTransferController = () =>
-  (projectTransferControllerPromise ??= import('./ui/ProjectTransferController.ts').then(
-    ({ ProjectTransferController }) => (window.projectTransferController ??= new ProjectTransferController()),
-  ))
+window.loadPublishProjectController = lazyImport(
+  () => import('./ui/PublishProjectController.ts'),
+  ({ PublishProjectController }) => (window.publishProjectController ??= new PublishProjectController()),
+)
 
-let recorderPromise
-window.loadRecorder = () => (recorderPromise ??= import('./recording/Recorder.ts').then(({ Recorder }) => Recorder))
+window.loadProjectTransferController = lazyImport(
+  () => import('./ui/ProjectTransferController.ts'),
+  ({ ProjectTransferController }) => (window.projectTransferController ??= new ProjectTransferController()),
+)
 
-let meetingRoomControllerPromise
-window.loadMeetingRoomController = () =>
-  (meetingRoomControllerPromise ??= import('./ui/MeetingRoomController.ts').then(
-    ({ MeetingRoomController }) => (window.meetingRoomController ??= new MeetingRoomController()),
-  ))
+window.loadRecorder = lazyImport(
+  () => import('./recording/Recorder.ts'),
+  ({ Recorder }) => Recorder,
+)
+
+window.loadMeetingRoomController = lazyImport(
+  () => import('./ui/MeetingRoomController.ts'),
+  ({ MeetingRoomController }) => (window.meetingRoomController ??= new MeetingRoomController()),
+)

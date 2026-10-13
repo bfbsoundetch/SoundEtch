@@ -1,8 +1,11 @@
 import { RemoteMediaClient3 } from 'remote/RemoteMediaClient3'
 import { AudioControl, AudioState } from '../audiocontext/AudioControl'
+import { Logger } from '../global/Logger'
 import { LocalMediaStreams } from '../mediastreams/LocalMediaStreams'
 import { AudioInput } from './AudioInput'
 import { MediaStreamInput as MediaStreamInput } from './MediaStreamInput'
+
+const logger = new Logger('AudioInputs')
 
 export class AudioInputs {
   private static listeners = new Array<() => any>()
@@ -111,7 +114,7 @@ export class AudioInputs {
           }
         })
         member.mediaStream.addEventListener('removetrack', (trackEvent) => {
-          console.error('remove track')
+          logger.debug(`Member ${member.peerId} removed a ${trackEvent.track.kind} track`)
           if (trackEvent.track.kind == 'audio') {
             this.remoteStreams.get(member.peerId)?.stop()
           }
