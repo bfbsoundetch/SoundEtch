@@ -351,13 +351,11 @@ export class TrackListTrack {
     })
     const increaseHeightItem = createItem('Increase track height', 'menuitem')
     increaseHeightItem.addEventListener('click', () => {
-      closeMenu()
       actions.onChangeHeight(2)
       button.focus()
     })
     const decreaseHeightItem = createItem('Decrease track height', 'menuitem')
     decreaseHeightItem.addEventListener('click', () => {
-      closeMenu()
       actions.onChangeHeight(-2)
       button.focus()
     })
