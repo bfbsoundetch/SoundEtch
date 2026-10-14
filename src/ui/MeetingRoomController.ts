@@ -506,7 +506,7 @@ export class MeetingRoomController {
               container.divElement.classList = 'vid-div meeting-grid-third'
               container.divElement.style.top = ''
               if (container != this.firstContainer) {
-                container.divElement.style.left = `${i*33}%`
+                container.divElement.style.left = `${i * 33}%`
                 ++i
               } else {
                 container.divElement.style.left = ''
