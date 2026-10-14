@@ -28,6 +28,8 @@ DeepFilterNet's `df_bg.wasm` and `DeepFilterNet3_onnx.tar.gz` are served from `n
 
 Each track has a focusable timeline control. Left/Right move the cursor by one ruler tick, Page Up/Page Down by one labelled interval, and Home/End go to the start and end. Hold Shift to select; Alt+Shift+Up/Down adds the neighbouring track to the selection, Ctrl/⌘+A selects the whole track, Delete cuts the selection, Escape clears it, and +/− zoom around the cursor. Shift+F10 or the Menu key opens the menu a right-click opens there: selection actions, clip actions (split, move or trim by entering a time, move to a new track, select, info, delete), or paste and go-to-time on an empty stretch. The zoom, scroll, and **Go to time…** buttons above the track headers work with a single click.
 
+In a track's options menu, Up/Down move through the visible actions, Home/End go to the first/last action, and Escape closes the menu. **Show transcript** is available only when the track has a placed transcript; it becomes **Hide transcript** while that track's panel is open.
+
 Ctrl/⌘+X cuts the timeline selection. Timeline copy, cut, paste, and undo shortcuts are ignored while focus is in a text field, a select, or an open dialog, and Ctrl/⌘+C copies selected text normally.
 
 In the **Transcript** panel, the arrow keys, Home, and End move between words, Shift extends the timeline selection word by word, and Enter or Space moves the cursor to the focused word.

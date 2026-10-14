@@ -1983,6 +1983,7 @@ video {
   color: var(--color);
   box-shadow: 0 0.5rem 1.5rem rgba(0, 0, 0, 0.18);
   font: inherit;
+  user-select: none;
 }
 
 .track-display-mode-menu:popover-open {
@@ -1999,6 +2000,10 @@ video {
   font: inherit;
   text-align: left;
   cursor: pointer;
+}
+
+.track-display-mode-option[hidden] {
+  display: none;
 }
 
 .track-display-mode-option:hover,
