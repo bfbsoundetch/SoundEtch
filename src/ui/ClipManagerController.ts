@@ -163,8 +163,8 @@ export class ClipManagerController {
   }
 
   private async hideMetadata() {
-    this.metadataDialog.close()
     await this.open()
+    this.metadataDialog.close()
     if (this.displayedClip) this.detailButtons.get(this.displayedClip)?.focus()
   }
 
