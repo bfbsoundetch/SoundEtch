@@ -1,10 +1,9 @@
 /// <reference lib="webworker" />
 
-// ORT 1.26's root build uses the JSEP WebGPU backend that matches the packaged
-// .jsep runtime below; its /webgpu build expects the incompatible asyncify runtime.
+// ORT 1.26's root build uses the JSEP WebGPU backend. Its /webgpu build
+// expects the incompatible asyncify runtime.
 import * as ort from 'onnxruntime-web'
 import ortWasmModuleUrl from 'onnxruntime-web/ort-wasm-simd-threaded.jsep.mjs?url'
-import ortWasmBinaryUrl from 'onnxruntime-web/ort-wasm-simd-threaded.jsep.wasm?url'
 import SoxrResampler from 'wasm-audio-resampler/app/soxr_resampler.js'
 import { SoxrDatatype, SoxrQuality } from 'wasm-audio-resampler/app/utils.js'
 import { FileSystemUtils } from '../filesystem/FileSystemUtils'
@@ -470,7 +469,7 @@ async function createRuntime(command: TranscribeCommand): Promise<GraniteRuntime
 
   ort.env.wasm.wasmPaths = {
     mjs: ortWasmModuleUrl,
-    wasm: ortWasmBinaryUrl,
+    wasm: 'https://assets.soundetch.org/onnxruntime-web/1.26.0/ort-wasm-simd-threaded.jsep.wasm?sha256=411b39a77bb006ce0cf17b30c978c66a130ebb2ba39c8dfdbdc9c1c5a251ae76',
   }
   ort.env.wasm.numThreads =
     command.allowWasmThreads && globalThis.crossOriginIsolated
