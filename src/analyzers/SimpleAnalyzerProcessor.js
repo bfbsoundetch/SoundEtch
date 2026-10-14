@@ -35,6 +35,9 @@ export class SimpleAnalyzerProcessor extends AudioWorkletProcessor {
     const output = outputs[0]
 
     if (!input || input.length == 0) {
+      this.instantaneousPeakOutput.fill(0)
+      this.heldPeakOutput.fill(0)
+      this.rmsOutput.fill(0)
       return true
     }
 
@@ -52,6 +55,10 @@ export class SimpleAnalyzerProcessor extends AudioWorkletProcessor {
         this.rmsSquareSum[channel] -= this.rmsSquares[channel][this.rmsSquarePosition]
         this.rmsSquares[channel][this.rmsSquarePosition] = sample * sample
         this.rmsSquareSum[channel] += sample * sample
+        // numerical computing problem
+        if (this.rmsSquareSum[channel] < 0) {
+          this.rmsSquareSum[channel] = 0
+        }
       }
       this.rmsSquarePosition = (this.rmsSquarePosition + 1) % this.rmsWindow
       this.rmsSampleCount = Math.min(this.rmsSampleCount + 1, this.rmsWindow)
