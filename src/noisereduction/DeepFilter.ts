@@ -105,8 +105,8 @@ async function initialize() {
 }
 
 function resourceUrl(filename: string) {
-  const env = (import.meta as ImportMeta & { env?: { BASE_URL?: string } }).env
-  const url = new URL(`${env?.BASE_URL ?? ''}/noisereduction/${filename}`, globalThis.location.origin)
+  const basePath = import.meta.env.BASE_URL.endsWith('/') ? import.meta.env.BASE_URL : `${import.meta.env.BASE_URL}/`
+  const url = new URL(`noisereduction/${filename}`, new URL(basePath, globalThis.location.origin))
   if (filename == 'df_bg.wasm') {
     url.searchParams.set('v', 'dfstate-api')
   }
