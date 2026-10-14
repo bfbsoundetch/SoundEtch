@@ -18,6 +18,9 @@ import { MainMenuController } from './ui/MainMenuController.ts'
 import { AddClipController } from './ui/AddClipController.ts'
 import { WelcomePageController } from './ui/WelcomePageController.ts'
 import { SettingsController } from './ui/SettingsController.ts'
+import { Logger } from './global/Logger.ts'
+
+const logger = new Logger('TopLevel')
 
 // Last-resort surface for errors that escape local handling, e.g. a failed dynamic
 // import inside an async event handler: such rejections are otherwise silent.
@@ -45,7 +48,7 @@ function reportSurfacedError(error) {
   if (reportingSurfacedError) return
   reportingSurfacedError = true
   try {
-    NotificationsController.showError(error instanceof Error ? error : new Error(String(error)))
+    logger.error(error instanceof Error ? error : new Error(String(error)))
   } finally {
     reportingSurfacedError = false
   }
