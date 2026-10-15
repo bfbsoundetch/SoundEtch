@@ -24,8 +24,8 @@ export class SimpleAnalyzerProcessor extends AudioWorkletProcessor {
     )
     this.peakHistoryPosition = 0
 
-    this.rmsSquares = Array.from({ length: this.channelCount }, () => new Float32Array(this.rmsWindow))
-    this.rmsSquareSum = new Float32Array(this.channelCount)
+    this.rmsSquares = Array.from({ length: this.channelCount }, () => new Float64Array(this.rmsWindow))
+    this.rmsSquareSum = new Float64Array(this.channelCount)
     this.rmsSquarePosition = 0
     this.rmsSampleCount = 0
   }
@@ -52,15 +52,23 @@ export class SimpleAnalyzerProcessor extends AudioWorkletProcessor {
         const sample = input[channel]?.[i] ?? 0
         const absoluteSample = Math.abs(sample)
         this.currentPeak[channel] = Math.max(this.currentPeak[channel], absoluteSample)
-        this.rmsSquareSum[channel] -= this.rmsSquares[channel][this.rmsSquarePosition]
-        this.rmsSquares[channel][this.rmsSquarePosition] = sample * sample
-        this.rmsSquareSum[channel] += sample * sample
-        // numerical computing problem
-        if (this.rmsSquareSum[channel] < 0) {
-          this.rmsSquareSum[channel] = 0
+        const square = sample * sample
+        this.rmsSquareSum[channel] += square - this.rmsSquares[channel][this.rmsSquarePosition]
+        this.rmsSquares[channel][this.rmsSquarePosition] = square
+      }
+      this.rmsSquarePosition += 1
+      if (this.rmsSquarePosition == this.rmsWindow) {
+        this.rmsSquarePosition = 0
+        // The running add/subtract leaves rounding residue that never cancels (e.g. a
+        // non-zero sum once the window is pure silence), so resum exactly once per window.
+        for (let channel = 0; channel < this.channelCount; ++channel) {
+          let sum = 0
+          for (let i = 0; i < this.rmsSquares[channel].length; ++i) {
+            sum += this.rmsSquares[channel][i]
+          }
+          this.rmsSquareSum[channel] = sum
         }
       }
-      this.rmsSquarePosition = (this.rmsSquarePosition + 1) % this.rmsWindow
       this.rmsSampleCount = Math.min(this.rmsSampleCount + 1, this.rmsWindow)
 
       this.samplesUntilUpdate -= 1
@@ -74,7 +82,8 @@ export class SimpleAnalyzerProcessor extends AudioWorkletProcessor {
             heldPeak = Math.max(heldPeak, peak)
           }
           this.heldPeakOutput[channel] = heldPeak
-          this.rmsOutput[channel] = Math.sqrt(this.rmsSquareSum[channel] / this.rmsSampleCount)
+          this.rmsOutput[channel] =
+            this.rmsSquareSum[channel] > 0 ? Math.sqrt(this.rmsSquareSum[channel] / this.rmsSampleCount) : 0
           this.currentPeak[channel] = 0
         }
         this.peakHistoryPosition = (this.peakHistoryPosition + 1) % this.peakHistory[0].length
