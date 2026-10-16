@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest'
-import { formatTranscriptParagraph } from './TranscriptFormatting'
+import { formatTranscriptGap, formatTranscriptParagraph } from './TranscriptFormatting'
 
 const SAMPLE_RATE = 1000
 
@@ -57,4 +57,11 @@ test('does not double punctuation already present in the text', () => {
     texts: ['All', 'terrain,', "isn't", 'it?'],
     punctuation: [',', '', ',', ''],
   })
+})
+
+test('gap labels show tenths of a second below a minute and whole seconds from a minute', () => {
+  expect(formatTranscriptGap('silence', 1_249, SAMPLE_RATE)).toBe('[silence 1.2s]')
+  expect(formatTranscriptGap('silence', 59_949, SAMPLE_RATE)).toBe('[silence 59.9s]')
+  expect(formatTranscriptGap('silence', 59_950, SAMPLE_RATE)).toBe('[silence 1m 0s]')
+  expect(formatTranscriptGap('untranscribed', 125_400, SAMPLE_RATE)).toBe('[untranscribed 2m 5s]')
 })

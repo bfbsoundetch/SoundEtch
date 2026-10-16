@@ -1,3 +1,4 @@
+import type { TranscriptGapKind } from '../../project/Transcription'
 import { TRANSCRIPT_PROPER_CASING } from './TranscriptProperNouns'
 
 export type TranscriptPunctuation = '' | ',' | '.' | '?'
@@ -108,4 +109,17 @@ export function formatTranscriptParagraph(words: readonly TimedWord[], sampleRat
   }
 
   return display.map((text, j) => ({ text, punctuation: punctuation[j] }))
+}
+
+/** Inline label for a gap, e.g. `[silence 1.2s]` or `[untranscribed 2m 5s]`. */
+export function formatTranscriptGap(kind: TranscriptGapKind, durationSamples: number, sampleRate: number): string {
+  const tenths = Math.round((durationSamples / sampleRate) * 10)
+  let duration: string
+  if (tenths < 600) {
+    duration = `${(tenths / 10).toFixed(1)}s`
+  } else {
+    const seconds = Math.round(tenths / 10)
+    duration = `${Math.floor(seconds / 60)}m ${seconds % 60}s`
+  }
+  return `[${kind} ${duration}]`
 }

@@ -44,6 +44,7 @@ import {
 } from './GraniteCtc'
 import type { GraniteSpeechSegment, SelectedSourceSampleRange } from './GraniteCtc'
 import {
+  buildSilenceMask,
   buildSpeechSupportMask,
   computeFrameEnergies,
   ctcTokenPosteriors,
@@ -60,6 +61,7 @@ import {
   traceWebAssemblyInstantiation,
 } from './GraniteDiagnostics'
 import { SileroVad } from './SileroVad'
+import { transcriptGapRanges } from './TranscriptGaps'
 
 const MODEL_BASE_URL = `https://huggingface.co/${MODEL_REPO_ID}/resolve/${MODEL_REVISION}/onnx-ctc/`
 const AUDIO_READ_CHUNK_FRAMES = 65_536
@@ -322,6 +324,22 @@ async function processTranscription(command: TranscribeCommand): Promise<void> {
         throw new Error('Granite produced overlapping word ranges')
       }
     }
+    const silenceMask = buildSilenceMask(
+      vadProbabilities,
+      energies,
+      GRANITE_VAD_SEGMENTATION_SETTINGS.negativeThreshold,
+    )
+    const gaps = transcriptGapRanges(
+      ranges,
+      speechMask,
+      silenceMask,
+      audio.length,
+      command.projectSampleRate,
+      interval,
+      speechRegions,
+    )
+    ranges.push(...gaps)
+    ranges.sort((left, right) => left.startSample - right.startSample || left.endSample - right.endSample)
     results.push({ ...interval, ranges })
     completedSourceSamples += intervalSourceSamples
     postProgress(command.requestId, {

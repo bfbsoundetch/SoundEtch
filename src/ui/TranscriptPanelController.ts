@@ -5,7 +5,7 @@ import type { Track } from '../project/Track'
 import type { TranscribedRange } from '../project/Transcription'
 import { BottomPanelController } from './BottomPanelController'
 import type { TrackListController } from './timeline/TrackListController'
-import { formatTranscriptParagraph } from './transcript/TranscriptFormatting'
+import { formatTranscriptGap, formatTranscriptParagraph } from './transcript/TranscriptFormatting'
 import {
   getTrackTranscriptEntries,
   getTranscriptEntriesInRange,
@@ -116,15 +116,26 @@ export class TranscriptPanelController {
     const sampleRate = this.trackListController.sampleRate
     const paragraphs = splitTranscriptParagraphs(getTrackTranscriptEntries(track)).map((entries) => {
       const paragraph = document.createElement('p')
-      formatTranscriptParagraph(entries, sampleRate).forEach((word, i) => {
+      const words = formatTranscriptParagraph(
+        entries.filter((entry) => entry.kind === undefined),
+        sampleRate,
+      )
+      let wordIndex = 0
+      entries.forEach((entry, i) => {
         if (i > 0) paragraph.append(' ')
         const element = document.createElement('span')
-        element.className = 'transcript-word'
         element.tabIndex = -1
-        element.textContent = word.text
         paragraph.append(element)
-        if (word.punctuation) paragraph.append(word.punctuation)
-        bindings.push({ entry: entries[i], element })
+        if (entry.kind === undefined) {
+          const word = words[wordIndex++]
+          element.className = 'transcript-word'
+          element.textContent = word.text
+          if (word.punctuation) paragraph.append(word.punctuation)
+        } else {
+          element.className = `transcript-gap transcript-${entry.kind}`
+          element.textContent = formatTranscriptGap(entry.kind, entry.endSample - entry.startSample, sampleRate)
+        }
+        bindings.push({ entry, element })
       })
       return paragraph
     })
@@ -248,7 +259,8 @@ export class TranscriptPanelController {
       'mousedown',
       (event) => {
         if (event.button !== 0) return
-        const element = event.target instanceof Element ? event.target.closest('.transcript-word') : null
+        const element =
+          event.target instanceof Element ? event.target.closest('.transcript-word, .transcript-gap') : null
         this.gesture = {
           x: event.clientX,
           y: event.clientY,

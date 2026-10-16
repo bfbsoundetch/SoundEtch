@@ -1,5 +1,6 @@
 import type { Clip } from '../../project/Clip'
-import type { TranscribedRange } from '../../project/Transcription'
+import type { TranscribedRange, TranscriptGapKind } from '../../project/Transcription'
+import { formatTranscriptGap } from '../transcript/TranscriptFormatting'
 import type { TrackListController } from './TrackListController'
 import { TrackListItemController } from './TrackListItemController'
 
@@ -12,6 +13,7 @@ export interface ProjectedTranscribedRange {
   readonly startSample: number
   readonly endSample: number
   readonly speechStartSample?: number
+  readonly kind?: TranscriptGapKind
   readonly drawStartBoundary: boolean
   readonly drawEndBoundary: boolean
 }
@@ -57,6 +59,7 @@ export function projectVisibleTranscribedRanges(
           : timelineStartSample + range.speechStartSample - sourceStartSample,
       drawStartBoundary: range.startSample >= visibleSourceStart,
       drawEndBoundary: range.endSample <= visibleSourceEnd,
+      kind: range.kind,
     })
   }
   return projected
@@ -158,8 +161,17 @@ export class TranscriptionOverlayController extends TrackListItemController {
       label.foreignObject.setAttribute('width', `${Math.max(0, rangeEndX - rangeStartX)}`)
       label.foreignObject.setAttribute('height', `${Math.max(0, laneHeight)}`)
       label.foreignObject.removeAttribute('hidden')
-      if (label.content.textContent !== range.text) {
-        label.content.textContent = range.text
+      label.foreignObject.classList.toggle('transcription-gap-label', range.kind !== undefined)
+      const text =
+        range.kind === undefined
+          ? range.text
+          : formatTranscriptGap(
+              range.kind,
+              Math.min(range.endSample, footprintEndSample) - Math.max(range.startSample, timelineStartSample),
+              this.sampleRate,
+            )
+      if (label.content.textContent !== text) {
+        label.content.textContent = text
       }
 
       if (range.drawStartBoundary && previousBoundarySample !== range.startSample) {

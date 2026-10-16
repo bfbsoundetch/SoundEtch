@@ -835,6 +835,7 @@ export class TrackListController {
 
       const replacementsByClip = new Map<Clip, TranscriptionReplacement[]>()
       let generatedWordCount = 0
+      let untranscribedCount = 0
       for (const result of results) {
         const replacements = replacementsByClip.get(result.clip) ?? []
         replacements.push({
@@ -843,7 +844,10 @@ export class TrackListController {
           ranges: result.ranges,
         })
         replacementsByClip.set(result.clip, replacements)
-        generatedWordCount += result.ranges.length
+        for (const range of result.ranges) {
+          if (range.kind === undefined) ++generatedWordCount
+          else if (range.kind === 'untranscribed') ++untranscribedCount
+        }
       }
 
       const commands = new Array<SetClipTranscriptionCommand>()
@@ -855,8 +859,13 @@ export class TrackListController {
       }
       if (commands.length > 0) {
         await this.history.execute(new BatchCommand(commands, 'generate transcription'))
-      } else if (generatedWordCount === 0) {
-        NotificationsController.showLongDurationMessage('No speech was detected in the selected audio.')
+      }
+      if (generatedWordCount === 0) {
+        NotificationsController.showLongDurationMessage(
+          untranscribedCount > 0
+            ? 'Speech was detected in the selected audio, but no words were recognized.'
+            : 'No speech was detected in the selected audio.',
+        )
       }
     } catch (error) {
       if (!(error instanceof DOMException && error.name === 'AbortError')) {

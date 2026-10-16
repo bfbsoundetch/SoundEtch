@@ -550,6 +550,15 @@ export function computeFrameEnergies(audio: Float32Array, frameSamples: number):
   return energies
 }
 
+/** Frame energy that counts as sound: a tenth of the loudest frame's amplitude, and at least 0.003. */
+function soundEnergyThreshold(energies: Float32Array): number {
+  let peakFrameEnergy = 0
+  for (const energy of energies) {
+    peakFrameEnergy = Math.max(peakFrameEnergy, energy)
+  }
+  return Math.max(0.003, peakFrameEnergy * 0.1)
+}
+
 export function buildSpeechSupportMask(
   probabilities: Float32Array,
   segments: readonly { startSample: number; endSample: number }[],
@@ -559,11 +568,7 @@ export function buildSpeechSupportMask(
   if (probabilities.length !== energies.length) {
     throw new Error('Silero probabilities and energy frames must have equal lengths.')
   }
-  let peakFrameEnergy = 0
-  for (const energy of energies) {
-    peakFrameEnergy = Math.max(peakFrameEnergy, energy)
-  }
-  const energyThreshold = Math.max(0.003, peakFrameEnergy * 0.1)
+  const energyThreshold = soundEnergyThreshold(energies)
   const mask = new Uint8Array(energies.length)
   for (const segment of segments) {
     const firstFrame = Math.max(0, Math.floor(segment.startSample / SILERO_VAD_FRAME_SAMPLES))
@@ -575,6 +580,57 @@ export function buildSpeechSupportMask(
     }
   }
   return mask
+}
+
+/**
+ * Marks frames where Silero is below its speech-end threshold and the energy
+ * is below the speech mask's sound threshold, over the whole interval. Energy
+ * alone would call quiet speech silence; Silero alone would call loud
+ * non-speech silence.
+ */
+export function buildSilenceMask(
+  probabilities: Float32Array,
+  energies: Float32Array,
+  negativeThreshold: number,
+): Uint8Array {
+  if (probabilities.length !== energies.length) {
+    throw new Error('Silero probabilities and energy frames must have equal lengths.')
+  }
+  const energyThreshold = soundEnergyThreshold(energies)
+  return Uint8Array.from(probabilities, (probability, frame) =>
+    probability < negativeThreshold && energies[frame] < energyThreshold ? 1 : 0,
+  )
+}
+
+/**
+ * Unpadded onset, in clip source samples, of the VAD speech region that owns a
+ * range. Ranges in padding belong to the nearest speech region, not the
+ * previous paragraph merely because their timing precedes Silero's detected
+ * onset.
+ */
+export function speechRegionStartSample(
+  startSample: number,
+  endSample: number,
+  projectSampleRate: number,
+  selectedRange: SelectedSourceSampleRange,
+  speechRegions: readonly GraniteSpeechSegment[],
+): number | undefined {
+  if (speechRegions.length === 0) {
+    return undefined
+  }
+  const sampleRatio = projectSampleRate / GRANITE_SAMPLE_RATE
+  const midpoint16kSample = ((startSample + endSample) / 2 - selectedRange.startSample) / sampleRatio
+  let low = 0
+  let high = speechRegions.length - 1
+  while (low < high) {
+    const middle = (low + high) >> 1
+    if (midpoint16kSample >= (speechRegions[middle].endSample + speechRegions[middle + 1].startSample) / 2) {
+      low = middle + 1
+    } else {
+      high = middle
+    }
+  }
+  return selectedRange.startSample + Math.round(speechRegions[low].startSample * sampleRatio)
 }
 
 export function timedWordsToTranscribedRanges(
@@ -599,26 +655,15 @@ export function timedWordsToTranscribedRanges(
     if (word.text.length === 0 || startSample >= endSample) {
       return []
     }
-    return [{ text: word.text, startSample, endSample, speechStartSample: undefined as number | undefined }]
+    const speechStartSample = speechRegionStartSample(
+      startSample,
+      endSample,
+      projectSampleRate,
+      selectedRange,
+      speechRegions,
+    )
+    return [{ text: word.text, startSample, endSample, speechStartSample }]
   })
   ranges.sort((left, right) => left.startSample - right.startSample || left.endSample - right.endSample)
-  if (speechRegions.length > 0) {
-    const sampleRatio = projectSampleRate / GRANITE_SAMPLE_RATE
-    let regionIndex = 0
-    let speechStartSample = selectedRange.startSample + Math.round(speechRegions[0].startSample * sampleRatio)
-    for (const range of ranges) {
-      const midpoint16kSample = ((range.startSample + range.endSample) / 2 - selectedRange.startSample) / sampleRatio
-      // Words in padding belong to the nearest speech region, not the previous
-      // paragraph merely because their timing precedes Silero's detected onset.
-      while (
-        regionIndex + 1 < speechRegions.length &&
-        midpoint16kSample >= (speechRegions[regionIndex].endSample + speechRegions[regionIndex + 1].startSample) / 2
-      ) {
-        regionIndex += 1
-        speechStartSample = selectedRange.startSample + Math.round(speechRegions[regionIndex].startSample * sampleRatio)
-      }
-      range.speechStartSample = speechStartSample
-    }
-  }
   return ranges
 }

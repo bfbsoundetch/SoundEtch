@@ -2,7 +2,7 @@ import { expect, test } from 'vitest'
 import { Clip } from '../../project/Clip'
 import { ClipView } from '../../project/ClipView'
 import { Track } from '../../project/Track'
-import { getTrackTranscriptEntries, getTranscriptEntriesInRange } from './TrackTranscript'
+import { getTrackTranscriptEntries, getTranscriptEntriesInRange, splitTranscriptParagraphs } from './TrackTranscript'
 
 function fixture() {
   const clip = new Clip('source', 1, 100)
@@ -81,4 +81,24 @@ test('blank atoms are omitted without normalizing persisted text', () => {
     [' phrase! ', 1020, 1040],
     [' phrase! ', 2040, 2060],
   ])
+})
+
+test('silence trails the paragraph it follows while untranscribed speech keeps its VAD region', () => {
+  const clip = new Clip('source', 1, 1_000)
+  clip.transcription = [
+    { text: '', startSample: 0, endSample: 100, kind: 'silence' },
+    { text: 'first', startSample: 100, endSample: 200, speechStartSample: 100 },
+    { text: '', startSample: 200, endSample: 300, kind: 'silence' },
+    { text: 'same', startSample: 300, endSample: 400, speechStartSample: 100 },
+    { text: '', startSample: 400, endSample: 600, kind: 'silence' },
+    { text: '', startSample: 600, endSample: 700, speechStartSample: 600, kind: 'untranscribed' },
+    { text: 'next', startSample: 800, endSample: 900, speechStartSample: 800 },
+  ]
+  const track = new Track('track', 1)
+  track.clipViews.push(new ClipView(clip, 0, 0, 1_000))
+
+  const paragraphs = splitTranscriptParagraphs(getTrackTranscriptEntries(track)).map((paragraph) =>
+    paragraph.map((entry) => entry.kind ?? entry.text),
+  )
+  expect(paragraphs).toEqual([['silence'], ['first', 'silence', 'same', 'silence'], ['untranscribed'], ['next']])
 })

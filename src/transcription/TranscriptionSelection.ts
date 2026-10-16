@@ -74,15 +74,44 @@ export function replaceTranscriptionRanges(
     }
   }
 
-  const preserved = current.filter(
-    (range) =>
-      !replacements.some(
-        (replacement) => range.startSample < replacement.endSample && range.endSample > replacement.startSample,
-      ),
-  )
-  return [...preserved, ...generated].sort(
+  const preserved = current.flatMap((range) => {
+    const overlapping = replacements
+      .filter((replacement) => range.startSample < replacement.endSample && range.endSample > replacement.startSample)
+      .sort((left, right) => left.startSample - right.startSample)
+    if (overlapping.length === 0) {
+      return [range]
+    }
+    // A word is indivisible; a gap keeps its parts outside the regenerated intervals.
+    if (range.kind === undefined) {
+      return []
+    }
+    const parts = new Array<TranscribedRange>()
+    let startSample = range.startSample
+    for (const replacement of overlapping) {
+      if (startSample < replacement.startSample) {
+        parts.push({ ...range, startSample, endSample: replacement.startSample })
+      }
+      startSample = Math.max(startSample, replacement.endSample)
+    }
+    if (startSample < range.endSample) {
+      parts.push({ ...range, startSample })
+    }
+    return parts
+  })
+
+  // Contiguous silence from separate generations reads as one pause.
+  const merged = new Array<TranscribedRange>()
+  for (const range of [...preserved, ...generated].sort(
     (left, right) => left.startSample - right.startSample || left.endSample - right.endSample,
-  )
+  )) {
+    const previous = merged[merged.length - 1]
+    if (previous?.kind === 'silence' && range.kind === 'silence' && previous.endSample === range.startSample) {
+      merged[merged.length - 1] = { ...previous, endSample: range.endSample }
+    } else {
+      merged.push(range)
+    }
+  }
+  return merged
 }
 
 export function transcriptionRangesEqual(
@@ -96,7 +125,8 @@ export function transcriptionRangesEqual(
         range.text === right[index].text &&
         range.startSample === right[index].startSample &&
         range.endSample === right[index].endSample &&
-        range.speechStartSample === right[index].speechStartSample,
+        range.speechStartSample === right[index].speechStartSample &&
+        range.kind === right[index].kind,
     )
   )
 }

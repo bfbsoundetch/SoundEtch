@@ -124,3 +124,35 @@ test('regeneration detects changed VAD paragraphs even when word text and timing
     ),
   ).toBe(false)
 })
+
+test('regeneration keeps gap parts outside the interval, drops straddling words, and joins touching silence', () => {
+  const current = [
+    { text: '', startSample: 0, endSample: 100, kind: 'silence' as const },
+    { text: 'straddles', startSample: 150, endSample: 210 },
+    { text: '', startSample: 210, endSample: 260, speechStartSample: 140, kind: 'untranscribed' as const },
+    { text: '', startSample: 260, endSample: 400, kind: 'silence' as const },
+  ]
+  const result = replaceTranscriptionRanges(current, [
+    {
+      startSample: 50,
+      endSample: 200,
+      ranges: [
+        { text: '', startSample: 50, endSample: 120, kind: 'silence' },
+        { text: 'new', startSample: 120, endSample: 140 },
+      ],
+    },
+    { startSample: 230, endSample: 300, ranges: [] },
+  ])
+
+  expect(result).toEqual([
+    { text: '', startSample: 0, endSample: 120, kind: 'silence' },
+    { text: 'new', startSample: 120, endSample: 140 },
+    { text: '', startSample: 210, endSample: 230, speechStartSample: 140, kind: 'untranscribed' },
+    { text: '', startSample: 300, endSample: 400, kind: 'silence' },
+  ])
+})
+
+test('equality distinguishes gap kinds', () => {
+  const silence = [{ text: '', startSample: 0, endSample: 10, kind: 'silence' as const }]
+  expect(transcriptionRangesEqual(silence, [{ ...silence[0], kind: 'untranscribed' }])).toBe(false)
+})
