@@ -6,6 +6,7 @@ import { JobType } from '../audiocontext/ControllableWorkerJob'
 import { AudioControl, AudioState } from '../audiocontext/AudioControl'
 import { Track } from '../project/Track'
 import { EffectIndex } from '../effects/EffectIndex'
+import { EffectChain } from '../effects/EffectChain'
 import { scheduleParameterValues } from '../effects/ParameterScheduling'
 
 export type SelectedRegion = {
@@ -62,7 +63,7 @@ export class Player {
       const pannerNode = audioContext.createStereoPanner()
       pannerNode.pan.value = track.getPan()
 
-      const playbackEffects = []
+      const chainEffects = []
       for (const effectData of track.effectRegions) {
         const effectModule = await EffectIndex.getInstance().getEffectById(effectData.id)
         if (!effectModule) {
@@ -77,14 +78,14 @@ export class Player {
             scheduleParameterValues(parameter, sequence, audioContext, startSample)
           }
         }
-        playbackEffects.push({ instanceId: effectData.instanceId, module: effectModule, audioContext })
+        chainEffects.push({
+          effect: { instanceId: effectData.instanceId, module: effectModule, audioContext },
+          bypassed: effectData.bypassed ?? false,
+        })
       }
 
-      let chainInput: AudioNode = gainNode
-      for (const effect of playbackEffects.toReversed()) {
-        chainInput = await effect.module.connect(audioContext, chainInput)
-      }
-      playerNode.connect(chainInput)
+      const effectChain = await EffectChain.connect(audioContext, chainEffects, gainNode)
+      playerNode.connect(effectChain.input)
       gainNode.connect(pannerNode)
       const analyzerOutput = await track.attachAnalyzer(pannerNode)
       analyzerOutput.connect(audioContext.destination)
@@ -101,14 +102,7 @@ export class Player {
         })),
         ringBufferArray: ringBufferArray,
       })
-      track.registerNewPlayback(
-        playerNode,
-        gainNode,
-        pannerNode,
-        playbackEffects,
-        () => {},
-        project.isTrackAudible(track),
-      )
+      track.registerNewPlayback(playerNode, gainNode, pannerNode, effectChain, () => {}, project.isTrackAudible(track))
       playerNodes.push(playerNode)
     }
     if (playerNodes.length == 0) {

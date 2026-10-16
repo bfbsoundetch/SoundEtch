@@ -24,6 +24,12 @@ The **Downloaded models** settings section reports the persistent browser-cache 
 
 DeepFilterNet's `df_bg.wasm` and `DeepFilterNet3_onnx.tar.gz` are served from `noisereduction/` under Vite's deployment base (`import.meta.env.BASE_URL`). The configured default is `/soundetch`; for an origin-root deployment such as `https://soundetch.org/`, build with `yarn build --base /`. Resource paths resolve relative to that base, preserving subpaths without turning a root base into a protocol-relative hostname.
 
+## Effects
+
+A track's **Effects** panel shows its chain from left to right. Each effect's controls are stacked below its name: **Bypass**, **Automate**, **Move left**, **Move right**, and **Remove**. **Bypass** is a toggle; a bypassed effect is labeled _Bypassed_, keeps its settings and automation, and stays in the chain. Bypassing is undoable and saved with the project.
+
+During playback, toggling bypass takes effect immediately. Each effect sits between two unity-gain junctions; bypass disconnects both junctions from the effect and routes the signal straight to the next effect, so the effect's own nodes are never torn down. The output junction is disconnected before the input, so the effect is never pulled without input. This matters because Chrome permanently stops an AudioWorklet whose `process()` returns `false`, and the noise remover's worklet does that when its input is empty. Exports skip bypassed effects.
+
 ## Meetings
 
 Whoever creates a meeting hosts it. The invite link always carries the host's id, including the copy each guest sees. Opening the link asks the host to let you in: the guest sees **Waiting for host _name_ to let you in…** until the host chooses **Admit** or **Deny** in the meeting room. Each request also raises a notification, so the host notices it outside the meeting room, and an admitted guest gets one too. A meeting holds the host and up to three guests; once it is full, remaining and later requests are turned away and the host is told.

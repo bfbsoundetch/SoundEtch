@@ -430,8 +430,10 @@ export class EffectPanelController {
   }
 
   private createEffectChainItem(track: Track, index: number, effectData: EffectData, metadata: EffectMetadata | null) {
+    const bypassed = effectData.bypassed ?? false
     const item = document.createElement('article')
     item.className = 'effect-list-item effect-chain-item effect-chain-effect'
+    item.classList.toggle('effect-chain-bypassed', bypassed)
     item.dataset.instanceId = effectData.instanceId
     item.style.border = 'double'
 
@@ -443,7 +445,7 @@ export class EffectPanelController {
     const nameId = `effect-chain-name-${effectData.instanceId}`
     nameElement.id = nameId
     const typeElement = document.createElement('span')
-    typeElement.textContent = 'Effect'
+    typeElement.textContent = bypassed ? 'Bypassed' : 'Effect'
     openButton.append(nameElement, typeElement)
     openButton.disabled = !metadata
     if (metadata) {
@@ -454,26 +456,31 @@ export class EffectPanelController {
 
     const controls = document.createElement('div')
     controls.className = 'effect-chain-controls'
-    const moveLeftButton = this.createIconButton('Move effect left', 'arrow-right', 'effect-icon-left')
-    moveLeftButton.classList.add('effect-chain-move-left')
-    moveLeftButton.disabled = index == 0
-    moveLeftButton.addEventListener('click', () => void this.moveEffect(track, index, index - 1))
-    const moveRightButton = this.createIconButton('Move effect right', 'arrow-right')
-    moveRightButton.classList.add('effect-chain-move-right')
-    moveRightButton.disabled = index == track.effectRegions.length - 1
-    moveRightButton.addEventListener('click', () => void this.moveEffect(track, index, index + 1))
-    const removeButton = this.createIconButton('Remove effect', 'trash')
-    removeButton.classList.add('effect-chain-remove')
-    removeButton.addEventListener('click', () => void this.removeEffect(track, index))
-    const automationButton = this.createIconButton('Automate', 'automation')
+    const bypassButton = this.createControlButton('Bypass', 'power')
+    bypassButton.classList.add('effect-chain-bypass')
+    bypassButton.setAttribute('aria-pressed', String(bypassed))
+    bypassButton.addEventListener('click', () => void this.setEffectBypassed(track, effectData.instanceId, !bypassed))
+    const automationButton = this.createControlButton('Automate', 'automation')
     automationButton.disabled = !metadata?.parameters.length
     if (metadata?.parameters.length) {
       automationButton.addEventListener('click', () => this.openAutomationView(track, effectData, metadata))
     }
-    for (const button of [moveLeftButton, moveRightButton, removeButton, automationButton]) {
+    const moveLeftButton = this.createControlButton('Move left', 'arrow-right', 'effect-icon-left')
+    moveLeftButton.classList.add('effect-chain-move-left')
+    moveLeftButton.disabled = index == 0
+    moveLeftButton.addEventListener('click', () => void this.moveEffect(track, index, index - 1))
+    const moveRightButton = this.createControlButton('Move right', 'arrow-right')
+    moveRightButton.classList.add('effect-chain-move-right')
+    moveRightButton.disabled = index == track.effectRegions.length - 1
+    moveRightButton.addEventListener('click', () => void this.moveEffect(track, index, index + 1))
+    const removeButton = this.createControlButton('Remove', 'trash')
+    removeButton.classList.add('effect-chain-remove')
+    removeButton.addEventListener('click', () => void this.removeEffect(track, index))
+    const buttons = [bypassButton, automationButton, moveLeftButton, moveRightButton, removeButton]
+    for (const button of buttons) {
       button.setAttribute('aria-describedby', nameId)
     }
-    controls.append(moveLeftButton, moveRightButton, removeButton, automationButton)
+    controls.append(...buttons)
     item.append(openButton, controls)
     return item
   }
@@ -500,13 +507,16 @@ export class EffectPanelController {
     return arrow
   }
 
-  private createIconButton(label: string, symbolId: string, iconClassName?: string) {
+  private createControlButton(label: string, symbolId: string, iconClassName?: string) {
     const button = document.createElement('button')
     button.type = 'button'
     button.className = 'clickable effect-chain-control'
-    button.title = label
-    button.setAttribute('aria-label', label)
-    button.appendChild(createSvgIcon(symbolId, { className: iconClassName }))
+    const labelElement = document.createElement('span')
+    labelElement.textContent = label
+    button.append(
+      createSvgIcon(symbolId, { className: `effect-chain-control-icon ${iconClassName ?? ''}` }),
+      labelElement,
+    )
     return button
   }
 
@@ -601,6 +611,34 @@ export class EffectPanelController {
           document.querySelector<HTMLElement>('#bottom-panel .effect-chain-add')?.focus()
         }
         announce(`Removed ${name}`)
+      }
+    } finally {
+      this.chainChangePending = false
+    }
+  }
+
+  private async setEffectBypassed(track: Track, instanceId: string, bypassed: boolean) {
+    const index = track.effectRegions.findIndex((effect) => effect.instanceId == instanceId)
+    if (this.chainChangePending || index < 0) {
+      return
+    }
+    this.chainChangePending = true
+    const viewVersion = this.viewVersion
+    try {
+      const oldEffects = cloneEffectData(track.effectRegions)
+      const newEffects = cloneEffectData(oldEffects)
+      const effect = newEffects[index]
+      const name = this.effectIndex.getEffectMetadataById(effect.id)?.name ?? effect.id
+      if ((effect.bypassed ?? false) != bypassed) {
+        effect.bypassed = bypassed
+        await editorHistory.execute(
+          new SetTrackEffectsCommand(track, oldEffects, newEffects, `${bypassed ? 'bypass' : 'enable'} ${name} effect`),
+        )
+      }
+      if (viewVersion == this.viewVersion) {
+        await this.showTrackEffectsList(track)
+        this.chainItem(instanceId)?.querySelector<HTMLElement>('.effect-chain-bypass')?.focus()
+        announce(`${bypassed ? 'Bypassed' : 'Enabled'} ${name}`)
       }
     } finally {
       this.chainChangePending = false

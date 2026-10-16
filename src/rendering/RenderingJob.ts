@@ -57,6 +57,9 @@ self.onmessage = async (e) => {
 
     const effectModules = new Array<EffectModule>()
     for (const effectData of track.effects) {
+      if (effectData.bypassed) {
+        continue
+      }
       const effectModule = getRenderingEffect(effectData.id)
       if (!effectModule) {
         console.error(`Effect ${effectData.id} is unavailable`)

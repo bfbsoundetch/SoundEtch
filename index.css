@@ -1241,6 +1241,14 @@ svg {
   stroke-width: 32px;
 }
 
+#power > path,
+#power > line {
+  fill: none;
+  stroke: currentColor;
+  stroke-linecap: round;
+  stroke-width: 36px;
+}
+
 #clock {
   padding: 1rem;
   position: relative;
@@ -3197,10 +3205,11 @@ body:has(.bottom-panel.resizing, .bottom-panel.layout-resize) #topdiv,
 }
 
 .effect-chain-effect {
-  grid-template-rows: minmax(0, 1fr) auto;
+  grid-template-rows: minmax(4rem, 1fr) auto;
   gap: 0.5rem;
   padding: 0;
-  overflow: hidden;
+  overflow-x: hidden;
+  overflow-y: auto;
 }
 
 .effect-chain-open {
@@ -3224,6 +3233,14 @@ body:has(.bottom-panel.resizing, .bottom-panel.layout-resize) #topdiv,
   opacity: 0.55;
 }
 
+.effect-chain-bypassed .effect-chain-open {
+  border-style: dashed;
+}
+
+.effect-chain-bypassed .effect-chain-open > * {
+  opacity: 0.55;
+}
+
 .effect-chain-open:disabled:hover::after,
 .effect-chain-control:disabled:hover::after {
   background-color: transparent;
@@ -3231,30 +3248,44 @@ body:has(.bottom-panel.resizing, .bottom-panel.layout-resize) #topdiv,
 
 .effect-chain-controls {
   display: grid;
-  grid-template-columns: repeat(4, 1fr);
   width: 100%;
   border-top: 1px solid currentColor;
 }
 
 .effect-chain-control {
   display: grid;
-  place-items: center;
+  grid-template-columns: 1.25rem minmax(0, 1fr);
+  align-items: center;
+  gap: 0.5rem;
   min-width: 0;
-  height: 2.5rem;
-  padding: 0.2rem;
-  border: 1px solid currentColor;
-  border-right: 1px solid currentColor;
+  height: 2.25rem;
+  padding: 0 0.5rem;
+  border: 0;
+  border-bottom: 1px solid currentColor;
   background: var(--alt-background);
   color: inherit;
+  font: inherit;
+  text-align: left;
+  white-space: nowrap;
 }
 
 .effect-chain-control:last-child {
-  border-right: 0;
+  border-bottom: 0;
+}
+
+.effect-chain-control-icon {
+  width: 1.25rem;
+  height: 1.25rem;
 }
 
 .effect-chain-control:disabled {
   cursor: default;
   opacity: 0.25;
+}
+
+.effect-chain-bypass[aria-pressed='true'] {
+  background: var(--color);
+  color: var(--bg-color);
 }
 
 .effect-chain-remove {

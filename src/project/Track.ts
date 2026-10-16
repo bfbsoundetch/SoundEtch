@@ -3,15 +3,9 @@ import { DatabasePersisted } from '../persistence/DatabasePersisted'
 import { Restorable } from '../persistence/Restoration'
 import { Analyzable } from '../analyzers/Analyzable'
 import { EffectData } from 'effects/EffectData'
-import { EffectModule } from 'effects/Effect'
+import { EffectChain } from '../effects/EffectChain'
 import { SimpleAnalyzer } from '../analyzers/SimpleAnalyzer'
 import { scheduleParameterValues } from '../effects/ParameterScheduling'
-
-export interface PlaybackEffect {
-  instanceId: string
-  module: EffectModule
-  audioContext: BaseAudioContext
-}
 
 type PlaybackChangeListener = () => void
 
@@ -20,7 +14,7 @@ class Playback {
     readonly playerNode: AudioWorkletNode,
     readonly gainNode: GainNode,
     readonly pannerNode: StereoPannerNode,
-    readonly effects: PlaybackEffect[],
+    readonly effectChain: EffectChain | null,
     readonly cleanup: (() => void) | null,
     public audible: boolean,
   ) {}
@@ -216,7 +210,7 @@ export class Track extends DatabasePersisted implements Analyzable {
     playerNode: AudioWorkletNode,
     gainNode: GainNode,
     pannerNode: StereoPannerNode,
-    effects: PlaybackEffect[] = [],
+    effectChain: EffectChain | null = null,
     cleanup: (() => void) | null = null,
     audible = true,
   ) {
@@ -231,7 +225,9 @@ export class Track extends DatabasePersisted implements Analyzable {
       audioContext.removeEventListener('statechange', handleContextStateChange)
       cleanup?.()
     }
-    this.playback = new Playback(playerNode, gainNode, pannerNode, effects, playbackCleanup, audible)
+    this.playback = new Playback(playerNode, gainNode, pannerNode, effectChain, playbackCleanup, audible)
+    // Bypass may have changed while the playback graph was being built.
+    this.applyPlaybackEffectBypass()
     gainNode.gain.value = audible ? this.gain : 0
     this.notifyPlaybackChange()
   }
@@ -248,12 +244,12 @@ export class Track extends DatabasePersisted implements Analyzable {
     this.playback = null
     playback.cleanup?.()
     playback.playerNode.disconnect()
-    playback.effects.forEach((effect) => effect.module.disconnect())
+    playback.effectChain?.disconnect()
     this.notifyPlaybackChange()
   }
 
   getPlaybackEffect(instanceId: string) {
-    const effect = this.playback?.effects.find((effect) => effect.instanceId == instanceId)
+    const effect = this.playback?.effectChain?.getEffect(instanceId)
     return effect && effect.audioContext.state != 'closed' ? effect : null
   }
 
@@ -270,12 +266,14 @@ export class Track extends DatabasePersisted implements Analyzable {
     this.playbackChangeListeners.forEach((listener) => listener())
   }
 
-  async applyPlaybackEffectParameters() {
-    if (!this.playback) {
+  async applyPlaybackEffectSettings() {
+    const effectChain = this.playback?.effectChain
+    if (!effectChain) {
       return
     }
+    this.applyPlaybackEffectBypass()
     for (const effectData of this.effectRegions) {
-      const playbackEffect = this.playback.effects.find((effect) => effect.instanceId == effectData.instanceId)
+      const playbackEffect = effectChain.getEffect(effectData.instanceId)
       if (!playbackEffect) {
         continue
       }
@@ -294,6 +292,13 @@ export class Track extends DatabasePersisted implements Analyzable {
           parameter.setValueAtTime(sequence.initialValue, playbackEffect.audioContext.currentTime)
         }
       }
+    }
+  }
+
+  private applyPlaybackEffectBypass() {
+    const effectChain = this.playback?.effectChain
+    for (const effectData of this.effectRegions) {
+      effectChain?.setBypassed(effectData.instanceId, effectData.bypassed ?? false)
     }
   }
 
