@@ -1,12 +1,21 @@
 import './FakesForRemoteTests'
 import { afterAll, afterEach, beforeAll, beforeEach, expect, test, vi } from 'vitest'
-import { blockFutureDataConnectionsWithPeer, resetRemoteTestFakes } from './FakesForRemoteTests'
-import type { RecordingActivity, RemoteMediaClient3, State } from './RemoteMediaClient3'
+import {
+  blockFutureDataConnectionsWithPeer,
+  isPeerOpen,
+  resetRemoteTestFakes,
+  setIceConnectionState,
+} from './FakesForRemoteTests'
+import type { JoinRequest, RecordingActivity, RemoteMediaClient3, State } from './RemoteMediaClient3'
 
 type LocalMediaStreamsClass = typeof import('../mediastreams/LocalMediaStreams').LocalMediaStreams
 
 type StateSnapshot = {
   roomId: string | null
+  isHost: boolean
+  hostUsername: string | null
+  waitingForHost: boolean
+  joinRequests: Array<JoinRequest>
   error: string | null
   members: Array<MemberSnapshot>
   screenShare: 'self' | { peerId: string; username: string; trackKinds: Array<string> } | null
@@ -59,27 +68,105 @@ afterAll(async () => {
   vi.restoreAllMocks()
 })
 
-test('connects peers and notifies state listeners with remote usernames', async () => {
+test('the meeting creator hosts, and a guest waits for the host to admit them', async () => {
   const alice = await createParticipant('Alice')
   const bob = await createParticipant('Bob', alice.client.id)
 
+  await waitForJoinRequest(alice, 'Bob')
+  await waitFor(() => latest(bob).hostUsername === 'Alice', 'Bob to learn the host name')
+  expect(latest(alice)).toMatchObject({ isHost: true, hostUsername: 'Alice', waitingForHost: false, members: [] })
+  expect(latest(bob)).toMatchObject({ isHost: false, waitingForHost: true, roomId: alice.client.id, members: [] })
+  expect(messagesAbout(alice, 'Bob')).toHaveLength(1)
+
+  await admit(alice, 'Bob')
   await waitForMember(alice, 'Bob')
   await waitForMember(bob, 'Alice')
 
   expect(latest(alice).roomId).toBe(alice.client.id)
-  expect(latest(bob).roomId).toBe(alice.client.id)
+  expect(latest(alice).joinRequests).toEqual([])
+  expect(latest(bob)).toMatchObject({ waitingForHost: false, hostUsername: 'Alice', roomId: alice.client.id })
   expect(memberUsernames(alice)).toEqual(['Bob'])
   expect(memberUsernames(bob)).toEqual(['Alice'])
-  expect(alice.states.length).toBeGreaterThan(1)
-  expect(bob.states.length).toBeGreaterThan(1)
+  expect(messagesAbout(bob, 'Alice')).toHaveLength(1)
+})
+
+test('the host can turn a guest away', async () => {
+  const alice = await createParticipant('Alice')
+  const bob = await createParticipant('Bob', alice.client.id)
+
+  const request = await waitForJoinRequest(alice, 'Bob')
+  alice.client.deny(request.peerId)
+
+  await waitFor(() => latest(bob).error != null, 'Bob to be turned away')
+  expect(latest(alice).joinRequests).toEqual([])
+  expect(latest(alice).members).toEqual([])
+})
+
+test('the host admits at most three guests', async () => {
+  const alice = await createParticipant('Alice')
+  const bob = await joinAndAdmit(alice, 'Bob')
+  const cara = await joinAndAdmit(alice, 'Cara')
+  const dan = await createParticipant('Dan', alice.client.id)
+  const eve = await createParticipant('Eve', alice.client.id)
+  await waitForJoinRequest(alice, 'Eve')
+
+  // Admitting the third guest turns away everyone still waiting.
+  await admit(alice, 'Dan')
+  await waitFor(() => latest(eve).error != null, 'Eve to be turned away')
+  expect(latest(alice).joinRequests).toEqual([])
+  // One notice for the request, one for turning Eve away.
+  expect(messagesAbout(alice, 'Eve')).toHaveLength(2)
+
+  // Nobody else can ask to join a full meeting.
+  const frank = await createParticipant('Frank', alice.client.id)
+  await waitFor(() => latest(frank).error != null, 'Frank to be turned away')
+  expect(messagesAbout(alice, 'Frank')).toHaveLength(1)
+  expect(latest(alice).joinRequests).toEqual([])
+
+  const everyone = [alice, bob, cara, dan]
+  await waitFor(() => everyone.every((participant) => latest(participant).members.length === 3), 'four-user mesh')
+  expect(memberUsernames(alice)).toEqual(['Bob', 'Cara', 'Dan'])
+})
+
+test('only the host can let guests in', async () => {
+  const alice = await createParticipant('Alice')
+  const bob = await joinAndAdmit(alice, 'Bob')
+  const frank = await createParticipant('Frank', bob.client.id)
+
+  await waitFor(() => latest(frank).error != null, 'Frank to be turned away by Bob')
+  expect(latest(bob).joinRequests).toEqual([])
+  expect(memberUsernames(bob)).toEqual(['Alice'])
+})
+
+test('a waiting guest is told when the host leaves before admitting them', async () => {
+  const alice = await createParticipant('Alice')
+  const bob = await createParticipant('Bob', alice.client.id)
+  await waitForJoinRequest(alice, 'Bob')
+
+  alice.client.disconnect()
+
+  await waitFor(() => latest(bob).error != null, 'Bob to learn the host left')
+})
+
+test('the meeting continues after the host leaves and everyone is told', async () => {
+  const alice = await createParticipant('Alice')
+  const bob = await joinAndAdmit(alice, 'Bob')
+  const cara = await joinAndAdmit(alice, 'Cara')
+  await waitFor(() => [alice, bob, cara].every((participant) => latest(participant).members.length === 2), 'mesh')
+
+  alice.client.disconnect()
+
+  await waitFor(
+    () => memberUsernames(bob).join() === 'Cara' && memberUsernames(cara).join() === 'Bob',
+    'Bob and Cara to stay connected without Alice',
+  )
+  expect(messagesAbout(bob, 'Alice').length).toBeGreaterThan(1)
+  expect(messagesAbout(cara, 'Alice').length).toBeGreaterThan(1)
 })
 
 test('enables, disables, and re-enables a microphone on the remote side', async () => {
   const alice = await createParticipant('Alice')
-  const bob = await createParticipant('Bob', alice.client.id)
-
-  await waitForMember(alice, 'Bob')
-  await waitForMember(bob, 'Alice')
+  const bob = await joinAndAdmit(alice, 'Bob')
 
   await alice.localMedia.startAudioDevice()
   await waitForMemberTracks(bob, 'Alice', ['audio'])
@@ -98,7 +185,7 @@ test('sends an already-enabled microphone to a user that joins later', async () 
   const alice = await createParticipant('Alice')
   await alice.localMedia.startAudioDevice()
 
-  const bob = await createParticipant('Bob', alice.client.id)
+  const bob = await joinAndAdmit(alice, 'Bob')
   await waitForMemberTracks(bob, 'Alice', ['audio'])
   expect(memberTrackKinds(alice, 'Bob')).toEqual([])
 
@@ -108,7 +195,7 @@ test('sends an already-enabled microphone to a user that joins later', async () 
 
 test('handles simultaneous microphone offers when both users join with microphones already enabled', async () => {
   const alice = await createParticipant('Alice', null, true)
-  const bob = await createParticipant('Bob', alice.client.id, true)
+  const bob = await joinAndAdmit(alice, 'Bob', true)
 
   await waitForMemberTracks(alice, 'Bob', ['audio'])
   await waitForMemberTracks(bob, 'Alice', ['audio'])
@@ -116,8 +203,8 @@ test('handles simultaneous microphone offers when both users join with microphon
 
 test('connects three users into a mesh and each user hears the other speakers', async () => {
   const alice = await createParticipant('Alice')
-  const bob = await createParticipant('Bob', alice.client.id)
-  const cara = await createParticipant('Cara', alice.client.id)
+  const bob = await joinAndAdmit(alice, 'Bob')
+  const cara = await joinAndAdmit(alice, 'Cara')
   const everyone = [alice, bob, cara]
 
   await waitFor(() => everyone.every((participant) => latest(participant).members.length === 2), 'three-user mesh')
@@ -139,30 +226,111 @@ test('connects three users into a mesh and each user hears the other speakers', 
   expect(memberUsernames(cara)).toEqual(['Alice', 'Bob'])
 })
 
-test('kicks the later peer when an introduced mesh connection cannot open', async () => {
+test('kicks the later peer when an introduced mesh connection cannot open and tells everyone', async () => {
   const alice = await createParticipant('Alice')
-  const bob = await createParticipant('Bob', alice.client.id)
-  await waitForMember(alice, 'Bob')
-  await waitForMember(bob, 'Alice')
+  const bob = await joinAndAdmit(alice, 'Bob')
 
   blockFutureDataConnectionsWithPeer(bob.client.id)
   const cara = await createParticipant('Cara', alice.client.id, false, 5)
+  await admit(alice, 'Cara')
 
   await waitFor(() => latest(cara).error?.includes('removed from the meeting') === true, 'Cara to be kicked')
   await waitFor(() => !memberUsernames(alice).includes('Cara'), 'Alice to remove Cara')
+  await waitFor(() => messagesAbout(bob, 'Cara').length > 0, 'Bob to be told about Cara')
 
   expect(memberUsernames(alice)).toEqual(['Bob'])
   expect(memberUsernames(bob)).toEqual(['Alice'])
-  expect(alice.messages.some((message) => message.includes('Removed Cara from the meeting'))).toBe(true)
+  for (const participant of [alice, bob]) {
+    expect(messagesAbout(participant, 'Cara').some((message) => message.includes('Bob'))).toBe(true)
+  }
   expect(latest(cara).error).toContain('Bob')
+})
+
+test('notifies when a connection is interrupted and again once every part of it is restored', async () => {
+  const alice = await createParticipant('Alice')
+  const bob = await joinAndAdmit(alice, 'Bob')
+  await waitFor(() => latest(bob).members.length === 1, 'Bob to see Alice')
+  const noticesBefore = messagesAbout(alice, 'Bob').length
+
+  setIceConnectionState(alice.client.id, bob.client.id, 'data', 'disconnected')
+  setIceConnectionState(alice.client.id, bob.client.id, 'media', 'disconnected')
+  await waitFor(() => messagesAbout(alice, 'Bob').length === noticesBefore + 1, 'interruption notice')
+
+  setIceConnectionState(alice.client.id, bob.client.id, 'data', 'connected')
+  await Promise.resolve()
+  expect(messagesAbout(alice, 'Bob')).toHaveLength(noticesBefore + 1)
+
+  setIceConnectionState(alice.client.id, bob.client.id, 'media', 'connected')
+  await waitFor(() => messagesAbout(alice, 'Bob').length === noticesBefore + 2, 'restoration notice')
+
+  const [interrupted, restored] = messagesAbout(alice, 'Bob').slice(noticesBefore)
+  expect(interrupted).not.toEqual(restored)
+  expect(memberUsernames(alice)).toEqual(['Bob'])
+})
+
+// A closed tab sends no close event: its connections just stay ICE-disconnected. Fake time stands in for the wait.
+test('removes a member whose data connection stays down, even without media', async () => {
+  const alice = await createParticipant('Alice')
+  const bob = await joinAndAdmit(alice, 'Bob')
+
+  vi.useFakeTimers()
+  setIceConnectionState(alice.client.id, bob.client.id, 'data', 'disconnected')
+  setIceConnectionState(alice.client.id, bob.client.id, 'media', 'disconnected')
+  // Media recovering must not keep a member whose data connection is still down.
+  setIceConnectionState(alice.client.id, bob.client.id, 'media', 'connected')
+  await vi.advanceTimersByTimeAsync(60_000)
+  vi.useRealTimers()
+
+  await waitFor(() => memberUsernames(alice).length === 0, 'Alice to remove Bob')
+})
+
+test('keeps a member whose connection recovers quickly', async () => {
+  const alice = await createParticipant('Alice')
+  const bob = await joinAndAdmit(alice, 'Bob')
+
+  vi.useFakeTimers()
+  setIceConnectionState(alice.client.id, bob.client.id, 'data', 'disconnected')
+  await vi.advanceTimersByTimeAsync(1_000)
+  setIceConnectionState(alice.client.id, bob.client.id, 'data', 'connected')
+  await vi.advanceTimersByTimeAsync(60_000)
+  vi.useRealTimers()
+
+  expect(memberUsernames(alice)).toEqual(['Bob'])
+})
+
+test('drops the join request of a waiting guest whose connection stays down', async () => {
+  const alice = await createParticipant('Alice')
+  const bob = await createParticipant('Bob', alice.client.id)
+  await waitForJoinRequest(alice, 'Bob')
+
+  vi.useFakeTimers()
+  setIceConnectionState(alice.client.id, bob.client.id, 'data', 'disconnected')
+  await vi.advanceTimersByTimeAsync(60_000)
+  vi.useRealTimers()
+
+  await waitFor(() => latest(alice).joinRequests.length === 0, 'Alice to drop Bob’s request')
+})
+
+test('losing a member that the host introduced does not get the newer guest removed', async () => {
+  const alice = await createParticipant('Alice')
+  const bob = await joinAndAdmit(alice, 'Bob')
+  const cara = await joinAndAdmit(alice, 'Cara')
+  await waitFor(() => [alice, bob, cara].every((participant) => latest(participant).members.length === 2), 'mesh')
+
+  // Cara's connection to Bob, made at Alice's introduction, drops after having worked.
+  vi.useFakeTimers()
+  setIceConnectionState(cara.client.id, bob.client.id, 'data', 'disconnected')
+  await vi.advanceTimersByTimeAsync(60_000)
+  vi.useRealTimers()
+
+  await waitFor(() => !memberUsernames(cara).includes('Bob'), 'Cara to remove Bob')
+  expect(latest(cara).error).toBeNull()
+  expect(memberUsernames(alice)).toEqual(['Bob', 'Cara'])
 })
 
 test('broadcasts recording activity changes and notifies remote listeners', async () => {
   const alice = await createParticipant('Alice')
-  const bob = await createParticipant('Bob', alice.client.id)
-
-  await waitForMember(alice, 'Bob')
-  await waitForMember(bob, 'Alice')
+  const bob = await joinAndAdmit(alice, 'Bob')
 
   const bobStateCount = bob.states.length
   alice.client.setRecordingActivity({ state: 'recording', countdownId: null })
@@ -188,8 +356,8 @@ test('broadcasts recording activity changes and notifies remote listeners', asyn
 
 test('removes disconnected peers from state and notifies remaining clients', async () => {
   const alice = await createParticipant('Alice')
-  const bob = await createParticipant('Bob', alice.client.id)
-  const cara = await createParticipant('Cara', alice.client.id)
+  const bob = await joinAndAdmit(alice, 'Bob')
+  const cara = await joinAndAdmit(alice, 'Cara')
   const everyone = [alice, bob, cara]
 
   await waitFor(() => everyone.every((participant) => latest(participant).members.length === 2), 'three-user mesh')
@@ -228,7 +396,8 @@ async function createParticipant(
   client.addStateListener((state) => participant.states.push(snapshotState(state)))
   client.addMessageListener((message) => participant.messages.push(message.info))
   participants.push(participant)
-  await waitFor(() => (client as any).peer.open === true, `${username} peer to open`)
+  // A guest can be turned away, and its peer destroyed, before the first poll sees it open.
+  await waitFor(() => isPeerOpen(client.id) || latest(participant).error != null, `${username} peer to open`)
   return participant
 }
 
@@ -245,6 +414,9 @@ async function importRemoteRuntime() {
 function snapshotState(state: State): StateSnapshot {
   return {
     error: state.error,
+    hostUsername: state.hostUsername,
+    isHost: state.isHost,
+    joinRequests: state.joinRequests.map((joinRequest) => ({ ...joinRequest })),
     members: state.members.map((member) => ({
       error: member.error,
       peerId: member.peerId,
@@ -256,6 +428,7 @@ function snapshotState(state: State): StateSnapshot {
       username: member.username,
     })),
     roomId: state.roomId,
+    waitingForHost: state.waitingForHost,
     screenShare:
       state.screenShare === 'self'
         ? 'self'
@@ -270,6 +443,28 @@ function snapshotState(state: State): StateSnapshot {
             }
           : null,
   }
+}
+
+async function joinAndAdmit(host: TestParticipant, username: string, startMic = false) {
+  const guest = await createParticipant(username, host.client.id, startMic)
+  await admit(host, username)
+  await waitForMember(host, username)
+  await waitForMember(guest, host.username)
+  return guest
+}
+
+async function admit(host: TestParticipant, username: string) {
+  host.client.admit((await waitForJoinRequest(host, username)).peerId)
+}
+
+async function waitForJoinRequest(host: TestParticipant, username: string) {
+  const findRequest = () => latest(host).joinRequests.find((joinRequest) => joinRequest.username === username)
+  await waitFor(() => findRequest() != null, `${host.username} to see ${username} ask to join`)
+  return findRequest()!
+}
+
+function messagesAbout(participant: TestParticipant, name: string) {
+  return participant.messages.filter((message) => message.includes(name))
 }
 
 async function waitForMember(participant: TestParticipant, username: string) {

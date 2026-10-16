@@ -24,6 +24,12 @@ The **Downloaded models** settings section reports the persistent browser-cache 
 
 DeepFilterNet's `df_bg.wasm` and `DeepFilterNet3_onnx.tar.gz` are served from `noisereduction/` under Vite's deployment base (`import.meta.env.BASE_URL`). The configured default is `/soundetch`; for an origin-root deployment such as `https://soundetch.org/`, build with `yarn build --base /`. Resource paths resolve relative to that base, preserving subpaths without turning a root base into a protocol-relative hostname.
 
+## Meetings
+
+Whoever creates a meeting hosts it. The invite link always carries the host's id, including the copy each guest sees. Opening the link asks the host to let you in: the guest sees **Waiting for host _name_ to let you in…** until the host chooses **Admit** or **Deny** in the meeting room. Each request also raises a notification, so the host notices it outside the meeting room, and an admitted guest gets one too. A meeting holds the host and up to three guests; once it is full, remaining and later requests are turned away and the host is told.
+
+Every member connects directly to every other member. If a newly admitted guest cannot reach someone, the host removes that guest and everyone is notified. Closing the meeting tab leaves the meeting immediately, like **Disconnect**. Everyone is notified when their connection to a member is interrupted, and again once it is restored; a member (or waiting guest) whose connection stays interrupted for 5 seconds is removed, which also covers crashes and lost networks. If the host leaves, the others stay connected and are told that no one new can join.
+
 ## Keyboard and assistive technology
 
 Each track has a focusable timeline control. Left/Right move the cursor by one ruler tick, Page Up/Page Down by one labelled interval, and Home/End go to the start and end. Hold Shift to select; Alt+Shift+Up/Down adds the neighbouring track to the selection, Ctrl/⌘+A selects the whole track, Delete cuts the selection, Escape clears it, and +/− zoom around the cursor. Shift+F10 or the Menu key opens the menu a right-click opens there: selection actions, clip actions (split, move or trim by entering a time, move to a new track, select, info, delete), or paste and go-to-time on an empty stretch. The zoom, scroll, and **Go to time…** buttons above the track headers work with a single click.

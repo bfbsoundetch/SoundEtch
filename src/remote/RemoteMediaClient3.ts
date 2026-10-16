@@ -11,16 +11,32 @@ export type PeerMessage =
       recordingActivity?: RecordingActivity
     }
   | {
+      // Host -> newly admitted guest: open a connection to this existing member.
       type: 'otherPeer'
       peer: string
     }
   | {
-      type: 'peerDisconnected'
+      // Host -> existing members: accept the connection this newly admitted guest is about to open.
+      type: 'peerAdmitted'
       peer: string
+    }
+  | {
+      // Host -> waiting guest.
+      type: 'admitted'
+    }
+  | {
+      // Host (or a peer that is not hosting) -> guest asking to join.
+      type: 'joinRejected'
+      reason: string
     }
   | {
       type: 'meshConnectionFailed'
       failedPeer: string
+    }
+  | {
+      // Host -> remaining members after removing a guest who could not connect directly to another member.
+      type: 'directConnectionFailed'
+      notice: string
     }
   | {
       type: 'kicked'
@@ -67,12 +83,27 @@ export interface Member {
   recordingActivity: RecordingActivity
 }
 
+export interface JoinRequest {
+  peerId: string
+  username: string
+}
+
 export interface State {
   members: Array<Member>
+  /** Peer id of the host. Only the host admits guests, so the invite link always points here. */
   roomId: string | null
+  isHost: boolean
+  hostUsername: string | null
+  /** A guest that has asked to join and is not yet admitted by the host. */
+  waitingForHost: boolean
+  /** Guests waiting for this client (the host) to admit or deny them. */
+  joinRequests: Array<JoinRequest>
   screenShare: Member | 'self' | null
   error: string | null
 }
+
+/** The host plus three guests. */
+export const MAX_GUESTS = 3
 
 export type RemoteMediaClientMessage = {
   type: 'info'
@@ -81,6 +112,11 @@ export type RemoteMediaClientMessage = {
 
 export type StateListener = (state: State) => void
 export type MessageListener = (message: RemoteMediaClientMessage) => void
+
+type HeldPeer = {
+  messages: Array<{ dataConnection: DataConnection; message: PeerMessage }>
+  timeout: number | null
+}
 
 class RemotePeerState {
   private pendingIceCandidates = new Array<RTCIceCandidateInit>()
@@ -92,6 +128,8 @@ class RemotePeerState {
   introducedByPeerId: string | null = null
   joinedSequence: number | null = null
   meshFailureReported = false
+  /** Which of this peer's ICE connections (data, media) are currently disconnected or failed. */
+  readonly interruptedConnections = new Set<'data' | 'media'>()
   ignoreOffer = false
   private rtcOperationQueue: Promise<void> = Promise.resolve()
 
@@ -130,11 +168,25 @@ class RemotePeerState {
 export class RemoteMediaClient3 {
   private readonly peer: Peer
   private readonly remotePeerStates = new Map<string, RemotePeerState>()
-  private readonly state: State = { members: new Array<Member>(), roomId: null, screenShare: null, error: null }
+  private readonly state: State = {
+    members: new Array<Member>(),
+    roomId: null,
+    isHost: true,
+    hostUsername: null,
+    waitingForHost: false,
+    joinRequests: new Array<JoinRequest>(),
+    screenShare: null,
+    error: null,
+  }
   private readonly stateListeners = new Array<StateListener>()
   private readonly messageListeners = new Array<MessageListener>()
   private readonly initializedDataConnections = new Set<string>()
   private readonly openedDataConnections = new Set<string>()
+  /** Peers whose messages are processed: guests the host admitted, or for a guest, the host and members it vouched for. */
+  private readonly admittedPeers = new Set<string>()
+  /** Messages from peers that are not admitted yet, replayed once they are. */
+  private readonly heldPeers = new Map<string, HeldPeer>()
+  private destroyed = false
   private readonly logger = new Logger('RemoteMediaClient')
   private nextJoinedSequence = 0
   private currentRecordingActivity: RecordingActivity = { state: 'idle', countdownId: null }
@@ -196,7 +248,11 @@ export class RemoteMediaClient3 {
       this.notifyStateListeners()
     })
 
+    // Whoever creates the meeting hosts it; everyone else joins through the host's id and waits to be admitted.
     this.state.roomId = roomName
+    this.state.isHost = roomName == null
+    this.state.hostUsername = roomName == null ? username : null
+    this.state.waitingForHost = roomName != null
     this.peer = createForTest
       ? new Peer('username', { config: rtcConfig, host: 'localhost', port: 8080, debug: 4 as any /*LogLevel.All*/ })
       : new Peer({ config: rtcConfig })
@@ -223,11 +279,13 @@ export class RemoteMediaClient3 {
         case 'socket-closed':
         case 'unavailable-id':
         case 'webrtc':
-          if (this.connections.size > 0) {
+          if (this.state.members.length > 0) {
             this.notifyMessageListeners({
               type: 'info',
               info: 'Disconnected from server, but the meeting is still active.',
             })
+          } else if (this.state.waitingForHost && error.type == 'peer-unavailable') {
+            this.leaveWithError(HOST_UNREACHABLE_MESSAGE)
           } else {
             this.state.error = error.message
             this.notifyStateListeners()
@@ -243,11 +301,19 @@ export class RemoteMediaClient3 {
         dataConnection.close()
         return
       }
+      if (dataConnection.metadata.joinRequest && !this.state.isHost) {
+        // Only the host admits guests.
+        this.rejectJoinRequestWhenOpen(
+          dataConnection,
+          'This invite link does not belong to the meeting host. Ask the host for their invite link.',
+        )
+        return
+      }
       this.setUpDataConnection(dataConnection)
     })
 
     if (roomName) {
-      this.joinRoom(roomName)
+      this.join(roomName, true)
     }
   }
 
@@ -259,11 +325,52 @@ export class RemoteMediaClient3 {
     return (this.peer as any)?._connections ?? new Map()
   }
 
-  joinRoom(roomId: string) {
-    this.join(roomId)
+  /** Host only: lets a guest who asked to join into the meeting. */
+  admit(peerId: string) {
+    const dataConnection = this.takeJoinRequest(peerId)
+    if (!dataConnection) {
+      this.notifyStateListeners()
+      return
+    }
+
+    // Vouch for the new guest before introducing them, so existing members accept their connections.
+    for (const memberPeerId of this.admittedPeers) {
+      this.getOpenDataConnection(memberPeerId)?.send({ type: 'peerAdmitted', peer: peerId })
+    }
+    this.admitPeer(peerId)
+    dataConnection.send({ type: 'admitted' })
+
+    if (this.admittedPeers.size >= MAX_GUESTS) {
+      for (const joinRequest of [...this.state.joinRequests]) {
+        const waitingConnection = this.takeJoinRequest(joinRequest.peerId)
+        if (waitingConnection) {
+          this.rejectJoinRequest(waitingConnection, MEETING_FULL_MESSAGE)
+          this.notifyMessageListeners({
+            type: 'info',
+            info: `${joinRequest.username} was turned away because the meeting is full.`,
+          })
+        }
+      }
+    }
+    this.notifyStateListeners()
+  }
+
+  /** Host only: turns away a guest who asked to join. */
+  deny(peerId: string) {
+    const dataConnection = this.takeJoinRequest(peerId)
+    if (dataConnection) {
+      this.rejectJoinRequest(dataConnection, `${this.username} did not let you into the meeting.`)
+    }
+    this.notifyStateListeners()
   }
 
   disconnect() {
+    this.destroyed = true
+    this.heldPeers.forEach((heldPeer) => {
+      if (heldPeer.timeout != null) {
+        window.clearTimeout(heldPeer.timeout)
+      }
+    })
     this.remotePeerStates.forEach((remotePeerState) => {
       this.clearIceDisconnectedCleanupTimeout(remotePeerState)
       this.clearMeshConnectionTimeout(remotePeerState)
@@ -294,10 +401,10 @@ export class RemoteMediaClient3 {
     return this.connections.get(peerId) ?? []
   }
 
-  private getDataConnection(peerId: string): DataConnection {
+  private getDataConnection(peerId: string, joinRequest = false): DataConnection {
     return (
       (this.getPeerConnections(peerId).find((connection) => connection.type === ConnectionType.Data) as
-        DataConnection | undefined) ?? this.peer.connect(peerId, { metadata: { soundetch: true } })
+        DataConnection | undefined) ?? this.peer.connect(peerId, { metadata: { soundetch: true, joinRequest } })
     )
   }
 
@@ -341,6 +448,7 @@ export class RemoteMediaClient3 {
   }
 
   private removePeerState(peerId: string) {
+    const departingHost = !this.state.isHost && peerId == this.state.roomId ? this.getMember(peerId) : null
     const remotePeerState = this.remotePeerStates.get(peerId)
     if (remotePeerState) {
       this.clearIceDisconnectedCleanupTimeout(remotePeerState)
@@ -351,6 +459,18 @@ export class RemoteMediaClient3 {
     if (this.state.screenShare != 'self' && this.state.screenShare?.peerId == peerId) {
       this.state.screenShare = null
     }
+    this.admittedPeers.delete(peerId)
+    this.releaseHeldPeer(peerId)
+    const joinRequestIndex = this.state.joinRequests.findIndex((joinRequest) => joinRequest.peerId == peerId)
+    if (joinRequestIndex >= 0) {
+      this.state.joinRequests.splice(joinRequestIndex, 1)
+    }
+    if (departingHost) {
+      this.notifyMessageListeners({
+        type: 'info',
+        info: `The host, ${departingHost.username}, left the meeting. No one new can join.`,
+      })
+    }
   }
 
   private handleOpenedDataConnection(dataConnection: DataConnection) {
@@ -359,7 +479,10 @@ export class RemoteMediaClient3 {
     }
 
     this.openedDataConnections.add(dataConnection.connectionId)
-    this.clearMeshConnectionTimeout(this.getOrCreateRemotePeerState(dataConnection.peer))
+    const remotePeerState = this.getOrCreateRemotePeerState(dataConnection.peer)
+    this.clearMeshConnectionTimeout(remotePeerState)
+    // The direct connection works, so losing it later means the peer left, not that it cannot connect directly.
+    remotePeerState.introducedByPeerId = null
     dataConnection.send({
       type: 'self',
       username: this.username,
@@ -385,15 +508,132 @@ export class RemoteMediaClient3 {
       }
     })
     this.removePeerState(dataConnection.peer)
+    if (this.state.waitingForHost && dataConnection.peer == this.state.roomId) {
+      this.leaveWithError(wasOpen ? 'The host left before letting you in.' : HOST_UNREACHABLE_MESSAGE)
+      return
+    }
     this.notifyStateListeners()
   }
 
+  /** Host only: introduces a newly admitted guest to every other member. */
   private shareKnownPeers(dataConnection: DataConnection) {
-    for (const peerId of this.connections.keys()) {
+    for (const peerId of this.admittedPeers) {
       if (peerId != dataConnection.peer && this.getOpenDataConnection(peerId)) {
         dataConnection.send({ type: 'otherPeer', peer: peerId })
       }
     }
+  }
+
+  private addJoinRequest(dataConnection: DataConnection, username: string) {
+    const peerId = dataConnection.peer
+    if (this.state.joinRequests.some((joinRequest) => joinRequest.peerId == peerId)) {
+      return
+    }
+
+    if (this.admittedPeers.size >= MAX_GUESTS) {
+      this.rejectJoinRequest(dataConnection, MEETING_FULL_MESSAGE)
+      this.notifyMessageListeners({ type: 'info', info: `${username} tried to join, but the meeting is full.` })
+      return
+    }
+
+    this.state.joinRequests.push({ peerId, username })
+    this.notifyMessageListeners({ type: 'info', info: `${username} is asking to join the meeting.` })
+    this.notifyStateListeners()
+  }
+
+  private takeJoinRequest(peerId: string): DataConnection | null {
+    const index = this.state.joinRequests.findIndex((joinRequest) => joinRequest.peerId == peerId)
+    if (index < 0) {
+      return null
+    }
+
+    this.state.joinRequests.splice(index, 1)
+    return this.getOpenDataConnection(peerId)
+  }
+
+  private rejectJoinRequest(dataConnection: DataConnection, reason: string) {
+    dataConnection.send({ type: 'joinRejected', reason })
+    // Flushing delivers the rejection before the connection closes.
+    dataConnection.close({ flush: true })
+  }
+
+  private rejectJoinRequestWhenOpen(dataConnection: DataConnection, reason: string) {
+    if (dataConnection.open) {
+      this.rejectJoinRequest(dataConnection, reason)
+    } else {
+      dataConnection.addListener('open', () => this.rejectJoinRequest(dataConnection, reason))
+    }
+  }
+
+  private handleAdmitted(hostConnection: DataConnection) {
+    if (!this.state.waitingForHost) {
+      return
+    }
+
+    this.state.waitingForHost = false
+    this.admitPeer(hostConnection.peer)
+    // The host treated our first 'self' message as the join request, so announce ourselves again as a member.
+    hostConnection.send({
+      type: 'self',
+      username: this.username,
+      screenShareStreamId: LocalMediaStreams.localScreenMediaStream.id,
+      recordingActivity: this.getCurrentRecordingActivityForMessage(),
+    })
+    this.notifyMessageListeners({
+      type: 'info',
+      info: `${this.state.hostUsername ?? 'The host'} let you into the meeting.`,
+    })
+    this.notifyStateListeners()
+  }
+
+  private admitPeer(peerId: string) {
+    this.admittedPeers.add(peerId)
+    const heldPeer = this.heldPeers.get(peerId)
+    if (!heldPeer) {
+      return
+    }
+
+    this.releaseHeldPeer(peerId)
+    for (const { dataConnection, message } of heldPeer.messages) {
+      this.handleDataMessage(dataConnection, message)
+    }
+  }
+
+  private holdMessage(dataConnection: DataConnection, message: PeerMessage) {
+    const peerId = dataConnection.peer
+    let heldPeer = this.heldPeers.get(peerId)
+    if (!heldPeer) {
+      heldPeer = { messages: [], timeout: null }
+      // The host vouches for a new member before introducing them, so a connection it never vouches for is dropped.
+      // Waiting for the host's own decision has no time limit.
+      if (peerId != this.state.roomId) {
+        heldPeer.timeout = window.setTimeout(() => {
+          this.heldPeers.delete(peerId)
+          this.logger.log(`Closing connection from ${peerId}, which the host did not admit.`)
+          ;[...this.getPeerConnections(peerId)].forEach((connection) => connection.close())
+        }, this.meshConnectionTimeoutMs)
+      }
+      this.heldPeers.set(peerId, heldPeer)
+    }
+    heldPeer.messages.push({ dataConnection, message })
+  }
+
+  private releaseHeldPeer(peerId: string) {
+    const heldPeer = this.heldPeers.get(peerId)
+    if (heldPeer?.timeout != null) {
+      window.clearTimeout(heldPeer.timeout)
+    }
+    this.heldPeers.delete(peerId)
+  }
+
+  private leaveWithError(reason: string) {
+    if (this.destroyed) {
+      return
+    }
+
+    this.state.error = reason
+    this.notifyStateListeners()
+    this.disconnect()
   }
 
   private clearMeshConnectionTimeout(remotePeerState: RemotePeerState) {
@@ -449,31 +689,25 @@ export class RemoteMediaClient3 {
     remotePeerState.iceDisconnectedCleanupTimeout = null
   }
 
-  private scheduleIceDisconnectedCleanup(
-    remoteId: string,
-    remotePeerState: RemotePeerState,
-    rtcPeerConnection: RTCPeerConnection,
-  ) {
+  /**
+   * A closed tab, crash, or lost network often leaves no close event behind: ICE just stays disconnected (Chrome
+   * never moves on to 'failed', and the data channel stays 'open'). Remove the peer if any of its connections stays
+   * interrupted for too long.
+   */
+  private scheduleIceDisconnectedCleanup(remoteId: string, remotePeerState: RemotePeerState) {
     if (remotePeerState.iceDisconnectedCleanupTimeout != null) {
       return
     }
 
     remotePeerState.iceDisconnectedCleanupTimeout = window.setTimeout(() => {
       remotePeerState.iceDisconnectedCleanupTimeout = null
-      if (remotePeerState.rtcPeerConnection != rtcPeerConnection) {
+      if (this.remotePeerStates.get(remoteId) != remotePeerState || remotePeerState.interruptedConnections.size == 0) {
         return
       }
 
-      switch (rtcPeerConnection.iceConnectionState) {
-        case 'connected':
-        case 'completed':
-        case 'closed':
-          return
-      }
-
-      this.logger.log(`Removing ${remoteId} after ICE ${rtcPeerConnection.iceConnectionState}`)
+      this.logger.log(`Removing ${remoteId} after its ${[...remotePeerState.interruptedConnections]} ICE stayed down`)
       this.reportMeshConnectionFailedIfIntroduced(remoteId)
-      rtcPeerConnection.close()
+      remotePeerState.rtcPeerConnection?.close()
       ;[...this.getPeerConnections(remoteId)].forEach((connection) => connection.close())
       this.removePeerState(remoteId)
       this.notifyStateListeners()
@@ -481,7 +715,7 @@ export class RemoteMediaClient3 {
   }
 
   private sendRecordingActivity(recordingActivity: RecordingActivity) {
-    for (const peerId of this.connections.keys()) {
+    for (const peerId of this.admittedPeers) {
       this.getOpenDataConnection(peerId)?.send({ type: 'recordingActivity', activity: recordingActivity })
     }
   }
@@ -524,7 +758,12 @@ export class RemoteMediaClient3 {
     }
   }
 
+  /** Host only: a newly admitted guest reported that it could not connect directly to another member. */
   private handleMeshConnectionFailed(reportingPeerId: string, failedPeerId: string) {
+    if (!this.state.isHost) {
+      return
+    }
+
     const reportingPeerState = this.remotePeerStates.get(reportingPeerId)
     const failedPeerState = this.remotePeerStates.get(failedPeerId)
     if (!reportingPeerState || !failedPeerState) {
@@ -541,26 +780,25 @@ export class RemoteMediaClient3 {
     const otherPeerId = kickedPeerId == reportingPeerId ? failedPeerId : reportingPeerId
     const kickedUsername = this.getMember(kickedPeerId)?.username ?? kickedPeerId
     const otherUsername = this.getMember(otherPeerId)?.username ?? otherPeerId
-    const middleMessage = `Removed ${kickedUsername} from the meeting because ${kickedUsername} could not connect directly to ${otherUsername}. Everyone in the meeting must be able to connect directly.`
+    const notice = `${kickedUsername} was removed from the meeting because ${kickedUsername} could not connect directly to ${otherUsername}. Everyone in the meeting must be able to connect directly.`
     const kickedMessage = `You were removed from the meeting because your browser could not connect directly to ${otherUsername}. Everyone in the meeting must be able to connect directly.`
 
-    this.notifyMessageListeners({ type: 'info', info: middleMessage })
+    this.notifyMessageListeners({ type: 'info', info: notice })
+    for (const peerId of this.admittedPeers) {
+      if (peerId != kickedPeerId) {
+        this.getOpenDataConnection(peerId)?.send({ type: 'directConnectionFailed', notice })
+      }
+    }
     this.getOpenDataConnection(kickedPeerId)?.send({ type: 'kicked', reason: kickedMessage })
   }
 
-  private handleKicked(reason: string) {
-    this.state.error = reason
-    this.notifyStateListeners()
-    this.disconnect()
-  }
-
-  private async join(peerId: string) {
+  private async join(peerId: string, joinRequest = false) {
     if (peerId == this.peer.id || this.getOpenDataConnection(peerId)) {
       return
     }
 
     const connectToPeer = () => {
-      const dataConnection = this.getDataConnection(peerId)
+      const dataConnection = this.getDataConnection(peerId, joinRequest)
       this.setUpDataConnection(dataConnection)
       if (dataConnection.open) {
         this.handleOpenedDataConnection(dataConnection)
@@ -580,6 +818,9 @@ export class RemoteMediaClient3 {
   }
 
   private notifyMessageListeners(message: RemoteMediaClientMessage) {
+    if (this.destroyed) {
+      return
+    }
     for (let i = 0; i < this.messageListeners.length; ++i) {
       this.messageListeners[i](message)
     }
@@ -612,6 +853,16 @@ export class RemoteMediaClient3 {
   private async handleDataMessage(self: DataConnection, data: unknown) {
     console.debug('received message', JSON.stringify(data))
     const peerMessage = data as PeerMessage
+    if (peerMessage.type == 'timestamp') {
+      // Handled by the PeerNetworkDelayEstimator's own listener.
+      return
+    }
+    if (!this.admittedPeers.has(self.peer)) {
+      this.handleMessageFromUnadmittedPeer(self, peerMessage)
+      return
+    }
+
+    const fromHost = self.peer == this.state.roomId
     switch (peerMessage.type) {
       case 'self':
         this.ensureMember(self.peer, peerMessage.username)
@@ -624,7 +875,9 @@ export class RemoteMediaClient3 {
         if (peerMessage.recordingActivity) {
           await this.setRemoteRecordingActivity(self.peer, peerMessage.recordingActivity, false)
         }
-        this.shareKnownPeers(self)
+        if (this.state.isHost) {
+          this.shareKnownPeers(self)
+        }
 
         const peerNeworkDelayEstimator = new PeerNetworkDelayEstimator(self)
         this.getOrCreateRemotePeerState(self.peer).peerNeworkDelayEstimator = peerNeworkDelayEstimator
@@ -632,21 +885,35 @@ export class RemoteMediaClient3 {
         this.notifyStateListeners()
         break
       case 'otherPeer':
-        if (peerMessage.peer != this.peer.id && !this.getOpenDataConnection(peerMessage.peer)) {
-          this.expectMeshConnection(peerMessage.peer, self.peer)
-          this.join(peerMessage.peer)
+        if (fromHost && peerMessage.peer != this.peer.id) {
+          this.admitPeer(peerMessage.peer)
+          if (!this.getOpenDataConnection(peerMessage.peer)) {
+            this.expectMeshConnection(peerMessage.peer, self.peer)
+            this.join(peerMessage.peer)
+          }
         }
         break
-      case 'peerDisconnected':
-        if (this.getOpenDataConnection(peerMessage.peer)) {
-          self.send({ type: 'otherPeer', peer: peerMessage.peer })
+      case 'peerAdmitted':
+        if (fromHost && peerMessage.peer != this.peer.id) {
+          this.admitPeer(peerMessage.peer)
         }
         break
       case 'meshConnectionFailed':
         this.handleMeshConnectionFailed(self.peer, peerMessage.failedPeer)
         break
+      case 'directConnectionFailed':
+        if (fromHost) {
+          this.notifyMessageListeners({ type: 'info', info: peerMessage.notice })
+        }
+        break
       case 'kicked':
-        this.handleKicked(peerMessage.reason)
+        if (fromHost) {
+          this.leaveWithError(peerMessage.reason)
+        }
+        break
+      case 'admitted':
+      case 'joinRejected':
+        // Only meaningful while waiting for the host.
         break
       case 'iceCandidate':
         await this.addOrQueueIceCandidate(self.peer, peerMessage.candidate)
@@ -666,11 +933,80 @@ export class RemoteMediaClient3 {
         break
       case 'chat':
         break
-      case 'timestamp':
-        break
       default:
         this.logger.errorMessage('unrecognized message ' + JSON.stringify(peerMessage))
         break
+    }
+  }
+
+  private handleMessageFromUnadmittedPeer(dataConnection: DataConnection, message: PeerMessage) {
+    if (this.state.isHost) {
+      // A guest's first 'self' message is its request to join. Nothing else from it is processed until the host
+      // admits it, after which it announces itself again.
+      if (message.type == 'self' && dataConnection.metadata?.joinRequest) {
+        this.addJoinRequest(dataConnection, message.username)
+      }
+      return
+    }
+
+    if (dataConnection.peer == this.state.roomId) {
+      switch (message.type) {
+        case 'admitted':
+          this.handleAdmitted(dataConnection)
+          return
+        case 'joinRejected':
+          this.leaveWithError(message.reason)
+          return
+        case 'self':
+          this.state.hostUsername = message.username
+          this.notifyStateListeners()
+          break
+      }
+    }
+    this.holdMessage(dataConnection, message)
+  }
+
+  private updateConnectionInterruption(
+    remoteId: string,
+    connection: 'data' | 'media',
+    iceConnectionState: RTCIceConnectionState,
+  ) {
+    const remotePeerState = this.remotePeerStates.get(remoteId)
+    if (!remotePeerState) {
+      return
+    }
+
+    const wasInterrupted = remotePeerState.interruptedConnections.size > 0
+    switch (iceConnectionState) {
+      case 'disconnected':
+      case 'failed':
+        remotePeerState.interruptedConnections.add(connection)
+        break
+      case 'connected':
+      case 'completed':
+        remotePeerState.interruptedConnections.delete(connection)
+        break
+      default:
+        return
+    }
+
+    const isInterrupted = remotePeerState.interruptedConnections.size > 0
+    if (isInterrupted == wasInterrupted) {
+      return
+    }
+
+    if (isInterrupted) {
+      this.scheduleIceDisconnectedCleanup(remoteId, remotePeerState)
+    } else {
+      this.clearIceDisconnectedCleanupTimeout(remotePeerState)
+    }
+    // A guest still waiting for the host has no tile, so only members get a notification.
+    const member = this.getMember(remoteId)
+    if (member) {
+      this.notifyMessageListeners({
+        type: 'info',
+        info: `Connection to ${member.username} was ${isInterrupted ? 'interrupted' : 'restored'}.`,
+      })
     }
   }
 
@@ -687,6 +1023,9 @@ export class RemoteMediaClient3 {
       this.handleClosedDataConnection(dataConnection)
     })
     dataConnection.addListener('data', (data) => this.handleDataMessage(dataConnection, data))
+    dataConnection.addListener('iceStateChanged', (iceConnectionState) =>
+      this.updateConnectionInterruption(dataConnection.peer, 'data', iceConnectionState),
+    )
     dataConnection.addListener('error', (e) => {
       this.handleClosedDataConnection(dataConnection)
       this.logger.errorMessage(e.message)
@@ -778,20 +1117,12 @@ export class RemoteMediaClient3 {
 
     newPeerConnection.oniceconnectionstatechange = () => {
       this.logger.log('New ice connecting state ' + newPeerConnection.iceConnectionState)
+      this.updateConnectionInterruption(remoteId, 'media', newPeerConnection.iceConnectionState)
       switch (newPeerConnection.iceConnectionState) {
-        case 'connected':
-        case 'completed':
-          this.clearIceDisconnectedCleanupTimeout(remotePeerState)
-          break
-        case 'disconnected':
-          this.scheduleIceDisconnectedCleanup(remoteId, remotePeerState, newPeerConnection)
-          break
         case 'failed':
           newPeerConnection.restartIce()
-          this.scheduleIceDisconnectedCleanup(remoteId, remotePeerState, newPeerConnection)
           break
         case 'closed':
-          this.clearIceDisconnectedCleanupTimeout(remotePeerState)
           remotePeerState.rtcPeerConnection = null
           break
       }
@@ -898,6 +1229,9 @@ export class RemoteMediaClient3 {
 
 const ICE_DISCONNECTED_CLEANUP_TIMEOUT_MS = 5000
 const MESH_CONNECTION_TIMEOUT_MS = 10000
+const MEETING_FULL_MESSAGE = `The meeting is full. A meeting can have up to ${MAX_GUESTS + 1} people.`
+const HOST_UNREACHABLE_MESSAGE =
+  'Could not reach the meeting host. The host may have left, or the invite link is wrong.'
 
 const rtcConfig = {
   iceServers: [

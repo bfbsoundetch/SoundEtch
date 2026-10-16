@@ -1301,6 +1301,51 @@ video {
   pointer-events: none;
 }
 
+#meeting-waiting-for-host,
+#meeting-join-requests {
+  position: absolute;
+  top: 1rem;
+  left: 50%;
+  transform: translateX(-50%);
+  z-index: 3;
+  width: max-content;
+  max-width: calc(100% - 8rem);
+  box-sizing: border-box;
+  border: 1px solid var(--color);
+  background: var(--bg-color);
+}
+
+#meeting-waiting-for-host {
+  padding: 0.5rem 0.75rem;
+}
+
+.meeting-join-request {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.5rem 0.65rem;
+}
+
+.meeting-join-request + .meeting-join-request {
+  border-top: 1px solid var(--color);
+}
+
+.meeting-join-request > span {
+  flex: 1;
+  overflow-wrap: anywhere;
+}
+
+.meeting-join-request-button {
+  padding: 0.35rem 0.75rem;
+  border: 1px solid var(--color);
+  background: transparent;
+  color: inherit;
+}
+
+.meeting-join-request-button:hover {
+  background: var(--alt-background);
+}
+
 #meeting-setup {
   position: absolute;
   width: 100%;

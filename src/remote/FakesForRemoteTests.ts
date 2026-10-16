@@ -225,7 +225,17 @@ const remoteTestFakes = vi.hoisted(() => {
       })
     }
 
-    close(notifyCounterpart = true) {
+    close(options: { flush?: boolean } = {}) {
+      if (options.flush) {
+        // Like PeerJS, deliver everything already sent before closing.
+        queueMicrotask(() => this.closeConnection(true))
+        return
+      }
+
+      this.closeConnection(true)
+    }
+
+    private closeConnection(notifyCounterpart: boolean) {
       if (this.closed) {
         return
       }
@@ -234,7 +244,7 @@ const remoteTestFakes = vi.hoisted(() => {
       this.open = false
       this.emitWithConnectionContext('close')
       if (notifyCounterpart) {
-        this.counterpart?.close(false)
+        this.counterpart?.closeConnection(false)
       }
     }
 
@@ -249,6 +259,10 @@ const remoteTestFakes = vi.hoisted(() => {
 
     emitError(error: Error) {
       this.emitWithConnectionContext('error', error)
+    }
+
+    emitIceStateChanged(state: RTCIceConnectionState) {
+      this.emitWithConnectionContext('iceStateChanged', state)
     }
 
     private emitWithConnectionContext(eventName: string, ...args: Array<any>) {
@@ -506,7 +520,7 @@ const remoteTestFakes = vi.hoisted(() => {
       }
     }
 
-    private updateIceConnectionState(state: RTCIceConnectionState) {
+    updateIceConnectionState(state: RTCIceConnectionState) {
       this.iceConnectionState = state
       queueMicrotask(() => {
         this.oniceconnectionstatechange?.call(
@@ -591,6 +605,26 @@ const remoteTestFakes = vi.hoisted(() => {
     blockedFutureDataConnectionPeers.add(peerId)
   }
 
+  function isPeerOpen(peerId: string) {
+    return peers.get(peerId)?.open === true
+  }
+
+  function setIceConnectionState(
+    localPeerId: string,
+    remotePeerId: string,
+    connection: 'data' | 'media',
+    state: RTCIceConnectionState,
+  ) {
+    if (connection === 'media') {
+      rtcPeerConnections.get(rtcKey(localPeerId, remotePeerId))!.updateIceConnectionState(state)
+      return
+    }
+
+    for (const dataConnection of peers.get(localPeerId)?._connections.get(remotePeerId) ?? []) {
+      dataConnection.emitIceStateChanged(state)
+    }
+  }
+
   return {
     blockFutureDataConnectionsWithPeer,
     connectionType,
@@ -604,7 +638,9 @@ const remoteTestFakes = vi.hoisted(() => {
     FakeRTCSessionDescription,
     getDisplayMedia,
     getUserMedia,
+    isPeerOpen,
     resetRemoteTestFakes,
+    setIceConnectionState,
   }
 })
 
@@ -657,3 +693,5 @@ function installGlobal(name: string, value: unknown) {
 
 export const blockFutureDataConnectionsWithPeer = remoteTestFakes.blockFutureDataConnectionsWithPeer
 export const resetRemoteTestFakes = remoteTestFakes.resetRemoteTestFakes
+export const setIceConnectionState = remoteTestFakes.setIceConnectionState
+export const isPeerOpen = remoteTestFakes.isPeerOpen

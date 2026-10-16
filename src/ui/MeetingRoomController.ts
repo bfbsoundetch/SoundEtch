@@ -1,4 +1,4 @@
-import { RemoteMediaClient3, type RecordingActivity, type State } from '../remote/RemoteMediaClient3'
+import { RemoteMediaClient3, type JoinRequest, type RecordingActivity, type State } from '../remote/RemoteMediaClient3'
 import { MediaStreamButtonController } from './MediaStreamButtonController'
 import { SpeakerMeterController } from './SpeakerMeterController'
 import { Direction, ErrorBubbleController } from './ErrorBubbleController'
@@ -15,6 +15,17 @@ enum VideoLayout {
   SPOTLIGHT = 'spotlight',
   SOLO = 'solo',
   GRID = 'grid',
+}
+
+const DISCONNECTED_STATE: State = {
+  members: [],
+  roomId: null,
+  isHost: false,
+  hostUsername: null,
+  waitingForHost: false,
+  joinRequests: [],
+  screenShare: null,
+  error: null,
 }
 
 class VideoContainer {
@@ -178,7 +189,8 @@ export class MeetingRoomController {
     (recordingActivity) => this.setLocalRecordingActivity(recordingActivity),
   )
 
-  private currentState: State = { members: [], roomId: null, screenShare: null, error: null }
+  private currentState: State = DISCONNECTED_STATE
+  private renderedJoinRequestsKey = ''
   private remoteMediaClient: RemoteMediaClient3 | null = null
 
   private readonly usernameErrorBubble = new ErrorBubbleController(
@@ -331,6 +343,9 @@ export class MeetingRoomController {
     linkSelector.addEventListener('focusout', (event) => {
       if (!linkSelector.contains(event.relatedTarget as Node | null)) this.closeLinkMenu()
     })
+    // Closing the tab tears down connections without telling anyone, so the others would only notice once ICE times
+    // out. Leaving explicitly removes us from their meeting right away.
+    window.addEventListener('pagehide', () => this.disconnect())
   }
 
   async createMeeting(): Promise<boolean> {
@@ -652,6 +667,7 @@ export class MeetingRoomController {
     this.currentState = { ...state, members: [...state.members] }
     this.applyVideoLayout()
     this.updateMeetingLinkUi()
+    this.updateAdmissionUi(state)
   }
 
   private setUiForDisconnectedState() {
@@ -681,8 +697,9 @@ export class MeetingRoomController {
       guestContainer.isActive = false
     }
     this.applyVideoLayout()
-    this.currentState = { members: [], roomId: null, screenShare: null, error: null }
+    this.currentState = DISCONNECTED_STATE
     this.updateMeetingLinkUi()
+    this.updateAdmissionUi(DISCONNECTED_STATE)
 
     const meetingParam = new URL(window.location.toString()).searchParams.get('meeting')
     if (meetingParam) {
@@ -717,7 +734,11 @@ export class MeetingRoomController {
     this.closeLinkMenu()
     this.applyVideoLayout()
     this.updateMeetingLinkUi()
-    announce('Connected to the meeting')
+    announce(
+      this.currentState.waitingForHost
+        ? 'Asked to join the meeting. Waiting for the host to let you in.'
+        : 'Connected to the meeting',
+    )
     document.getElementById('open-meeting-link-button')!.focus()
   }
 
@@ -755,6 +776,52 @@ export class MeetingRoomController {
     linkBox.style.display = 'flex'
     linkElement.disabled = !this.currentState.roomId || !meetingLink
     linkElement.innerText = meetingLink ?? 'Meeting link is not available yet.'
+  }
+
+  private updateAdmissionUi(state: State) {
+    const waitingElement = document.getElementById('meeting-waiting-for-host') as HTMLDivElement
+    waitingElement.hidden = !state.waitingForHost
+    waitingElement.innerText = state.hostUsername
+      ? `Waiting for host ${state.hostUsername} to let you in…`
+      : 'Waiting for the host to let you in…'
+
+    const joinRequestsKey = state.joinRequests.map((joinRequest) => joinRequest.peerId).join()
+    if (joinRequestsKey == this.renderedJoinRequestsKey) {
+      return
+    }
+
+    this.renderedJoinRequestsKey = joinRequestsKey
+    const joinRequestsElement = document.getElementById('meeting-join-requests') as HTMLDivElement
+    const hadFocus = joinRequestsElement.contains(document.activeElement)
+    joinRequestsElement.replaceChildren(
+      ...state.joinRequests.map((joinRequest) => this.createJoinRequestElement(joinRequest)),
+    )
+    joinRequestsElement.hidden = state.joinRequests.length == 0
+    if (hadFocus) {
+      ;(joinRequestsElement.querySelector('button') ?? document.getElementById('open-meeting-link-button'))?.focus()
+    }
+  }
+
+  private createJoinRequestElement(joinRequest: JoinRequest) {
+    const element = document.createElement('div')
+    element.className = 'meeting-join-request'
+    const label = document.createElement('span')
+    label.innerText = `${joinRequest.username} wants to join`
+    element.appendChild(label)
+
+    for (const [text, respond] of [
+      ['Admit', () => this.remoteMediaClient?.admit(joinRequest.peerId)],
+      ['Deny', () => this.remoteMediaClient?.deny(joinRequest.peerId)],
+    ] as const) {
+      const button = document.createElement('button')
+      button.type = 'button'
+      button.className = 'meeting-join-request-button clickable'
+      button.innerText = text
+      button.setAttribute('aria-label', `${text} ${joinRequest.username}`)
+      button.onclick = respond
+      element.appendChild(button)
+    }
+    return element
   }
 
   private setLocalRecordingActivity(recordingActivity: RecordingActivity) {
