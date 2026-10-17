@@ -12,6 +12,12 @@ Only track names and amplitude-axis ticks are labeled; no mix or timing text app
 
 The trace uses pre-AAC PCM. MP4 audio still uses the browser's AAC encoder or the existing AAC fallback; encoder priming/padding can introduce playback delay and a padded audio tail.
 
+## Export loudness
+
+**Loudness** in Publish Settings sets the integrated loudness (ITU-R BS.1770-4 / EBU R128) of WAV, FLAC, MP3, Opus and MP4 exports: Off (the mix level, default), −14 LUFS (music streaming), −16 LUFS (podcasts) or −23 LUFS (broadcast). The mix renders once into a temporary file in browser storage while its gated loudness is measured ("Measuring loudness..."), then streams back with gain `target − measured` through a 4×-oversampled true-peak lookahead limiter with a −1 dBTP ceiling. Mono exports are measured as one channel. Project audio, track gain and Freeze are unchanged.
+
+The gain is computed before limiting. When limited peaks carry much of the program's energy, the result lands below the target. The limiter detects true peaks with a 145-tap Kaiser-windowed interpolator, so exports hold the −1 dBTP ceiling to within 0.1 dB as measured by ffmpeg's `ebur128`, including on full-band noise.
+
 ## Timeline display modes
 
 Use each track's options menu (three dots) to switch between its waveform and a WebGPU-rendered spectrogram, rename the track, show or hide its transcript, or change its height. The selected mode is session-only and resets to the waveform when a project is opened or the page is reloaded. If WebGPU is unavailable, the spectrogram view keeps its editing overlays on the selected color scheme's minimum-dB background; switching back to the waveform remains available.

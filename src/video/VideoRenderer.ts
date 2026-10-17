@@ -16,7 +16,14 @@ import { ProjectManager } from '../project/ProjectManager'
 import { Track } from '../project/Track'
 import type { SelectedRegion } from '../playback/Player'
 import { createRenderingArgument } from '../rendering/RenderingArgumentFactory'
-import { RenderingEncodingPortMessage, RenderingWorkerStartMessage } from '../rendering/RenderingWorkerProtocol'
+import { Renderer, type AudioSourceWorker } from '../rendering/Renderer'
+import {
+  RenderingArgument,
+  RenderingConsumerPortMessage,
+  RenderingEncodingPortMessage,
+  RenderingOutputWorkerMessage,
+  RenderingWorkerStartMessage,
+} from '../rendering/RenderingWorkerProtocol'
 import { OscilloscopeFrames } from './OscilloscopeFrames'
 
 export type VideoExportPresetName = 'youtube' | 'tiktok'
@@ -55,7 +62,11 @@ export class VideoRenderer {
   private static cancelExportCallback: (() => void) | null = null
   private static aacEncoderRegistered = false
 
-  static async exportProject(presetName: VideoExportPresetName, selectedRegion: SelectedRegion | null) {
+  static async exportProject(
+    presetName: VideoExportPresetName,
+    selectedRegion: SelectedRegion | null,
+    loudnessTargetLufs: number | null,
+  ) {
     const preset = VIDEO_EXPORT_PRESETS[presetName]
     const project = await ProjectManager.getActiveProject()
     const tracks = selectedRegion?.tracks ?? project.getTracks()
@@ -81,9 +92,12 @@ export class VideoRenderer {
 
     const abortController = new AbortController()
     const signal = abortController.signal
-    let output: Output | null = null
 
-    VideoRenderer.cancelExportCallback = () => abortController.abort()
+    // Renderer.cancelRender() stops a running loudness-measuring pass; it is a no-op otherwise.
+    VideoRenderer.cancelExportCallback = () => {
+      abortController.abort()
+      Renderer.cancelRender()
+    }
 
     try {
       VideoRenderer.setProcessingProgress(0.01)
@@ -93,6 +107,40 @@ export class VideoRenderer {
       await VideoRenderer.ensureAacEncoder(channelCount, project.sampleRate)
       VideoRenderer.throwIfAborted(signal)
 
+      const argument = createRenderingArgument(project, channelCount, startPosition, projectLength, tracks)
+      const writeVideo = (createSource: () => AudioSourceWorker) =>
+        VideoRenderer.writeVideo(file, preset, project.title, argument, videoCodec, createSource, signal)
+      if (loudnessTargetLufs === null) {
+        await writeVideo(() => Renderer.createRenderingSource(argument))
+      } else {
+        await Renderer.withLoudnessNormalizedSource(
+          argument,
+          loudnessTargetLufs,
+          `Publishing ${preset.label} video...`,
+          writeVideo,
+        )
+      }
+    } finally {
+      VideoRenderer.cancelExportCallback = null
+    }
+  }
+
+  static cancelExport() {
+    VideoRenderer.cancelExportCallback?.()
+  }
+
+  private static async writeVideo(
+    file: FileSystemFileHandle,
+    preset: VideoExportPreset,
+    title: string,
+    argument: RenderingArgument,
+    videoCodec: VideoCodec,
+    createSource: () => AudioSourceWorker,
+    signal: AbortSignal,
+  ): Promise<void> {
+    let output: Output | null = null
+
+    try {
       const writable = await file.createWritable()
       const canvas = document.createElement('canvas')
       canvas.width = preset.width
@@ -125,16 +173,20 @@ export class VideoRenderer {
         name: `${preset.label} visual`,
       })
       output.addAudioTrack(audioSource, { name: 'Project audio' })
-      output.setMetadataTags({ title: project.title })
+      output.setMetadataTags({ title })
 
       await output.start()
       VideoRenderer.setProcessingProgress(0.05)
 
-      const argument = createRenderingArgument(project, channelCount, startPosition, projectLength, tracks)
-      const scope = new OscilloscopeFrames(project.sampleRate, preset.frameRate, projectLength, channelCount)
-      const duration = projectLength / project.sampleRate
-      const trackNames = tracks.map((track) => track.name)
-      await VideoRenderer.pipeRenderedAudioToSource(argument, audioSource, signal, async (audio) => {
+      const scope = new OscilloscopeFrames(
+        argument.sampleRate,
+        preset.frameRate,
+        argument.length,
+        argument.channelCount,
+      )
+      const duration = argument.length / argument.sampleRate
+      const trackNames = argument.trackSubsets.map((track) => track.name)
+      await VideoRenderer.pipeRenderedAudioToSource(createSource(), argument, audioSource, signal, async (audio) => {
         await scope.addAudio(audio, async (samples, sampleCount, frame) => {
           VideoRenderer.throwIfAborted(signal)
           const timestamp = frame / preset.frameRate
@@ -155,22 +207,16 @@ export class VideoRenderer {
         await output.cancel().catch(() => {})
       }
       throw error
-    } finally {
-      VideoRenderer.cancelExportCallback = null
     }
   }
 
-  static cancelExport() {
-    VideoRenderer.cancelExportCallback?.()
-  }
-
   private static async pipeRenderedAudioToSource(
-    argument: RenderingWorkerStartMessage['argument'],
+    source: AudioSourceWorker,
+    argument: RenderingArgument,
     audioSource: AudioSampleSource,
     signal: AbortSignal,
     onAudio: (audio: Float32Array) => Promise<void>,
   ): Promise<void> {
-    const renderingWorker = new Worker('./assets/renderingWorker.js', { type: 'module' })
     const channel = new MessageChannel()
     let queue = Promise.resolve()
     let writtenFrames = 0
@@ -179,7 +225,7 @@ export class VideoRenderer {
     return await new Promise<void>((resolve, reject) => {
       const cleanup = () => {
         channel.port1.close()
-        renderingWorker.terminate()
+        source.worker.terminate()
         signal.removeEventListener('abort', abort)
       }
       const fail = (error: unknown) => {
@@ -201,8 +247,13 @@ export class VideoRenderer {
       const abort = () => fail(new Error('Video export canceled'))
 
       signal.addEventListener('abort', abort, { once: true })
-      renderingWorker.onerror = (error) => fail(error)
-      renderingWorker.onmessageerror = (error) => fail(error)
+      source.worker.onerror = (error) => fail(error)
+      source.worker.onmessageerror = (error) => fail(error)
+      source.worker.onmessage = (e: MessageEvent<RenderingOutputWorkerMessage | undefined>) => {
+        if (e.data?.error) {
+          fail(new Error(String(e.data.error)))
+        }
+      }
 
       channel.port1.onmessage = (portEvent) => {
         const message = portEvent.data as RenderingEncodingPortMessage
@@ -216,6 +267,7 @@ export class VideoRenderer {
                 onAudio(audio),
               ])
               writtenFrames += message.length / argument.channelCount
+              channel.port1.postMessage({ type: 'consumed' } satisfies RenderingConsumerPortMessage)
               return
             }
 
@@ -226,11 +278,7 @@ export class VideoRenderer {
       }
       channel.port1.start()
 
-      const startMessage: RenderingWorkerStartMessage = {
-        argument,
-        encodingPort: channel.port2,
-      }
-      renderingWorker.postMessage(startMessage, [channel.port2])
+      source.worker.postMessage({ ...source.startMessage, encodingPort: channel.port2 }, [channel.port2])
     })
   }
 

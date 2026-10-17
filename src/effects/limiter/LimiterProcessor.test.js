@@ -45,4 +45,31 @@ describe('LimiterProcessor', () => {
 
     expect(output[2]).toBeCloseTo(1)
   })
+
+  test('true-peak mode limits inter-sample peaks that sample-peak mode misses', () => {
+    // Samples sit at ±0.7071 while the reconstructed waveform peaks at 1.0 between them.
+    const input = Float32Array.from({ length: 4800 }, (_, n) => Math.sin((Math.PI / 2) * n + Math.PI / 4))
+    const samplePeak = new LimiterProcessor({ processorOptions: { sampleRate: 48000 } })
+    const truePeak = new LimiterProcessor({ processorOptions: { sampleRate: 48000, truePeak: true } })
+
+    const [samplePeakOutput] = process(samplePeak, [input], -1)
+    const [truePeakOutput] = process(truePeak, [input], -1)
+
+    const steadyStateMax = (output) => Math.max(...output.slice(2400).map(Math.abs))
+    expect(steadyStateMax(samplePeakOutput)).toBeCloseTo(Math.SQRT1_2, 4)
+    expect(steadyStateMax(truePeakOutput)).toBeCloseTo(Math.SQRT1_2 * 10 ** (-1 / 20), 2)
+  })
+
+  test('true-peak mode holds near-Nyquist sines at the ceiling', () => {
+    // A 20 kHz sine at 48 kHz meets the 4x grid at 48 distinct phases, so this measures filter accuracy near Nyquist.
+    const input = Float32Array.from({ length: 9600 }, (_, n) => Math.sin((2 * Math.PI * 20000 * n) / 48000 + 0.3))
+    const processor = new LimiterProcessor({ processorOptions: { sampleRate: 48000, truePeak: true } })
+
+    const [output] = process(processor, [input], -1)
+
+    const steadyStateMax = (samples) => Math.max(...samples.slice(4800).map(Math.abs))
+    const gainDb = 20 * Math.log10(steadyStateMax(output) / steadyStateMax(input))
+    expect(gainDb).toBeLessThanOrEqual(-0.95)
+    expect(gainDb).toBeGreaterThanOrEqual(-1.1)
+  })
 })

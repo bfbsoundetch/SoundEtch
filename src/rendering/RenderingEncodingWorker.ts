@@ -1,5 +1,9 @@
 import { encoderInforWritableStreamFactory } from '../encoders/EncoderType'
-import { RenderingEncodingInitMessage, RenderingEncodingPortMessage } from './RenderingWorkerProtocol'
+import {
+  RenderingConsumerPortMessage,
+  RenderingEncodingInitMessage,
+  RenderingEncodingPortMessage,
+} from './RenderingWorkerProtocol'
 
 self.onmessage = async (e) => {
   const { type } = e.data as RenderingEncodingInitMessage
@@ -68,6 +72,7 @@ self.onmessage = async (e) => {
       .then(async () => {
         if (message.type === 'audio') {
           await appendInterleavedAudio(message.buffer, message.length)
+          encodingPort.postMessage({ type: 'consumed' } satisfies RenderingConsumerPortMessage)
           return
         }
 

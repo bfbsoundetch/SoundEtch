@@ -26,6 +26,27 @@ export type RenderingFileWritingInitMessage = {
   length: number
 }
 
+export type LoudnessMeasuringInitMessage = {
+  type: 'init'
+  dirname: string
+  filename: string
+  sampleRate: number
+  channelCount: number
+  encodingPort: MessagePort
+  length: number
+}
+
+export type LoudnessNormalizingStartMessage = {
+  dirname: string
+  filename: string
+  sampleRate: number
+  channelCount: number
+  length: number
+  gain: number
+  truePeakCeilingDb: number
+  encodingPort: MessagePort
+}
+
 export type RenderingEncodingPortMessage =
   | {
       type: 'audio'
@@ -35,6 +56,17 @@ export type RenderingEncodingPortMessage =
   | {
       type: 'stop'
     }
+
+// Consumer → source, one per processed 'audio' message. Sources that throttle (LoudnessNormalizingWorker)
+// wait for these; RenderingJob ignores them.
+export type RenderingConsumerPortMessage = { type: 'consumed' }
+
+export type RenderingOutputWorkerMessage = {
+  progress?: number
+  done?: boolean
+  error?: string
+  integratedLufs?: number
+}
 
 export type TrackSubset = {
   name: string

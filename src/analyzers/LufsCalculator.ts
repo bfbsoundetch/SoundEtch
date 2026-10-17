@@ -1,5 +1,3 @@
-import { AudioControl } from '../audiocontext/AudioControl'
-
 export class LufsCalculator {
   // This logic probably originates with libebur128 https://github.com/jiixyj/libebur128
   static preFilterCoefficients(fs: number) {

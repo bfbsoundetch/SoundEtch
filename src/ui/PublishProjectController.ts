@@ -130,7 +130,7 @@ export class PublishProjectController {
     const selectedRegion = this.appWindow.trackListController.selectedRegion
     this.appWindow.processingModalController?.show('Publishing project...', () => Renderer.cancelRender())
     try {
-      await Renderer.exportProject(encoderInfo, selectedRegion)
+      await Renderer.exportProject(encoderInfo, selectedRegion, this.getLoudnessTargetLufs())
     } catch (e) {
       NotificationsController.showError(e as Error)
     } finally {
@@ -147,12 +147,17 @@ export class PublishProjectController {
       VideoRenderer.cancelExport(),
     )
     try {
-      await VideoRenderer.exportProject(presetName, selectedRegion)
+      await VideoRenderer.exportProject(presetName, selectedRegion, this.getLoudnessTargetLufs())
     } catch (e) {
       NotificationsController.showError(e as Error)
     } finally {
       this.appWindow.processingModalController?.hide()
     }
+  }
+
+  private getLoudnessTargetLufs(): number | null {
+    const value = this.getSelectValue('loudness-target')
+    return value === '' ? null : Number(value)
   }
 
   private createEncoderInfo(): EncoderInfo {

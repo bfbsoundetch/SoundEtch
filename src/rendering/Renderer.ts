@@ -5,21 +5,49 @@ import { ClipViewSubset } from '../playback/AudioFileReader'
 import { ProjectManager } from '../project/ProjectManager'
 import { EncoderInfo } from '../encoders/EncoderType'
 import {
+  LoudnessMeasuringInitMessage,
+  LoudnessNormalizingStartMessage,
+  RenderingArgument,
   RenderingEncodingInitMessage,
   RenderingFileWritingInitMessage,
+  RenderingOutputWorkerMessage,
   RenderingWorkerStartMessage,
 } from './RenderingWorkerProtocol'
 import type { SelectedRegion } from 'playback/Player'
 import { createRenderingArgument } from './RenderingArgumentFactory'
 import { Clip } from '../project/Clip'
 import { cloneWithGetters } from '../global/ObjectUtils'
+import { FileSystemUtils } from '../filesystem/FileSystemUtils'
+import type { ProcessingModalController } from '../ui/ProcessingModalController'
+
+const EXPORT_TRUE_PEAK_CEILING_DB = -1
+// Sits beside the numeric project directories in the OPFS root, so it can never collide with one.
+const EXPORT_TEMP_DIRECTORY = 'export-temp'
+const STALE_EXPORT_TEMP_FILE_AGE_MS = 24 * 60 * 60 * 1000
+// A terminated worker's sync access handle lock is released asynchronously.
+const LOCKED_TEMP_FILE_DELETE_RETRIES = 5
+const LOCKED_TEMP_FILE_DELETE_RETRY_MS = 100
+
+interface ProcessingModalWindow extends Window {
+  readonly processingModalController?: ProcessingModalController
+}
+
+// A worker that produces interleaved audio on an encoding port (RenderingJob or LoudnessNormalizingWorker).
+export type AudioSourceWorker = {
+  worker: Worker
+  startMessage:
+    Omit<RenderingWorkerStartMessage, 'encodingPort'> | Omit<LoudnessNormalizingStartMessage, 'encodingPort'>
+}
 
 export class Renderer {
   private static readingWorkerController: WorkerController | null = null
-  private static renderingWorker: Worker | null = null
   private static cancelRenderingCallback: (() => void) | null = null
 
-  static async exportProject(encoderInfo: EncoderInfo, selectedRegion: SelectedRegion | null) {
+  static async exportProject(
+    encoderInfo: EncoderInfo,
+    selectedRegion: SelectedRegion | null,
+    loudnessTargetLufs: number | null,
+  ) {
     const project = await ProjectManager.getActiveProject()
     const projectLength = selectedRegion
       ? selectedRegion.endSample - selectedRegion.startSample
@@ -30,38 +58,127 @@ export class Renderer {
       startIn: 'downloads',
       suggestedName: `${project.title}.${exportInfo.encoder}`,
     } as any)
-
-    return Renderer.render(
-      file,
-      exportInfo.channelCount,
+    const argument = createRenderingArgument(
       project,
-      exportInfo,
+      exportInfo.channelCount,
       selectedRegion?.startSample ?? 0,
       projectLength,
-      ...tracks,
+      tracks,
     )
+
+    const encode = (createSource: () => AudioSourceWorker) =>
+      Renderer.encode(file, exportInfo, projectLength, createSource)
+
+    if (loudnessTargetLufs === null) {
+      return encode(() => Renderer.createRenderingSource(argument))
+    }
+    return Renderer.withLoudnessNormalizedSource(argument, loudnessTargetLufs, 'Publishing project...', encode)
   }
 
-  static async render(
-    file: FileSystemFileHandle,
-    outputChannelCount: number,
-    project: Project,
-    encoderInfo: EncoderInfo,
-    startPosition: number,
-    projectLength: number,
-    ...tracks: Array<Track>
-  ) {
-    const argument = createRenderingArgument(project, outputChannelCount, startPosition, projectLength, tracks)
-    const encodingWorker = new Worker(new URL('./RenderingEncodingWorker.ts', import.meta.url), { type: 'module' })
+  static createRenderingSource(argument: RenderingArgument): AudioSourceWorker {
+    return { worker: new Worker('./assets/renderingWorker.js', { type: 'module' }), startMessage: { argument } }
+  }
 
-    const encodingInitMessage: Omit<RenderingEncodingInitMessage, 'encodingPort'> = {
+  // Pass 1 renders the mix once into an OPFS temp file while measuring its integrated loudness. consume then
+  // runs its pipeline from a source that streams the temp file back through the normalization gain and a
+  // true-peak limiter. The temp file is deleted when consume settles, including on cancel and error.
+  static async withLoudnessNormalizedSource<T>(
+    argument: RenderingArgument,
+    loudnessTargetLufs: number,
+    publishingTitle: string,
+    consume: (createSource: () => AudioSourceWorker) => Promise<T>,
+  ): Promise<T> {
+    const tempFile = { dirname: EXPORT_TEMP_DIRECTORY, filename: crypto.randomUUID() }
+    const modal = (window as ProcessingModalWindow).processingModalController
+
+    try {
+      modal?.setTitle('Measuring loudness...')
+      modal?.setProgress(0)
+      const { integratedLufs } = await Renderer.runPipeline(
+        Renderer.createRenderingSource(argument),
+        new Worker(new URL('./LoudnessMeasuringWorker.ts', import.meta.url), { type: 'module' }),
+        {
+          type: 'init',
+          ...tempFile,
+          sampleRate: argument.sampleRate,
+          channelCount: argument.channelCount,
+          length: argument.length,
+        },
+      )
+      if (integratedLufs === undefined) {
+        throw new Error('Loudness measurement returned no result')
+      }
+
+      let gain = 1
+      if (Number.isFinite(integratedLufs)) {
+        gain = 10 ** ((loudnessTargetLufs - integratedLufs) / 20)
+      } else {
+        console.warn('Loudness normalization skipped: the export is silent')
+      }
+
+      modal?.setTitle(publishingTitle)
+      modal?.setProgress(0)
+      // No I/O await between pass 1 resolving and consume starting its pipeline: a cancel click is a
+      // macrotask, so it always reaches one of the two pipelines.
+      return await consume(() => ({
+        worker: new Worker(new URL('./LoudnessNormalizingWorker.ts', import.meta.url), { type: 'module' }),
+        startMessage: {
+          ...tempFile,
+          sampleRate: argument.sampleRate,
+          channelCount: argument.channelCount,
+          length: argument.length,
+          gain,
+          truePeakCeilingDb: EXPORT_TRUE_PEAK_CEILING_DB,
+        },
+      }))
+    } finally {
+      await Renderer.deleteExportTempFiles(tempFile)
+    }
+  }
+
+  private static async deleteExportTempFiles(tempFile: { dirname: string; filename: string }) {
+    for (let retry = 0; ; ++retry) {
+      try {
+        await FileSystemUtils.deleteFile(tempFile.dirname, tempFile.filename)
+        break
+      } catch (error) {
+        const locked = error instanceof DOMException && error.name === 'NoModificationAllowedError'
+        if (!locked || retry === LOCKED_TEMP_FILE_DELETE_RETRIES) {
+          console.warn('Could not delete export temp file', error)
+          break
+        }
+        const { promise, resolve } = Promise.withResolvers<void>()
+        setTimeout(resolve, LOCKED_TEMP_FILE_DELETE_RETRY_MS)
+        await promise
+      }
+    }
+
+    // Leftovers from exports interrupted by a crash or a closed tab.
+    try {
+      for (const file of await FileSystemUtils.getDirectoryFiles(EXPORT_TEMP_DIRECTORY)) {
+        if (file.data instanceof File && Date.now() - file.data.lastModified > STALE_EXPORT_TEMP_FILE_AGE_MS) {
+          await FileSystemUtils.deleteFile(EXPORT_TEMP_DIRECTORY, file.path)
+        }
+      }
+    } catch (error) {
+      console.warn('Could not remove stale export temp files', error)
+    }
+  }
+
+  private static async encode(
+    file: FileSystemFileHandle,
+    encoderInfo: EncoderInfo,
+    length: number,
+    createSource: () => AudioSourceWorker,
+  ) {
+    const encodingWorker = new Worker(new URL('./RenderingEncodingWorker.ts', import.meta.url), { type: 'module' })
+    await Renderer.runPipeline(createSource(), encodingWorker, {
       type: 'init',
       file,
       encoderInfo,
-      channelCount: outputChannelCount,
-      length: projectLength,
-    }
-    await Renderer.runRender(argument, encodingWorker, encodingInitMessage)
+      channelCount: encoderInfo.channelCount,
+      length,
+    })
   }
 
   static async renderToClip(
@@ -82,69 +199,65 @@ export class Renderer {
       channelCount,
       length,
     }
-    await Renderer.runRender(argument, writingWorker, writingInitMessage)
+    await Renderer.runPipeline(Renderer.createRenderingSource(argument), writingWorker, writingInitMessage)
   }
 
-  private static async runRender(
-    argument: ReturnType<typeof createRenderingArgument>,
+  // Connects source → output worker over a MessageChannel and resolves with the output worker's done message.
+  private static async runPipeline(
+    source: AudioSourceWorker,
     outputWorker: Worker,
     outputInitMessage:
-      Omit<RenderingEncodingInitMessage, 'encodingPort'> | Omit<RenderingFileWritingInitMessage, 'encodingPort'>,
-  ) {
-    const renderingWorker = new Worker('./assets/renderingWorker.js', { type: 'module' })
+      | Omit<RenderingEncodingInitMessage, 'encodingPort'>
+      | Omit<RenderingFileWritingInitMessage, 'encodingPort'>
+      | Omit<LoudnessMeasuringInitMessage, 'encodingPort'>,
+  ): Promise<RenderingOutputWorkerMessage> {
     const encodingChannel = new MessageChannel()
-    Renderer.renderingWorker = renderingWorker
+    const { promise, resolve, reject } = Promise.withResolvers<RenderingOutputWorkerMessage>()
 
-    await new Promise<void>((resolve, reject) => {
-      const cleanup = () => {
-        Renderer.cancelRenderingCallback = null
-        Renderer.renderingWorker = null
-        renderingWorker.terminate()
-        outputWorker.terminate()
+    const cleanup = () => {
+      Renderer.cancelRenderingCallback = null
+      source.worker.terminate()
+      outputWorker.terminate()
+    }
+
+    Renderer.cancelRenderingCallback = () => {
+      cleanup()
+      reject(new Error('Render canceled'))
+    }
+
+    const rejectWithCleanup = (error: unknown) => {
+      cleanup()
+      reject(error)
+    }
+
+    outputWorker.onmessage = (e: MessageEvent<RenderingOutputWorkerMessage>) => {
+      if (e.data.error) {
+        rejectWithCleanup(new Error(String(e.data.error)))
+        return
       }
-
-      Renderer.cancelRenderingCallback = () => {
+      if (e.data.done) {
         cleanup()
-        reject(new Error('Render canceled'))
+        resolve(e.data)
       }
-
-      const rejectWithCleanup = (error: unknown) => {
-        cleanup()
-        reject(error)
+      const progress = e.data.progress
+      if (typeof progress === 'number') {
+        ;(window as ProcessingModalWindow).processingModalController?.setProgress(progress)
       }
-
-      outputWorker.onmessage = (e) => {
-        if (e.data.error) {
-          rejectWithCleanup(new Error(String(e.data.error)))
-          return
-        }
-        if (e.data.done) {
-          cleanup()
-          resolve()
-        }
-        const progress = e.data.progress
-        if (typeof progress === 'number') {
-          ;(window as any).processingModalController?.setProgress(progress)
-        }
+    }
+    source.worker.onmessage = (e: MessageEvent<RenderingOutputWorkerMessage | undefined>) => {
+      if (e.data?.error) {
+        rejectWithCleanup(new Error(String(e.data.error)))
       }
+    }
 
-      renderingWorker.onerror = (error) => rejectWithCleanup(error)
-      outputWorker.onerror = (error) => rejectWithCleanup(error)
-      renderingWorker.onmessageerror = (error) => rejectWithCleanup(error)
-      outputWorker.onmessageerror = (error) => rejectWithCleanup(error)
+    source.worker.onerror = (error) => rejectWithCleanup(error)
+    outputWorker.onerror = (error) => rejectWithCleanup(error)
+    source.worker.onmessageerror = (error) => rejectWithCleanup(error)
+    outputWorker.onmessageerror = (error) => rejectWithCleanup(error)
 
-      const encodingInitMessage = {
-        ...outputInitMessage,
-        encodingPort: encodingChannel.port1,
-      }
-      outputWorker.postMessage(encodingInitMessage, [encodingChannel.port1])
-
-      const renderingStartMessage: RenderingWorkerStartMessage = {
-        argument,
-        encodingPort: encodingChannel.port2,
-      }
-      renderingWorker.postMessage(renderingStartMessage, [encodingChannel.port2])
-    })
+    outputWorker.postMessage({ ...outputInitMessage, encodingPort: encodingChannel.port1 }, [encodingChannel.port1])
+    source.worker.postMessage({ ...source.startMessage, encodingPort: encodingChannel.port2 }, [encodingChannel.port2])
+    return await promise
   }
 
   static cancelRender() {

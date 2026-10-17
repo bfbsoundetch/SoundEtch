@@ -6,6 +6,21 @@
 
 const LOOKAHEAD_MS = 5
 const MAX_CHANNELS = 32
+// True-peak interpolation: a Kaiser-windowed sinc with this many taps per polyphase branch. Phase 0 is the
+// input delayed by TRUE_PEAK_TAPS_PER_PHASE / 2 frames.
+const TRUE_PEAK_TAPS_PER_PHASE = 36
+const TRUE_PEAK_KAISER_BETA = 8
+
+// Zeroth-order modified Bessel function of the first kind, for the Kaiser window.
+function besselI0(x) {
+  let sum = 1
+  let term = 1
+  for (let k = 1; k < 50; ++k) {
+    term *= (x / (2 * k)) ** 2
+    sum += term
+  }
+  return sum
+}
 
 const ProcessorBase = globalThis.AudioWorkletProcessor ?? class {}
 
@@ -52,6 +67,31 @@ export class LimiterProcessor extends ProcessorBase {
 
     this.lastRelease = -1
     this.releaseCoefficient = 0
+
+    // Opt-in true-peak detection: the deque tracks the peak of the oversampled signal instead of the
+    // sample peak. Detection is delayed by TRUE_PEAK_TAPS_PER_PHASE / 2 frames, which must stay inside the
+    // lookahead window; below about 3.7 kHz it would not, so those rates fall back to sample-peak detection.
+    const rate = processorSampleRate
+    const oversampling = rate < 96000 ? 4 : rate < 192000 ? 2 : 1
+    this.oversampling =
+      processorOptions.truePeak === true && this.lookaheadSamples > TRUE_PEAK_TAPS_PER_PHASE / 2 ? oversampling : 1
+    if (this.oversampling > 1) {
+      const taps = TRUE_PEAK_TAPS_PER_PHASE * this.oversampling + 1 // 145 at 4x, 73 at 2x
+      this.phaseLength = Math.ceil(taps / this.oversampling) // 37
+      this.interpolationFilter = new Float64Array(this.oversampling * this.phaseLength)
+      const windowNormalization = besselI0(TRUE_PEAK_KAISER_BETA)
+      for (let j = 0; j < taps; ++j) {
+        const m = (j - (taps - 1) / 2) / this.oversampling
+        const sinc = m == 0 ? 1 : Math.sin(Math.PI * m) / (Math.PI * m)
+        const x = (2 * j) / (taps - 1) - 1
+        const kaiser = besselI0(TRUE_PEAK_KAISER_BETA * Math.sqrt(Math.max(0, 1 - x * x))) / windowNormalization
+        this.interpolationFilter[(j % this.oversampling) * this.phaseLength + Math.floor(j / this.oversampling)] =
+          sinc * kaiser
+      }
+      // Doubled ring per channel so the filter loop reads a contiguous window without modulo.
+      this.interpolationHistory = new Float64Array(MAX_CHANNELS * 2 * this.phaseLength)
+      this.historyPosition = 0
+    }
   }
 
   process(inputs, outputs, parameters) {
@@ -65,10 +105,14 @@ export class LimiterProcessor extends ProcessorBase {
 
     for (let frame = 0; frame < frameCount; ++frame) {
       let peak = 0
-      for (let channel = 0; channel < input.length; ++channel) {
-        const sample = input[channel][frame]
-        const magnitude = sample < 0 ? -sample : sample
-        if (magnitude > peak) peak = magnitude
+      if (this.oversampling > 1) {
+        peak = this.measureTruePeak(input, frame)
+      } else {
+        for (let channel = 0; channel < input.length; ++channel) {
+          const sample = input[channel][frame]
+          const magnitude = sample < 0 ? -sample : sample
+          if (magnitude > peak) peak = magnitude
+        }
       }
 
       while (this.queueTail > this.queueHead && this.peakValues[(this.queueTail - 1) % windowSize] <= peak) {
@@ -110,6 +154,30 @@ export class LimiterProcessor extends ProcessorBase {
     }
 
     return true
+  }
+
+  measureTruePeak(input, frame) {
+    const phaseLength = this.phaseLength
+    const filter = this.interpolationFilter
+    const history = this.interpolationHistory
+    const position = this.historyPosition
+    let peak = 0
+    for (let channel = 0; channel < input.length; ++channel) {
+      const base = channel * 2 * phaseLength
+      const sample = input[channel][frame]
+      history[base + position] = sample
+      history[base + position + phaseLength] = sample
+      const newest = base + position + phaseLength
+      for (let phase = 0; phase < this.oversampling; ++phase) {
+        const taps = phase * phaseLength
+        let y = 0
+        for (let k = 0; k < phaseLength; ++k) y += filter[taps + k] * history[newest - k]
+        const magnitude = y < 0 ? -y : y
+        if (magnitude > peak) peak = magnitude
+      }
+    }
+    this.historyPosition = (position + 1) % phaseLength
+    return peak
   }
 }
 
