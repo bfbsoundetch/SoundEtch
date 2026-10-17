@@ -204,6 +204,7 @@
           <button id="first-header-button" class="project-button tooltipped clickable">
             <svg class="header-button record" viewBox="0 0 500 500" aria-hidden="true">
               <use xlink:href="#record" />
+              <use class="record-button-slash" xlink:href="#slash" />
             </svg>
             <svg class="header-button play" viewBox="0 0 500 500" aria-hidden="true">
               <use xlink:href="#play" />
@@ -229,13 +230,13 @@
             <span>Add Clip...</span>
           </button>
           <div></div>
-          <button id="mic-button" class="project-button tooltipped clickable">
+          <button id="mic-button" class="project-button media-stream-button tooltipped clickable">
             <svg class="header-button" viewBox="0 0 500 500" aria-hidden="true">
               <use xlink:href="#microphone" />
             </svg>
             <span>Enable Microphone</span>
           </button>
-          <button id="capture-tab-button" class="project-button tooltipped clickable">
+          <button id="capture-tab-button" class="project-button media-stream-button tooltipped clickable">
             <svg class="header-button" viewBox="0 0 500 500" aria-hidden="true">
               <use xlink:href="#browser-tab" />
             </svg>
@@ -457,7 +458,7 @@
             <button
               type="button"
               id="meeting-mic-button"
-              class="meeting-button tooltipped clickable"
+              class="meeting-button media-stream-button tooltipped clickable"
               onclick="LocalMediaStreams.startAudioDevice()"
             >
               <svg class="meeting-icon" viewBox="0 0 500 500" aria-hidden="true">
@@ -468,7 +469,7 @@
             <button
               type="button"
               id="meeting-camera-button"
-              class="meeting-button tooltipped clickable"
+              class="meeting-button media-stream-button tooltipped clickable"
               onclick="LocalMediaStreams.startVideoDevice()"
             >
               <svg class="meeting-icon" viewBox="0 0 500 500" aria-hidden="true">
@@ -518,6 +519,7 @@
           <button id="meeting-record-button" type="button" class="meeting-button tooltipped clickable">
             <svg class="header-button record" viewBox="0 0 500 500" aria-hidden="true">
               <use xlink:href="#record" />
+              <use class="record-button-slash" xlink:href="#slash" />
             </svg>
             <svg class="header-button play" viewBox="0 0 500 500" aria-hidden="true">
               <use xlink:href="#play" />

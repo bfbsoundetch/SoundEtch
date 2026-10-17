@@ -337,6 +337,14 @@ dialog.overlay[open] {
   opacity: 0.5;
 }
 
+.record-button-slash {
+  display: none;
+}
+
+.record-button-unavailable .record-button-slash {
+  display: inline;
+}
+
 .record-button-countdown {
   position: absolute;
   inset: 0;
@@ -455,6 +463,11 @@ dialog.overlay[open] {
   height: 3rem;
   flex: 1;
   user-select: none;
+}
+
+.media-stream-button[aria-pressed='true'] {
+  background: var(--color);
+  color: var(--bg-color);
 }
 
 .tooltipped span {
@@ -3957,6 +3970,7 @@ input::placeholder {
 
 @media (forced-colors: active) {
   .track-mute-button[aria-pressed='true'],
+  .media-stream-button[aria-pressed='true'],
   .track-solo-button[aria-pressed='true'],
   .track-display-mode-option[aria-checked='true'],
   #transcript-panel-content .transcript-word.playing,
