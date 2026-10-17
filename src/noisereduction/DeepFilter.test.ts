@@ -23,7 +23,35 @@ test.each([
   await expect(DeepFilter.create()).rejects.toThrow()
 
   expect(fetchResource.mock.calls).toEqual([
-    [`${resourceBase}df_bg.wasm?v=dfstate-api`],
+    [`${resourceBase}df_bg.wasm?v=simd-mmm`],
     [`${resourceBase}DeepFilterNet3_onnx.tar.gz`],
   ])
+})
+
+test('drops the DeepFilter wasm cached by an earlier version once the current one is fetched', async () => {
+  vi.resetModules()
+  vi.stubEnv('BASE_URL', '/')
+  vi.stubGlobal('location', { origin: 'https://soundetch.test' })
+  const resourceBase = 'https://soundetch.test/noisereduction/'
+  const modelUrl = `${resourceBase}DeepFilterNet3_onnx.tar.gz`
+  const unrelatedUrl = `${resourceBase}other.bin`
+  const cachedUrls = [`${resourceBase}df_bg.wasm?v=dfstate-api`, modelUrl, unrelatedUrl]
+  vi.stubGlobal('caches', {
+    open: async () => ({
+      match: async (url: string) => (cachedUrls.includes(url) ? new Response(new Uint8Array(1)) : undefined),
+      put: async (url: string) => void cachedUrls.push(url),
+      keys: async () => cachedUrls.map((url) => new Request(url)),
+      delete: async (request: Request) => cachedUrls.splice(cachedUrls.indexOf(request.url), 1).length > 0,
+    }),
+  })
+  vi.stubGlobal(
+    'fetch',
+    vi.fn(async () => new Response(new Uint8Array(1))),
+  )
+  const { DeepFilter } = await import('./DeepFilter')
+
+  // The stub bytes are not a WebAssembly module, so initialization fails after caching.
+  await expect(DeepFilter.create()).rejects.toThrow()
+
+  expect(cachedUrls).toEqual([modelUrl, unrelatedUrl, `${resourceBase}df_bg.wasm?v=simd-mmm`])
 })

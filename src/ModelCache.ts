@@ -42,7 +42,7 @@ interface ModelCacheDefinition {
 
 const DEEP_FILTER_ASSETS: readonly CachedAsset[] = [
   { filename: 'DeepFilterNet3_onnx.tar.gz', bytes: 7_983_136 },
-  { filename: 'df_bg.wasm', bytes: 4_876_732 },
+  { filename: 'df_bg.wasm', bytes: 4_891_126 },
 ]
 
 const GRANITE_ASSETS: readonly CachedAsset[] = Object.entries(TRANSCRIPTION_ASSET_BYTES)

@@ -108,7 +108,7 @@ function resourceUrl(filename: string) {
   const basePath = import.meta.env.BASE_URL.endsWith('/') ? import.meta.env.BASE_URL : `${import.meta.env.BASE_URL}/`
   const url = new URL(`noisereduction/${filename}`, new URL(basePath, globalThis.location.origin))
   if (filename == 'df_bg.wasm') {
-    url.searchParams.set('v', 'dfstate-api')
+    url.searchParams.set('v', 'simd-mmm')
   }
   return url.href
 }
@@ -125,5 +125,17 @@ async function getCachedOrFetch(url: string) {
     throw new Error(`Could not load noise reduction resource: ${response.status} ${response.statusText}`)
   }
   await cache.put(url, response.clone())
+  await deleteSupersededVersions(cache, url)
   return response.arrayBuffer()
+}
+
+// A cache-busting version bump leaves the previous build of a resource cached under its old URL.
+async function deleteSupersededVersions(cache: Cache, url: string) {
+  const { pathname } = new URL(url)
+  const requests = await cache.keys()
+  await Promise.all(
+    requests
+      .filter((request) => request.url != url && new URL(request.url).pathname == pathname)
+      .map((request) => cache.delete(request)),
+  )
 }

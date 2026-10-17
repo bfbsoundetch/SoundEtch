@@ -54,7 +54,7 @@ class FakeCacheStorage {
 test('reports cached model bytes and unloads only each model cache', async () => {
   const storage = new FakeCacheStorage()
   const deepFilterModelUrl = 'https://soundetch.test/soundetch/noisereduction/DeepFilterNet3_onnx.tar.gz'
-  const deepFilterWasmUrl = 'https://soundetch.test/soundetch/noisereduction/df_bg.wasm?v=dfstate-api'
+  const deepFilterWasmUrl = 'https://soundetch.test/soundetch/noisereduction/df_bg.wasm?v=simd-mmm'
   const unrelatedUrl = 'https://soundetch.test/soundetch/other-resource.bin'
   storage.add(DEEP_FILTER_CACHE_NAME, [deepFilterModelUrl, deepFilterWasmUrl, unrelatedUrl])
   storage.add(GRANITE_MODEL_CACHE_NAME, [
@@ -65,7 +65,7 @@ test('reports cached model bytes and unloads only each model cache', async () =>
   storage.add(SILERO_VAD_CACHE_NAME, ['https://models.test/model_quantized.onnx'])
 
   await expect(getModelCacheUsage(storage as unknown as CacheStorage)).resolves.toEqual({
-    deepFilterNet: 7_983_136 + 4_876_732,
+    deepFilterNet: 7_983_136 + 4_891_126,
     granite:
       TRANSCRIPTION_ASSET_BYTES[GRANITE_MODEL_DATA_FILE] +
       TRANSCRIPTION_ASSET_BYTES['vocab.json'] +

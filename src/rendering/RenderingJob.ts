@@ -28,6 +28,9 @@ import { GateEffect } from '../effects/gate/GateEffect'
 
 const BLOCK_SIZE = 1024
 const RENDER_CHUNK_SAMPLE_CAPACITY = 1024 * 1024
+// Consumers report progress per chunk. Slow effects such as noise reduction take seconds to fill a whole
+// chunk, so a partial chunk is posted once this much time has passed since the last one.
+const RENDER_CHUNK_MAX_INTERVAL_MS = 100
 
 self.onmessage = async (e) => {
   const { argument, encodingPort } = e.data as RenderingWorkerStartMessage
@@ -106,24 +109,26 @@ self.onmessage = async (e) => {
     output[i] = new Float32Array(BLOCK_SIZE)
   }
 
-  let pendingChunk = new Float32Array(RENDER_CHUNK_SAMPLE_CAPACITY)
+  const pendingChunk = new Float32Array(RENDER_CHUNK_SAMPLE_CAPACITY)
   let pendingLength = 0
+  let lastFlushTime = performance.now()
 
   const flushPendingChunk = () => {
     if (pendingLength === 0) {
       return
     }
 
+    const chunk = pendingChunk.slice(0, pendingLength)
     encodingPort.postMessage(
       {
         type: 'audio',
-        buffer: pendingChunk.buffer,
+        buffer: chunk.buffer,
         length: pendingLength,
       },
-      [pendingChunk.buffer],
+      [chunk.buffer],
     )
-    pendingChunk = new Float32Array(RENDER_CHUNK_SAMPLE_CAPACITY)
     pendingLength = 0
+    lastFlushTime = performance.now()
   }
 
   for (let i = 0; i < length; i += BLOCK_SIZE) {
@@ -143,6 +148,10 @@ self.onmessage = async (e) => {
       for (let channel = 0; channel < argument.channelCount; ++channel) {
         pendingChunk[pendingLength++] = output[channel][frame]
       }
+    }
+
+    if (performance.now() - lastFlushTime >= RENDER_CHUNK_MAX_INTERVAL_MS) {
+      flushPendingChunk()
     }
   }
 

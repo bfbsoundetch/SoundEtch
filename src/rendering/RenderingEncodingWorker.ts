@@ -18,20 +18,19 @@ self.onmessage = async (e) => {
   let inputLength = 0
   let queue = Promise.resolve()
 
-  let writtenFrames = 0
+  // Counts frames copied into the encoder's input buffer, which runs at most one buffer ahead of the
+  // encoded output, so progress advances with every audio message rather than every full buffer.
+  let acceptedFrames = 0
   const writeBufferedInput = async () => {
     if (inputLength === 0) {
       return
     }
-    const chunkFrameCount = inputLength / channelCount
-    await encoderWriter.writeChunk(chunkFrameCount)
-    writtenFrames += chunkFrameCount
-    postMessage({ progress: writtenFrames / length })
+    await encoderWriter.writeChunk(inputLength / channelCount)
     inputLength = 0
   }
 
-  const appendInterleavedAudio = async (audioBuffer: ArrayBuffer, length: number) => {
-    const audio = new Float32Array(audioBuffer, 0, length)
+  const appendInterleavedAudio = async (audioBuffer: ArrayBuffer, sampleCount: number) => {
+    const audio = new Float32Array(audioBuffer, 0, sampleCount)
     let offset = 0
 
     while (offset < audio.length) {
@@ -53,10 +52,12 @@ self.onmessage = async (e) => {
 
       inputLength += availableFrames * channelCount
       offset += availableFrames * channelCount
+      acceptedFrames += availableFrames
 
       if (inputLength === inputBuffer.length) {
         await writeBufferedInput()
       }
+      postMessage({ progress: acceptedFrames / length })
     }
   }
 
