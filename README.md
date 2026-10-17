@@ -54,7 +54,7 @@ In a track's options menu, Up/Down move through the visible actions, Home/End go
 
 Ctrl/⌘+X cuts the timeline selection. Timeline copy, cut, paste, and undo shortcuts are ignored while focus is in a text field, a select, or an open dialog, and Ctrl/⌘+C copies selected text normally.
 
-In the **Transcript** panel, the arrow keys, Home, and End move between words, Shift extends the timeline selection word by word, and Enter or Space moves the cursor to the focused word.
+In the **Transcript** panel, the arrow keys, Home, and End move between words, Shift extends the timeline selection word by word, and Enter or Space moves the cursor to the focused word. F2 edits the selected text or focused word; Ctrl/⌘+Enter applies the edit, and Escape cancels it.
 
 Screen readers hear status changes: transport state, recording countdowns, edits such as cut, paste, undo, and redo, notifications, processing progress in 10% steps, and meeting joins and departures. Error notifications stay until dismissed with their close button or Escape; other notifications pause while hovered or focused. Escape also hides an open tooltip.
 
@@ -64,7 +64,11 @@ Tracks with transcription show a dedicated lane below the waveform or spectrogra
 
 Transcription ranges persist with the clip in IndexedDB and project archives. Clips created by older versions load with an empty transcription.
 
-Click a transcript interval in the timeline lane to open the read-only **Transcript** panel and select that specific placed occurrence, scrolling it toward the vertical center of the panel. When stopped or monitoring, this also selects its trim-clamped timeline interval. The panel lists every placed occurrence in timeline order, including repeated and offscreen placements; trims clamp each atom's interactive timing. Persisted multiword phrases remain one timed atom.
+Click a transcript interval in the timeline lane to open the **Transcript** panel and select that specific placed occurrence, scrolling it toward the vertical center of the panel. When stopped or monitoring, this also selects its trim-clamped timeline interval. The panel lists every placed occurrence in timeline order, including repeated and offscreen placements; trims clamp each atom's interactive timing. Persisted multiword phrases remain one timed atom.
+
+While stopped or monitoring, select text in the panel and choose **Edit text**, centered on the selection, to correct it. Applying changed text replaces the selected source interval with one timed chunk, including any pauses between its selected words, without changing audio or rerunning alignment. Unchanged fields keep their original word timing; an empty replacement removes the selected text without cutting audio. Edits save with the project and support undo/redo. Repeated placements share their clip's correction, and editing a trim-clipped word preserves its full source timing. Selections spanning separate clips or disjoint source intervals show one field per source range, applied together as one undoable edit. Line breaks stay within the replacement chunk.
+
+Closing the edit dialog restores the transcript selection: Apply selects the replacement chunk, while Cancel and Escape restore the original selected atoms. The timeline selection stays unchanged.
 
 Drag the shared bottom panel's top bar or centered grip to switch between half-screen height and full height below the main header. An upward drag of at least 24px selects full height; a downward drag of at least 24px selects half height, without needing to cross the midpoint. Smaller gestures keep the current size. The panel follows the pointer, then eases into its chosen size over 100ms on release while the timeline boundary moves with it; no intermediate height is retained. Full height has no panel shadow. Reduced-motion preferences disable the animation. Viewport/header changes update the bounds without cancelling an active drag, and tracking continues outside the moving header or after pointer-capture loss until release. A cancelled gesture or window focus loss restores the previously chosen size.
 

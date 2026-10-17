@@ -3,7 +3,14 @@ import type { SelectedRegion } from '../playback/Player'
 import type { ClipView } from '../project/ClipView'
 import type { Track } from '../project/Track'
 import type { TranscribedRange } from '../project/Transcription'
+import {
+  replaceTranscriptionRanges,
+  transcriptionRangesEqual,
+  type TranscriptionReplacement,
+} from '../transcription/TranscriptionSelection'
 import { BottomPanelController } from './BottomPanelController'
+import { TranscriptEditDialogController } from './TranscriptEditDialogController'
+import { announce } from './LiveAnnouncer'
 import type { TrackListController } from './timeline/TrackListController'
 import { formatTranscriptGap, formatTranscriptParagraph } from './transcript/TranscriptFormatting'
 import {
@@ -12,6 +19,8 @@ import {
   splitTranscriptParagraphs,
   type TrackTranscriptEntry,
 } from './transcript/TrackTranscript'
+import { getTranscriptTextEdits } from './transcript/TranscriptTextEdit'
+import { BatchCommand, SetClipTranscriptionCommand } from './undo/UndoableActions'
 
 type Binding = { entry: TrackTranscriptEntry; element: HTMLSpanElement }
 type Snapshot = {
@@ -40,8 +49,25 @@ export class TranscriptPanelController {
   private lastPlaybackSample: number | null = null
   private firstPlayingElement: HTMLSpanElement | null = null
   private keyboardAnchor: number | null = null
+  private readonly selectionMenu = document.createElement('div')
+  private editDialog: TranscriptEditDialogController | null = null
+  private applyingEdit = false
 
-  constructor(private readonly trackListController: TrackListController) {}
+  constructor(private readonly trackListController: TrackListController) {
+    this.selectionMenu.className = 'transcript-selection-menu'
+    this.selectionMenu.hidden = true
+    this.selectionMenu.setAttribute('role', 'toolbar')
+    this.selectionMenu.setAttribute('aria-label', 'Transcript selection actions')
+    const editButton = document.createElement('button')
+    editButton.type = 'button'
+    editButton.className = 'clickable'
+    editButton.textContent = 'Edit text'
+    editButton.setAttribute('aria-keyshortcuts', 'F2')
+    editButton.addEventListener('mousedown', (event) => event.preventDefault())
+    editButton.addEventListener('click', () => this.openEditDialog())
+    this.selectionMenu.append(editButton)
+    document.body.append(this.selectionMenu)
+  }
 
   get track(): Track | null {
     return this.activeTrack
@@ -76,6 +102,7 @@ export class TranscriptPanelController {
       this.selectNativeRange(binding, binding)
       binding.element.scrollIntoView({ block: 'center', inline: 'nearest' })
     }
+    this.updateSelectionMenu()
   }
 
   close(): void {
@@ -100,6 +127,8 @@ export class TranscriptPanelController {
     )
       return
     this.gesture = null
+    this.selectionMenu.hidden = true
+    if (!this.applyingEdit) this.editDialog?.close()
     this.trackListController.pointerStateManager.finishSelectingTranscript()
     this.clearOwnedNativeSelection()
     this.clearPlayback()
@@ -124,7 +153,6 @@ export class TranscriptPanelController {
       entries.forEach((entry, i) => {
         if (i > 0) paragraph.append(' ')
         const element = document.createElement('span')
-        element.tabIndex = -1
         paragraph.append(element)
         if (entry.kind === undefined) {
           const word = words[wordIndex++]
@@ -184,10 +212,12 @@ export class TranscriptPanelController {
       firstElement.scrollIntoView({ block: 'nearest', inline: 'nearest' })
     }
     this.firstHighlighted = firstElement
+    this.updateSelectionMenu()
   }
 
   syncPlayback(position?: number): void {
     if (!this.activeTrack) return
+    if (!this.trackListController.canEdit()) this.selectionMenu.hidden = true
     const sample = AudioControl.isPlaying() ? (position ?? AudioControl.audioContext?.getPosition()) : undefined
     if (sample === undefined) {
       this.clearPlayback()
@@ -241,6 +271,8 @@ export class TranscriptPanelController {
 
   private deactivate(): void {
     this.gesture = null
+    this.selectionMenu.hidden = true
+    this.editDialog?.close()
     this.trackListController.pointerStateManager.finishSelectingTranscript()
     this.clearOwnedNativeSelection()
     this.clearPlayback()
@@ -259,8 +291,10 @@ export class TranscriptPanelController {
       'mousedown',
       (event) => {
         if (event.button !== 0) return
+        this.selectionMenu.hidden = true
         const element =
           event.target instanceof Element ? event.target.closest('.transcript-word, .transcript-gap') : null
+        element?.removeAttribute('tabindex')
         this.gesture = {
           x: event.clientX,
           y: event.clientY,
@@ -268,7 +302,6 @@ export class TranscriptPanelController {
           binding: this.bindings.find((b) => b.element === element) ?? null,
         }
         if (this.canWriteSelection()) this.trackListController.pointerStateManager.startSelectingTranscript(event)
-        this.content!.focus({ preventScroll: true })
       },
       { signal },
     )
@@ -285,10 +318,34 @@ export class TranscriptPanelController {
     )
     document.addEventListener('mouseup', (event) => this.handleMouseUp(event), { signal })
     this.content!.addEventListener('keydown', (event) => this.handleKeyDown(event), { signal })
+    this.content!.addEventListener(
+      'focusout',
+      (event) => {
+        // Only the keyboard-focused atom is focusable; nested focus targets
+        // otherwise prevent native drag selection in Chromium.
+        if (event.target instanceof HTMLSpanElement) event.target.removeAttribute('tabindex')
+      },
+      { signal },
+    )
+    document.addEventListener(
+      'mousedown',
+      (event) => {
+        if (
+          event.target instanceof Node &&
+          !this.content?.contains(event.target) &&
+          !this.selectionMenu.contains(event.target)
+        )
+          this.selectionMenu.hidden = true
+      },
+      { signal },
+    )
+    window.addEventListener('resize', () => (this.selectionMenu.hidden = true), { signal })
+    window.addEventListener('scroll', () => (this.selectionMenu.hidden = true), { signal, capture: true })
     window.addEventListener(
       'blur',
       () => {
         this.gesture = null
+        this.selectionMenu.hidden = true
         this.trackListController.pointerStateManager.finishSelectingTranscript()
       },
       { signal },
@@ -296,7 +353,9 @@ export class TranscriptPanelController {
     document.addEventListener(
       'selectionchange',
       () => {
-        if (this.gesture || this.publishing || !this.content?.contains(document.activeElement)) return
+        if (this.gesture || this.publishing) return
+        this.updateSelectionMenu()
+        if (!this.content?.contains(document.activeElement)) return
         const selection = document.getSelection()
         if (!this.ownsSelection(selection)) return
         const ignored = this.ignoredSelection
@@ -354,6 +413,7 @@ export class TranscriptPanelController {
       selection.setBaseAndExtent(anchor, anchorOffset, focus, focusOffset)
     }
     this.rememberSelection(selection)
+    this.updateSelectionMenu()
   }
 
   private clearOwnedNativeSelection(): void {
@@ -419,6 +479,7 @@ export class TranscriptPanelController {
     } finally {
       this.gesture = null
       this.trackListController.pointerStateManager.finishSelectingTranscript()
+      this.updateSelectionMenu()
     }
   }
 
@@ -432,6 +493,15 @@ export class TranscriptPanelController {
   }
 
   private handleKeyDown(event: KeyboardEvent): void {
+    if (event.key === 'Escape') {
+      this.selectionMenu.hidden = true
+      return
+    }
+    if (event.key === 'F2' && !event.altKey && !event.ctrlKey && !event.metaKey) {
+      event.preventDefault()
+      this.openEditDialog()
+      return
+    }
     const bindings = this.bindings
     if (event.altKey || event.ctrlKey || event.metaKey || bindings.length === 0) return
     const current = bindings.findIndex((b) => b.element === document.activeElement)
@@ -468,6 +538,7 @@ export class TranscriptPanelController {
         return
     }
     event.preventDefault()
+    bindings[next].element.tabIndex = -1
     bindings[next].element.focus()
     if (event.shiftKey) {
       const anchor = (this.keyboardAnchor ??= current < 0 ? next : current)
@@ -516,6 +587,141 @@ export class TranscriptPanelController {
     } finally {
       this.publishing = false
     }
+  }
+  private updateSelectionMenu(): void {
+    const selection = document.getSelection()
+    this.selectionMenu.hidden = true
+    if (
+      this.gesture ||
+      !this.content?.isConnected ||
+      !this.trackListController.canEdit() ||
+      document.querySelector('dialog[open]') ||
+      !this.ownsSelection(selection) ||
+      selection.isCollapsed
+    )
+      return
+    const range = selection.getRangeAt(0)
+    if (this.wordsInRange(range).length === 0) return
+    const bounds = range.getBoundingClientRect()
+    const contentBounds = this.content.getBoundingClientRect()
+    if (bounds.bottom < contentBounds.top || bounds.top > contentBounds.bottom) return
+    this.selectionMenu.hidden = false
+    const menuBounds = this.selectionMenu.getBoundingClientRect()
+    const left = Math.max(
+      8,
+      Math.min(bounds.left + (bounds.width - menuBounds.width) / 2, window.innerWidth - menuBounds.width - 8),
+    )
+    const top =
+      bounds.top - menuBounds.height - 8 >= contentBounds.top
+        ? bounds.top - menuBounds.height - 8
+        : Math.min(bounds.bottom + 8, window.innerHeight - menuBounds.height - 8)
+    this.selectionMenu.style.left = `${left}px`
+    this.selectionMenu.style.top = `${top}px`
+  }
+
+  private openEditDialog(): void {
+    if (!this.trackListController.canEdit() || !this.activeTrack) return
+    const selection = document.getSelection()
+    const words = this.ownsSelection(selection) ? this.wordsInRange(selection.getRangeAt(0)) : []
+    if (words.length === 0) {
+      const focused = this.bindings.find((binding) => binding.element === document.activeElement)
+      if (focused) words.push(focused)
+    }
+    const range = this.ownsSelection(selection) ? selection.getRangeAt(0) : null
+    const backwards =
+      !!range &&
+      !range.collapsed &&
+      range.startContainer === selection?.focusNode &&
+      range.startOffset === selection.focusOffset
+    const selectedPlacements = new Map<number, { clipView: ClipView; startSample: number; endSample: number }>()
+    for (const { entry } of words) {
+      const interval = selectedPlacements.get(entry.placementIndex)
+      if (interval) {
+        interval.startSample = Math.min(interval.startSample, entry.startSample)
+        interval.endSample = Math.max(interval.endSample, entry.endSample)
+      } else {
+        selectedPlacements.set(entry.placementIndex, {
+          clipView: entry.clipView,
+          startSample: entry.startSample,
+          endSample: entry.endSample,
+        })
+      }
+    }
+    const edits = getTranscriptTextEdits(words.map((binding) => binding.entry))
+    if (edits.length === 0) return
+    const track = this.activeTrack
+    const views = [...track.clipViews]
+    const originals = new Map(edits.map((edit) => [edit.clip, edit.clip.transcription]))
+    this.selectionMenu.hidden = true
+    this.content!.focus({ preventScroll: true })
+    this.editDialog ??= new TranscriptEditDialogController()
+    this.editDialog.open(
+      edits,
+      this.trackListController.sampleRate,
+      async (texts) => {
+        if (
+          !this.trackListController.canEdit() ||
+          this.activeTrack !== track ||
+          track.clipViews.length !== views.length ||
+          !views.every((view, index) => track.clipViews[index] === view) ||
+          ![...originals].every(([clip, ranges]) => clip.transcription === ranges)
+        )
+          throw new Error('The transcript changed. Close this dialog and select the text again.')
+
+        const replacementsByClip = new Map<(typeof edits)[number]['clip'], TranscriptionReplacement[]>()
+        edits.forEach((edit, index) => {
+          const text = texts[index].replace(/\r\n?/g, '\n').trim()
+          if (text === edit.text) return
+          const replacements = replacementsByClip.get(edit.clip) ?? []
+          replacements.push({
+            startSample: edit.startSample,
+            endSample: edit.endSample,
+            ranges: text
+              ? [
+                  {
+                    text,
+                    startSample: edit.startSample,
+                    endSample: edit.endSample,
+                    ...(edit.speechStartSample === undefined ? {} : { speechStartSample: edit.speechStartSample }),
+                  },
+                ]
+              : [],
+          })
+          replacementsByClip.set(edit.clip, replacements)
+        })
+        const commands: SetClipTranscriptionCommand[] = []
+        for (const [clip, replacements] of replacementsByClip) {
+          const ranges = replaceTranscriptionRanges(clip.transcription, replacements)
+          if (!transcriptionRangesEqual(clip.transcription, ranges))
+            commands.push(new SetClipTranscriptionCommand(clip, clip.transcription, ranges))
+        }
+        if (commands.length === 0) {
+          announce('Transcript text was unchanged.')
+          return
+        }
+        this.applyingEdit = true
+        try {
+          await this.trackListController.history.execute(new BatchCommand(commands, 'edit transcript text'))
+          announce('Transcript text updated. Audio and alignment were unchanged.')
+        } finally {
+          this.applyingEdit = false
+        }
+      },
+      () => {
+        if (this.activeTrack !== track) return
+        // Resolve fresh atoms: applying an edit replaces the transcript DOM.
+        const selected = this.bindings.filter(({ entry }) => {
+          const interval = selectedPlacements.get(entry.placementIndex)
+          return (
+            interval?.clipView === entry.clipView &&
+            entry.startSample < interval.endSample &&
+            entry.endSample > interval.startSample
+          )
+        })
+        if (selected.length > 0) this.selectNativeRange(selected[0], selected[selected.length - 1], backwards)
+        else this.clearOwnedNativeSelection()
+      },
+    )
   }
 
   private reveal(sample: number): void {

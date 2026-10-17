@@ -3096,6 +3096,10 @@ body:has(.bottom-panel.resizing, .bottom-panel.layout-resize) #topdiv,
   margin-top: 1rem;
 }
 
+#transcript-panel-content .transcript-word {
+  white-space: pre-wrap;
+}
+
 #transcript-panel-content .transcript-word:hover,
 #transcript-panel-content .transcript-gap:hover {
   background: var(--clickable-hover);
@@ -3128,6 +3132,80 @@ body:has(.bottom-panel.resizing, .bottom-panel.layout-resize) #topdiv,
 #transcript-panel-content ::selection {
   background: #3b90e659;
   color: var(--color);
+}
+
+.transcript-selection-menu {
+  position: fixed;
+  z-index: 1002;
+  border: 1px solid var(--color);
+  background: var(--menu-bg);
+  color: var(--color);
+}
+
+.transcript-selection-menu[hidden] {
+  display: none;
+}
+
+.transcript-selection-menu button {
+  padding: 0.5rem 0.75rem;
+}
+
+.transcript-edit-dialog {
+  width: min(42rem, calc(100vw - 2rem));
+  max-height: calc(100vh - 2rem);
+  box-sizing: border-box;
+  overflow-y: auto;
+  border: 1px solid var(--color);
+  padding: 1.5rem;
+  background: var(--menu-bg);
+  color: var(--color);
+}
+
+.transcript-edit-dialog::backdrop {
+  background: rgba(0, 0, 0, 0.4);
+}
+
+.transcript-edit-dialog h1 {
+  margin: 0 0 1rem;
+  font-size: 1.2rem;
+}
+
+.transcript-edit-dialog label {
+  display: grid;
+  gap: 0.5rem;
+  margin-top: 1rem;
+}
+
+.transcript-edit-dialog label > span {
+  font-size: 0.875rem;
+  overflow-wrap: anywhere;
+}
+
+.transcript-edit-text {
+  width: 100%;
+  box-sizing: border-box;
+  resize: vertical;
+  padding: 0.75rem;
+  font: inherit;
+  line-height: 1.5;
+  border: 1px solid var(--color);
+  background: var(--bg-color);
+  color: var(--color);
+}
+
+.transcript-edit-actions {
+  display: flex;
+  justify-content: flex-end;
+  gap: 0.75rem;
+  margin-top: 1rem;
+}
+
+.transcript-edit-actions button {
+  padding: 0.5rem 0.75rem;
+}
+
+.transcript-edit-dialog :disabled {
+  opacity: 0.5;
 }
 
 .bottom-panel-actions {
