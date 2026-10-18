@@ -30,7 +30,6 @@
             paint-order: stroke;
             stroke: black;
             stroke-width: 7;
-            white-space: pre;
           "
           x="300"
           y="60"
@@ -41,15 +40,97 @@
     </h1>
     <p></p>
     <p>
-      The De-esser, Limiter, and Gate effects are adapted from
-      <a href="https://github.com/audiojs/dynamics">AudioJS Dynamics</a>, MIT-licensed software by Dmitry Iv.
-      <a href="THIRD_PARTY_NOTICES.txt">Third-party notices.</a>
+      SoundEtch stands on the shoulders of many open-source projects. We are grateful to their
+      authors and communities:
     </p>
-    <p>
-      SoundEtch also relies on <a href="https://ko-fi.com/tf3rdl">TF3RDL</a> for spectrum analysis,
-      <a href="https://github.com/Rikorose/DeepFilterNet">DeepFilterNet</a> for noise reduction,
-      <a href="https://mediabunny.dev/">MediaBunny</a> for media processing, and
-      <a href="https://peerjs.com/">PeerJS</a> for peer-to-peer connectivity.
-    </p>
+    <div class="acknowledgements">
+      <h2>Transcription</h2>
+      <ul>
+        <li>
+          <a href="https://github.com/snakers4/silero-vad">Silero VAD</a> — voice activity
+          detection
+        </li>
+        <li>
+          <a href="https://huggingface.co/ibm-granite/granite-speech-5.0-470m-turboctc"
+            >IBM Granite Speech 5.0 TurboCTC</a
+          > — speech-to-text model
+        </li>
+        <li>
+          <a href="https://github.com/microsoft/onnxruntime">ONNX Runtime Web</a> — runs the
+          models in the browser
+        </li>
+        <li>
+          <a href="https://github.com/indutny/fft.js">fft.js</a> — fast Fourier transform
+        </li>
+      </ul>
+
+      <h2>Effects</h2>
+      <ul>
+        <li>
+          <a href="https://github.com/audiojs/dynamics">AudioJS Dynamics</a> — the De-esser,
+          Limiter, and Gate effects are adapted from it (MIT licensed, by Dmitry Iv)
+        </li>
+        <li>
+          <a href="https://github.com/teropa/weq8">WEQ8</a> — parametric equalizer
+        </li>
+        <li>
+          <a href="https://github.com/Rikorose/DeepFilterNet">DeepFilterNet</a> — noise reduction
+        </li>
+      </ul>
+
+      <h2>Media Import &amp; Export</h2>
+      <ul>
+        <li>
+          <a href="https://mediabunny.dev/">MediaBunny</a> — media processing, muxing, and
+          encoding
+        </li>
+        <li>
+          <a href="https://github.com/bilibili/web-demuxer">web-demuxer</a> — demultiplexing of
+          imported media files
+        </li>
+        <li>
+          <a href="https://lame.sourceforge.io/">LAME</a> — MP3 encoding (WebAssembly bridge from
+          the MediaBunny project)
+        </li>
+        <li>
+          <a href="https://github.com/xiph/flac">libFLAC</a> — FLAC encoding
+        </li>
+        <li>
+          <a href="https://github.com/xiph/opus">libopus</a> and
+          <a href="https://github.com/xiph/libopusenc">libopusenc</a> — Opus encoding
+        </li>
+        <li>
+          <a href="https://github.com/geekuillaume/wasm-audio-resampler">wasm-audio-resampler</a>
+          — sample-rate conversion, built on <a href="https://sourceforge.net/projects/soxr/">SoXR</a>
+        </li>
+      </ul>
+
+      <h2>Audio Engine &amp; Connectivity</h2>
+      <ul>
+        <li>
+          <a href="https://github.com/descriptinc/web-audio-js">@descript/web-audio-js</a> —
+          offline audio rendering
+        </li>
+        <li>
+          <a href="https://github.com/padenot/ringbuf.js">ringbuf.js</a> — real-time audio
+          streaming between threads
+        </li>
+        <li>
+          <a href="https://peerjs.com/">PeerJS</a> — peer-to-peer connectivity
+        </li>
+      </ul>
+
+      <h2>Analysis</h2>
+      <ul>
+        <li>
+          <a href="https://ko-fi.com/tf3rdl">TF3RDL</a> — spectrum analysis
+        </li>
+      </ul>
+
+      <p class="notices">
+        WEQ8 and web-demuxer packages via patched forks. Full license texts:
+        <a href="THIRD_PARTY_NOTICES.txt">Third-party notices.</a>
+      </p>
+    </div>
   </body>
 </html>
