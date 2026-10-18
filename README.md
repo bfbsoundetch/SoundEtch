@@ -2,6 +2,54 @@
 
 Web audio recorder and editor
 
+## Private feedback
+
+**Send Feedback…** in the application menu opens a separate, no-login feedback page. The action is disabled until the editor is built with an absolute HTTPS `VITE_FEEDBACK_URL` (HTTP localhost is allowed only in development). The separate page keeps third-party verification out of the editor's cross-origin-isolated audio environment.
+
+Production feedback is live at [soundetch-feedback.bfb-e2a.workers.dev](https://soundetch-feedback.bfb-e2a.workers.dev/). `.env.production` sets that URL for production editor builds. The editor remains on the existing assets-only Worker `damp-block-3bec`, serving `soundetch.org` and `www.soundetch.org` with its original cross-origin isolation headers.
+
+The optional log attachment controls on the feedback page explain how to open **Logs**, choose **Download .txt**, and select the export. File selection only reads the text locally. Review/redact the preview and check **Include these logs** before sending. Messages are limited to 4,000 characters and UTF-8 logs to 64 KiB; filenames, project/audio files, names, and email addresses are not requested or attached automatically. Feedback is private to the operator, not anonymous from Cloudflare.
+
+`feedback-worker/` serves the form and `/api/feedback` from one Worker origin. Every accepted report requires server-side Turnstile verification bound to that hostname and the `feedback` action. One atomic D1 INSERT enforces 3 accepted reports per IP per rolling hour and 100 per UTC day, including concurrent requests. Only a keyed IP hash is stored. A daily 03:17 UTC job removes reports older than 30 days (up to approximately 31 days live); deleted data can remain in D1's 7-day recovery history.
+
+### Feedback deployment
+
+Use **Workers Free**, **D1 Free**, and **Turnstile Free**; do not enable a paid plan. Free quota exhaustion makes intake unavailable rather than authorizing additional spending. Rejected requests still consume the shared Workers account request allowance, so this does not guarantee availability during an attack. [Workers limits](https://developers.cloudflare.com/workers/platform/limits/) · [D1 quotas](https://developers.cloudflare.com/d1/platform/pricing/) · [Turnstile plans](https://developers.cloudflare.com/turnstile/plans/)
+
+Node 22+ and the installed Wrangler dependency are required. `.yarnclean` must not remove `assets` directories: Miniflare needs its packaged runtime assets.
+
+The production Worker and the private D1 database, both named `soundetch-feedback`, are already provisioned. Routine feedback-service updates use `yarn feedback:deploy`; editor builds use `yarn build --base /` and the committed production URL. The steps below are for provisioning a new environment, not recreating the existing production resources.
+
+1. Authenticate with Cloudflare, verify the account is on Workers Free, and confirm available D1/Cron capacity. Create the database with `yarn wrangler d1 create soundetch-feedback`; put its returned UUID in the `d1_databases[0].database_id` field in `feedback-worker/wrangler.jsonc`. Do not reuse unrelated resources with the same name.
+2. Apply `yarn wrangler d1 migrations apply DB --remote --config feedback-worker/wrangler.jsonc`, then run `yarn feedback:deploy` to obtain the actual `workers.dev` hostname. The form remains unavailable until its verification configuration is supplied.
+3. Create a Free **Managed** Turnstile widget allowing exactly that hostname, with pre-clearance disabled. Set `TURNSTILE_SITE_KEY` in the Worker config's public `vars`; keep `TURNSTILE_ACTION` as `feedback`. Store its matching secret and a separate random IP-hashing secret:
+
+   ```sh
+   yarn wrangler secret put TURNSTILE_SECRET_KEY --config feedback-worker/wrangler.jsonc
+   openssl rand -hex 32
+   yarn wrangler secret put IP_HASH_SECRET --config feedback-worker/wrangler.jsonc
+   yarn feedback:deploy
+   ```
+
+   Use the generated 64-character value for `IP_HASH_SECRET`. Neither secret belongs in a `VITE_*` variable, browser bundle, committed file, or report.
+4. Verify a real submission and private D1 retrieval, then build the editor with the real feedback origin: `VITE_FEEDBACK_URL="https://YOUR-FEEDBACK-HOST/" yarn build --base /`. Publish through the editor's existing static deployment. Do not enable the link before the service works.
+
+Read reports through the authenticated D1 dashboard, not a public endpoint:
+
+```sql
+SELECT id, datetime(created_at, 'unixepoch') AS received_at, message
+FROM feedback ORDER BY created_at DESC LIMIT 50;
+SELECT message, logs FROM feedback WHERE id = '<selected-uuid>';
+```
+
+### Feedback development and verification
+
+Put a real development widget's `TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY`, `TURNSTILE_ACTION="feedback"`, and a nonproduction `IP_HASH_SECRET` in ignored `feedback-worker/.dev.vars`. Allow the development hostname on that widget. Run `yarn wrangler d1 migrations apply DB --local --config feedback-worker/wrangler.jsonc`, then `yarn feedback:dev`. For the editor entry point, use `VITE_FEEDBACK_URL=http://localhost:8787/ yarn dev`.
+
+`yarn test feedback-worker/index.test.js` uses the real Worker, assets, migrations, and isolated D1 through Wrangler's test harness; only outbound Siteverify responses are simulated. It covers admission caps/concurrency, input and wire-size boundaries, verification failures and replay, private storage, and retention.
+
+Cloudflare's public dummy keys are not a valid end-to-end substitute for the required hostname/action binding: the observed dummy Siteverify response reported `example.com` and omitted `action`. Keep the production checks intact. Browser-flow verification can isolate external verification in a temporary test harness, but live end-to-end acceptance requires a genuine configured widget. No test bypass is included in the Worker.
+
 ## Video export
 
 Choose **Video - MP4 Visualizer** in Publish Settings to export a 1920×1080 YouTube or 1080×1920 TikTok video at 60 fps. Both layouts show one oscilloscope trace from the final rendered mix, including track gain, pan, mute/solo, and effects.

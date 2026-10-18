@@ -1,0 +1,30 @@
+{
+  "$schema": "../node_modules/wrangler/config-schema.json",
+  "name": "soundetch-feedback",
+  "main": "src/index.js",
+  "compatibility_date": "2026-10-17",
+  "workers_dev": true,
+  "assets": {
+    "directory": "./public",
+    "binding": "ASSETS",
+    "run_worker_first": ["/api/*"],
+  },
+  "d1_databases": [
+    {
+      "binding": "DB",
+      "database_name": "soundetch-feedback",
+      "database_id": "9961dbfa-ce81-4178-ae01-57015edbc0e7",
+      "migrations_dir": "migrations",
+    },
+  ],
+  "vars": {
+    "TURNSTILE_SITE_KEY": "0x4AAAAAAFZwZMydVoGezprK",
+    "TURNSTILE_ACTION": "feedback",
+  },
+  "triggers": {
+    "crons": ["17 3 * * *"],
+  },
+  "observability": {
+    "enabled": false,
+  },
+}

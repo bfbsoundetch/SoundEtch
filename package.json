@@ -30,7 +30,9 @@
     "prettier": "prettier -w '**/*.{js,ts,css,html}'",
     "dev": "vite",
     "build": "tsc && vite build",
-    "preview": "vite preview"
+    "preview": "vite preview",
+    "feedback:dev": "wrangler dev --config feedback-worker/wrangler.jsonc --port 8787",
+    "feedback:deploy": "wrangler deploy --config feedback-worker/wrangler.jsonc"
   },
   "devDependencies": {
     "@types/node": "^20.16.11",
@@ -54,7 +56,8 @@
     "vite": "^6.2.0",
     "vite-plugin-node-polyfills": "^0.26.0",
     "vite-plugin-wasm": "^3.5.0",
-    "vitest": "^3.1.4"
+    "vitest": "^3.1.4",
+    "wrangler": "^4.151.1"
   },
   "resolutions": {
     "vite": "^6.2.0"

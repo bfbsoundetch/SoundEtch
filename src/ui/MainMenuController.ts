@@ -8,6 +8,7 @@ export class MainMenuController {
   private readonly editButton = document.getElementById('main-menu-edit-button') as HTMLButtonElement
   private readonly undoButton = document.getElementById('main-menu-undo-button') as HTMLButtonElement
   private readonly redoButton = document.getElementById('main-menu-redo-button') as HTMLButtonElement
+  private readonly feedbackButton = document.getElementById('open-feedback-button') as HTMLButtonElement
 
   constructor() {
     this.editButton.onclick = () => this.setEditSubmenuOpen(this.editButton.getAttribute('aria-expanded') != 'true')
@@ -20,6 +21,32 @@ export class MainMenuController {
     this.editSubmenu.onmouseleave = () => this.setEditSubmenuOpen(false)
     this.undoButton.onclick = () => void this.undo()
     this.redoButton.onclick = () => void this.redo()
+    const configuredFeedbackUrl = import.meta.env.VITE_FEEDBACK_URL?.trim()
+    let feedbackUrl: URL | undefined
+    if (configuredFeedbackUrl) {
+      try {
+        const parsedUrl = new URL(configuredFeedbackUrl)
+        if (
+          parsedUrl.protocol === 'https:' ||
+          (import.meta.env.DEV &&
+            parsedUrl.protocol === 'http:' &&
+            (parsedUrl.hostname === 'localhost' || parsedUrl.hostname === '127.0.0.1'))
+        ) {
+          feedbackUrl = parsedUrl
+        }
+      } catch {
+        // Missing or invalid deployment configuration must not open a broken URL.
+      }
+    }
+    this.feedbackButton.disabled = !feedbackUrl
+    this.feedbackButton.title = feedbackUrl ? 'Opens in a new tab' : 'Feedback is not configured for this deployment.'
+    if (feedbackUrl) {
+      const url = feedbackUrl.href
+      this.feedbackButton.onclick = () => {
+        window.open(url, '_blank', 'noopener,noreferrer')
+        this.close()
+      }
+    }
 
     this.menuDropdown.addEventListener('toggle', () => {
       this.update()

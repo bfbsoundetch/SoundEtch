@@ -1,0 +1,115 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <meta name="color-scheme" content="light dark" />
+    <meta name="referrer" content="no-referrer" />
+    <title>Send Feedback — SoundEtch</title>
+    <link rel="stylesheet" href="/form.css" />
+    <script type="module" src="/form.js"></script>
+  </head>
+  <body>
+    <main>
+      <header>
+        <p class="eyebrow">SoundEtch</p>
+        <h1>Send Feedback</h1>
+        <p>No account is needed. Please do not include passwords, secrets, or audio/project files.</p>
+      </header>
+
+      <aside class="notice" aria-labelledby="privacy-heading">
+        <h2 id="privacy-heading">Private feedback</h2>
+        <p>
+          Feedback is private to the operator and stored in Cloudflare. Reports older than 30 days are removed daily.
+          Deleted data may remain in Cloudflare's 7-day recovery history.
+        </p>
+        <p>
+          Cloudflare processes verification requests. This form does not guarantee anonymity from Cloudflare or
+          automatically redact sensitive text.
+        </p>
+      </aside>
+
+      <noscript
+        ><p>
+          JavaScript is required to verify and send feedback. Nothing is submitted while JavaScript is disabled.
+        </p></noscript
+      >
+
+      <form id="feedback-form" novalidate>
+        <fieldset id="draft-fields">
+          <legend class="visually-hidden">Your feedback</legend>
+          <div class="field">
+            <label for="message">Feedback <span class="hint">(required)</span></label>
+            <p id="message-help" class="hint">
+              Describe what happened or what you would like to change. Maximum 4,000 characters.
+            </p>
+            <textarea
+              id="message"
+              name="message"
+              rows="7"
+              maxlength="4000"
+              required
+              aria-describedby="message-help message-error"
+            ></textarea>
+            <p id="message-error" class="error" hidden></p>
+          </div>
+
+          <div class="field">
+            <label for="log-file">Existing log export <span class="hint">(optional .txt, up to 64 KiB)</span></label>
+            <p id="logs-help" class="hint">
+              To attach logs to this feedback, open SoundEtch's main menu, choose Logs, then Download .txt, and select
+              the file below. Logs are optional and may contain sensitive text; review and redact them before including
+              them.
+            </p>
+            <input
+              id="log-file"
+              type="file"
+              accept=".txt,text/plain"
+              aria-describedby="logs-help logs-consent-help logs-error"
+            />
+            <button id="remove-logs" type="button" class="secondary" disabled>Remove logs</button>
+            <p id="logs-consent-help" class="hint">
+              Choosing a file only reads it on this device. Review and edit the text below, then explicitly choose
+              whether to include it. No file name is sent.
+            </p>
+            <label for="logs-preview">Review and redact logs</label>
+            <textarea
+              id="logs-preview"
+              rows="8"
+              spellcheck="false"
+              disabled
+              aria-describedby="logs-consent-help logs-size logs-error"
+            ></textarea>
+            <p id="logs-size" class="hint">No log file selected.</p>
+            <label class="checkbox-label" for="include-logs">
+              <input id="include-logs" type="checkbox" disabled aria-describedby="logs-consent-help logs-error" />
+              <span>Include these logs</span>
+            </label>
+            <p id="logs-error" class="error" hidden></p>
+          </div>
+        </fieldset>
+
+        <section class="field" aria-labelledby="verification-heading">
+          <h2 id="verification-heading">Verification</h2>
+          <p id="verification-help" class="hint">
+            Complete the verification before sending. If it expires or fails, retry without losing your draft.
+          </p>
+          <div id="turnstile-widget" aria-describedby="verification-help verification-error"></div>
+          <p id="verification-error" class="error" hidden></p>
+          <button
+            id="retry-verification"
+            type="button"
+            class="secondary"
+            disabled
+            aria-describedby="verification-error"
+          >
+            Retry verification
+          </button>
+        </section>
+
+        <button id="send-feedback" type="submit" disabled>Send feedback</button>
+        <p id="feedback-status" role="status" aria-live="polite" aria-atomic="true">Loading verification…</p>
+      </form>
+    </main>
+  </body>
+</html>
