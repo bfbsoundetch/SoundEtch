@@ -7,10 +7,15 @@ p {
   margin: 2rem;
 }
 
+.acknowledgements-header {
+  font-size: large;
+}
+
 .acknowledgements {
   max-width: 46rem;
   margin: 0 auto;
   text-align: left;
+  font-size: medium;
 }
 
 .acknowledgements h2 {
