@@ -110,8 +110,8 @@ class ClipSummarizer {
       const channel = i % this.clip.getChannelCount()
       if (i >= skip * this.clip.getChannelCount() * (resultIndex / 2 + 1)) {
         for (let c = 0; c < this.clip.getChannelCount(); ++c) {
-          result[c][resultIndex] = max[c]
-          result[c][resultIndex + 1] = min[c]
+          result[c][resultIndex] = Math.min(max[c], 1)
+          result[c][resultIndex + 1] = Math.max(min[c], -1)
         }
         max.fill(-1)
         min.fill(1)
@@ -126,8 +126,8 @@ class ClipSummarizer {
     }
     for (let channel = 0; channel < this.clip.getChannelCount(); ++channel) {
       if (max[channel] != -1 || min[channel] != 1) {
-        result[channel][resultIndex] = max[channel]
-        result[channel][resultIndex + 1] = min[channel]
+        result[channel][resultIndex] = Math.min(max[channel], 1)
+        result[channel][resultIndex + 1] = Math.max(min[channel], -1)
       }
     }
     return result
