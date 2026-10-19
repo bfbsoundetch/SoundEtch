@@ -1,10 +1,27 @@
 body {
   font-family: Georgia, 'Times New Roman', Times, serif;
-  font-size: x-large;
+  font-size: xx-large;
 }
 
 p {
-  margin: 2rem;
+  margin-left: 6rem;
+  margin-right: 6rem;
+  margin-top: 3rem;
+}
+
+.features-section {
+  font-size: x-large;
+  text-align: left;
+  margin: 0 6rem;
+}
+
+.features-section ul {
+  display: inline-block;
+}
+
+.features-section li {
+  margin-top: 1rem;
+  vertical-align: middle;
 }
 
 .acknowledgements-header {

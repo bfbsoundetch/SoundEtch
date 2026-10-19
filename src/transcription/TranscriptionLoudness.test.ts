@@ -9,7 +9,10 @@ const SAMPLE_RATE = 16_000
 
 function sine(peakDbfs: number, seconds = 3): Float32Array {
   const amplitude = 10 ** (peakDbfs / 20)
-  return Float32Array.from({ length: seconds * SAMPLE_RATE }, (_, n) => amplitude * Math.sin((2 * Math.PI * 1000 * n) / SAMPLE_RATE))
+  return Float32Array.from(
+    { length: seconds * SAMPLE_RATE },
+    (_, n) => amplitude * Math.sin((2 * Math.PI * 1000 * n) / SAMPLE_RATE),
+  )
 }
 
 function loudness(samples: Float32Array): number {
