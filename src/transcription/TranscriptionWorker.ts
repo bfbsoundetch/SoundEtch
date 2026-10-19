@@ -61,6 +61,7 @@ import {
   traceWebAssemblyInstantiation,
 } from './GraniteDiagnostics'
 import { SileroVad } from './SileroVad'
+import { normalizeTranscriptionLoudness } from './TranscriptionLoudness'
 import { transcriptGapRanges } from './TranscriptGaps'
 
 const MODEL_BASE_URL = `https://huggingface.co/${MODEL_REPO_ID}/resolve/${MODEL_REVISION}/onnx-ctc/`
@@ -260,6 +261,10 @@ async function processTranscription(command: TranscribeCommand): Promise<void> {
       backend: runtime.backend,
     })
     const audio = await traceStage(`${intervalLabel} audio read`, () => readSelectedAudio16k(command, interval))
+    // Energy thresholds keep the clip's own level: quiet audio stays silence after normalization.
+    const energies = computeFrameEnergies(audio, SILERO_VAD_FRAME_SAMPLES)
+    const { measuredLufs, gainDb } = normalizeTranscriptionLoudness(audio)
+    graniteLog(`${intervalLabel}: ${measuredLufs.toFixed(1)} LUFS, ${gainDb.toFixed(1)} dB gain`)
     const vadProbabilities = await traceStage(`${intervalLabel} Silero VAD`, () =>
       runtime.vad.computeProbabilities(
         audio,
@@ -274,7 +279,6 @@ async function processTranscription(command: TranscribeCommand): Promise<void> {
     )
     const { speechRegions, segments } = segmentSpeechFromVadProbabilities(vadProbabilities, audio.length)
     graniteLog(`${intervalLabel}: ${(audio.length / GRANITE_SAMPLE_RATE).toFixed(1)} s, ${segments.length} segments`)
-    const energies = computeFrameEnergies(audio, SILERO_VAD_FRAME_SAMPLES)
     const speechMask = buildSpeechSupportMask(
       vadProbabilities,
       segments,
