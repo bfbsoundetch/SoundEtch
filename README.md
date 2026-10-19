@@ -50,6 +50,14 @@ Put a real development widget's `TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY`, `T
 
 Cloudflare's public dummy keys are not a valid end-to-end substitute for the required hostname/action binding: the observed dummy Siteverify response reported `example.com` and omitted `action`. Keep the production checks intact. Browser-flow verification can isolate external verification in a temporary test harness, but live end-to-end acceptance requires a genuine configured widget. No test bypass is included in the Worker.
 
+## Video import and preview
+
+Use **Add clip → Local file** to import video, or the existing **Remote URL** option for a CORS-accessible media URL. Supported containers/codecs depend on the browser's decoders. Imported video opens the shared bottom **Video** panel automatically; reopen it with **Video…** beside the timeline controls. If several tracks contain video, the panel's **Video track** selector chooses which one to preview.
+
+The picture follows playback, pause, timeline cursor dragging, and stopped selections. Video and its decoded audio share the same clip placement, so moving, trimming, splitting, or copying the clip retains the source timing. Gaps show black, metadata rotation is respected, and the picture fits without stretching. Sound comes only from the timeline mix, not a second video player.
+
+Original compressed footage is stored with the project and included in project archives. Video without audio keeps its full timeline duration without creating a PCM file. Import cancellation/failure removes the new media assets. This feature does not add camera recording, video composition/editing controls, or footage export; MP4 publishing remains the existing visualizer described below.
+
 ## Video export
 
 Choose **Video - MP4 Visualizer** in Publish Settings to export a 1920×1080 YouTube or 1080×1920 TikTok video at 60 fps. Both layouts show one oscilloscope trace from the final rendered mix, including track gain, pan, mute/solo, and effects.

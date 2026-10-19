@@ -42,6 +42,23 @@ export class FileSystemUtils {
     }
   }
 
+  static async getExistingFile(dirName: string, fileName: string): Promise<Blob> {
+    if (GlobalSettings.useMemoryFS || (!FileSystemUtils.hasOpfs() && typeof window !== 'undefined')) {
+      const handle = MemoryBackedFileSystem.getExistingFileHandle(dirName, fileName)
+      if (!handle) {
+        throw new DOMException(`Video file not found: ${fileName}`, 'NotFoundError')
+      }
+      return handle.getFile()
+    }
+    if (!FileSystemUtils.hasOpfs()) {
+      throw new Error('Video file access requires browser storage')
+    }
+    const root = await navigator.storage.getDirectory()
+    const directory = await root.getDirectoryHandle(dirName, { create: false })
+    const handle = await directory.getFileHandle(fileName, { create: false })
+    return handle.getFile()
+  }
+
   static async deleteFile(dirName: string, fileName: string): Promise<void> {
     if (GlobalSettings.useMemoryFS) {
       MemoryBackedFileSystem.deleteFile(dirName, fileName)

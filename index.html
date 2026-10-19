@@ -20,7 +20,13 @@
     async function audioFileLocalHandler() {
       const inputForm = document.getElementById('audio-file-local')
       if (inputForm.files.length == 1) {
-        await window.addClipController.importLocalFile(inputForm.files[0])
+        const Recorder = await window.loadRecorder()
+        try {
+          const track = await window.addClipController.importLocalFile(inputForm.files[0])
+          if (track) document.getElementById('add-clip-modal').close()
+        } finally {
+          inputForm.value = ''
+        }
       }
     }
     async function audioFileRemoteHandler() {
@@ -29,7 +35,8 @@
         return
       }
       const Recorder = await window.loadRecorder()
-      await Recorder.createFromUrl(inputForm.value)
+      const track = await Recorder.createFromUrl(inputForm.value)
+      if (track) document.getElementById('add-clip-modal').close()
     }
     function setAddClipSource(sourceType) {
       const localSection = document.getElementById('add-clip-local-section')
@@ -354,6 +361,9 @@
           <button type="button" id="timeline-go-to-time-button" class="bordered clickable timeline-view-button">
             Go to time…
           </button>
+          <button type="button" id="timeline-video-button" class="bordered clickable timeline-view-button">
+            Video…
+          </button>
         </div>
         <div id="input-track-lists">
           <div id="timeline-info-area">
@@ -405,7 +415,7 @@
           >
             Choose local file...
           </button>
-          <input type="file" id="audio-file-local" accept="audio/*" hidden onchange="audioFileLocalHandler()" />
+          <input type="file" id="audio-file-local" accept="audio/*,video/*" hidden onchange="audioFileLocalHandler()" />
         </div>
         <div id="add-clip-remote-section" class="add-clip-url-option" hidden>
           <label for="audio-file-url">From URL</label>

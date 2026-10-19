@@ -2,12 +2,16 @@ import { Restorable } from '../persistence/Restoration'
 import { DatabasePersisted } from '../persistence/DatabasePersisted'
 import { Summary } from './Summary'
 import type { TranscribedRange } from './Transcription'
+import type { VideoSegment } from './Video'
 
 @Restorable('Clip')
 export class Clip extends DatabasePersisted {
   readonly summary: Summary
   transcription: TranscribedRange[] = []
   importedMetadata: Record<string, unknown> | null = null
+  audioPresent = true
+  videoLength = 0
+  videoSegments: VideoSegment[] = []
   readonly tags: Record<string, string>
   readonly sourceFilename: string | null
 
@@ -26,7 +30,7 @@ export class Clip extends DatabasePersisted {
   }
 
   get length(): number {
-    return this.summary.length
+    return Math.max(this.summary.length, this.videoLength)
   }
 
   set length(length: number) {

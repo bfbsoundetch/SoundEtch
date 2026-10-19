@@ -31,6 +31,14 @@ describe('importedTags', () => {
     ).toEqual({ ARTIST: 'Artist', TITLE: 'Title' })
   })
 
+  test('uses video stream metadata for silent footage', () => {
+    expect(
+      importedTags({ title: 'Container title' }, [
+        { codec_type_string: 'video', tags: { ARTIST: 'Video artist', TITLE: 'Stream title' } },
+      ]),
+    ).toEqual({ ARTIST: 'Video artist', title: 'Container title' })
+  })
+
   test('container tags override stream tags case-insensitively', () => {
     expect(
       importedTags({ artist: 'Container artist', album: 'Album' }, [

@@ -44,6 +44,7 @@ import type { ProcessingModalController } from '../ProcessingModalController'
 import { TranscriptPanelController } from '../TranscriptPanelController'
 import { getTrackTranscriptEntries } from '../transcript/TrackTranscript'
 import type { TrackTranscriptEntry } from '../transcript/TrackTranscript'
+import { VideoPanelController } from '../VideoPanelController'
 
 interface Selection {
   startSample: number
@@ -121,6 +122,8 @@ export class TrackListController {
   private readonly trackDisplayModes = new Map<Track, TrackDisplayMode>()
   private spectrogramService: SpectrogramService | null = null
   private transcriptPanelController: TranscriptPanelController | null = null
+  private videoPanelController: VideoPanelController | null = null
+  private videoPanelRequest = 0
 
   readonly timelineSelectionContextMenu = new ContextMenuController(
     'timeline-selection-contextmenu',
@@ -257,6 +260,11 @@ export class TrackListController {
       this.translate(this.width / 4)
     })
     document.getElementById('timeline-go-to-time-button')!.addEventListener('click', () => this.openGoToTime())
+    document.getElementById('timeline-video-button')!.addEventListener('click', () => {
+      void this.openVideoPanel().catch((error) => {
+        NotificationsController.showError(error instanceof Error ? error : new Error(String(error)))
+      })
+    })
 
     this.newTrackDropRegion.className = 'new-track-drop-region clickable'
     this.newTrackDropRegion.textContent = '+ new track'
@@ -267,6 +275,7 @@ export class TrackListController {
     this.history.addChangeListener(() => {
       this.draw()
       this.transcriptPanelController?.refreshData()
+      this.videoPanelController?.refreshData()
     })
     KeyPressController.addKeyDownListener((event) => this.handleKeyDown(event))
 
@@ -311,6 +320,8 @@ export class TrackListController {
       this.sampleRate = project.sampleRate
       if (this.renderedProjectId != project.id) {
         this.transcriptPanelController?.close()
+        ++this.videoPanelRequest
+        this.videoPanelController?.close()
         this.renderedProjectId = project.id
         this.translationUnits = 0
         this.waveforms.forEach((waveform) => waveform.remove())
@@ -429,12 +440,22 @@ export class TrackListController {
       const panelTrack = this.transcriptPanelController?.track
       if (panelTrack && !project.getTracks().includes(panelTrack)) this.transcriptPanelController?.close()
       else this.transcriptPanelController?.refreshData()
+      this.videoPanelController?.refreshData(project)
     })
   }
 
   openTrackTranscript(track: Track, entry: TrackTranscriptEntry): void {
+    ++this.videoPanelRequest
     this.transcriptPanelController ??= new TranscriptPanelController(this)
     this.transcriptPanelController.open(track, entry)
+  }
+
+  async openVideoPanel(track?: Track): Promise<void> {
+    const request = ++this.videoPanelRequest
+    const project = await ProjectManager.getActiveProject()
+    if (request !== this.videoPanelRequest || project !== (await ProjectManager.getActiveProject())) return
+    this.videoPanelController ??= new VideoPanelController(this)
+    this.videoPanelController.open(project, track)
   }
 
   private getSpectrogramService(): SpectrogramService {

@@ -222,6 +222,7 @@ export class SpectrogramService {
     const marginByKey = new Map<string, TileDemand>()
 
     for (const placement of frame.clips) {
+      if (!placement.clip.audioPresent) continue
       const clipId = placement.clip.id
       if (clipId === undefined) continue
       const visibleTimelineStart = Math.max(frame.timelineStart, placement.timelineStart)
@@ -230,7 +231,7 @@ export class SpectrogramService {
 
       const sourceStart = Math.max(0, placement.sourceStart + visibleTimelineStart - placement.timelineStart)
       const sourceEnd = Math.min(
-        placement.clip.length,
+        placement.clip.summary.length,
         placement.sourceStart + visibleTimelineEnd - placement.timelineStart,
       )
       if (sourceEnd <= sourceStart) continue
@@ -308,19 +309,19 @@ export class SpectrogramService {
     const hop = this.settings.hopSize * 2 ** demand.key.level
     const ownedStart = demand.key.tileIndex * TILE_COLUMNS * hop
     const ownedEnd = (demand.key.tileIndex + 1) * TILE_COLUMNS * hop
-    if (ownedEnd <= 0 || ownedStart >= demand.clip.length) return false
+    if (ownedEnd <= 0 || ownedStart >= demand.clip.summary.length) return false
     const entry = this.cache.get(keyString)
     if (entry === undefined) return true
-    if (demand.clip.length <= entry.sourceFrameCount) return false
+    if (demand.clip.summary.length <= entry.sourceFrameCount) return false
 
     const firstColumn = demand.key.tileIndex * TILE_COLUMNS - HALO_COLUMNS
     const finalColumn = firstColumn + TILE_COLUMNS + 2 * HALO_COLUMNS - 1
     const firstWindowFrame = firstColumn * hop - this.settings.fftSize / 2
     const finalWindowFrame = finalColumn * hop - this.settings.fftSize / 2 + this.settings.fftSize
-    if (finalWindowFrame <= entry.sourceFrameCount || firstWindowFrame >= demand.clip.length) return false
+    if (finalWindowFrame <= entry.sourceFrameCount || firstWindowFrame >= demand.clip.summary.length) return false
 
     const stoppedGrowth =
-      this.lastAudioState === AudioState.STOPPED && demand.clip.length > entry.lastRequestedClipLength
+      this.lastAudioState === AudioState.STOPPED && demand.clip.summary.length > entry.lastRequestedClipLength
     demand.forceTailRefresh = entry.refreshEpoch < this.tailRefreshEpoch || stoppedGrowth
     return demand.forceTailRefresh || performance.now() - entry.lastRefreshAt >= 500
   }
@@ -497,6 +498,7 @@ export class SpectrogramService {
     const timelineEnd = frame.timelineStart + frame.cssWidth * frame.samplesPerCssPixel
     const visible = new Array<VisiblePlacement>()
     for (const placement of frame.clips) {
+      if (!placement.clip.audioPresent) continue
       const placementEnd = placement.timelineStart + placement.length
       let visibleTimelineStart = Math.max(frame.timelineStart, placement.timelineStart)
       let visibleTimelineEnd = Math.min(timelineEnd, placementEnd)
@@ -508,9 +510,9 @@ export class SpectrogramService {
         visibleTimelineStart -= sourceStart
         sourceStart = 0
       }
-      if (sourceEnd > placement.clip.length) {
-        visibleTimelineEnd -= sourceEnd - placement.clip.length
-        sourceEnd = placement.clip.length
+      if (sourceEnd > placement.clip.summary.length) {
+        visibleTimelineEnd -= sourceEnd - placement.clip.summary.length
+        sourceEnd = placement.clip.summary.length
       }
       if (sourceEnd <= sourceStart || visibleTimelineEnd <= visibleTimelineStart) continue
 
@@ -552,18 +554,19 @@ export class SpectrogramService {
   ): Promise<CachedSpectrogramTile | null> {
     if (this.workflow !== null) throw new Error('SpectrogramService supports one source workflow at a time')
     if (this.sampleRate <= 0 || this.directoryName.length === 0) return null
+    if (!clip.audioPresent) return null
 
     const keyString = this.getKeyString(key)
     const existing = this.cache.get(keyString) ?? null
     const hop = this.settings.hopSize * 2 ** key.level
     const ownedStart = key.tileIndex * TILE_COLUMNS * hop
     const ownedEnd = (key.tileIndex + 1) * TILE_COLUMNS * hop
-    if (ownedEnd <= 0 || ownedStart >= clip.length) return existing
+    if (ownedEnd <= 0 || ownedStart >= clip.summary.length) return existing
 
     const now = performance.now()
     if (
       existing !== null &&
-      clip.length > existing.sourceFrameCount &&
+      clip.summary.length > existing.sourceFrameCount &&
       !forceTailRefresh &&
       now - existing.lastRefreshAt < 500
     ) {
@@ -578,7 +581,7 @@ export class SpectrogramService {
       ])
       const sourceChannelCount = clip.getChannelCount()
       const fileFrameCount = Math.floor(file.size / (sourceChannelCount * Float32Array.BYTES_PER_ELEMENT))
-      const sourceFrameCount = Math.max(0, Math.min(fileFrameCount, Math.floor(clip.length)))
+      const sourceFrameCount = Math.max(0, Math.min(fileFrameCount, Math.floor(clip.summary.length)))
       const firstColumn = key.tileIndex * TILE_COLUMNS - HALO_COLUMNS
       const finalColumn = firstColumn + TILE_COLUMNS + 2 * HALO_COLUMNS - 1
       const firstWindowFrame = firstColumn * hop - this.settings.fftSize / 2
@@ -586,7 +589,7 @@ export class SpectrogramService {
 
       if (existing !== null) {
         existing.lastRefreshAt = now
-        existing.lastRequestedClipLength = clip.length
+        existing.lastRequestedClipLength = clip.summary.length
         existing.refreshEpoch = this.tailRefreshEpoch
         const newlyAvailableFramesCrossTile =
           sourceFrameCount > existing.sourceFrameCount &&
@@ -608,7 +611,7 @@ export class SpectrogramService {
           keyString,
           key,
           clip,
-          requestedClipLength: clip.length,
+          requestedClipLength: clip.summary.length,
           refreshEpoch: this.tailRefreshEpoch,
           gpuTile,
           firstColumn,
@@ -622,7 +625,7 @@ export class SpectrogramService {
           type: 'load',
           requestId,
           file,
-          clipLength: clip.length,
+          clipLength: clip.summary.length,
           sourceChannelCount,
           hop,
           fftSize: this.settings.fftSize,

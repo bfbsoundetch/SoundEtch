@@ -712,6 +712,7 @@ export class ClipViewController extends TrackListItemController {
   private readonly spectrogramFallbackElement = document.createElementNS('http://www.w3.org/2000/svg', 'rect')
   readonly headerElement = document.createElementNS('http://www.w3.org/2000/svg', 'rect')
   readonly headerTitleElement = document.createElementNS('http://www.w3.org/2000/svg', 'foreignObject')
+  private readonly silentVideoLabel = document.createElementNS('http://www.w3.org/2000/svg', 'text')
   readonly headerInfoElement = document.createElementNS('http://www.w3.org/2000/svg', 'foreignObject')
   readonly endCrossFadeHeaderElement = document.createElementNS('http://www.w3.org/2000/svg', 'rect')
   readonly endCrossFadeHeaderTitleElement = document.createElementNS('http://www.w3.org/2000/svg', 'foreignObject')
@@ -753,6 +754,11 @@ export class ClipViewController extends TrackListItemController {
 
     this.headerTitleDivElement.innerText = this.clipView.clip.name
     this.headerTitleElement.appendChild(this.headerTitleDivElement)
+    this.silentVideoLabel.textContent = 'Video · no audio'
+    this.silentVideoLabel.setAttribute('fill', 'var(--waveform-stroke)')
+    this.silentVideoLabel.setAttribute('text-anchor', 'middle')
+    this.silentVideoLabel.setAttribute('pointer-events', 'none')
+    this.silentVideoLabel.setAttribute('aria-hidden', 'true')
     this.headerTitleElement.setAttribute('aria-hidden', 'true')
     this.endCrossFadeHeaderTitleElement.setAttribute('aria-hidden', 'true')
     this.headerTitleElement.classList.add('clip-view-header-title')
@@ -833,6 +839,7 @@ export class ClipViewController extends TrackListItemController {
     this.clipElementsGroup.appendChild(this.svgPathElement)
     this.clipElementsGroup.appendChild(this.startCrossFadePathElement)
     this.clipElementsGroup.appendChild(this.endCrossFadePathElement)
+    this.clipElementsGroup.appendChild(this.silentVideoLabel)
     this.transcriptionOverlay = new TranscriptionOverlayController(
       this.trackListController,
       this.clipView.clip,
@@ -940,8 +947,9 @@ export class ClipViewController extends TrackListItemController {
   }
 
   drawBoundingBox(startSample: number, endSample: number) {
-    this.headerTitleDivElement.innerText = this.clipView.clip.name
-    this.infoButton.setAttribute('aria-label', `View info for ${this.clipView.clip.name}`)
+    const video = this.clipView.clip.videoSegments.length > 0
+    this.headerTitleDivElement.innerText = `${video ? 'Video · ' : ''}${this.clipView.clip.name}`
+    this.infoButton.setAttribute('aria-label', `View info for ${video ? 'video clip ' : ''}${this.clipView.clip.name}`)
     this.rectElement.height.baseVal.value = this.waveformHeight
     this.leftHandle.y2.baseVal.value = this.waveform.transcriptionLaneTop
     this.rightHandle.y2.baseVal.value = this.waveform.transcriptionLaneTop
@@ -970,6 +978,12 @@ export class ClipViewController extends TrackListItemController {
     this.rightHandle.x2.baseVal.value = xEnd + endCrossFadeLength
 
     this.rectElement.width.baseVal.value = Math.ceil(xEnd - xStart)
+    const visibleStart = Math.max(0, xStart)
+    const visibleEnd = Math.min(this.waveform.width, xEnd)
+    this.silentVideoLabel.setAttribute('x', `${(visibleStart + visibleEnd) / 2}`)
+    this.silentVideoLabel.setAttribute('y', `${Waveform.HEADER_HEIGHT + this.waveformHeight / 2}`)
+    this.silentVideoLabel.style.display =
+      !this.clipView.clip.audioPresent && visibleEnd - visibleStart > 120 ? '' : 'none'
     this.headerElement.width.baseVal.value = Math.ceil(xEnd - xStart)
     this.layoutHeader(xStart, Math.max(0, Math.ceil(xEnd - xStart)))
     this.endCrossFadeHeaderElement.x.baseVal.value = xEnd

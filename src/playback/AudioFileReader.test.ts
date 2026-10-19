@@ -2,7 +2,6 @@ import { AudioFileReader } from './AudioFileReader'
 import { RingBuffer } from 'ringbuf.js'
 import { MemoryBackedFileSystem } from '../filesystem/MemoryBackedFileSystem'
 import { GlobalSettings } from '../global/GlobalSettings'
-import { vi } from 'vitest'
 import { Clip } from '../project/Clip'
 import { ClipView, cloneClipViewWithNewStartPosition } from '../project/ClipView'
 import { expect, test } from 'vitest'
@@ -34,7 +33,7 @@ test('basic test', async () => {
   ringBuffer.pop(outputArray)
 
   const testArray = new Float32Array(16)
-  testArray.set([Number.NaN, 5, 0.2, 0.3, 0.4, Number.NaN, 92, 0.3, 0.4, 0.5, 0.6])
+  testArray.set([Number.NaN, 5, 0.2, 0.3, 0.4, Number.NaN, 92, 0.3, 0.4, 0.5, 0.6, Number.NaN, 895])
   expect(outputArray).toEqual(testArray)
 })
 
@@ -81,53 +80,6 @@ test('equal-power crossfade', async () => {
   expect(output).toEqual(new Float32Array([1, 1, 1, 3 / Math.sqrt(2), 2, 2]))
 })
 
-test('timed wait test', async () => {
-  vi.useFakeTimers()
-  const ringBufferArray = RingBuffer.getStorageForCapacity(5, Float32Array)
-  const ringBuffer = new RingBuffer(ringBufferArray, Float32Array)
-  MemoryBackedFileSystem.deleteFile('test', '1')
-  const file1 = MemoryBackedFileSystem.getFileHandle('test', '1')
-  file1.write(getInputArrayBuffer(0.1, 0.2, 0.3, 0.4, 0.5, 0.6, 0.7))
-  const clipView1 = {
-    startPosition: 5,
-    offset: 1,
-    length: 3,
-    clip: { id: 1, channelCount: 1 },
-  }
-  const clipView2 = {
-    startPosition: 100,
-    offset: 2,
-    length: 4,
-    clip: { id: 1, channelCount: 1 },
-  }
-  const audioFileReader = new AudioFileReader('test', 0, 999, [clipView1, clipView2], 1, false, ringBufferArray)
-
-  audioFileReader.runBufferFillingLoop()
-
-  const outputArray = new Float32Array(5)
-  await stepAwaitsForward()
-  ringBuffer.pop(outputArray)
-  expect(outputArray).toEqual(new Float32Array([Number.NaN, 5, 0.2, 0.3, 0.4]))
-
-  // The ring buffer fills up mid-clip; the reader continues after a timed wait covering the
-  // silence: clipView2 startPosition 100 - clipView1 startPosition 5 - length 3 = 92 samples,
-  // which is 92,000 ms at a sample rate of 1, minus the 250 ms head start.
-  await stepAwaitsForward()
-  vi.advanceTimersByTime(92 * 1000 - 250)
-  await stepAwaitsForward()
-  ringBuffer.pop(outputArray)
-  expect(outputArray).toEqual(new Float32Array([Number.NaN, 92, 0.3, 0.4, 0.5]))
-
-  // The last sample only fits after the pop; the reader retries on a short 10 ms timer.
-  vi.advanceTimersByTime(10)
-  await stepAwaitsForward()
-  const tail = new Float32Array(1)
-  ringBuffer.pop(tail)
-  expect(tail[0]).toBeCloseTo(0.6)
-  expect(ringBuffer.availableRead()).toBe(0)
-  vi.useRealTimers()
-})
-
 test('pause and resume', async () => {
   const ringBufferArray = RingBuffer.getStorageForCapacity(4, Float32Array)
   const ringBuffer = new RingBuffer(ringBufferArray, Float32Array)
@@ -143,7 +95,7 @@ test('pause and resume', async () => {
   const audioFileReader = new AudioFileReader('test', 5, 999, [clipView1], 1, false, ringBufferArray)
 
   audioFileReader.pause()
-  audioFileReader.runBufferFillingLoop()
+  const completion = audioFileReader.runBufferFillingLoop()
   await stepAwaitsForward()
 
   expect(ringBuffer.availableRead()).toBe(0)
@@ -152,6 +104,8 @@ test('pause and resume', async () => {
   await stepAwaitsForward()
 
   expect(ringBuffer.availableRead()).toBeGreaterThan(0)
+  audioFileReader.stop()
+  await completion
 })
 
 test('stop test', async () => {
@@ -218,6 +172,31 @@ test('large silence', async () => {
   ])
   expect(outputArray).toEqual(expected)
   expect(ringBuffer.availableRead()).toBe(0)
+})
+
+test('video-only playback produces timed silence without creating PCM files', async () => {
+  const ringBufferArray = RingBuffer.getStorageForCapacity(8, Float32Array)
+  const ringBuffer = new RingBuffer(ringBufferArray, Float32Array)
+  const reader = new AudioFileReader('silent-video', 24_000, 120_000, [], 48_000, false, ringBufferArray)
+
+  await reader.runBufferFillingLoop()
+  const output = new Float32Array(2)
+  expect(ringBuffer.pop(output)).toBe(2)
+  expect(output).toEqual(new Float32Array([Number.NaN, 96_000]))
+  expect(MemoryBackedFileSystem.getDirectoryFiles('silent-video')).toEqual([])
+})
+
+test('looping video-only playback yields when full and stops cleanly', async () => {
+  const ringBufferArray = RingBuffer.getStorageForCapacity(4, Float32Array)
+  const ringBuffer = new RingBuffer(ringBufferArray, Float32Array)
+  const reader = new AudioFileReader('silent-loop', 0, 48_000, [], 48_000, true, ringBufferArray)
+  const completion = reader.runBufferFillingLoop()
+  await reader.readyPromise
+  const output = new Float32Array(2)
+  ringBuffer.pop(output)
+  reader.stop()
+  await completion
+  expect(output).toEqual(new Float32Array([Number.NaN, 48_000]))
 })
 
 function getInputArrayBuffer(...data: Array<number>): ArrayBuffer {

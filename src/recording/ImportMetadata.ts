@@ -12,8 +12,12 @@ export function importedTags(
   containerTags: Record<string, string>,
   streams: Array<{ codec_type_string: string; tags: Record<string, string> }>,
 ): Record<string, string> {
-  const audioStreamTags = streams.find((stream) => stream.codec_type_string === 'audio')?.tags ?? {}
-  const tags = { ...audioStreamTags }
+  const streamTags =
+    (
+      streams.find((stream) => stream.codec_type_string === 'audio') ??
+      streams.find((stream) => stream.codec_type_string === 'video')
+    )?.tags ?? {}
+  const tags = { ...streamTags }
   const existingKeys = new Map(Object.keys(tags).map((key) => [key.toLowerCase(), key]))
 
   for (const [key, value] of Object.entries(containerTags)) {

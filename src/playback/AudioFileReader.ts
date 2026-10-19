@@ -26,6 +26,7 @@ export class AudioFileReader {
   readyPromise: Promise<any>
   private readyResolver: Function | null = null // will always be set in constructor
   private waitPromiseWithResolvers = Promise.withResolvers()
+  private readonly silenceToken = new Float32Array([Number.NaN, 0])
 
   constructor(
     private readonly projectName: string,
@@ -68,16 +69,9 @@ export class AudioFileReader {
         // Push pairs of (NaN, number of silent samples)
         const silenceSamples = Math.min(this.endSample - this.position, clipView.startPosition - this.position)
         if (silenceSamples > 0) {
-          const bufferToPush = new Float32Array(2 * Math.ceil(silenceSamples / AudioFileReader.MAX_EXACT_FLOAT32_INT))
-          for (let i = 0; i < bufferToPush.length; i += 2) {
-            bufferToPush[i] = Number.NaN
-            bufferToPush[i + 1] = AudioFileReader.MAX_EXACT_FLOAT32_INT
-          }
-          bufferToPush[bufferToPush.length - 1] = silenceSamples % AudioFileReader.MAX_EXACT_FLOAT32_INT
-          while (this.ringBuffer.availableWrite() < bufferToPush.length) {
-            await Promise.resolve(null)
-          }
-          this.ringBuffer.push(bufferToPush)
+          await this.pushSilence(silenceSamples)
+          if (this.isStopped) return
+          this.position += silenceSamples
         }
         let msToPlaySilence = (silenceSamples / this.sampleRate) * 1000
 
@@ -174,9 +168,32 @@ export class AudioFileReader {
 
         this.position = Math.max(this.position, clipView.startPosition + clipView.length)
       }
+      await this.pushSilence(this.endSample - this.position)
+      if (this.isStopped) return
+      // A zero-length loop cannot make progress.
+      if (this.startPosition >= this.endSample) break
     } while (this.loop)
     this.logger.debug('Finished reading this track.')
     this.readyResolver!() // in case we never hit it before
+  }
+
+  private async pushSilence(frameCount: number) {
+    const token = this.silenceToken
+    while (frameCount > 0) {
+      await this.pausePromise
+      if (this.isStopped) return
+      if (this.ringBuffer.availableWrite() < token.length) {
+        setTimeout(this.waitPromiseWithResolvers.resolve, 10)
+        await this.waitPromiseWithResolvers.promise
+        this.waitPromiseWithResolvers = Promise.withResolvers()
+        continue
+      }
+      const frames = Math.min(frameCount, AudioFileReader.MAX_EXACT_FLOAT32_INT)
+      token[1] = frames
+      this.ringBuffer.push(token)
+      frameCount -= frames
+      this.readyResolver!()
+    }
   }
 
   async runBufferFillingLoop() {

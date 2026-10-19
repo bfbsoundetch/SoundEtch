@@ -22,8 +22,12 @@ export function getSelectedClipIntervals(selection: SelectedRegion): SelectedCli
   const intervalsByClip = new Map<Clip, Array<Omit<SelectedClipInterval, 'clip'>>>()
   for (const track of selection.tracks) {
     for (const clipView of track.clipViews) {
+      if (!clipView.clip.audioPresent) {
+        continue
+      }
       const intersectionStart = Math.max(selection.startSample, clipView.startPosition)
-      const intersectionEnd = Math.min(selection.endSample, clipView.getEndPosition())
+      const audioEnd = clipView.startPosition + Math.max(0, clipView.clip.summary.length - clipView.offset)
+      const intersectionEnd = Math.min(selection.endSample, clipView.getEndPosition(), audioEnd)
       if (intersectionStart >= intersectionEnd) {
         continue
       }

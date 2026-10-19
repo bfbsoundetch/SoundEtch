@@ -20,17 +20,17 @@ export function createRenderingArgument(
         name: track.name,
         length: track.length,
         channelCount: track.getChannelCount(),
-        clipViews: track.clipViews.map((clipView) => {
-          return {
+        clipViews: track.clipViews
+          .filter((clipView) => clipView.clip.audioPresent && clipView.offset < clipView.clip.summary.length)
+          .map((clipView) => ({
             startPosition: clipView.startPosition,
             offset: clipView.offset,
-            length: clipView.length,
+            length: Math.max(0, Math.min(clipView.length, clipView.clip.summary.length - clipView.offset)),
             clip: {
               id: clipView.clip.id!,
               channelCount: clipView.clip.getChannelCount(),
             },
-          }
-        }),
+          })),
         gain: project.isTrackAudible(track) ? track.getGain() : 0,
         pan: track.getPan(),
         effects: structuredClone(track.effectRegions),

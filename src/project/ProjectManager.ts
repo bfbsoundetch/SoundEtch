@@ -164,6 +164,9 @@ export class ProjectManager {
 
   private static async populateSummaries(project: Project) {
     for (const clip of project.getClips()) {
+      if (!clip.audioPresent) {
+        continue
+      }
       const summaryFile = await (
         await FileSystemUtils.getFileHandle(`${project.id}`, `${clip.filename}_summary`)
       ).getFile()
@@ -272,6 +275,9 @@ export class ProjectManager {
     await Promise.all([
       FileSystemUtils.deleteFile(project.directoryName, clip.filename),
       FileSystemUtils.deleteFile(project.directoryName, `${clip.filename}_summary`),
+      ...clip.videoSegments.map((segment) =>
+        FileSystemUtils.deleteFile(project.directoryName, `${clip.filename}_video_${segment.index}`),
+      ),
     ])
 
     if (clip.id) {

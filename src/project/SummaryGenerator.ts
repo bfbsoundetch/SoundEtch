@@ -15,6 +15,10 @@ export class SummaryGenerator {
     endPosition: number,
     skip: number,
   ): Promise<Array<Array<number>>> {
+    endPosition = Math.min(endPosition, clip.summary.length)
+    if (!clip.audioPresent || startPosition >= endPosition) {
+      return Array.from({ length: clip.getChannelCount() }, () => [])
+    }
     let clipSummarizer = this.clipSummarizers.get(clip)
     if (!clipSummarizer) {
       clipSummarizer = new ClipSummarizer(clip)

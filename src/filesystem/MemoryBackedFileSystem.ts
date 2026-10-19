@@ -14,6 +14,10 @@ export class MemoryBackedFileSystem {
     return newFile
   }
 
+  static getExistingFileHandle(dirName: string, fileName: string): MemoryBackedFileSystemSyncAccessHandle | null {
+    return MemoryBackedFileSystem.files.get(`${dirName}/${fileName}`) ?? null
+  }
+
   static replaceFileHandle(dirName: string, fileName: string): MemoryBackedFileSystemSyncAccessHandle {
     const path = `${dirName}/${fileName}`
     const file = new MemoryBackedFileSystemSyncAccessHandle(path)

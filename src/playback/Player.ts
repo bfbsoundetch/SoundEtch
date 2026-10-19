@@ -91,15 +91,17 @@ export class Player {
       analyzerOutput.connect(audioContext.destination)
 
       playbackInfos.push({
-        clipViews: track.clipViews.map((clipView): ClipViewSubset => ({
-          startPosition: clipView.startPosition,
-          offset: clipView.offset,
-          length: clipView.length,
-          clip: {
-            id: clipView.clip.id!,
-            channelCount: clipView.clip.getChannelCount(),
-          },
-        })),
+        clipViews: track.clipViews
+          .filter((clipView) => clipView.clip.audioPresent && clipView.offset < clipView.clip.summary.length)
+          .map((clipView): ClipViewSubset => ({
+            startPosition: clipView.startPosition,
+            offset: clipView.offset,
+            length: Math.max(0, Math.min(clipView.length, clipView.clip.summary.length - clipView.offset)),
+            clip: {
+              id: clipView.clip.id!,
+              channelCount: clipView.clip.getChannelCount(),
+            },
+          })),
         ringBufferArray: ringBufferArray,
       })
       track.registerNewPlayback(playerNode, gainNode, pannerNode, effectChain, () => {}, project.isTrackAudible(track))

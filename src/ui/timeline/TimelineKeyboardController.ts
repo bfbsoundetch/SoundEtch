@@ -57,7 +57,10 @@ export class TimelineKeyboardController {
         valueText = `Selected ${this.spoken(region.startSample)} to ${this.spoken(region.endSample)}`
       } else {
         const clip = waveform.clipViewAt(cursor)
-        valueText = `${cursor == 0 ? 'Cursor at start' : `Cursor at ${this.spoken(cursor)}`}, ${clip ? `in clip ${clip.clip.name}` : 'no clip'}`
+        const clipLabel = clip
+          ? `in ${clip.clip.videoSegments.length > 0 ? 'video ' : ''}clip ${clip.clip.name}${clip.clip.audioPresent ? '' : ', no audio'}`
+          : 'no clip'
+        valueText = `${cursor == 0 ? 'Cursor at start' : `Cursor at ${this.spoken(cursor)}`}, ${clipLabel}`
       }
       setAttributeIfChanged(control, 'aria-label', `${waveform.track.name} timeline`)
       setAttributeIfChanged(control, 'aria-valuenow', (value / sampleRate).toFixed(3))

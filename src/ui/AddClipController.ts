@@ -1,3 +1,4 @@
+import { Track } from '../project/Track'
 import { AudioControl, AudioState } from '../audiocontext/AudioControl'
 import { TimeUtils } from '../global/TimeUtils'
 import { Clip } from '../project/Clip'
@@ -21,16 +22,16 @@ export class AddClipController {
     this.bindFileDrop(document.getElementById('welcome')!)
   }
 
-  async importLocalFile(file: File) {
+  async importLocalFile(file: File): Promise<Track | null> {
     if (this.importingLocalFile) {
-      return
+      return null
     }
     this.importingLocalFile = true
     try {
       // WebEntrypoint installs the shared lazy loader before constructing this controller.
       const appWindow = window as unknown as AddClipWindow
       const Recorder = await appWindow.loadRecorder()
-      await Recorder.createFromFile(file)
+      return Recorder.createFromFile(file)
     } finally {
       this.importingLocalFile = false
     }

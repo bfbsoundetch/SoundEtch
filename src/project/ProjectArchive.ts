@@ -161,7 +161,7 @@ export class ProjectArchive {
     if (!fileName) {
       throw new Error(`Invalid OPFS path in project archive: ${sourcePath}`)
     }
-    const match = /^(\d+)(_summary)?$/.exec(fileName)
+    const match = /^(\d+)(_summary|_video_\d+)?$/.exec(fileName)
     if (!match) {
       return sourcePath
     }
