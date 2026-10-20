@@ -20,8 +20,7 @@
     async function audioFileLocalHandler() {
       const inputForm = document.getElementById('audio-file-local')
       if (inputForm.files.length == 1) {
-        const Recorder = await window.loadRecorder()
-        await Recorder.createFromFile(inputForm.files[0])
+        await window.addClipController.importLocalFile(inputForm.files[0])
       }
     }
     async function audioFileRemoteHandler() {

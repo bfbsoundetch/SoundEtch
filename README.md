@@ -66,6 +66,12 @@ The trace uses pre-AAC PCM. MP4 audio still uses the browser's AAC encoder or th
 
 The gain is computed before limiting. When limited peaks carry much of the program's energy, the result lands below the target. The limiter detects true peaks with a 145-tap Kaiser-windowed interpolator, so exports hold the −1 dBTP ceiling to within 0.1 dB as measured by ffmpeg's `ebur128`, including on full-band noise.
 
+## Importing media
+
+Drag one local media file onto the timeline, or onto the welcome area in an empty project, to use the same importer as **Add Clip → Local file**. The drop area gets a dashed outline while it can accept the file. Audio is placed on a new track at the current cursor position, not at the pointer's drop position, with the same import progress, cancellation, metadata, and error handling as the file picker.
+
+File drops are available while stopped or monitoring, not during playback, recording, or another local-file import. Drop one file at a time; text and link drags are left alone.
+
 ## Timeline display modes
 
 Use each track's options menu (three dots) to switch between its waveform and a WebGPU-rendered spectrogram, rename the track, show or hide its transcript, or change its height. The selected mode is session-only and resets to the waveform when a project is opened or the page is reloaded. If WebGPU is unavailable, the spectrogram view keeps its editing overlays on the selected color scheme's minimum-dB background; switching back to the waveform remains available.

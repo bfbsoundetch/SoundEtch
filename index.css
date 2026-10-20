@@ -279,6 +279,12 @@ dialog.overlay[open] {
   overflow-y: scroll;
 }
 
+#timeline-body.media-file-drag-over,
+#welcome.media-file-drag-over {
+  outline: 3px dashed var(--color);
+  outline-offset: -3px;
+}
+
 #timeline-body[hidden],
 #welcome[hidden],
 #input-info-list[hidden],

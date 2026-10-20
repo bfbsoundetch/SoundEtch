@@ -1,16 +1,80 @@
-import { AudioControl } from '../audiocontext/AudioControl'
+import { AudioControl, AudioState } from '../audiocontext/AudioControl'
 import { TimeUtils } from '../global/TimeUtils'
 import { Clip } from '../project/Clip'
 import { ProjectManager } from '../project/ProjectManager'
+import type { Recorder } from '../recording/Recorder'
 import { NotificationsController } from './NotificationsController'
+
+interface AddClipWindow extends Window {
+  loadRecorder(): Promise<typeof Recorder>
+}
 
 export class AddClipController {
   private readonly dialog = document.getElementById('add-clip-modal') as HTMLDialogElement
   private readonly existingClipList = document.getElementById('add-clip-existing-list') as HTMLDivElement
   private readonly clipManagerButton = document.getElementById('add-clip-open-clip-manager-button') as HTMLButtonElement
+  private importingLocalFile = false
 
   constructor() {
     this.clipManagerButton.onclick = () => void this.openClipManager()
+    this.bindFileDrop(document.getElementById('timeline-body')!)
+    this.bindFileDrop(document.getElementById('welcome')!)
+  }
+
+  async importLocalFile(file: File) {
+    if (this.importingLocalFile) {
+      return
+    }
+    this.importingLocalFile = true
+    try {
+      // WebEntrypoint installs the shared lazy loader before constructing this controller.
+      const appWindow = window as unknown as AddClipWindow
+      const Recorder = await appWindow.loadRecorder()
+      await Recorder.createFromFile(file)
+    } finally {
+      this.importingLocalFile = false
+    }
+  }
+
+  private canDropFile() {
+    const state = AudioControl.getState()
+    return !this.importingLocalFile && (state == AudioState.STOPPED || state == AudioState.MONITORING)
+  }
+
+  private bindFileDrop(target: HTMLElement) {
+    const dragOver = (event: DragEvent) => {
+      if (!event.dataTransfer?.types.includes('Files')) {
+        return
+      }
+      event.preventDefault()
+      const canDrop = this.canDropFile()
+      event.dataTransfer.dropEffect = canDrop ? 'copy' : 'none'
+      target.classList.toggle('media-file-drag-over', canDrop)
+    }
+    target.addEventListener('dragenter', dragOver)
+    target.addEventListener('dragover', dragOver)
+    target.addEventListener('dragleave', (event) => {
+      if (!(event.relatedTarget instanceof Node) || !target.contains(event.relatedTarget)) {
+        target.classList.remove('media-file-drag-over')
+      }
+    })
+    target.addEventListener('drop', (event) => {
+      target.classList.remove('media-file-drag-over')
+      if (!event.dataTransfer?.types.includes('Files')) {
+        return
+      }
+      event.preventDefault()
+      if (!this.canDropFile()) {
+        return
+      }
+      const files = event.dataTransfer.files
+      if (files.length != 1) {
+        NotificationsController.showErrorMessage('Drop one media file at a time.')
+        return
+      }
+      // Capture the file before the drop event's data store becomes inaccessible.
+      void this.importLocalFile(files[0])
+    })
   }
 
   async refreshExistingClips() {
