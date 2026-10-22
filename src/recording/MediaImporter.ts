@@ -8,7 +8,7 @@ import type { VideoSegment } from '../project/Video'
 import { cloneWithGetters } from '../global/ObjectUtils'
 import { FileSystemUtils } from '../filesystem/FileSystemUtils'
 import { importedClipName, importedTags } from './ImportMetadata'
-import { getAudioChunkPlacement } from './MediaTiming'
+import { getAudioChunkPlacement, getMediaPresentation } from './MediaTiming'
 import { getMatchingMediaTrackIndex } from './MediaTrackMatching'
 
 const INTERLEAVE_RESAMPLE_BATCH_SIZE_SAMPLES = 1024 * 1024
@@ -83,17 +83,7 @@ export class MediaImporter {
         }
         const firstVideoPTS = await waitFor(videoTrack.getFirstTimestamp())
         const videoEndPTS = await waitFor(videoTrack.computeDuration())
-        if (!Number.isFinite(firstVideoPTS) || !Number.isFinite(videoEndPTS) || videoEndPTS <= firstVideoPTS) {
-          throw new Error('Video stream has no finite, nonempty presentation interval')
-        }
-        await waitFor(
-          new VideoSampleSink(videoTrack).getSample(firstVideoPTS).then((sample) => {
-            if (!sample) throw new Error('The selected video stream contains no decodable frames')
-            // Close inside the operation, even if cancellation has already won the outer race.
-            sample.close()
-          }),
-        )
-        let originSeconds = firstVideoPTS
+        let firstAudioPTS: number | null = null
         if (audioStream) {
           const audioTracks = await waitFor(input.getAudioTracks())
           const audioTrackIndex = getMatchingMediaTrackIndex(audioStreams, audioStream, audioTracks, 'audio')
@@ -101,28 +91,24 @@ export class MediaImporter {
           if (!(await waitFor(audioTrack.canDecode()))) {
             throw new Error(`Unsupported audio codec: ${audioStream.codec_name}`)
           }
-          const firstAudioPTS = await waitFor(audioTrack.getFirstTimestamp())
-          if (!Number.isFinite(firstAudioPTS)) {
-            throw new Error('Audio stream has no finite presentation timestamp')
-          }
-          originSeconds = Math.min(firstVideoPTS, firstAudioPTS)
-          leadingAudioOffsetSeconds = firstAudioPTS - originSeconds
+          firstAudioPTS = await waitFor(audioTrack.getFirstTimestamp())
         }
+        const presentation = getMediaPresentation(firstVideoPTS, videoEndPTS, firstAudioPTS, project.sampleRate)
+        await waitFor(
+          new VideoSampleSink(videoTrack).getSample(presentation.videoMediaStartSeconds).then((sample) => {
+            if (!sample) throw new Error('The selected video stream contains no decodable frames')
+            // Close inside the operation, even if cancellation has already won the outer race.
+            sample.close()
+          }),
+        )
+        leadingAudioOffsetSeconds = presentation.leadingAudioOffsetSeconds
         segment = {
           index: 0,
           trackNumber: videoTrackIndex + 1,
-          startSample: Math.round((firstVideoPTS - originSeconds) * project.sampleRate),
-          length: Math.round((videoEndPTS - firstVideoPTS) * project.sampleRate),
-          mediaStartSeconds: firstVideoPTS,
+          startSample: presentation.videoStartSample,
+          length: presentation.videoLength,
+          mediaStartSeconds: presentation.videoMediaStartSeconds,
           mimeType: file.type,
-        }
-        if (
-          !Number.isSafeInteger(segment.startSample) ||
-          !Number.isSafeInteger(segment.length) ||
-          !Number.isSafeInteger(segment.startSample + segment.length) ||
-          segment.length <= 0
-        ) {
-          throw new Error('Video presentation interval is outside the supported sample range')
         }
         input.dispose()
         input = null
