@@ -9,6 +9,7 @@ import { cloneWithGetters } from '../global/ObjectUtils'
 import { FileSystemUtils } from '../filesystem/FileSystemUtils'
 import { importedClipName, importedTags } from './ImportMetadata'
 import { getAudioChunkPlacement } from './MediaTiming'
+import { getMatchingMediaTrackIndex } from './MediaTrackMatching'
 
 const INTERLEAVE_RESAMPLE_BATCH_SIZE_SAMPLES = 1024 * 1024
 
@@ -41,7 +42,21 @@ export class MediaImporter {
       const audioStreams = mediaInfo.streams.filter((stream) => stream.codec_type_string === 'audio')
       const videoStreams = mediaInfo.streams.filter((stream) => stream.codec_type_string === 'video')
       const audioStream = audioStreams.length ? await waitFor(demuxer.getMediaStream('audio')) : null
-      const videoStream = videoStreams.length ? await waitFor(demuxer.getMediaStream('video')) : null
+      let videoStream: WebAVStream | null = null
+      if (videoStreams.length) {
+        input = new Input({ source: new BlobSource(file), formats: ALL_FORMATS })
+        if (!(await waitFor(input.canRead()))) {
+          throw new Error('Unsupported video container')
+        }
+        // Audio bitstream containers expose cover art as FFmpeg video streams, but cannot contain timed video.
+        // Inspect the parsed container, not the file's extension or caller-provided MIME type.
+        if (!(await waitFor(input.getFormat())).mimeType.startsWith('audio/')) {
+          videoStream = await waitFor(demuxer.getMediaStream('video'))
+        } else {
+          input.dispose()
+          input = null
+        }
+      }
       if (!audioStream && !videoStream) {
         throw new Error('The file contains no audio or video stream')
       }
@@ -59,17 +74,10 @@ export class MediaImporter {
       const project = await waitFor(ProjectManager.getActiveProject())
       let segment: VideoSegment | null = null
       let leadingAudioOffsetSeconds = 0
-      if (videoStream) {
-        const videoOrdinal = selectedStreamOrdinal(videoStreams, videoStream)
-        input = new Input({ source: new BlobSource(file), formats: ALL_FORMATS })
-        if (!(await waitFor(input.canRead()))) {
-          throw new Error('Unsupported video container')
-        }
+      if (videoStream && input) {
         const videoTracks = await waitFor(input.getVideoTracks())
-        if (videoTracks.length !== videoStreams.length || !videoTracks[videoOrdinal - 1]) {
-          throw new Error('Video stream ordinals do not match between media parsers')
-        }
-        const videoTrack = videoTracks[videoOrdinal - 1]!
+        const videoTrackIndex = getMatchingMediaTrackIndex(videoStreams, videoStream, videoTracks, 'video')
+        const videoTrack = videoTracks[videoTrackIndex]!
         if (!(await waitFor(videoTrack.canDecode()))) {
           throw new Error(`Unsupported video codec: ${videoStream.codec_name}`)
         }
@@ -87,12 +95,9 @@ export class MediaImporter {
         )
         let originSeconds = firstVideoPTS
         if (audioStream) {
-          const audioOrdinal = selectedStreamOrdinal(audioStreams, audioStream)
           const audioTracks = await waitFor(input.getAudioTracks())
-          if (audioTracks.length !== audioStreams.length || !audioTracks[audioOrdinal - 1]) {
-            throw new Error('Audio stream ordinals do not match between media parsers')
-          }
-          const audioTrack = audioTracks[audioOrdinal - 1]!
+          const audioTrackIndex = getMatchingMediaTrackIndex(audioStreams, audioStream, audioTracks, 'audio')
+          const audioTrack = audioTracks[audioTrackIndex]!
           if (!(await waitFor(audioTrack.canDecode()))) {
             throw new Error(`Unsupported audio codec: ${audioStream.codec_name}`)
           }
@@ -105,7 +110,7 @@ export class MediaImporter {
         }
         segment = {
           index: 0,
-          trackNumber: videoOrdinal,
+          trackNumber: videoTrackIndex + 1,
           startSample: Math.round((firstVideoPTS - originSeconds) * project.sampleRate),
           length: Math.round((videoEndPTS - firstVideoPTS) * project.sampleRate),
           mediaStartSeconds: firstVideoPTS,
@@ -327,12 +332,6 @@ export class MediaImporter {
       demuxer.destroy()
     }
   }
-}
-
-function selectedStreamOrdinal(streams: WebAVStream[], selected: WebAVStream): number {
-  const index = streams.findIndex((stream) => stream.index === selected.index)
-  if (index < 0) throw new Error('Selected media stream was not found in the container stream list')
-  return index + 1
 }
 
 async function copyVideoFile(

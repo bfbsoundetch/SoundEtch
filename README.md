@@ -54,6 +54,10 @@ Cloudflare's public dummy keys are not a valid end-to-end substitute for the req
 
 Use **Add clip → Local file** to import video, or the existing **Remote URL** option for a CORS-accessible media URL. Supported containers/codecs depend on the browser's decoders. Imported video opens the shared bottom **Video** panel automatically; reopen it with **Video…** beside the timeline controls. If several tracks contain video, the panel's **Video track** selector chooses which one to preview.
 
+MP4/MOV imports match the selected media streams by container track ID, not by requiring both parsers to report the same stream count. Embedded cover artwork can appear as an extra FFmpeg video stream without blocking the actual movie. The preview retains the selected track even when a file contains multiple video tracks.
+
+Embedded album artwork in MP3 and other audio-bitstream containers is not treated as timed video. These files use the audio import path without video sidecars or automatically opening the Video panel. Classification uses the parsed container, not the filename extension or caller-provided MIME type; actual unsupported video still produces an error rather than silently importing audio alone.
+
 The picture follows playback, pause, timeline cursor dragging, and stopped selections. Video and its decoded audio share the same clip placement, so moving, trimming, splitting, or copying the clip retains the source timing. Gaps show black, metadata rotation is respected, and the picture fits without stretching. Sound comes only from the timeline mix, not a second video player.
 
 Original compressed footage is stored with the project and included in project archives. Video without audio keeps its full timeline duration without creating a PCM file. Import cancellation/failure removes the new media assets. This feature does not add camera recording, video composition/editing controls, or footage export; MP4 publishing remains the existing visualizer described below.

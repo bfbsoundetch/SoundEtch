@@ -46,12 +46,12 @@ export class FileSystemUtils {
     if (GlobalSettings.useMemoryFS || (!FileSystemUtils.hasOpfs() && typeof window !== 'undefined')) {
       const handle = MemoryBackedFileSystem.getExistingFileHandle(dirName, fileName)
       if (!handle) {
-        throw new DOMException(`Video file not found: ${fileName}`, 'NotFoundError')
+        throw new DOMException(`File not found: ${fileName}`, 'NotFoundError')
       }
       return handle.getFile()
     }
     if (!FileSystemUtils.hasOpfs()) {
-      throw new Error('Video file access requires browser storage')
+      throw new Error('File access requires OPFS')
     }
     const root = await navigator.storage.getDirectory()
     const directory = await root.getDirectoryHandle(dirName, { create: false })
