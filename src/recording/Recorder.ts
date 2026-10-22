@@ -2,6 +2,7 @@ import { Track } from '../project/Track'
 import { RingBuffer } from 'ringbuf.js'
 import { AudioInput } from '../audioinputs/AudioInput'
 import { AudioInputs } from '../audioinputs/AudioInputs'
+import { VideoInputs, type VideoInput } from '../videoinputs/VideoInputs'
 import { NetworkUtils } from '../NetworkUtils'
 import { ProjectManager } from '../project/ProjectManager'
 import { WorkerController } from '../audiocontext/WorkerController'
@@ -10,6 +11,7 @@ import { AudioControl, AudioState } from '../audiocontext/AudioControl'
 import { cloneWithGetters } from '../global/ObjectUtils'
 import { NotificationsController } from '../ui/NotificationsController'
 import { MediaImporter } from './MediaImporter'
+import { VideoRecordingSession } from './VideoRecordingSession'
 import type { ProcessingModalController } from '../ui/ProcessingModalController'
 import type { TrackListController } from '../ui/timeline/TrackListController'
 
@@ -21,33 +23,43 @@ type RecorderWindow = typeof window & {
 export class Recorder {
   private static writingWorkerController: WorkerController | null = null
 
-  static async startRecordingActiveAudioInputs() {
+  static async startRecordingActiveInputs() {
     const activeProject = await ProjectManager.getActiveProject()
     if (!activeProject) {
       throw new Error('No active project.')
     }
-    return Recorder.startRecording2(AudioInputs.gatherActiveAudioInputs())
+    return Recorder.startRecording(AudioInputs.gatherActiveAudioInputs(), VideoInputs.gather())
   }
 
-  static async startRecording2(audioInputs: Array<AudioInput>) {
+  /** One new track per source; a person's or device's audio and video share one linked clip. */
+  static async startRecording(audioInputs: Array<AudioInput>, videoInputs: Array<VideoInput>) {
     const audioContext = await AudioControl.createNewAudioContext(AudioState.RECORDING)
+    const project = await ProjectManager.getActiveProject()
     const workerController = Recorder.getWritingWorkerController()
     const unusedAddModuleResult = audioContext.audioWorklet.addModule('./assets/recordingAudioWorklet.js')
+    const videoSession =
+      videoInputs.length > 0
+        ? new VideoRecordingSession(audioContext, project.directoryName, project.sampleRate, (tracks) =>
+            Recorder.showRecordedVideo(tracks),
+          )
+        : null
+    const unpairedVideoInputs = new Map(videoInputs.map((videoInput) => [videoInput.id, videoInput]))
     const inputs = []
     const audioWorkletNodes = []
+    let trackIndex = 0
     for (const audioInput of audioInputs) {
       const track = await ProjectManager.addClipWithTrack(
         'Recording: ' + audioInput.name,
         audioInput.channelCount,
         0,
         AudioControl.startPosition,
-        inputs.length,
+        trackIndex++,
       )
       const clipView = track.clipViews[0]!
       const ringBufferArray = RingBuffer.getStorageForCapacity(64 * 1024, Float32Array)
       const overrunSampleCount = new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT)
       inputs.push({
-        dirname: `${(await ProjectManager.getActiveProject()).id}`,
+        dirname: project.directoryName,
         ringBufferArray: ringBufferArray,
         channelCount: audioInput.channelCount,
         clip: cloneWithGetters(clipView.clip),
@@ -65,14 +77,50 @@ export class Recorder {
       await audioInput.connect(recordingWorkletNode)
       audioWorkletNodes.push(recordingWorkletNode)
       workerController.worker.addEventListener('message', clipView.clip.summary.getWorkerMessageListener())
+
+      const videoInput = unpairedVideoInputs.get(audioInput.id)
+      if (videoInput) {
+        unpairedVideoInputs.delete(audioInput.id)
+        videoSession!.add(videoInput, clipView.clip, track)
+      }
+    }
+    for (const videoInput of unpairedVideoInputs.values()) {
+      const track = await ProjectManager.addClipWithTrack(
+        'Recording: ' + videoInput.name,
+        1,
+        0,
+        AudioControl.startPosition,
+        trackIndex++,
+      )
+      const clip = track.clipViews[0]!.clip
+      clip.audioPresent = false
+      await ProjectManager.saveClip(clip)
+      videoSession!.add(videoInput, clip, track)
     }
 
     if (audioWorkletNodes.length == 0) {
-      audioContext.close()
+      if (!videoSession) {
+        audioContext.close()
+        return
+      }
+      videoSession.start()
+      // No audio writer resumes the context once it is ready, and the video clock is its sample position.
+      await audioContext.resume()
       return
     }
+    videoSession?.start()
     workerController.setAudioWorkletNodes(audioWorkletNodes)
     workerController.start(JobType.RECORDER, inputs)
+  }
+
+  private static showRecordedVideo(tracks: Array<Track>) {
+    const trackListController = (window as RecorderWindow).trackListController
+    trackListController.draw()
+    if (tracks.length > 0) {
+      void trackListController.openVideoPanel(tracks[0]).catch((error) => {
+        NotificationsController.showError(error instanceof Error ? error : new Error(String(error)))
+      })
+    }
   }
 
   static stopRecording(stopMediaStreamTracks: boolean = true) {

@@ -7,7 +7,8 @@ export interface DirectoryFile {
 }
 
 export interface BinaryFileWriter {
-  write(data: Uint8Array<ArrayBuffer>): Promise<void>
+  /** Appends at the current position, or writes at `position` and continues from the end of that write. */
+  write(data: Uint8Array<ArrayBuffer>, position?: number): Promise<void>
   close(): Promise<void>
   abort(): Promise<void>
 }
@@ -128,13 +129,13 @@ export class FileSystemUtils {
       let position = 0
       let open = true
       return {
-        async write(data: Uint8Array<ArrayBuffer>) {
+        async write(data: Uint8Array<ArrayBuffer>, at = position) {
           if (!open) {
             throw new Error('Cannot write to a closed file')
           }
           const buffer = new Uint8Array(data).buffer
-          file.write(buffer, { at: position })
-          position += data.byteLength
+          file.write(buffer, { at })
+          position = at + data.byteLength
         },
         async close() {
           open = false
@@ -157,8 +158,8 @@ export class FileSystemUtils {
     const fileHandle = await directory.getFileHandle(pathSegments.at(-1)!, { create: true })
     const writable = await fileHandle.createWritable()
     return {
-      async write(data: Uint8Array<ArrayBuffer>) {
-        await writable.write(data)
+      async write(data: Uint8Array<ArrayBuffer>, position?: number) {
+        await writable.write(position === undefined ? data : { type: 'write', position, data })
       },
       async close() {
         await writable.close()

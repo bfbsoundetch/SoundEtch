@@ -1,4 +1,5 @@
 import { AudioInputs } from '../audioinputs/AudioInputs'
+import { VideoInputs } from '../videoinputs/VideoInputs'
 import { AudioControl, AudioState } from '../audiocontext/AudioControl'
 import type { RecordingActivity } from '../remote/RemoteMediaClient3'
 import { announce } from './LiveAnnouncer'
@@ -18,15 +19,17 @@ export class RecordButtonController {
     this.countdownElement.className = 'record-button-countdown'
     this.button.appendChild(this.countdownElement)
 
-    AudioInputs.addListener(() => {
-      if (this.isCountingDown && !this.hasAvailableAudioInputs()) {
+    const handleInputChange = () => {
+      if (this.isCountingDown && !this.hasAvailableInputs()) {
         this.cancelCountdown()
         return
       }
       if (this.isStoppedState(AudioControl.getState())) {
         this.configureStoppedState()
       }
-    })
+    }
+    AudioInputs.addListener(handleInputChange)
+    VideoInputs.addListener(handleInputChange)
 
     this.configureStoppedState()
   }
@@ -35,15 +38,15 @@ export class RecordButtonController {
     if (this.isCountingDown) {
       return
     }
-    const hasAvailableAudioInputs = this.hasAvailableAudioInputs()
-    this.button.getElementsByTagName('span')[0].innerText = hasAvailableAudioInputs
+    const hasAvailableInputs = this.hasAvailableInputs()
+    this.button.getElementsByTagName('span')[0].innerText = hasAvailableInputs
       ? 'Record'
-      : 'Nothing to record. Enable a mic or screen share.'
+      : 'Nothing to record. Enable a mic, camera or screen share.'
     this.button.disabled = false
-    this.button.setAttribute('aria-disabled', String(!hasAvailableAudioInputs))
-    this.button.className = `${this.baseClassName} tooltipped${hasAvailableAudioInputs ? ' clickable' : ' record-button-unavailable'}`
-    this.button.onclick = hasAvailableAudioInputs
-      ? this.hasRemoteAudioInputs()
+    this.button.setAttribute('aria-disabled', String(!hasAvailableInputs))
+    this.button.className = `${this.baseClassName} tooltipped${hasAvailableInputs ? ' clickable' : ' record-button-unavailable'}`
+    this.button.onclick = hasAvailableInputs
+      ? this.hasRemoteInputs()
         ? () => void this.startCountdown()
         : () => void this.startRecording()
       : null
@@ -67,7 +70,7 @@ export class RecordButtonController {
   }
 
   private async startCountdown() {
-    if (this.isCountingDown || !this.hasAvailableAudioInputs() || !this.isStoppedState(AudioControl.getState())) {
+    if (this.isCountingDown || !this.hasAvailableInputs() || !this.isStoppedState(AudioControl.getState())) {
       this.configureStoppedState()
       return
     }
@@ -115,26 +118,26 @@ export class RecordButtonController {
   private async startRecording() {
     // Recording is loaded only after the user requests it, keeping it out of the initial timeline chunk.
     const { Recorder } = await import('../recording/Recorder')
-    await Recorder.startRecordingActiveAudioInputs()
+    await Recorder.startRecordingActiveInputs()
   }
 
   private shouldContinueCountdown(countdownToken: number) {
     if (countdownToken !== this.countdownToken || !this.isCountingDown) {
       return false
     }
-    if (!this.hasAvailableAudioInputs() || !this.isStoppedState(AudioControl.getState())) {
+    if (!this.hasAvailableInputs() || !this.isStoppedState(AudioControl.getState())) {
       this.cancelCountdown()
       return false
     }
     return true
   }
 
-  private hasAvailableAudioInputs() {
-    return AudioInputs.gatherActiveAudioInputs().length > 0
+  private hasAvailableInputs() {
+    return AudioInputs.gatherActiveAudioInputs().length > 0 || VideoInputs.gather().length > 0
   }
 
-  private hasRemoteAudioInputs() {
-    return AudioInputs.getRemoteInputs().length > 0
+  private hasRemoteInputs() {
+    return AudioInputs.getRemoteInputs().length > 0 || VideoInputs.gather().some((input) => input.remote)
   }
 
   private hideCountdown() {

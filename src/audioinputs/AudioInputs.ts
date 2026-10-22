@@ -85,12 +85,22 @@ export class AudioInputs {
     return [...this.remoteStreams.values()]
   }
 
+  /** Input id of a guest's screen share, shared with its video so both record into one clip. */
+  static remoteScreenShareId(peerId: string): string {
+    return `${peerId}-screen`
+  }
+
+  /** Keeps a guest's screen-share recording apart from their camera's. */
+  static remoteScreenShareName(username: string): string {
+    return `${username} screen`
+  }
+
   static registerRemoteMediaClient(remoteMediaClient: RemoteMediaClient3) {
     remoteMediaClient.addStateListener((state) => {
       if (state.screenShare && state.screenShare != 'self') {
         this.remoteScreenShare = new MediaStreamInput(
-          `${state.screenShare.peerId}-screen`,
-          state.screenShare.username,
+          AudioInputs.remoteScreenShareId(state.screenShare.peerId),
+          AudioInputs.remoteScreenShareName(state.screenShare.username),
           false,
         )
       } else {

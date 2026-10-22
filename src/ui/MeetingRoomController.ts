@@ -4,6 +4,7 @@ import { SpeakerMeterController } from './SpeakerMeterController'
 import { Direction, ErrorBubbleController } from './ErrorBubbleController'
 import { NotificationsController } from './NotificationsController'
 import { AudioInputs } from '../audioinputs/AudioInputs'
+import { VideoInputs } from '../videoinputs/VideoInputs'
 import { AudioInput } from '../audioinputs/AudioInput'
 import { LocalMediaStreams } from '../mediastreams/LocalMediaStreams'
 import { Logger } from '../global/Logger'
@@ -360,6 +361,7 @@ export class MeetingRoomController {
     }
     this.remoteMediaClient = new RemoteMediaClient3(username)
     AudioInputs.registerRemoteMediaClient(this.remoteMediaClient)
+    VideoInputs.registerRemoteMediaClient(this.remoteMediaClient)
     this.remoteMediaClient.setRecordingActivity(this.localRecordingActivity)
     this.remoteMediaClient.addStateListener((state) => this.stateListener(state))
     this.remoteMediaClient.addMessageListener((message) =>
@@ -389,6 +391,7 @@ export class MeetingRoomController {
       this.logger.log('About to join ' + meetingId)
       this.remoteMediaClient = new RemoteMediaClient3(username, meetingId)
       AudioInputs.registerRemoteMediaClient(this.remoteMediaClient)
+      VideoInputs.registerRemoteMediaClient(this.remoteMediaClient)
       this.remoteMediaClient.setRecordingActivity(this.localRecordingActivity)
       this.remoteMediaClient.addStateListener((state) => this.stateListener(state))
       this.remoteMediaClient.addMessageListener((message) =>

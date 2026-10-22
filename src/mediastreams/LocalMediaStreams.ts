@@ -41,28 +41,16 @@ export class LocalMediaStreams {
     return mediaStream
   }
 
-  static async startVideoDevice(
-    aspectRatio: number = 1.5,
-    width: number | null = null,
-    frameRate: number | null = null,
-    facingEnvironment: boolean = false,
-  ): Promise<MediaStream> {
+  static async startVideoDevice(): Promise<MediaStream> {
+    if (LocalMediaStreams.localAVDeviceMediaStream.getVideoTracks().length > 0) {
+      return LocalMediaStreams.localAVDeviceMediaStream
+    }
     if (!navigator.mediaDevices.getUserMedia) {
       throw Error('Device recording not supported by the browser.')
     }
-    const constraints: MediaTrackConstraints = {
-      aspectRatio: aspectRatio,
-      facingMode: facingEnvironment ? 'environment' : 'user',
-    }
-    if (width) {
-      constraints.width = width
-      constraints.height = Math.round(width * aspectRatio)
-    }
-    if (frameRate) {
-      constraints.frameRate = frameRate
-    }
     const mediaStream = await navigator.mediaDevices.getUserMedia({
-      video: constraints,
+      // Recordings keep this resolution; meeting connections scale it down as their bandwidth requires.
+      video: { facingMode: 'user', width: { ideal: 1280 }, height: { ideal: 720 }, frameRate: { ideal: 30 } },
     })
     mediaStream.getVideoTracks().forEach((track) => {
       track.onended = (_) => {

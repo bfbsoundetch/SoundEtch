@@ -3,7 +3,14 @@ class ReportingAudioWorkletProcessor extends AudioWorkletProcessor {
     super(options)
     this.position = options.processorOptions.position
     this.startPosition = this.position[0]
-    this.loopLength = options.processorOptions.loopEnd - this.startPosition
+    if (options.processorOptions.loopEnd) {
+      if (options.processorOptions.loopEnd < this.startPosition) {
+        throw new Error(`Loop end ${options.processorOptions.loopEnd} is earlier than the start ${this.startPosition}`)
+      }
+      this.loopLength = options.processorOptions.loopEnd - this.startPosition
+    } else {
+      this.loopLength = 0
+    }
     this.samplesProcessed = 0
   }
 
