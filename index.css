@@ -1925,6 +1925,47 @@ video {
   overflow-y: auto;
 }
 
+.track-media-channels {
+  display: none;
+}
+
+.track-info.has-video-lane {
+  grid-template-areas:
+    'title title peak'
+    'channels channels peak'
+    'delete effects peak'
+    'mix mix peak'
+    'gain gain peak'
+    'pan pan peak';
+  grid-template-rows: minmax(1.2em, 1fr) 72px auto auto auto 1fr;
+}
+
+.has-video-lane > .track-media-channels {
+  grid-area: channels;
+  display: flex;
+  flex-direction: column;
+  justify-content: space-between;
+  align-items: stretch;
+  min-width: 0;
+  border-block: 1px solid color-mix(in srgb, var(--color) 30%, transparent);
+}
+
+.track-channel-label {
+  min-width: 0;
+  max-width: 100%;
+  padding: 0.125rem 0.25rem;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--color);
+  background: var(--bg-color);
+  border: 0;
+  font: inherit;
+  font-size: 0.75rem;
+  font-weight: 600;
+  text-align: left;
+}
+
 /* 24px-tall slider boxes meet the 2.5.8 target size; the negative block margins let them extend into the row gaps. */
 .track-info input[type='range'] {
   height: 1.5rem;
@@ -2175,6 +2216,37 @@ video {
 
 .spectrogram-mode .spectrogram-canvas {
   display: block;
+}
+
+.video-thumbnail-canvas {
+  position: absolute;
+  z-index: 0;
+  left: 0;
+  width: 100%;
+  pointer-events: none;
+}
+
+.video-thumbnail-canvas[hidden] {
+  display: none;
+}
+
+.video-lane-hit-rect {
+  fill: transparent;
+  stroke: color-mix(in srgb, var(--color) 40%, transparent);
+  stroke-width: 1;
+  pointer-events: all;
+}
+
+.clip-no-audio-label {
+  fill: var(--waveform-stroke);
+  font:
+    0.8125rem system-ui,
+    sans-serif;
+  dominant-baseline: central;
+}
+
+.spectrogram-mode .clip-no-audio-label {
+  fill: var(--color);
 }
 
 .spectrogram-scale {

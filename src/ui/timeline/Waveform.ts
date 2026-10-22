@@ -30,6 +30,9 @@ import { getTrackTranscriptEntries, type TrackTranscriptEntry } from '../transcr
 import { NotificationsController } from '../NotificationsController'
 import { announce } from '../LiveAnnouncer'
 import { TimeUtils } from '../../global/TimeUtils'
+import { VideoThumbnailRenderer } from '../../video/VideoThumbnailRenderer'
+import { VIDEO_LANE_HEIGHT } from '../../video/VideoThumbnailLayout'
+import type { VideoPlacement } from '../../video/VideoFrameResolver'
 
 let nextClipMenuId = 0
 
@@ -56,6 +59,12 @@ export class Waveform extends TrackListItemController {
   width = 0
   private height = 0
   private transcriptionLaneHeightValue = 0
+  private videoLaneHeightValue = 0
+  private readonly transferredClipViews = new Set<ClipView>()
+  private readonly videoCanvas = document.createElement('canvas')
+  private videoRenderer: VideoThumbnailRenderer | null = null
+  private videoDrawFrame = 0
+  private mediaOverlayVisible = true
 
   private readonly dragInProgressClipViews = new Array<ClipViewController>()
   private readonly transientClipViewControllers = new Set<ClipViewController>()
@@ -73,8 +82,20 @@ export class Waveform extends TrackListItemController {
     return this.height
   }
 
+  get audioLaneTop() {
+    return Waveform.HEADER_HEIGHT + this.videoLaneHeight
+  }
+
+  get videoLaneHeight() {
+    return this.videoLaneHeightValue
+  }
+
+  get auxiliaryLaneHeight() {
+    return this.videoLaneHeight + this.transcriptionLaneHeight
+  }
+
   get transcriptionLaneTop() {
-    return this.height + Waveform.HEADER_HEIGHT
+    return this.audioLaneTop + this.height
   }
 
   get transcriptionLaneHeight() {
@@ -110,7 +131,8 @@ export class Waveform extends TrackListItemController {
     readonly index: number,
     private readonly spectrogramService: SpectrogramService,
     initialDisplayMode: TrackDisplayMode,
-    private readonly resizeTrackForTranscriptionLane: (heightDelta: number) => void,
+    private readonly resizeTrackForAuxiliaryLanes: (heightDelta: number) => void,
+    private readonly projectDirectory: string,
   ) {
     super(trackListController)
     this.color = `var(--waveform-${index})`
@@ -118,6 +140,10 @@ export class Waveform extends TrackListItemController {
     this.spectrogramCanvas.className = 'spectrogram-canvas'
     this.spectrogramCanvas.setAttribute('aria-hidden', 'true')
     this.div.appendChild(this.spectrogramCanvas)
+    this.videoCanvas.className = 'video-thumbnail-canvas'
+    this.videoCanvas.setAttribute('aria-hidden', 'true')
+    this.videoCanvas.hidden = true
+    this.div.appendChild(this.videoCanvas)
     div.addEventListener('dblclick', (event) => {
       trackListController.selectTrack(this)
     })
@@ -380,10 +406,11 @@ export class Waveform extends TrackListItemController {
       const placements = new Array<SpectrogramClipPlacement>()
       for (const clipView of this.track.clipViews) {
         const controller = this.clipViewControllerMap.get(clipView)
-        if (controller !== undefined) placements.push(controller.getSpectrogramPlacement())
+        if (controller !== undefined && clipView.clip.audioPresent)
+          placements.push(controller.getSpectrogramPlacement())
       }
       for (const controller of this.transientClipViewControllers) {
-        placements.push(controller.getSpectrogramPlacement())
+        if (controller.clipView.clip.audioPresent) placements.push(controller.getSpectrogramPlacement())
       }
       this.trackRenderer.draw({
         cssWidth: this.width,
@@ -391,14 +418,63 @@ export class Waveform extends TrackListItemController {
         dpr: window.devicePixelRatio || 1,
         timelineStart: this.getSampleForXValue(0),
         samplesPerCssPixel: this.samplesPerUnit,
-        headerHeight: Waveform.HEADER_HEIGHT,
+        headerHeight: this.audioLaneTop,
         channelCount: this.track.getChannelCount(),
         clips: placements,
       })
     })
   }
 
+  setMediaOverlayVisible(visible: boolean): void {
+    this.mediaOverlayVisible = visible
+    this.videoCanvas.hidden = !visible || this.videoLaneHeight === 0
+    if (visible) this.requestVideoDraw()
+    else {
+      if (this.videoDrawFrame !== 0) cancelAnimationFrame(this.videoDrawFrame)
+      this.videoDrawFrame = 0
+      this.videoRenderer?.clear()
+    }
+  }
+
+  requestVideoDraw(): void {
+    if (!this.mediaOverlayVisible || this.videoLaneHeight === 0 || this.videoDrawFrame !== 0) return
+    this.videoDrawFrame = requestAnimationFrame(() => {
+      this.videoDrawFrame = 0
+      if (!this.mediaOverlayVisible || this.videoLaneHeight === 0) return
+      this.videoRenderer ??= new VideoThumbnailRenderer(this.videoCanvas, (error) => {
+        NotificationsController.showShortDurationMessage(`Video thumbnails: ${error.message}`)
+      })
+      this.videoRenderer.draw({
+        projectDirectory: this.projectDirectory,
+        sampleRate: this.sampleRate,
+        timelineStart: this.getSampleForXValue(0),
+        samplesPerPixel: this.samplesPerUnit,
+        cssWidth: this.width,
+        cssHeight: this.videoLaneHeight,
+        dpr: window.devicePixelRatio || 1,
+        placements: this.getVideoPlacements(),
+      })
+    })
+  }
+
+  private getVideoPlacements(): VideoPlacement[] {
+    const placements: VideoPlacement[] = []
+    for (const clipView of this.track.clipViews) {
+      if (this.transferredClipViews.has(clipView) || clipView.clip.videoSegments.length === 0) continue
+      const controller = this.clipViewControllerMap.get(clipView)
+      placements.push(controller?.getVideoPlacement() ?? clipView)
+    }
+    for (const controller of this.transientClipViewControllers) {
+      if (controller.clipView.clip.videoSegments.length > 0) placements.push(controller.getVideoPlacement())
+    }
+    return placements
+  }
+
   remove(): void {
+    if (this.videoDrawFrame !== 0) cancelAnimationFrame(this.videoDrawFrame)
+    this.videoDrawFrame = 0
+    this.videoRenderer?.destroy()
+    this.videoRenderer = null
     if (this.spectrogramDrawFrame !== 0) cancelAnimationFrame(this.spectrogramDrawFrame)
     this.spectrogramDrawFrame = 0
     this.removeSpectrogramSettingsListener()
@@ -448,21 +524,33 @@ export class Waveform extends TrackListItemController {
   }
 
   private updateLayout(): void {
+    for (const clipView of this.transferredClipViews) {
+      if (!this.track.clipViews.includes(clipView)) this.transferredClipViews.delete(clipView)
+    }
+    const placements = this.getVideoPlacements()
+    const videoLaneHeight = placements.length > 0 ? VIDEO_LANE_HEIGHT : 0
     const transcriptionLaneHeight = this.track.clipViews.some((clipView) => clipView.clip.transcription.length > 0)
       ? TRANSCRIPTION_LANE_HEIGHT
       : 0
-    const transcriptionLaneHeightChanged = transcriptionLaneHeight !== this.transcriptionLaneHeightValue
-    if (transcriptionLaneHeightChanged) {
-      const heightDelta = transcriptionLaneHeight - this.transcriptionLaneHeightValue
+    const auxiliaryLanesChanged =
+      transcriptionLaneHeight !== this.transcriptionLaneHeightValue || videoLaneHeight !== this.videoLaneHeightValue
+    if (auxiliaryLanesChanged) {
+      const heightDelta = videoLaneHeight + transcriptionLaneHeight - this.auxiliaryLaneHeight
       this.transcriptionLaneHeightValue = transcriptionLaneHeight
-      this.resizeTrackForTranscriptionLane(heightDelta)
+      this.videoLaneHeightValue = videoLaneHeight
+      this.resizeTrackForAuxiliaryLanes(heightDelta)
+      this.videoCanvas.hidden = !this.mediaOverlayVisible || videoLaneHeight === 0
+      this.div.classList.toggle('has-video-lane', videoLaneHeight > 0)
+      if (videoLaneHeight === 0) {
+        if (this.videoDrawFrame !== 0) cancelAnimationFrame(this.videoDrawFrame)
+        this.videoDrawFrame = 0
+        this.videoRenderer?.clear()
+      }
     }
 
     const width = this.div.clientWidth
-    const height = Math.max(0, this.div.clientHeight - Waveform.HEADER_HEIGHT - this.transcriptionLaneHeight)
-    if (!transcriptionLaneHeightChanged && width === this.width && height === this.height) {
-      return
-    }
+    const height = Math.max(0, this.div.clientHeight - Waveform.HEADER_HEIGHT - this.auxiliaryLaneHeight)
+    if (!auxiliaryLanesChanged && width === this.width && height === this.height) return
 
     this.width = width
     this.height = height
@@ -473,21 +561,24 @@ export class Waveform extends TrackListItemController {
     this.transcriptionLaneElement.setAttribute('height', `${this.transcriptionLaneHeight}`)
     this.transcriptionLaneElement.toggleAttribute('hidden', this.transcriptionLaneHeight === 0)
     this.spectrogramCanvas.style.height = `${this.transcriptionLaneTop}px`
+    this.videoCanvas.style.top = `${Waveform.HEADER_HEIGHT}px`
+    this.videoCanvas.style.height = `${this.videoLaneHeight}px`
+    if (auxiliaryLanesChanged) this.trackListController.selectionController.draw()
   }
 
   private drawAxes() {
     const channelHeight = this.height / this.track.getChannelCount()
 
-    let axesPath = `M 1 0 L 1 ${this.height + Waveform.HEADER_HEIGHT} `
+    let axesPath = `M 1 ${this.audioLaneTop} L 1 ${this.transcriptionLaneTop} `
     let channelSeparatorPath = ''
     for (let channel = 0; channel < this.track.getChannelCount(); ++channel) {
-      const xAxis = Waveform.HEADER_HEIGHT + channel * channelHeight + channelHeight / 2
+      const xAxis = this.audioLaneTop + channel * channelHeight + channelHeight / 2
       axesPath += `M 0 ${xAxis} L ${this.width * this.PIXEL_RATIO} ${xAxis}`
 
       if (channel > 0) {
         channelSeparatorPath +=
-          `M 0 ${Waveform.HEADER_HEIGHT + channel * channelHeight}` +
-          `L ${this.width * this.PIXEL_RATIO} ${Waveform.HEADER_HEIGHT + channel * channelHeight}`
+          `M 0 ${this.audioLaneTop + channel * channelHeight}` +
+          `L ${this.width * this.PIXEL_RATIO} ${this.audioLaneTop + channel * channelHeight}`
       }
     }
     this.axesPathElement.setAttribute('d', axesPath)
@@ -502,7 +593,7 @@ export class Waveform extends TrackListItemController {
   private drawSpectrogramScale(): void {
     const channelCount = this.track.getChannelCount()
     const channelHeight = channelCount > 0 ? this.height / channelCount : 0
-    const layoutKey = `${this.currentDisplayMode}|${this.height}|${channelCount}|${spectrogramSettings.current.frequencyBands}|${this.sampleRate}`
+    const layoutKey = `${this.currentDisplayMode}|${this.audioLaneTop}|${this.height}|${channelCount}|${spectrogramSettings.current.frequencyBands}|${this.sampleRate}`
     if (layoutKey === this.spectrogramScaleLayoutKey) return
     this.spectrogramScaleLayoutKey = layoutKey
 
@@ -519,7 +610,7 @@ export class Waveform extends TrackListItemController {
     )
     const scaleFragment = document.createDocumentFragment()
     for (let channel = 0; channel < channelCount; ++channel) {
-      const channelBottom = Waveform.HEADER_HEIGHT + (channel + 1) * channelHeight
+      const channelBottom = this.audioLaneTop + (channel + 1) * channelHeight
       const channelTop = channelBottom - channelHeight
       for (const tick of ticks) {
         const y = channelBottom - tick.fraction * channelHeight
@@ -541,7 +632,8 @@ export class Waveform extends TrackListItemController {
     this.spectrogramScaleGroupElement.replaceChildren(scaleFragment)
   }
 
-  releaseClipViewController(controller: ClipViewController) {
+  releaseClipViewController(controller: ClipViewController, transferred = false) {
+    if (transferred) this.transferredClipViews.add(controller.clipView)
     if (this.clipViewControllerMap.get(controller.clipView) == controller) {
       this.clipViewControllerMap.delete(controller.clipView)
     }
@@ -549,6 +641,7 @@ export class Waveform extends TrackListItemController {
   }
 
   adoptClipViewController(controller: ClipViewController) {
+    this.transferredClipViews.delete(controller.clipView)
     if (!this.track.clipViews.includes(controller.clipView)) {
       this.transientClipViewControllers.add(controller)
       return
@@ -583,6 +676,7 @@ export class Waveform extends TrackListItemController {
     const endSample = waveform.getSampleForXValue(end)
     for (let clipViewIndex = 0; clipViewIndex < waveform.track.clipViews.length; ++clipViewIndex) {
       const currentClipView = waveform.track.clipViews[clipViewIndex]
+      if (this.transferredClipViews.has(currentClipView)) continue
       let clipViewController = this.clipViewControllerMap.get(currentClipView)
       if (
         currentClipView.startPosition < endSample &&
@@ -622,6 +716,7 @@ export class Waveform extends TrackListItemController {
       }
     }
     this.requestSpectrogramDraw()
+    this.requestVideoDraw()
   }
 
   drawClipViewOver(clipViewController: ClipViewController) {
@@ -706,13 +801,14 @@ export class ClipViewController extends TrackListItemController {
   endCrossFadeDuration = 0
   public draggedShift = 0
   private readonly clipElementsGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g')
+  private readonly videoHitElement = document.createElementNS('http://www.w3.org/2000/svg', 'rect')
   private readonly handleElementsGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g')
 
   readonly rectElement = document.createElementNS('http://www.w3.org/2000/svg', 'rect')
   private readonly spectrogramFallbackElement = document.createElementNS('http://www.w3.org/2000/svg', 'rect')
   readonly headerElement = document.createElementNS('http://www.w3.org/2000/svg', 'rect')
   readonly headerTitleElement = document.createElementNS('http://www.w3.org/2000/svg', 'foreignObject')
-  private readonly silentVideoLabel = document.createElementNS('http://www.w3.org/2000/svg', 'text')
+  private readonly noAudioLabel = document.createElementNS('http://www.w3.org/2000/svg', 'text')
   readonly headerInfoElement = document.createElementNS('http://www.w3.org/2000/svg', 'foreignObject')
   readonly endCrossFadeHeaderElement = document.createElementNS('http://www.w3.org/2000/svg', 'rect')
   readonly endCrossFadeHeaderTitleElement = document.createElementNS('http://www.w3.org/2000/svg', 'foreignObject')
@@ -754,11 +850,11 @@ export class ClipViewController extends TrackListItemController {
 
     this.headerTitleDivElement.innerText = this.clipView.clip.name
     this.headerTitleElement.appendChild(this.headerTitleDivElement)
-    this.silentVideoLabel.textContent = 'Video · no audio'
-    this.silentVideoLabel.setAttribute('fill', 'var(--waveform-stroke)')
-    this.silentVideoLabel.setAttribute('text-anchor', 'middle')
-    this.silentVideoLabel.setAttribute('pointer-events', 'none')
-    this.silentVideoLabel.setAttribute('aria-hidden', 'true')
+    this.noAudioLabel.textContent = 'No audio'
+    this.noAudioLabel.classList.add('clip-no-audio-label')
+    this.noAudioLabel.setAttribute('text-anchor', 'middle')
+    this.noAudioLabel.setAttribute('pointer-events', 'none')
+    this.noAudioLabel.setAttribute('aria-hidden', 'true')
     this.headerTitleElement.setAttribute('aria-hidden', 'true')
     this.endCrossFadeHeaderTitleElement.setAttribute('aria-hidden', 'true')
     this.headerTitleElement.classList.add('clip-view-header-title')
@@ -766,12 +862,34 @@ export class ClipViewController extends TrackListItemController {
     this.waveform.clipViewGroupElement.appendChild(this.clipElementsGroup)
     this.waveform.aboveClipViewGroupElement.appendChild(this.handleElementsGroup)
     this.clipElementsGroup.appendChild(this.spectrogramFallbackElement)
+    this.clipElementsGroup.appendChild(this.videoHitElement)
+    this.videoHitElement.classList.add('video-lane-hit-rect')
+    this.videoHitElement.setAttribute('role', 'img')
+    this.videoHitElement.setAttribute(
+      'aria-label',
+      `Video channel for ${clipView.clip.name}; ${clipView.clip.audioPresent ? 'linked to audio' : 'no audio'}`,
+    )
+    this.videoHitElement.addEventListener('dblclick', (event) => {
+      trackListController.selectClipView(clipView, this.waveform)
+      event.stopPropagation()
+    })
+    this.videoHitElement.addEventListener('contextmenu', (event) => {
+      event.preventDefault()
+      event.stopPropagation()
+      this.waveform.openClipContextMenu(event.clientX, event.clientY)
+    })
+    this.videoHitElement.addEventListener('mouseenter', () => {
+      this.trackListController.pointerStateManager.setPointedOverClipView(this)
+    })
+    this.videoHitElement.addEventListener('mouseleave', () => {
+      this.trackListController.pointerStateManager.removePointedOverClipView(this)
+    })
     this.clipElementsGroup.appendChild(this.rectElement)
     this.clipElementsGroup.appendChild(this.headerElement)
     this.clipElementsGroup.appendChild(this.headerTitleElement)
     this.clipElementsGroup.appendChild(this.headerInfoElement)
     this.clipElementsGroup.appendChild(this.fullClipGrayFilter)
-    this.rectElement.setAttribute('y', `${Waveform.HEADER_HEIGHT}`)
+    this.rectElement.setAttribute('y', `${this.waveform.audioLaneTop}`)
     this.rectElement.setAttribute('height', `${this.waveformHeight}`)
     this.rectElement.classList = 'waveform-rect'
     this.rectElement.style.setProperty('--waveform-color', this.color)
@@ -781,7 +899,7 @@ export class ClipViewController extends TrackListItemController {
     })
 
     this.rectElement.setAttribute('x', '0')
-    this.spectrogramFallbackElement.setAttribute('y', `${Waveform.HEADER_HEIGHT}`)
+    this.spectrogramFallbackElement.setAttribute('y', `${this.waveform.audioLaneTop}`)
     this.spectrogramFallbackElement.setAttribute('height', `${this.waveformHeight}`)
     this.spectrogramFallbackElement.classList.add('spectrogram-fallback')
     this.updateSpectrogramFallbackFill()
@@ -817,7 +935,7 @@ export class ClipViewController extends TrackListItemController {
 
     this.handleElementsGroup.appendChild(this.leftHandle)
     this.leftHandle.setAttribute('y1', '0')
-    this.leftHandle.setAttribute('y2', `${this.waveform.getHeight() + Waveform.HEADER_HEIGHT}`)
+    this.leftHandle.setAttribute('y2', `${this.waveform.transcriptionLaneTop}`)
     this.leftHandle.classList = 'clip-view-handle clip-view-handle-left'
 
     this.leftHandle.setAttribute('x1', '0')
@@ -829,7 +947,7 @@ export class ClipViewController extends TrackListItemController {
 
     this.handleElementsGroup.appendChild(this.rightHandle)
     this.rightHandle.setAttribute('y1', '0')
-    this.rightHandle.setAttribute('y2', `${this.waveform.getHeight() + Waveform.HEADER_HEIGHT}`)
+    this.rightHandle.setAttribute('y2', `${this.waveform.transcriptionLaneTop}`)
     this.rightHandle.classList = 'clip-view-handle clip-view-handle-right'
 
     this.rightHandle.classList.toggle('clip-view-handle-trimmed', this.clipView.length < this.clipView.clip.length)
@@ -839,7 +957,7 @@ export class ClipViewController extends TrackListItemController {
     this.clipElementsGroup.appendChild(this.svgPathElement)
     this.clipElementsGroup.appendChild(this.startCrossFadePathElement)
     this.clipElementsGroup.appendChild(this.endCrossFadePathElement)
-    this.clipElementsGroup.appendChild(this.silentVideoLabel)
+    this.clipElementsGroup.appendChild(this.noAudioLabel)
     this.transcriptionOverlay = new TranscriptionOverlayController(
       this.trackListController,
       this.clipView.clip,
@@ -909,6 +1027,23 @@ export class ClipViewController extends TrackListItemController {
     this.rectElement.classList.toggle('spectrogram-hit-rect', spectrogramMode)
   }
 
+  getVideoPlacement(): VideoPlacement {
+    if (this.fullClipPreview) {
+      return {
+        clip: this.clipView.clip,
+        offset: 0,
+        startPosition: this.startPosition - this.clipView.offset,
+        length: this.clipView.clip.length,
+      }
+    }
+    return {
+      clip: this.clipView.clip,
+      offset: this.clipView.offset,
+      startPosition: this.startPosition,
+      length: this.clipView.length,
+    }
+  }
+
   getSpectrogramPlacement(): SpectrogramClipPlacement {
     if (this.fullClipPreview) {
       return {
@@ -932,14 +1067,15 @@ export class ClipViewController extends TrackListItemController {
 
   switchParent(waveform: Waveform) {
     const oldWaveform = this.waveform
-    oldWaveform.releaseClipViewController(this)
+    oldWaveform.releaseClipViewController(this, true)
     oldWaveform.resetAfterDrawnOver(this.clipView)
     this.waveform = waveform
     waveform.adoptClipViewController(this)
     this.setDisplayMode(waveform.displayMode)
     this.reset()
-    oldWaveform.requestSpectrogramDraw()
-    waveform.requestSpectrogramDraw()
+    oldWaveform.draw()
+    waveform.draw()
+    this.draw(this.getSampleForXValue(0), this.getSampleForXValue(waveform.width))
   }
 
   private startClipViewMove(self: ClipViewController, startMouseEvent: MouseEvent) {
@@ -950,10 +1086,16 @@ export class ClipViewController extends TrackListItemController {
     const video = this.clipView.clip.videoSegments.length > 0
     this.headerTitleDivElement.innerText = `${video ? 'Video · ' : ''}${this.clipView.clip.name}`
     this.infoButton.setAttribute('aria-label', `View info for ${video ? 'video clip ' : ''}${this.clipView.clip.name}`)
+    this.rectElement.y.baseVal.value = this.waveform.audioLaneTop
+    this.spectrogramFallbackElement.y.baseVal.value = this.waveform.audioLaneTop
+    this.spectrogramFallbackElement.style.display = this.clipView.clip.audioPresent ? '' : 'none'
+    this.videoHitElement.y.baseVal.value = Waveform.HEADER_HEIGHT
+    this.videoHitElement.height.baseVal.value = video ? this.waveform.videoLaneHeight : 0
+    this.videoHitElement.style.display = video ? '' : 'none'
     this.rectElement.height.baseVal.value = this.waveformHeight
     this.leftHandle.y2.baseVal.value = this.waveform.transcriptionLaneTop
     this.rightHandle.y2.baseVal.value = this.waveform.transcriptionLaneTop
-    this.fullClipGrayFilter.height.baseVal.value = this.waveformHeight
+    this.fullClipGrayFilter.height.baseVal.value = this.waveformHeight + this.waveform.videoLaneHeight
     this.spectrogramFallbackElement.height.baseVal.value = this.waveformHeight
     this.updateSpectrogramFallbackFill()
     const spectrogramPlacement = this.getSpectrogramPlacement()
@@ -978,12 +1120,15 @@ export class ClipViewController extends TrackListItemController {
     this.rightHandle.x2.baseVal.value = xEnd + endCrossFadeLength
 
     this.rectElement.width.baseVal.value = Math.ceil(xEnd - xStart)
+    const videoStartX = Math.max(this.getXValueForSample(this.startPosition), -10000)
+    const videoEndX = Math.min(this.getXValueForSample(this.endPosition), 10000)
+    this.videoHitElement.x.baseVal.value = videoStartX
+    this.videoHitElement.width.baseVal.value = Math.max(0, videoEndX - videoStartX)
     const visibleStart = Math.max(0, xStart)
     const visibleEnd = Math.min(this.waveform.width, xEnd)
-    this.silentVideoLabel.setAttribute('x', `${(visibleStart + visibleEnd) / 2}`)
-    this.silentVideoLabel.setAttribute('y', `${Waveform.HEADER_HEIGHT + this.waveformHeight / 2}`)
-    this.silentVideoLabel.style.display =
-      !this.clipView.clip.audioPresent && visibleEnd - visibleStart > 120 ? '' : 'none'
+    this.noAudioLabel.setAttribute('x', `${(visibleStart + visibleEnd) / 2}`)
+    this.noAudioLabel.setAttribute('y', `${this.waveform.audioLaneTop + this.waveformHeight / 2}`)
+    this.noAudioLabel.style.display = !this.clipView.clip.audioPresent && visibleEnd - visibleStart > 64 ? '' : 'none'
     this.headerElement.width.baseVal.value = Math.ceil(xEnd - xStart)
     this.layoutHeader(xStart, Math.max(0, Math.ceil(xEnd - xStart)))
     this.endCrossFadeHeaderElement.x.baseVal.value = xEnd
@@ -1022,6 +1167,7 @@ export class ClipViewController extends TrackListItemController {
   async draw(startSample: number, endSample: number) {
     this.drawBoundingBox(startSample, endSample)
     this.drawTranscriptionOverlay(startSample, endSample)
+    this.waveform.requestVideoDraw()
     if (this.waveform.displayMode === 'waveform') {
       await this.drawWaveform(startSample, endSample)
     } else {
@@ -1030,6 +1176,12 @@ export class ClipViewController extends TrackListItemController {
   }
 
   async drawWaveform(startSample: number, endSample: number, fullClip = false) {
+    if (!this.clipView.clip.audioPresent) {
+      this.svgPathElement.setAttribute('d', '')
+      this.startCrossFadePathElement.setAttribute('d', '')
+      this.endCrossFadePathElement.setAttribute('d', '')
+      return
+    }
     let realStart, realEnd: number
     const clipViewStart = this.getXValueForSample(this.startPosition)
     const startSampleX = this.getXValueForSample(startSample)
@@ -1069,7 +1221,7 @@ export class ClipViewController extends TrackListItemController {
     let mainPathStartX = -1
     let endCrossFadeStartX = -1
     for (let channel = 0; channel < channelCount; ++channel) {
-      const xAxis = Waveform.HEADER_HEIGHT + channel * channelHeight + channelHeight / 2
+      const xAxis = this.waveform.audioLaneTop + channel * channelHeight + channelHeight / 2
       const startCrossFadeSegments = new Array()
       const endCrossFadeSegments = new Array()
       const pathSegments = new Array(summary[channel].length)
@@ -1167,6 +1319,8 @@ export class ClipViewController extends TrackListItemController {
         this.headerElement.width.baseVal.value = this.resizeInfo.oldWidth - shift
         this.rectElement.x.baseVal.value = this.resizeInfo.oldStartX + shift
         this.rectElement.width.baseVal.value = this.resizeInfo.oldWidth - shift
+        this.videoHitElement.x.baseVal.value = this.resizeInfo.oldStartX + shift
+        this.videoHitElement.width.baseVal.value = Math.max(0, this.resizeInfo.oldWidth - shift)
 
         this.layoutHeader(this.resizeInfo.oldStartX + shift, this.resizeInfo.oldWidth - shift)
         break
@@ -1181,6 +1335,7 @@ export class ClipViewController extends TrackListItemController {
         this.fullClipGrayFilter.x.baseVal.value = this.resizeInfo.oldStartX + this.resizeInfo.oldWidth + shift
         this.headerElement.width.baseVal.value = this.resizeInfo.oldWidth + shift
         this.rectElement.width.baseVal.value = this.resizeInfo.oldWidth + shift
+        this.videoHitElement.width.baseVal.value = Math.max(0, this.resizeInfo.oldWidth + shift)
         this.layoutHeader(this.resizeInfo.oldStartX, this.resizeInfo.oldWidth + shift)
         break
     }
@@ -1222,6 +1377,7 @@ export class ClipViewController extends TrackListItemController {
     this.fullClipPreview = false
     this.resizeInfo = null
     this.waveform.requestSpectrogramDraw()
+    this.waveform.requestVideoDraw()
     const clipViewIndex = this.waveform.track.clipViews.indexOf(this.clipView)
     if (
       clipViewsEqual(this.clipView, newClipView) ||
@@ -1251,7 +1407,7 @@ export class ClipViewController extends TrackListItemController {
     this.fullClipGrayFilter.x.baseVal.value = this.getXValueForSample(clipView.startPosition - clipView.offset)
     this.fullClipGrayFilter.width.baseVal.value = maxLeftShift
     this.fullClipGrayFilter.y.baseVal.value = Waveform.HEADER_HEIGHT
-    this.fullClipGrayFilter.height.baseVal.value = this.waveformHeight
+    this.fullClipGrayFilter.height.baseVal.value = this.waveformHeight + this.waveform.videoLaneHeight
 
     this.drawTranscriptionOverlay(this.getSampleForXValue(0), this.getSampleForXValue(this.waveform.width))
     if (this.waveform.displayMode === 'waveform') {
@@ -1260,6 +1416,7 @@ export class ClipViewController extends TrackListItemController {
       this.drawBoundingBox(this.translation * this.samplesPerUnit, this.getSampleForXValue(this.waveform.width))
       this.waveform.requestSpectrogramDraw()
     }
+    this.waveform.requestVideoDraw()
 
     this.leftHandle.dataset.active = 'true'
     this.trackListController.pointerStateManager.startResizingClipView(this)
@@ -1286,11 +1443,12 @@ export class ClipViewController extends TrackListItemController {
       this.drawBoundingBox(this.translation * this.samplesPerUnit, this.getSampleForXValue(this.waveform.width))
       this.waveform.requestSpectrogramDraw()
     }
+    this.waveform.requestVideoDraw()
 
     this.fullClipGrayFilter.x.baseVal.value = filterStartX
     this.fullClipGrayFilter.width.baseVal.value = maxRightShift
     this.fullClipGrayFilter.y.baseVal.value = Waveform.HEADER_HEIGHT
-    this.fullClipGrayFilter.height.baseVal.value = this.waveformHeight
+    this.fullClipGrayFilter.height.baseVal.value = this.waveformHeight + this.waveform.videoLaneHeight
 
     this.rightHandle.dataset.active = 'true'
     this.trackListController.pointerStateManager.startResizingClipView(this)

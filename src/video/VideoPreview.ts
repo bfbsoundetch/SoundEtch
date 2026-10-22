@@ -1,25 +1,43 @@
-import { ALL_FORMATS, BlobSource, CanvasSink, Input } from 'mediabunny'
-import type { WrappedCanvas } from 'mediabunny'
+import { ALL_FORMATS, BlobSource, EncodedPacketSink, Input, VideoSampleSink } from 'mediabunny'
+import type { VideoSample } from 'mediabunny'
 import { FileSystemUtils } from '../filesystem/FileSystemUtils'
 import type { VideoFrameTarget } from './VideoFrameResolver'
+
+/**
+ * A restart must skip more than this much decoding to pay for a new decoder and the frames the running one has
+ * already queued; shorter forward moves, including every playback tick, advance the running decoder.
+ */
+const RESTART_SAVING_SECONDS = 0.25
 
 type Request = {
   directory: string
   sampleRate: number
   target: VideoFrameTarget
-  forward: boolean
 }
 
 type Source = {
   key: string
   input: Input
-  sink: CanvasSink | null
-  iterator: AsyncGenerator<WrappedCanvas, void, unknown> | null
-  current: WrappedCanvas | null
-  next: WrappedCanvas | null
+  sink: VideoSampleSink | null
+  packets: EncodedPacketSink | null
+  iterator: AsyncGenerator<VideoSample, void, unknown> | null
+  iteratorEnd: number
+  current: VideoSample | null
+  next: VideoSample | null
 }
 
-/** One active input, one decode operation, and at most two pooled display frames. */
+function sourceKey(directory: string, target: VideoFrameTarget): string {
+  return `${directory}/${target.filename}#${target.segment.trackNumber}`
+}
+
+function covers(frame: VideoSample, next: VideoSample | null, time: number): boolean {
+  return time >= frame.timestamp && time < (next?.timestamp ?? frame.timestamp + frame.duration)
+}
+
+/**
+ * One open input with one sequential decoder that playback and forward scrubbing advance instead of seeking. It holds
+ * at most three frames: the decoder's current and next frames and the displayed picture.
+ */
 export class VideoPreview {
   private desired: Request | null = null
   private source: Source | null = null
@@ -27,6 +45,8 @@ export class VideoPreview {
   private busy = false
   private revision = 0
   private failedSource: string | null = null
+  private shown: VideoSample | null = null
+  private shownOriginal: VideoSample | null = null
 
   constructor(
     private readonly canvas: HTMLCanvasElement,
@@ -34,52 +54,46 @@ export class VideoPreview {
     private readonly onError: (error: Error) => void,
   ) {}
 
-  request(directory: string, sampleRate: number, target: VideoFrameTarget, forward: boolean, force = false): void {
+  /** `redraw` repaints the displayed picture after the canvas size changes; it never decodes again. */
+  request(directory: string, sampleRate: number, target: VideoFrameTarget, redraw = false): void {
     const previous = this.desired
-    const key = this.sourceKey(directory, target)
     if (
-      !force &&
       previous &&
       previous.directory === directory &&
       previous.sampleRate === sampleRate &&
       previous.target.placement === target.placement &&
       previous.target.segment === target.segment &&
-      previous.target.mediaTimeSeconds === target.mediaTimeSeconds &&
-      previous.forward === forward
-    )
+      previous.target.mediaTimeSeconds === target.mediaTimeSeconds
+    ) {
+      if (redraw && this.shown) this.paint(this.shown)
       return
-    const reset =
-      !previous ||
-      this.sourceKey(previous.directory, previous.target) !== key ||
-      previous.target.placement !== target.placement ||
-      previous.target.segment !== target.segment ||
-      target.mediaTimeSeconds < previous.target.mediaTimeSeconds ||
-      previous.forward !== forward
-    if (reset) {
-      this.releaseSource()
-      this.clearCanvas()
-      if (!previous || this.sourceKey(previous.directory, previous.target) !== key) this.failedSource = null
-    } else if (!forward) {
-      // A slow scrub must not leave the previous seek's picture visible.
-      this.clearCanvas()
     }
-    this.desired = { directory, sampleRate, target, forward }
+    const key = sourceKey(directory, target)
+    if (!previous || sourceKey(previous.directory, previous.target) !== key) {
+      // Another file's picture must not stand in for this one.
+      this.failedSource = null
+      this.blank()
+    } else if (redraw && this.shown) this.paint(this.shown)
+    this.desired = { directory, sampleRate, target }
     ++this.revision
     if (this.failedSource === key) return
-    if (reset || !forward) this.onStatus('Loading video…')
+    // Seeks within a source keep the previous picture until the new frame replaces it.
+    if (!this.shown) this.onStatus('Loading video…')
     void this.drain()
   }
 
+  /** Stops decoding and blanks the picture; the input stays open for a return to the same footage. */
   clear(): void {
     this.desired = null
     ++this.revision
     this.failedSource = null
-    this.releaseSource()
-    this.clearCanvas()
+    if (this.source) this.stopIterator(this.source)
+    this.blank()
   }
 
-  private sourceKey(directory: string, target: VideoFrameTarget): string {
-    return `${directory}/${target.filename}#${target.segment.trackNumber}`
+  release(): void {
+    this.clear()
+    this.releaseSource()
   }
 
   private async drain(): Promise<void> {
@@ -90,46 +104,38 @@ export class VideoPreview {
         const request = this.desired
         const revision = this.revision
         const epoch = this.sourceEpoch
-        const key = this.sourceKey(request.directory, request.target)
+        const key = sourceKey(request.directory, request.target)
         if (key === this.failedSource) return
         let source: Source | null = null
         try {
-          source = await this.getSource(request)
+          source = await this.getSource(request, key)
           if (!source || this.source !== source) continue
-          const frame = await this.getFrame(source, request)
-          if (this.source !== source || !this.desired) continue
+          const frame = await this.seek(source, request)
+          if (this.source !== source) continue
           const latest = this.desired
-          // Forward decoding can service a newer clock tick only if this exact frame covers it.
-          const coversLatest =
-            request.forward &&
-            latest.forward &&
-            latest.target.placement === request.target.placement &&
-            latest.target.segment === request.target.segment &&
-            frame !== null &&
-            latest.target.mediaTimeSeconds >= frame.timestamp &&
-            latest.target.mediaTimeSeconds < (source.next?.timestamp ?? frame.timestamp + frame.duration)
-          if (revision === this.revision || coversLatest) {
-            if (frame) {
-              this.draw(frame)
-              this.onStatus('')
-            } else {
-              this.clearCanvas()
-              this.onStatus('No video frame at this position.')
-            }
-            if (coversLatest || revision === this.revision) return
+          // Show frames decoded for superseded positions too: a continuous scrub would otherwise display nothing.
+          if (frame && latest && sourceKey(latest.directory, latest.target) === key) {
+            this.show(frame)
+            this.onStatus('')
           }
+          if (revision !== this.revision) continue
+          if (!frame) {
+            this.blank()
+            this.onStatus('No video frame at this position.')
+          }
+          return
         } catch (error) {
           // Disposing an obsolete input rejects its in-flight reads; those are not preview failures.
           if (
             !this.desired ||
             epoch !== this.sourceEpoch ||
             (source && source !== this.source) ||
-            key !== this.sourceKey(this.desired.directory, this.desired.target)
+            key !== sourceKey(this.desired.directory, this.desired.target)
           )
             continue
           this.failedSource = key
           this.releaseSource()
-          this.clearCanvas()
+          this.blank()
           const failure = error instanceof Error ? error : new Error(String(error))
           this.onStatus(`Video preview unavailable: ${failure.message}`)
           this.onError(failure)
@@ -141,15 +147,24 @@ export class VideoPreview {
     }
   }
 
-  private async getSource(request: Request): Promise<Source | null> {
-    const key = this.sourceKey(request.directory, request.target)
+  private async getSource(request: Request, key: string): Promise<Source | null> {
     if (this.source?.key === key) return this.source
+    this.releaseSource()
     const epoch = this.sourceEpoch
     const file = await FileSystemUtils.getExistingFile(request.directory, request.target.filename)
     if (epoch !== this.sourceEpoch) return null
     if (file.size === 0) throw new Error(`Video file ${request.target.filename} is empty`)
     const input = new Input({ source: new BlobSource(file), formats: ALL_FORMATS })
-    const source: Source = { key, input, sink: null, iterator: null, current: null, next: null }
+    const source: Source = {
+      key,
+      input,
+      sink: null,
+      packets: null,
+      iterator: null,
+      iteratorEnd: 0,
+      current: null,
+      next: null,
+    }
     this.source = source
     try {
       if (!(await input.canRead())) throw new Error('The video container is not supported')
@@ -158,8 +173,9 @@ export class VideoPreview {
       if (!track) throw new Error(`Video track ${request.target.segment.trackNumber} is missing`)
       if (!(await track.canDecode())) throw new Error('The selected video track cannot be decoded in this browser')
       if (this.source !== source) return null
-      // Defaults apply the stored rotation and display aspect ratio before drawing.
-      source.sink = new CanvasSink(track, { poolSize: 2 })
+      // Samples carry the stored rotation and display aspect ratio; drawing applies both.
+      source.sink = new VideoSampleSink(track)
+      source.packets = new EncodedPacketSink(track)
       return source
     } catch (error) {
       if (this.source !== source) return null
@@ -167,34 +183,66 @@ export class VideoPreview {
     }
   }
 
-  private async getFrame(source: Source, request: Request): Promise<WrappedCanvas | null> {
-    const sink = source.sink!
+  private async seek(source: Source, request: Request): Promise<VideoSample | null> {
     const time = request.target.mediaTimeSeconds
-    if (!request.forward) return sink.getCanvas(time)
-    if (!source.iterator) {
-      const segment = request.target.segment
-      source.iterator = sink.canvases(time, segment.mediaStartSeconds + segment.length / request.sampleRate)
-      const current = await source.iterator.next()
-      source.current = current.done ? null : current.value
-      if (this.source !== source) return null
-      const next = await source.iterator.next()
-      source.next = next.done ? null : next.value
+    const segment = request.target.segment
+    const end = segment.mediaStartSeconds + segment.length / request.sampleRate
+    const current = source.current
+    if (source.iterator && current && source.iteratorEnd === end && time >= current.timestamp) {
+      if (covers(current, source.next, time)) return current
+      let reachable = time - current.timestamp <= RESTART_SAVING_SECONDS
+      if (!reachable) {
+        // A restart decodes from the key frame at or before the target.
+        const key = await source.packets!.getKeyPacket(time, { metadataOnly: true })
+        if (this.source !== source || source.current !== current) return null
+        reachable = !key || key.timestamp - current.timestamp <= RESTART_SAVING_SECONDS
+      }
+      if (reachable) return this.advance(source, time)
     }
-    while (source.next && source.next.timestamp <= time) {
-      source.current = source.next
-      source.next = null
-      // The old current canvas is no longer needed before the two-canvas pool advances.
-      const next = await source.iterator.next()
-      source.next = next.done ? null : next.value
-      if (this.source !== source) return null
-    }
-    const frame = source.current
-    if (!frame || time < frame.timestamp || time >= (source.next?.timestamp ?? frame.timestamp + frame.duration))
-      return null
-    return frame
+    this.stopIterator(source)
+    const iterator = source.sink!.samples(time, end)
+    source.iterator = iterator
+    source.iteratorEnd = end
+    source.current = await this.pull(source, iterator)
+    if (source.current) source.next = await this.pull(source, iterator)
+    return this.advance(source, time)
   }
 
-  private draw(frame: WrappedCanvas): void {
+  private async advance(source: Source, time: number): Promise<VideoSample | null> {
+    const iterator = source.iterator
+    while (iterator && source.iterator === iterator && source.next && source.next.timestamp <= time) {
+      // Skipped frames are closed without drawing.
+      source.current?.close()
+      source.current = source.next
+      source.next = null
+      source.next = await this.pull(source, iterator)
+    }
+    const frame = source.current
+    return frame && source.iterator === iterator && covers(frame, source.next, time) ? frame : null
+  }
+
+  private async pull(
+    source: Source,
+    iterator: AsyncGenerator<VideoSample, void, unknown>,
+  ): Promise<VideoSample | null> {
+    const result = await iterator.next()
+    const sample = result.done ? null : result.value
+    if (source.iterator === iterator) return sample
+    // The iterator was stopped while this frame decoded.
+    sample?.close()
+    return null
+  }
+
+  private show(frame: VideoSample): void {
+    if (this.shownOriginal === frame && this.shown) return
+    this.shown?.close()
+    // A clone shares the decoded picture but survives the decoder advancing past it, for redraws.
+    this.shown = frame.clone()
+    this.shownOriginal = frame
+    this.paint(this.shown)
+  }
+
+  private paint(frame: VideoSample): void {
     const ratio = window.devicePixelRatio || 1
     const width = Math.max(1, Math.round(this.canvas.clientWidth * ratio))
     const height = Math.max(1, Math.round(this.canvas.clientHeight * ratio))
@@ -204,17 +252,27 @@ export class VideoPreview {
     if (!context) throw new Error('Video preview requires a 2D canvas')
     context.fillStyle = '#000'
     context.fillRect(0, 0, width, height)
-    const scale = Math.min(width / frame.canvas.width, height / frame.canvas.height)
-    const drawWidth = frame.canvas.width * scale
-    const drawHeight = frame.canvas.height * scale
-    context.drawImage(frame.canvas, (width - drawWidth) / 2, (height - drawHeight) / 2, drawWidth, drawHeight)
+    frame.drawWithFit(context, { fit: 'contain' })
   }
 
-  private clearCanvas(): void {
+  private blank(): void {
+    this.shown?.close()
+    this.shown = null
+    this.shownOriginal = null
     const context = this.canvas.getContext('2d', { alpha: false })
     if (!context) return
     context.fillStyle = '#000'
     context.fillRect(0, 0, this.canvas.width, this.canvas.height)
+  }
+
+  private stopIterator(source: Source): void {
+    const iterator = source.iterator
+    source.iterator = null
+    source.current?.close()
+    source.current = null
+    source.next?.close()
+    source.next = null
+    if (iterator) void iterator.return().catch(() => {})
   }
 
   private releaseSource(): void {
@@ -222,11 +280,7 @@ export class VideoPreview {
     const source = this.source
     this.source = null
     if (!source) return
-    const iterator = source.iterator
-    source.iterator = null
-    source.current = null
-    source.next = null
-    if (iterator) void iterator.return().catch(() => {})
+    this.stopIterator(source)
     source.input.dispose()
   }
 }

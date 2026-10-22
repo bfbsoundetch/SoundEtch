@@ -104,7 +104,8 @@ export class VideoPanelController {
       .filter((track) => track.clipViews.some((view) => view.clip.videoSegments.length > 0))
     if (!this.selectedTrack || !this.tracks.includes(this.selectedTrack)) {
       this.selectedTrack = this.tracks[0] ?? null
-      this.preview.clear()
+      // The footage may have been deleted with its track; do not keep its input open.
+      this.preview.release()
       this.showingEmpty = true
       this.geometryChanged = true
     }
@@ -162,13 +163,7 @@ export class VideoPanelController {
       return
     }
     this.showingEmpty = false
-    this.preview.request(
-      project.directoryName,
-      project.sampleRate,
-      target,
-      state === AudioState.PLAYING,
-      this.geometryChanged,
-    )
+    this.preview.request(project.directoryName, project.sampleRate, target, this.geometryChanged)
     this.geometryChanged = false
   }
 
@@ -187,7 +182,7 @@ export class VideoPanelController {
     this.active = false
     cancelAnimationFrame(this.animationFrame)
     this.resizeObserver.disconnect()
-    this.preview.clear()
+    this.preview.release()
     this.project = null
     this.geometryChanged = true
     this.showingEmpty = true

@@ -143,10 +143,11 @@ export class MediaImporter {
       clip.audioPresent = decoderConfig !== null
       if (segment) {
         clip.videoSegments = [segment]
-        clip.videoLength = segment.startSample + segment.length
         await copyVideoFile(file, project.directoryName, `${clip.filename}_video_0`, signal, (progress) => {
           onProgress?.(progress * (decoderConfig ? 0.25 : 0.95))
         })
+        // Timeline decoders can read any nonempty placement immediately.
+        clip.videoLength = segment.startSample + segment.length
       }
       throwIfAborted(signal)
 

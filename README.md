@@ -60,7 +60,13 @@ Embedded album artwork in MP3 and other audio-bitstream containers is not treate
 
 The picture follows playback, pause, timeline cursor dragging, and stopped selections. Video and its decoded audio share the same clip placement, so moving, trimming, splitting, or copying the clip retains the source timing. Gaps show black, metadata rotation is respected, and the picture fits without stretching. Sound comes only from the timeline mix, not a second video player.
 
-Original compressed footage is stored with the project and included in project archives. Video without audio keeps its full timeline duration without creating a PCM file. Import cancellation/failure removes the new media assets. This feature does not add camera recording, video composition/editing controls, or footage export; MP4 publishing remains the existing visualizer described below.
+The preview keeps the footage open while it is selected. Playback and forward scrubbing advance one running decoder instead of seeking for every position; a decoder restarts at the nearest key frame only when that skips meaningful work, such as a jump backward or far ahead. While scrubbing, the previous picture stays visible and frames appear as they decode instead of after the cursor stops. Resizing the panel redraws the current picture without decoding it again.
+
+Tracks containing footage show a dedicated **Video** thumbnail lane above **Audio** (waveform or spectrogram). The shared clip header, trim handles, and context menu edit both channels together; double-click a thumbnail to select the linked clip. The **Video** and **Audio** channel labels focus that track's timeline for keyboard editing. Audio-only tracks keep their current layout, and silent footage is labeled **No audio**.
+
+The filmstrip follows timeline scrolling and zooming. Footage gaps inside a clip show black; outside clips the lane stays transparent. Only visible thumbnail tiles on visible tracks are decoded, with a bounded image cache, and decoding continues while the timeline scrolls rather than restarting on every redraw. Each tile shows a key frame from its time span when the span contains one, which decodes without the rest of its group of pictures; otherwise it shows the frame at the span's midpoint. Removing footage or a track, or switching projects, releases the corresponding thumbnail resources. Video duration is exposed only after the original footage has finished copying, so thumbnails cannot open a partially written sidecar.
+
+Original compressed footage is stored with the project and included in project archives. Video without audio keeps its full timeline duration without creating a PCM file. Import cancellation/failure removes the new media assets. This feature does not add camera recording, independent video/audio edits, video compositing, or footage export; MP4 publishing remains the existing visualizer described below.
 
 ## Video export
 

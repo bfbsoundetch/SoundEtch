@@ -18,6 +18,7 @@ export type TrackMenuActions = {
   onShowTranscript: () => void
   onHideTranscript: () => void
   onChangeHeight: (deltaRem: number) => void
+  onFocusChannel: () => void
 }
 
 export class TrackListTrack {
@@ -56,6 +57,31 @@ export class TrackListTrack {
 
     trackHeading.appendChild(trackTitle)
     this.trackInfoDiv.appendChild(trackHeading)
+    const channelLabels = document.createElement('div')
+    channelLabels.className = 'track-media-channels'
+    channelLabels.setAttribute('role', 'group')
+    channelLabels.setAttribute('aria-label', 'Media channels')
+    const videoChannel = document.createElement('button')
+    videoChannel.type = 'button'
+    videoChannel.className = 'track-channel-label track-video-channel-label clickable'
+    videoChannel.textContent = 'Video'
+    const audioChannel = document.createElement('button')
+    audioChannel.type = 'button'
+    audioChannel.className = 'track-channel-label track-audio-channel-label clickable'
+    const updateChannelLabels = () => {
+      const hasAudio = track.clipViews.some((clipView) => clipView.clip.audioPresent)
+      audioChannel.textContent = hasAudio ? 'Audio' : 'Audio · none'
+      videoChannel.setAttribute('aria-label', `Video channel for ${track.name}. Enter the linked timeline`)
+      audioChannel.setAttribute(
+        'aria-label',
+        `${hasAudio ? 'Audio channel' : 'No audio'} for ${track.name}. Enter the linked timeline`,
+      )
+    }
+    videoChannel.addEventListener('click', actions.onFocusChannel)
+    audioChannel.addEventListener('click', actions.onFocusChannel)
+    updateChannelLabels()
+    channelLabels.append(videoChannel, audioChannel)
+    this.trackInfoDiv.appendChild(channelLabels)
 
     const deleteTrackButton = document.createElement('button')
     deleteTrackButton.type = 'button'
@@ -205,6 +231,7 @@ export class TrackListTrack {
       updateMixButtons()
       updateDeleteButtonName()
       trackMenu.updateAccessibleName()
+      updateChannelLabels()
       gainSlider.setAttribute('aria-label', `Gain for ${track.name}`)
       panSlider.setAttribute('aria-label', `Pan for ${track.name}`)
       this.peakMeter.setLabel(`Level meter for ${track.name}`)

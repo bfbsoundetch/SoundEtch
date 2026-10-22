@@ -3,7 +3,9 @@ import { TimeUtils } from '../../global/TimeUtils'
 import { announce } from '../LiveAnnouncer'
 import { stepTimelinePosition } from './TimelineKeyboardSteps'
 import type { TrackListController } from './TrackListController'
-import { Waveform } from './Waveform'
+import type { Waveform } from './Waveform'
+
+const TIMELINE_HINT = '←/→ move · Shift+←/→ select · Shift+F10 actions · +/− zoom'
 
 /** One focusable slider-like control per track that gives the timeline a keyboard model. */
 export class TimelineKeyboardController {
@@ -25,7 +27,7 @@ export class TimelineKeyboardController {
     control.setAttribute('aria-valuenow', '0')
     control.setAttribute('aria-valuemax', '0')
     control.setAttribute('aria-describedby', 'timeline-keyboard-help')
-    control.dataset.hint = '←/→ move · Shift+←/→ select · Shift+F10 actions · +/− zoom'
+    control.dataset.hint = TIMELINE_HINT
     control.addEventListener('keydown', (event) => this.handleKeyDown(event, waveform))
     control.addEventListener('contextmenu', (event) => {
       event.preventDefault()
@@ -62,7 +64,14 @@ export class TimelineKeyboardController {
           : 'no clip'
         valueText = `${cursor == 0 ? 'Cursor at start' : `Cursor at ${this.spoken(cursor)}`}, ${clipLabel}`
       }
-      setAttributeIfChanged(control, 'aria-label', `${waveform.track.name} timeline`)
+      const media =
+        waveform.videoLaneHeight > 0
+          ? waveform.track.clipViews.some((view) => view.clip.audioPresent)
+            ? ' linked video and audio'
+            : ' video'
+          : ''
+      setAttributeIfChanged(control, 'aria-label', `${waveform.track.name}${media} timeline`)
+      setAttributeIfChanged(control, 'data-hint', `${media ? `${media.trim()} · ` : ''}${TIMELINE_HINT}`)
       setAttributeIfChanged(control, 'aria-valuenow', (value / sampleRate).toFixed(3))
       setAttributeIfChanged(control, 'aria-valuemax', (Math.max(value, maxLength) / sampleRate).toFixed(3))
       setAttributeIfChanged(control, 'aria-valuetext', valueText)
@@ -288,7 +297,7 @@ export class TimelineKeyboardController {
     this.keepVisible(sample)
     const bounds = waveform.div.getBoundingClientRect()
     const x = bounds.left + Math.min(Math.max(waveform.getXValueForSample(sample), 0), bounds.width)
-    const y = bounds.top + Waveform.HEADER_HEIGHT
+    const y = bounds.top + waveform.audioLaneTop
     const target = { trackIndex: waveform.index, sample }
     if (inRegion) {
       this.trackList.timelineSelectionContextMenu.draw(x, y, target)

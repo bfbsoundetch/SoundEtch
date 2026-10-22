@@ -138,7 +138,13 @@ export class TimelineRegionController extends TrackListItemController {
     const lowX = this.getXValueForSample(lowSample)
     const highX = this.getXValueForSample(highSample)
 
-    this.waveformElements.values().forEach((v) => {
+    this.waveformElements.forEach((v, waveform) => {
+      const height = waveform.fullHeight
+      if (v.rect.height.baseVal.value !== height) {
+        v.rect.height.baseVal.value = height
+        v.leftExpand.y2.baseVal.value = height
+        v.rightExpand.y2.baseVal.value = height
+      }
       v.rect.setAttribute('x', `${lowX}`)
       v.rect.setAttribute('width', `${highX - lowX}`)
 
@@ -155,11 +161,6 @@ export class TimelineRegionController extends TrackListItemController {
   }
 
   resize(): void {
-    this.waveformElements.forEach((value, key) => {
-      value.rect.setAttribute('height', `${key.fullHeight}`)
-      value.leftExpand.setAttribute('y2', `${key.fullHeight}`)
-      value.rightExpand.setAttribute('y2', `${key.fullHeight}`)
-    })
     this.draw()
   }
 

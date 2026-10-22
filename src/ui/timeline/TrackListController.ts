@@ -385,11 +385,12 @@ export class TrackListController {
         this.tracklistElement.appendChild(waveformDiv)
 
         const displayMode = this.trackDisplayModes.get(track) ?? 'waveform'
-        const resizeTrackForTranscriptionLane = (heightDelta: number) => {
+        const resizeTrackForAuxiliaryLanes = (heightDelta: number) => {
           const currentHeight = parseFloat(getComputedStyle(waveformDiv).height)
           const height = Math.max(0, currentHeight + heightDelta)
           trackInfoDiv.style.height = `${height}px`
           waveformDiv.style.height = `${height}px`
+          trackInfoDiv.classList.toggle('has-video-lane', waveform.videoLaneHeight > 0)
         }
         const waveform = new Waveform(
           this,
@@ -398,7 +399,8 @@ export class TrackListController {
           i,
           this.getSpectrogramService(),
           displayMode,
-          resizeTrackForTranscriptionLane,
+          resizeTrackForAuxiliaryLanes,
+          project.directoryName,
         )
         this.timelineKeyboard.attach(waveform)
         const trackListInfo = new TrackListInfo(project, track, trackInfoDiv, this.history, displayMode, {
@@ -414,6 +416,7 @@ export class TrackListController {
           },
           onHideTranscript: () => this.transcriptPanelController?.close(),
           onChangeHeight: (deltaRem) => this.changeTrackHeight(trackInfoDiv, waveformDiv, waveform, deltaRem),
+          onFocusChannel: () => this.timelineKeyboard.focus(waveform),
         })
         this.addTrackResizeHandles(trackInfoDiv, waveformDiv, waveform)
         nextWaveforms.push(waveform)
@@ -470,7 +473,7 @@ export class TrackListController {
     deltaRem: number,
   ) {
     const height = Math.max(
-      6 * this.rootFontSize + waveform.transcriptionLaneHeight,
+      6 * this.rootFontSize + waveform.auxiliaryLaneHeight,
       waveformDiv.getBoundingClientRect().height + deltaRem * this.rootFontSize,
     )
     trackInfoDiv.style.height = `${height}px`
@@ -489,7 +492,7 @@ export class TrackListController {
       const pointerId = event.pointerId
       const startY = event.clientY
       const startHeight = waveformDiv.getBoundingClientRect().height
-      const minimumHeight = 6 * this.rootFontSize + waveform.transcriptionLaneHeight
+      const minimumHeight = 6 * this.rootFontSize + waveform.auxiliaryLaneHeight
 
       handle.setPointerCapture(pointerId)
       handle.classList.add('track-resize-handle-active')
@@ -592,6 +595,7 @@ export class TrackListController {
       candidate.info.classList.toggle('automation-dimmed', !isActive)
       candidate.waveform.classList.toggle('automation-dimmed', !isActive)
       candidate.waveform.classList.toggle('automation-active-waveform', isActive)
+      candidate.controller.setMediaOverlayVisible(false)
     }
 
     const originalInfoElements = Array.from(pair.info.childNodes)
@@ -607,7 +611,7 @@ export class TrackListController {
         pair.controller.topSvgElement,
         track,
         selectedParameter,
-        Waveform.HEADER_HEIGHT,
+        pair.controller.audioLaneTop,
       )
       mode.controller.draw()
     }
@@ -626,7 +630,7 @@ export class TrackListController {
       pair.controller.topSvgElement,
       track,
       parameterMetadata,
-      Waveform.HEADER_HEIGHT,
+      pair.controller.audioLaneTop,
     )
     this.automationMode = { controller, infoElement: pair.info, originalInfoElements }
     controller.draw()
@@ -647,6 +651,7 @@ export class TrackListController {
       pair.info.inert = false
       pair.waveform.inert = false
       pair.waveform.classList.remove('automation-dimmed', 'automation-active-waveform')
+      pair.controller.setMediaOverlayVisible(true)
     }
     if (hadFocus) mode.infoElement.querySelector<HTMLElement>('.track-effect-selector')?.focus()
     this.automationMode = null
