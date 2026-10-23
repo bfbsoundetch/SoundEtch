@@ -2812,13 +2812,21 @@ video {
   pointer-events: none;
 }
 
+.transcription-range-placeholders {
+  fill: none;
+  stroke: var(--muted-text-color);
+  stroke-width: 4;
+  stroke-linecap: butt;
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
+}
+
 .transcription-range-label {
   overflow: hidden;
   pointer-events: none;
 }
 
-.transcription-lane[hidden],
-.transcription-range-label[hidden] {
+.transcription-lane[hidden] {
   display: none;
 }
 

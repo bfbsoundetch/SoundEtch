@@ -5,6 +5,7 @@ import type { TrackListController } from './TrackListController'
 import { TrackListItemController } from './TrackListItemController'
 
 const SVG_NAMESPACE = 'http://www.w3.org/2000/svg'
+const MIN_READABLE_WORD_FRACTION = 0.75
 
 export const TRANSCRIPTION_LANE_HEIGHT = 32
 
@@ -16,6 +17,20 @@ export interface ProjectedTranscribedRange {
   readonly kind?: TranscriptGapKind
   readonly drawStartBoundary: boolean
   readonly drawEndBoundary: boolean
+}
+
+function firstIntersectingRange(transcription: readonly TranscribedRange[], startSample: number): number {
+  let low = 0
+  let high = transcription.length
+  while (low < high) {
+    const middle = low + Math.floor((high - low) / 2)
+    if (transcription[middle].endSample <= startSample) {
+      low = middle + 1
+    } else {
+      high = middle
+    }
+  }
+  return low
 }
 
 export function projectVisibleTranscribedRanges(
@@ -32,16 +47,7 @@ export function projectVisibleTranscribedRanges(
     return []
   }
 
-  let low = 0
-  let high = transcription.length
-  while (low < high) {
-    const middle = low + Math.floor((high - low) / 2)
-    if (transcription[middle].endSample <= visibleSourceStart) {
-      low = middle + 1
-    } else {
-      high = middle
-    }
-  }
+  const low = firstIntersectingRange(transcription, visibleSourceStart)
 
   const projected = new Array<ProjectedTranscribedRange>()
   for (let index = low; index < transcription.length; ++index) {
@@ -70,6 +76,12 @@ interface LabelNode {
   readonly content: HTMLDivElement
 }
 
+interface LabelStyle {
+  readonly font: string
+  readonly padding: number
+  readonly wordWidths: Map<string, number>
+}
+
 interface DrawCache {
   readonly transcription: readonly TranscribedRange[]
   readonly transcriptionLength: number
@@ -88,8 +100,11 @@ interface DrawCache {
 export class TranscriptionOverlayController extends TrackListItemController {
   private readonly overlayElement = document.createElementNS(SVG_NAMESPACE, 'svg')
   private readonly boundaryPathElement = document.createElementNS(SVG_NAMESPACE, 'path')
+  private readonly placeholderPathElement = document.createElementNS(SVG_NAMESPACE, 'path')
   private readonly labels = new Array<LabelNode>()
   private cache: DrawCache | null = null
+  private labelStyles: { speech: LabelStyle; gap: LabelStyle } | null = null
+  private static measureContext: CanvasRenderingContext2D | null = null
 
   constructor(
     trackListController: TrackListController,
@@ -101,6 +116,8 @@ export class TranscriptionOverlayController extends TrackListItemController {
     this.overlayElement.setAttribute('aria-hidden', 'true')
     this.boundaryPathElement.classList.add('transcription-range-boundaries')
     this.overlayElement.appendChild(this.boundaryPathElement)
+    this.placeholderPathElement.classList.add('transcription-range-placeholders')
+    this.overlayElement.appendChild(this.placeholderPathElement)
     parentElement.appendChild(this.overlayElement)
   }
 
@@ -141,53 +158,79 @@ export class TranscriptionOverlayController extends TrackListItemController {
     this.overlayElement.setAttribute('width', `${overlayWidth}`)
     this.overlayElement.setAttribute('height', `${Math.max(0, laneHeight)}`)
 
-    const projected = projectVisibleTranscribedRanges(
-      transcription,
-      sourceStartSample,
-      sourceEndSample,
-      timelineStartSample,
-      viewportStartSample,
-      viewportEndSample,
-    )
+    const visibleSourceStart = Math.max(sourceStartSample, sourceStartSample + viewportStartSample - timelineStartSample)
+    const visibleSourceEnd = Math.min(sourceEndSample, sourceStartSample + viewportEndSample - timelineStartSample)
+    let labelCount = 0
+    let placeholderPath = ''
+    let placeholderStart = 0
+    let placeholderEnd = -1
+    const flushPlaceholder = () => {
+      if (placeholderEnd >= 0) {
+        placeholderPath += `M ${placeholderStart} ${laneHeight / 2} H ${placeholderEnd} `
+        placeholderEnd = -1
+      }
+    }
     let boundaryPath = ''
     let previousBoundarySample: number | null = null
-    for (let index = 0; index < projected.length; ++index) {
-      const range = projected[index]
-      const label = this.getLabel(index)
-      const rangeStartX = this.getXValueForSample(range.startSample) - overlayX
-      const rangeEndX = this.getXValueForSample(range.endSample) - overlayX
+    for (
+      let index = firstIntersectingRange(transcription, visibleSourceStart);
+      overlayWidth > 0 && laneHeight > 0 && visibleSourceStart < visibleSourceEnd && index < transcription.length;
+      ++index
+    ) {
+      const range = transcription[index]
+      if (range.startSample >= visibleSourceEnd) break
+      const startSample = timelineStartSample + range.startSample - sourceStartSample
+      const endSample = timelineStartSample + range.endSample - sourceStartSample
+      const rangeStartX = this.getXValueForSample(startSample) - overlayX
+      const rangeEndX = this.getXValueForSample(endSample) - overlayX
+      const visibleStartX = Math.max(0, rangeStartX)
+      const visibleEndX = Math.min(overlayWidth, rangeEndX)
+      const rangeWidth = rangeEndX - rangeStartX
+      const styles = this.getLabelStyles()
+      const style = range.kind === undefined ? styles.speech : styles.gap
+      // Subpixel intervals need neither text formatting nor font measurement.
+      const text =
+        rangeWidth <= style.padding
+          ? ''
+          : range.kind === undefined
+            ? range.text
+            : formatTranscriptGap(
+                range.kind,
+                Math.min(endSample, footprintEndSample) - Math.max(startSample, timelineStartSample),
+                this.sampleRate,
+              )
+      if (!this.canReadWord(text, rangeWidth, style)) {
+        if (placeholderEnd < 0 || visibleStartX > placeholderEnd + 1) {
+          flushPlaceholder()
+          placeholderStart = visibleStartX
+        }
+        placeholderEnd = Math.max(placeholderEnd, visibleEndX)
+        continue
+      }
+      flushPlaceholder()
+      const label = this.getLabel(labelCount++)
       label.foreignObject.setAttribute('x', `${rangeStartX}`)
       label.foreignObject.setAttribute('y', '0')
-      label.foreignObject.setAttribute('width', `${Math.max(0, rangeEndX - rangeStartX)}`)
-      label.foreignObject.setAttribute('height', `${Math.max(0, laneHeight)}`)
-      label.foreignObject.removeAttribute('hidden')
+      label.foreignObject.setAttribute('width', `${rangeWidth}`)
+      label.foreignObject.setAttribute('height', `${laneHeight}`)
       label.foreignObject.classList.toggle('transcription-gap-label', range.kind !== undefined)
-      const text =
-        range.kind === undefined
-          ? range.text
-          : formatTranscriptGap(
-              range.kind,
-              Math.min(range.endSample, footprintEndSample) - Math.max(range.startSample, timelineStartSample),
-              this.sampleRate,
-            )
       if (label.content.textContent !== text) {
         label.content.textContent = text
       }
-
-      if (range.drawStartBoundary && previousBoundarySample !== range.startSample) {
-        const x = rangeStartX
-        boundaryPath += `M ${x} 0 V ${Math.max(0, laneHeight)} `
-        previousBoundarySample = range.startSample
+      if (range.startSample >= visibleSourceStart && previousBoundarySample !== startSample) {
+        boundaryPath += `M ${rangeStartX} 0 V ${laneHeight} `
+        previousBoundarySample = startSample
       }
-      if (range.drawEndBoundary && previousBoundarySample !== range.endSample) {
-        const x = rangeEndX
-        boundaryPath += `M ${x} 0 V ${Math.max(0, laneHeight)} `
-        previousBoundarySample = range.endSample
+      if (range.endSample <= visibleSourceEnd && previousBoundarySample !== endSample) {
+        boundaryPath += `M ${rangeEndX} 0 V ${laneHeight} `
+        previousBoundarySample = endSample
       }
     }
+    flushPlaceholder()
+    this.placeholderPathElement.setAttribute('d', placeholderPath)
     this.boundaryPathElement.setAttribute('d', boundaryPath)
-    for (let index = projected.length; index < this.labels.length; ++index) {
-      this.labels[index].foreignObject.setAttribute('hidden', '')
+    while (this.labels.length > labelCount) {
+      this.labels.pop()!.foreignObject.remove()
     }
 
     this.cache = {
@@ -212,10 +255,61 @@ export class TranscriptionOverlayController extends TrackListItemController {
 
   resize(): void {
     this.invalidate()
+    this.labelStyles = null
   }
 
   remove(): void {
     this.overlayElement.remove()
+  }
+
+  private getLabelStyles(): { speech: LabelStyle; gap: LabelStyle } {
+    if (this.labelStyles) return this.labelStyles
+    const label = this.getLabel(0)
+    const readStyle = (): LabelStyle => {
+      const style = getComputedStyle(label.content)
+      return {
+        font: style.font,
+        padding: parseFloat(style.paddingLeft) + parseFloat(style.paddingRight),
+        wordWidths: new Map(),
+      }
+    }
+    label.foreignObject.classList.remove('transcription-gap-label')
+    const speech = readStyle()
+    label.foreignObject.classList.add('transcription-gap-label')
+    const gap = readStyle()
+    label.foreignObject.classList.remove('transcription-gap-label')
+    return (this.labelStyles = { speech, gap })
+  }
+
+  private canReadWord(text: string, width: number, style: LabelStyle): boolean {
+    if (!text || width <= style.padding) return false
+    let wordWidth = style.wordWidths.get(text)
+    if (wordWidth === undefined) {
+      const context = (TranscriptionOverlayController.measureContext ??= document.createElement('canvas').getContext('2d')!)
+      context.font = style.font
+      const words = text.trim().replace(/\s+/g, ' ')
+      const textWidth = context.measureText(words).width
+      wordWidth = words ? MIN_READABLE_WORD_FRACTION * textWidth : Infinity
+      if (words.includes(' ')) {
+        const center = textWidth / 2
+        const spaceWidth = context.measureText(' ').width
+        let start = 0
+        wordWidth = Infinity
+        // At this zoom, the centered label must expose at least 75% of one word.
+        for (const word of words.matchAll(/\S+/g)) {
+          const width = context.measureText(word[0]).width
+          const distance = Math.abs(start + width / 2 - center)
+          wordWidth = Math.min(
+            wordWidth,
+            Math.max(MIN_READABLE_WORD_FRACTION * width, 2 * distance + (2 * MIN_READABLE_WORD_FRACTION - 1) * width),
+          )
+          if (start >= center) break
+          start += width + spaceWidth
+        }
+      }
+      style.wordWidths.set(text, wordWidth)
+    }
+    return width >= wordWidth + style.padding
   }
 
   private getLabel(index: number): LabelNode {
