@@ -405,7 +405,7 @@ export class TrackListController {
             if (entry) this.openTrackTranscript(track, entry)
           },
           onChangeHeight: (deltaRem) => this.changeTrackHeight(trackInfoDiv, waveformDiv, waveform, deltaRem),
-          onFocusChannel: () => this.timelineKeyboard.focus(waveform),
+          onShowVideo: () => this.trackPanelController.show(track, 'video'),
         })
         this.addTrackResizeHandles(trackInfoDiv, waveformDiv, waveform)
         nextWaveforms.push(waveform)
