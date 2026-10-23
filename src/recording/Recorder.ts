@@ -117,7 +117,7 @@ export class Recorder {
     const trackListController = (window as RecorderWindow).trackListController
     trackListController.draw()
     if (tracks.length > 0) {
-      void trackListController.openVideoPanel(tracks[0]).catch((error) => {
+      void trackListController.revealTrack(tracks[0]).catch((error) => {
         NotificationsController.showError(error instanceof Error ? error : new Error(String(error)))
       })
     }
@@ -181,7 +181,7 @@ export class Recorder {
     })
     ;(window as RecorderWindow).trackListController.draw()
     if (track.clipViews.some((view) => view.clip.videoSegments.length > 0)) {
-      await (window as RecorderWindow).trackListController.openVideoPanel(track)
+      await (window as RecorderWindow).trackListController.revealTrack(track)
     }
     return track
   }

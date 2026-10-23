@@ -85,6 +85,8 @@
         .addEventListener('wheel', preventHorizontalOverscroll, { passive: false })
       window.trackListController = new window.TrackListController()
       window.audioInputsController = new window.AudioInputsController()
+      window.inputsPanelController = new window.InputsPanelController()
+      window.outputPanelController = new window.OutputPanelController()
       window.keyPressController = new window.KeyPressController()
       window.mainMenuController = new window.MainMenuController()
       window.settingsController = new window.SettingsController()
@@ -366,9 +368,6 @@
           </button>
           <button type="button" id="timeline-go-to-time-button" class="bordered clickable timeline-view-button">
             Go to time…
-          </button>
-          <button type="button" id="timeline-video-button" class="bordered clickable timeline-view-button">
-            Video…
           </button>
         </div>
         <div id="input-track-lists">
@@ -1225,6 +1224,9 @@
         <line x1="250" y1="140" x2="250" y2="345" />
         <polyline points="130 225 250 345 370 225" />
         <line x1="60" y1="455" x2="440" y2="455" />
+      </g>
+      <g id="chevron-down" viewBox="0 0 500 500">
+        <polyline points="75 165 250 340 425 165" />
       </g>
       <g id="stop" viewBox="0 0 500 500">
         <polygon points="50 450 50 50 450 50 450 450" />

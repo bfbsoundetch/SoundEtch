@@ -225,16 +225,19 @@ export class AutomationController extends TrackListItemController {
     }
     this.pointEditorIsOpen = true
     this.bottomPanelController.open({
+      tab: 'tracks',
       owner: this,
       title: `${this.parameterMetadata.displayName} automation`,
       subtitle: `${this.track.name} · ${this.paramVals.transitionSequence.length} points`,
       body: this.createPointEditor(),
+      onBack: () => this.bottomPanelController.close(this),
       onClose: () => {
         this.pointEditorIsOpen = false
         this.pointEditorControls.clear()
         this.pointEditorTableBody = null
       },
     })
+    this.bottomPanelController.reveal('tracks')
   }
 
   private createPointEditor() {
@@ -395,7 +398,7 @@ export class AutomationController extends TrackListItemController {
       return
     }
     const points = this.paramVals.transitionSequence
-    this.bottomPanelController.setSubtitle(`${this.track.name} · ${points.length} points`)
+    this.bottomPanelController.setSubtitle(this, `${this.track.name} · ${points.length} points`)
     if (points.length == 0) {
       if (this.pointEditorControls.size > 0 || this.pointEditorTableBody) {
         this.rebuildPointEditor()
@@ -425,7 +428,7 @@ export class AutomationController extends TrackListItemController {
   private rebuildPointEditor() {
     const hadFocus =
       document.querySelector('#bottom-panel .automation-point-editor')?.contains(document.activeElement) ?? false
-    this.bottomPanelController.setBody(this.createPointEditor())
+    this.bottomPanelController.setBody(this, this.createPointEditor())
     if (hadFocus) document.querySelector<HTMLElement>('#bottom-panel .automation-add-point-button')?.focus()
   }
 

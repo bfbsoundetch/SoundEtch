@@ -8,7 +8,6 @@ import {
   transcriptionRangesEqual,
   type TranscriptionReplacement,
 } from '../transcription/TranscriptionSelection'
-import { BottomPanelController } from './BottomPanelController'
 import { TranscriptEditDialogController } from './TranscriptEditDialogController'
 import { announce } from './LiveAnnouncer'
 import type { TrackListController } from './timeline/TrackListController'
@@ -33,7 +32,6 @@ type Gesture = { x: number; y: number; moved: boolean; binding: Binding | null }
 type NativeEndpoints = { anchor: Node | null; anchorOffset: number; focus: Node | null; focusOffset: number }
 
 export class TranscriptPanelController {
-  private readonly shell = BottomPanelController.getInstance()
   private activeTrack: Track | null = null
   private content: HTMLElement | null = null
   private bindings: Binding[] = []
@@ -73,8 +71,9 @@ export class TranscriptPanelController {
     return this.activeTrack
   }
 
-  open(track: Track, entry: TrackTranscriptEntry): void {
-    if (this.activeTrack !== track) {
+  /** Shows `track`'s transcript in the returned element, which stays live until `deactivate`. */
+  activate(track: Track): HTMLElement {
+    if (this.activeTrack !== track || !this.content) {
       this.deactivate()
       this.activeTrack = track
       this.content = document.createElement('section')
@@ -84,14 +83,12 @@ export class TranscriptPanelController {
       this.listen(this.lifetime.signal)
     }
     this.refreshData()
-    this.shell.open({
-      owner: this,
-      title: 'Transcript',
-      subtitle: track.name,
-      body: this.content!,
-      onClose: () => this.deactivate(),
-    })
     this.syncPlayback()
+    return this.content
+  }
+
+  /** Selects one placed occurrence and scrolls it toward the middle; the content must be on screen. */
+  selectEntry(entry: TrackTranscriptEntry): void {
     const binding = this.bindings.find(
       (b) =>
         b.entry.clipView === entry.clipView &&
@@ -103,10 +100,6 @@ export class TranscriptPanelController {
       binding.element.scrollIntoView({ block: 'center', inline: 'nearest' })
     }
     this.updateSelectionMenu()
-  }
-
-  close(): void {
-    this.shell.close(this)
   }
 
   refreshData(): void {
@@ -140,7 +133,6 @@ export class TranscriptPanelController {
       transcriptionLength: clipView.clip.transcription.length,
     }))
     this.content.setAttribute('aria-label', `Transcript for ${track.name}`)
-    this.shell.setSubtitle(track.name)
     const bindings: Binding[] = []
     const sampleRate = this.trackListController.sampleRate
     const paragraphs = splitTranscriptParagraphs(getTrackTranscriptEntries(track)).map((entries) => {
@@ -269,7 +261,9 @@ export class TranscriptPanelController {
     this.firstPlayingElement = null
   }
 
-  private deactivate(): void {
+  deactivate(): void {
+    // The Tracks tab calls this on every refresh that does not show the transcript.
+    if (!this.activeTrack) return
     this.gesture = null
     this.selectionMenu.hidden = true
     this.editDialog?.close()

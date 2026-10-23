@@ -41,10 +41,9 @@ import {
 } from '../../transcription/TranscriptionSelection'
 import type { TranscriptionReplacement } from '../../transcription/TranscriptionSelection'
 import type { ProcessingModalController } from '../ProcessingModalController'
-import { TranscriptPanelController } from '../TranscriptPanelController'
+import { TrackPanelController } from '../TrackPanelController'
 import { getTrackTranscriptEntries } from '../transcript/TrackTranscript'
 import type { TrackTranscriptEntry } from '../transcript/TrackTranscript'
-import { VideoPanelController } from '../VideoPanelController'
 
 interface Selection {
   startSample: number
@@ -92,6 +91,8 @@ export class TrackListController {
   }
 
   rootFontSize = parseFloat(getComputedStyle(document.documentElement).fontSize)
+  // First, so the transcript it owns exists before anything below can draw.
+  readonly trackPanelController = new TrackPanelController(this)
   readonly waveforms = new Array<Waveform>()
   readonly timelineController = new TimelineController(this)
   readonly inputListController = new InputListController()
@@ -102,7 +103,7 @@ export class TrackListController {
     false,
     (event: PointerEvent) => this.timelineSelectionContextMenu.draw(event.clientX, event.clientY),
     (selection) => {
-      this.transcriptPanelController?.syncSelection(selection)
+      this.trackPanelController.transcript.syncSelection(selection)
       this.timelineKeyboard.refresh()
     },
     this,
@@ -121,9 +122,7 @@ export class TrackListController {
   private automationMode: AutomationMode | null = null
   private readonly trackDisplayModes = new Map<Track, TrackDisplayMode>()
   private spectrogramService: SpectrogramService | null = null
-  private transcriptPanelController: TranscriptPanelController | null = null
-  private videoPanelController: VideoPanelController | null = null
-  private videoPanelRequest = 0
+  private trackPanelRequest = 0
 
   readonly timelineSelectionContextMenu = new ContextMenuController(
     'timeline-selection-contextmenu',
@@ -260,11 +259,6 @@ export class TrackListController {
       this.translate(this.width / 4)
     })
     document.getElementById('timeline-go-to-time-button')!.addEventListener('click', () => this.openGoToTime())
-    document.getElementById('timeline-video-button')!.addEventListener('click', () => {
-      void this.openVideoPanel().catch((error) => {
-        NotificationsController.showError(error instanceof Error ? error : new Error(String(error)))
-      })
-    })
 
     this.newTrackDropRegion.className = 'new-track-drop-region clickable'
     this.newTrackDropRegion.textContent = '+ new track'
@@ -274,8 +268,7 @@ export class TrackListController {
 
     this.history.addChangeListener(() => {
       this.draw()
-      this.transcriptPanelController?.refreshData()
-      this.videoPanelController?.refreshData()
+      this.trackPanelController.refreshData()
     })
     KeyPressController.addKeyDownListener((event) => this.handleKeyDown(event))
 
@@ -301,7 +294,7 @@ export class TrackListController {
         this.exitAutomationMode()
       }
       this.showWelcomeOnEmptyProject()
-      this.transcriptPanelController?.syncPlayback()
+      this.trackPanelController.transcript.syncPlayback()
       switch (state) {
         case AudioState.PLAYING:
         case AudioState.RECORDING:
@@ -319,9 +312,7 @@ export class TrackListController {
       this.showWelcomeOnEmptyProject()
       this.sampleRate = project.sampleRate
       if (this.renderedProjectId != project.id) {
-        this.transcriptPanelController?.close()
-        ++this.videoPanelRequest
-        this.videoPanelController?.close()
+        ++this.trackPanelRequest
         this.renderedProjectId = project.id
         this.translationUnits = 0
         this.waveforms.forEach((waveform) => waveform.remove())
@@ -409,12 +400,10 @@ export class TrackListController {
             waveform.setDisplayMode(mode)
           },
           hasTranscript: () => getTrackTranscriptEntries(track).length > 0,
-          isTranscriptOpen: () => this.transcriptPanelController?.track === track,
           onShowTranscript: () => {
             const entry = getTrackTranscriptEntries(track)[0]
             if (entry) this.openTrackTranscript(track, entry)
           },
-          onHideTranscript: () => this.transcriptPanelController?.close(),
           onChangeHeight: (deltaRem) => this.changeTrackHeight(trackInfoDiv, waveformDiv, waveform, deltaRem),
           onFocusChannel: () => this.timelineKeyboard.focus(waveform),
         })
@@ -440,25 +429,22 @@ export class TrackListController {
       this.waveforms.forEach((waveform) => waveform.draw())
       this.selectionController.remove()
       this.pointerStateManager.reset()
-      const panelTrack = this.transcriptPanelController?.track
-      if (panelTrack && !project.getTracks().includes(panelTrack)) this.transcriptPanelController?.close()
-      else this.transcriptPanelController?.refreshData()
-      this.videoPanelController?.refreshData(project)
+      this.trackPanelController.refreshData(project)
     })
   }
 
   openTrackTranscript(track: Track, entry: TrackTranscriptEntry): void {
-    ++this.videoPanelRequest
-    this.transcriptPanelController ??= new TranscriptPanelController(this)
-    this.transcriptPanelController.open(track, entry)
+    ++this.trackPanelRequest
+    this.trackPanelController.showTranscript(track, entry)
   }
 
-  async openVideoPanel(track?: Track): Promise<void> {
-    const request = ++this.videoPanelRequest
+  /** Opens the bottom panel's Tracks tab on `track`. */
+  async revealTrack(track: Track): Promise<void> {
+    const request = ++this.trackPanelRequest
     const project = await ProjectManager.getActiveProject()
-    if (request !== this.videoPanelRequest || project !== (await ProjectManager.getActiveProject())) return
-    this.videoPanelController ??= new VideoPanelController(this)
-    this.videoPanelController.open(project, track)
+    if (request !== this.trackPanelRequest || project !== (await ProjectManager.getActiveProject())) return
+    this.trackPanelController.refreshData(project)
+    this.trackPanelController.show(track, 'video')
   }
 
   private getSpectrogramService(): SpectrogramService {
@@ -825,9 +811,23 @@ export class TrackListController {
     if (!selection) {
       return
     }
-    const intervals = getSelectedClipIntervals(selection)
+    await this.transcribe(selection, 'the selected region')
+  }
+
+  /** Transcribes all of `track`'s audio, as Generate transcription does for a selection. */
+  async transcribeTrack(track: Track): Promise<void> {
+    if (!this.canEdit()) {
+      NotificationsController.showLongDurationMessage('Stop playback or recording before transcribing.')
+      return
+    }
+    await this.transcribe({ startSample: 0, endSample: track.length, tracks: [track] }, track.name)
+  }
+
+  /** `where` names the region in messages, such as "the selected region" or a track name. */
+  private async transcribe(region: SelectedRegion, where: string) {
+    const intervals = getSelectedClipIntervals(region)
     if (intervals.length === 0) {
-      NotificationsController.showLongDurationMessage('The selected region contains no audio to transcribe.')
+      NotificationsController.showLongDurationMessage(`There is no audio to transcribe in ${where}.`)
       return
     }
 
@@ -889,8 +889,8 @@ export class TrackListController {
       if (generatedWordCount === 0) {
         NotificationsController.showLongDurationMessage(
           untranscribedCount > 0
-            ? 'Speech was detected in the selected audio, but no words were recognized.'
-            : 'No speech was detected in the selected audio.',
+            ? `Speech was detected in ${where}, but no words were recognized.`
+            : `No speech was detected in ${where}.`,
         )
       }
     } catch (error) {
@@ -908,7 +908,7 @@ export class TrackListController {
     this.automationMode?.controller.draw()
     this.selectionController.draw()
     this.positionMarkerController.draw()
-    this.transcriptPanelController?.syncPlayback()
+    this.trackPanelController.transcript.syncPlayback()
     this.timelineKeyboard.refresh()
   }
 
@@ -1074,6 +1074,6 @@ export class TrackListController {
     this.waveforms.forEach((waveform) => waveform.drawAudioData())
     this.selectionController.draw()
     this.positionMarkerController.draw(position)
-    this.transcriptPanelController?.syncPlayback(position)
+    this.trackPanelController.transcript.syncPlayback(position)
   }
 }

@@ -101,6 +101,7 @@ export class EffectPanelController {
         return
       }
       this.bottomPanelController.open({
+        tab: 'tracks',
         owner: this,
         title: metadata.name,
         subtitle: track.name,
@@ -119,13 +120,17 @@ export class EffectPanelController {
     }
   }
 
+  /** Opens the Tracks tab on `track`'s effect chain. */
   async showTrackEffectsList(track: Track) {
     const viewVersion = ++this.viewVersion
     await this.closeEffectView()
     if (viewVersion != this.viewVersion) {
       return
     }
+    this.trackListController.trackPanelController.show(track, 'effects')
+  }
 
+  createTrackEffectsChain(track: Track): HTMLElement {
     const bodyElement = document.createElement('div')
     bodyElement.className = 'effect-list-body'
     bodyElement.appendChild(this.createChainEndpoint('Track', track.name))
@@ -148,13 +153,7 @@ export class EffectPanelController {
 
     bodyElement.appendChild(this.createChainArrow())
     bodyElement.appendChild(this.createChainEndpoint('Output'))
-    this.bottomPanelController.open({
-      owner: this,
-      title: 'Effects',
-      subtitle: track.name,
-      body: bodyElement,
-      onClose: () => this.handlePanelClose(),
-    })
+    return bodyElement
   }
 
   async showAvailableEffectsList(track: Track) {
@@ -649,14 +648,17 @@ export class EffectPanelController {
     return document.querySelector<HTMLElement>(`#bottom-panel [data-instance-id="${CSS.escape(instanceId)}"]`)
   }
 
+  private get trackListController() {
+    return (window as any).trackListController as TrackListController
+  }
+
   private openAutomationView(track: Track, effectData: EffectData, metadata: EffectMetadata) {
-    const trackListController = (window as any).trackListController as TrackListController
     const parameters = metadata.parameters.filter((parameter) => effectData.params[parameter.id])
     if (parameters.length == 0) {
       return
     }
     this.bottomPanelController.close(this)
-    trackListController.enterAutomationMode(track, effectData.instanceId, parameters)
+    this.trackListController.enterAutomationMode(track, effectData.instanceId, parameters)
   }
 
   private async closeEffectView() {
@@ -688,6 +690,7 @@ export class EffectPanelController {
 
   private openSubview(title: string, subtitle: string, body: HTMLElement, track: Track) {
     this.bottomPanelController.open({
+      tab: 'tracks',
       owner: this,
       title,
       subtitle,

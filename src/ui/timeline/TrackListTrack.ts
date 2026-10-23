@@ -14,9 +14,7 @@ let nextDisplayModeMenuId = 0
 export type TrackMenuActions = {
   onDisplayModeChange: (mode: TrackDisplayMode) => void
   hasTranscript: () => boolean
-  isTranscriptOpen: () => boolean
   onShowTranscript: () => void
-  onHideTranscript: () => void
   onChangeHeight: (deltaRem: number) => void
   onFocusChannel: () => void
 }
@@ -361,20 +359,14 @@ export class TrackListTrack {
       onRename()
     })
     const transcriptItem = createItem('Show transcript', 'menuitem')
-    // Reflects whether this track's transcript is showing each time the menu opens.
+    // A transcript can be added or removed between openings of the menu.
     const refreshTranscriptItem = () => {
-      const open = actions.isTranscriptOpen()
-      transcriptItem.textContent = open ? 'Hide transcript' : 'Show transcript'
-      transcriptItem.hidden = !open && !actions.hasTranscript()
+      transcriptItem.hidden = !actions.hasTranscript()
     }
     refreshTranscriptItem()
     transcriptItem.addEventListener('click', () => {
       closeMenu()
-      if (actions.isTranscriptOpen()) {
-        actions.onHideTranscript()
-      } else {
-        actions.onShowTranscript()
-      }
+      actions.onShowTranscript()
     })
     const increaseHeightItem = createItem('Increase track height', 'menuitem')
     increaseHeightItem.addEventListener('click', () => {
