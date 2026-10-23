@@ -26,5 +26,5 @@ test('a loop wraps the position back to its start', () => {
 })
 
 test('an end at or before the start is not a loop', () => {
-  expect(advance(5_000, 4_000, 20)).toThrowError()
+  expect(() => advance(5_000, 4_000, 20)).toThrow('Loop end 4000 is earlier than the start 5000')
 })
