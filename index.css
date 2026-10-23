@@ -3245,7 +3245,8 @@ body:has(.bottom-panel.resizing, .bottom-panel.layout-resize) #topdiv,
   padding: 0.65rem 0.75rem;
   border-bottom: 1px solid var(--color);
   font-variant: small-caps;
-  letter-spacing: 0.06rem;
+  font-size: x-large;
+  letter-spacing: 0.04rem;
   cursor: pointer;
 }
 
@@ -3316,6 +3317,7 @@ body:has(.bottom-panel.resizing, .bottom-panel.layout-resize) #topdiv,
   grid-template-rows: var(--input-card-header-height) minmax(0, 1fr);
   flex: 0 0 auto;
   border: 1px solid var(--color);
+  user-select: none;
 }
 
 .input-card-header {
