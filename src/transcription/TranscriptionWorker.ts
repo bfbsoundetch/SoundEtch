@@ -48,6 +48,7 @@ import {
   buildSpeechSupportMask,
   computeFrameEnergies,
   ctcTokenPosteriors,
+  graniteLeadingWordOnset,
   graniteWordOnsetFrames,
   refineGraniteWords,
   timedWordsToTranscribedRanges,
@@ -699,13 +700,14 @@ async function transcribeGraniteSegment(
     const onsetFrames = graniteWordOnsetFrames(
       words,
       spans,
-      vocabularyLogProbs.data as Float32Array,
+      (vocabularyLogProbs.data as Float32Array).subarray(0, realOutputFrames * vocabularyLogProbs.dims[1]),
       vocabularyLogProbs.dims[1],
       (text) => runtime.decoder.wordPrefixTokenIds(text),
     )
     let timed = timeGraniteWords(words, posteriors, onsetFrames, segmentDurationSeconds)
     if (posteriors !== null) {
       const segmentOffsetSeconds = segmentStart16kSample / GRANITE_SAMPLE_RATE
+      const leadingWordOnset = graniteLeadingWordOnset(words, onsetFrames, segmentDurationSeconds)
       timed = timed.map((word) => ({
         ...word,
         start: word.start + segmentOffsetSeconds,
@@ -718,6 +720,7 @@ async function transcribeGraniteSegment(
         SILERO_VAD_FRAME_SAMPLES / SILERO_VAD_SAMPLE_RATE,
         segmentOffsetSeconds,
         (segmentStart16kSample + audio.length) / GRANITE_SAMPLE_RATE,
+        leadingWordOnset === undefined ? undefined : leadingWordOnset + segmentOffsetSeconds,
       ).map((word) => ({
         ...word,
         start: word.start - segmentOffsetSeconds,

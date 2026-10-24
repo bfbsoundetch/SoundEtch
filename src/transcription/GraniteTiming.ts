@@ -210,7 +210,7 @@ const PREFIX_ONSET_SHARE = 0.4
  * its start; within two frames it is as often early as the spike is late.
  */
 const MIN_PREFIX_ONSET_LEAD_FRAMES = 3
-/** The previous word still occupies the frame after its spike. */
+/** The previous word still occupies the frame after its spike or relocated onset. */
 const MIN_PREFIX_ONSET_FRAMES_AFTER_PREVIOUS_SPIKE = 2
 /**
  * Shorter words sit close to their spike, and their prefix pieces ("Ġo", "Ġa")
@@ -225,13 +225,23 @@ const MIN_PREFIX_ONSET_LETTERS = 6
  * earlier, as its word-initial prefix pieces ("Ġlegisl"; "Ġag" for
  * "agriculture") take over from the previous word's. For each word of at
  * least six letters, returns the first frame, from the second frame after the
- * previous word's spike, where its prefix pieces hold at least 40% of the
- * non-blank distribution and more than the previous word's pieces, if that
- * frame leads its spike by at least three frames. Pieces that spell a prefix
- * of both words ("Ġi" for "i issued") count for neither.
+ * previous word's spike (or its relocated onset, when later), where its prefix
+ * pieces hold at least 40% of the non-blank distribution and more than the
+ * previous word's pieces, if that frame leads its spike by at least three
+ * frames. Pieces that spell a prefix of both words ("Ġi" for "i issued") count
+ * for neither.
+ *
+ * Granite also emits a segment's first word on the segment's first frame
+ * wherever it is spoken: after the VAD pre-roll, a chunk's leading pause, or
+ * seconds of music the VAD accepted as speech. The distribution still shows
+ * the word where it is heard ("Ġwelcome" after an intro song). For a first
+ * word on frame 0, of any length, returns the first frame of the last run
+ * before its next token in which its prefix pieces hold at least 40% and more
+ * than the next word's pieces. A run that touches the frame-0 spike is the
+ * word itself, spoken from the segment start, and moves nothing.
  *
  * `vocabularyLogProbs` holds log P(token | non-blank) for `vocabularySize`
- * token ids per 80 ms frame.
+ * token ids per 80 ms frame, for the segment's real frames only.
  */
 export function graniteWordOnsetFrames(
   words: readonly RawGraniteWord[],
@@ -240,33 +250,59 @@ export function graniteWordOnsetFrames(
   vocabularySize: number,
   prefixTokenIds: (text: string) => readonly number[],
 ): Array<number | undefined> {
+  const frameCount = Math.floor(vocabularyLogProbs.length / vocabularySize)
   const prefixIds = words.map((word) => prefixTokenIds(word.text))
-  return words.map((word, index) => {
+  const showsWord = (frame: number, ownIds: readonly number[], otherIds: readonly number[]): boolean => {
+    const row = frame * vocabularySize
+    let own = 0
+    for (const id of ownIds) {
+      own += Math.exp(vocabularyLogProbs[row + id])
+    }
+    let other = 0
+    for (const id of otherIds) {
+      other += Math.exp(vocabularyLogProbs[row + id])
+    }
+    return own >= PREFIX_ONSET_SHARE && own > other
+  }
+  const onsets = new Array<number | undefined>()
+  for (const [index, word] of words.entries()) {
+    const spike = tokenSpans[word.firstToken]
+    if (index === 0 && spike.startFrame === 0) {
+      const nextIds = prefixIds[1] ?? []
+      const ownIds = prefixIds[0].filter((id) => !nextIds.includes(id))
+      const otherIds = nextIds.filter((id) => !prefixIds[0].includes(id))
+      let frame = Math.min(frameCount, tokenSpans[word.firstToken + 1]?.startFrame ?? frameCount) - 1
+      while (frame >= spike.endFrame && !showsWord(frame, ownIds, otherIds)) {
+        --frame
+      }
+      while (frame > spike.endFrame && showsWord(frame - 1, ownIds, otherIds)) {
+        --frame
+      }
+      onsets.push(frame > spike.endFrame ? frame : undefined)
+      continue
+    }
     if (word.text.replace(/[^a-z']/gi, '').length < MIN_PREFIX_ONSET_LETTERS) {
-      return undefined
+      onsets.push(undefined)
+      continue
     }
     const previousIds = index > 0 ? prefixIds[index - 1] : []
     const ownIds = prefixIds[index].filter((id) => !previousIds.includes(id))
     const otherIds = previousIds.filter((id) => !prefixIds[index].includes(id))
-    const spike = tokenSpans[word.firstToken].startFrame
     const firstFrame =
-      index > 0 ? tokenSpans[words[index - 1].firstToken].startFrame + MIN_PREFIX_ONSET_FRAMES_AFTER_PREVIOUS_SPIKE : 0
-    for (let frame = firstFrame; frame <= spike - MIN_PREFIX_ONSET_LEAD_FRAMES; ++frame) {
-      const row = frame * vocabularySize
-      let own = 0
-      for (const id of ownIds) {
-        own += Math.exp(vocabularyLogProbs[row + id])
-      }
-      let other = 0
-      for (const id of otherIds) {
-        other += Math.exp(vocabularyLogProbs[row + id])
-      }
-      if (own >= PREFIX_ONSET_SHARE && own > other) {
-        return frame
+      index > 0
+        ? Math.max(tokenSpans[words[index - 1].firstToken].startFrame, onsets[index - 1] ?? 0) +
+          MIN_PREFIX_ONSET_FRAMES_AFTER_PREVIOUS_SPIKE
+        : 0
+    let onset: number | undefined
+    for (let frame = firstFrame; frame <= spike.startFrame - MIN_PREFIX_ONSET_LEAD_FRAMES; ++frame) {
+      if (showsWord(frame, ownIds, otherIds)) {
+        onset = frame
+        break
       }
     }
-    return undefined
-  })
+    onsets.push(onset)
+  }
+  return onsets
 }
 
 /**
@@ -293,6 +329,23 @@ export function timeGraniteWords(
     const end = Math.max(start + 0.02, Math.min(durationSeconds, endFrames * GRANITE_TIMING_FRAME_SECONDS))
     return { text: word.text, start, end }
   })
+}
+
+/**
+ * Segment seconds, at the middle of the frame, where Granite's prefix
+ * evidence hears a first word it emitted on frame 0: the onset
+ * `graniteWordOnsetFrames` returns after that word's spike.
+ */
+export function graniteLeadingWordOnset(
+  words: readonly RawGraniteWord[],
+  onsetFrames: readonly (number | undefined)[],
+  durationSeconds: number,
+): number | undefined {
+  const onsetFrame = onsetFrames[0]
+  if (words.length === 0 || onsetFrame === undefined || onsetFrame <= words[0].startFrame) {
+    return undefined
+  }
+  return Math.min(durationSeconds, (onsetFrame + 0.5) * GRANITE_TIMING_FRAME_SECONDS)
 }
 
 /** Speech runs shorter than this are treated as clicks, not a word. */
@@ -324,16 +377,24 @@ const EXPECTED_SECONDS_PER_LETTER = 0.045
 const MAX_SECONDS_PER_LETTER = 0.09
 const MIN_LONGEST_WORD_SECONDS = 0.3
 const MIN_WORD_SECONDS = 0.02
+/**
+ * Energy places a first word's onset on 32 ms frames, so it is kept within
+ * this distance of where Granite's prefix evidence hears the word (the middle
+ * of an 80 ms frame). Farther apart, energy settled on other sound: music or
+ * noise the VAD accepted as speech before the word.
+ */
+const LEADING_ONSET_TOLERANCE_SECONDS = 0.2
 
 /**
- * Granite can emit a segment's first word at the very start of the segment,
- * inside the VAD pre-roll or a 20-second chunk's leading pause, up to 750 ms
- * before the speech it transcribes. Bounded refinement cannot reach that far,
- * so a first word that starts within that leading window and is at least 80%
- * unsupported starts at the nearest supported speech run between the segment
- * start and the next word. When the next word's spike already sits where that
- * speech begins, the first word starts at the first supported run before the
- * next word ends.
+ * Granite emits a segment's first word on the segment's first frame. When
+ * `graniteWordOnsetFrames` finds no later prefix evidence for it, the word can
+ * still sit inside the VAD pre-roll or a 20-second chunk's leading pause, up
+ * to 750 ms before the speech it transcribes. Bounded refinement cannot reach
+ * that far, so a first word that starts within that leading window and is at
+ * least 80% unsupported starts at the nearest supported speech run between the
+ * segment start and the next word. When the next word's spike already sits
+ * where that speech begins, the first word starts at the first supported run
+ * before the next word ends.
  */
 function relocateLeadingWord(
   anchor: TimedGraniteWord,
@@ -453,6 +514,11 @@ function speechOnsetStart(
  * Ends bridge quiet stretches up to 96 ms (stop closures), or up to 192 ms
  * while the word is shorter than its letters suggest (quiet fricatives), and
  * never pass the next word's start, a letter-based length cap, or the segment.
+ *
+ * `leadingWordOnset` (from `graniteLeadingWordOnset`, in interval seconds) is
+ * where Granite's prefix evidence hears a first word it emitted on frame 0.
+ * Energy still places that word's onset unless it lands more than 200 ms away;
+ * the word then starts at the evidence, or where speech resumes after it.
  */
 export function refineGraniteWords(
   words: readonly TimedGraniteWord[],
@@ -461,6 +527,7 @@ export function refineGraniteWords(
   frameSeconds: number,
   segmentStartSeconds: number,
   segmentEndSeconds: number,
+  leadingWordOnset?: number,
 ): TimedGraniteWord[] {
   // Frames straddling the segment start belong partly to the previous segment.
   const segmentFirstFrame = Math.ceil(segmentStartSeconds / frameSeconds)
@@ -484,6 +551,7 @@ export function refineGraniteWords(
       frameEnergies[frame] >= threshold
   }
 
+  const anchors = words.slice()
   const starts = new Array<number>(words.length)
   words.forEach((anchor, index) => {
     const nextAnchorStart = words[index + 1]?.start ?? segmentEndSeconds
@@ -500,14 +568,29 @@ export function refineGraniteWords(
             frameSeconds,
           )
         : undefined
-    const start =
+    let start =
       relocated ??
       speechOnsetStart(anchor, searchEnd, activityAround(anchor.start), speechMask, frameSeconds, index === 0)
+    if (
+      index === 0 &&
+      leadingWordOnset !== undefined &&
+      Math.abs(start - leadingWordOnset) > LEADING_ONSET_TOLERANCE_SECONDS
+    ) {
+      anchors[0] = { text: anchor.text, start: leadingWordOnset, end: leadingWordOnset }
+      start = speechOnsetStart(
+        anchors[0],
+        Math.min(nextAnchorStart, leadingWordOnset + ONSET_SEARCH_SECONDS),
+        activityAround(leadingWordOnset),
+        speechMask,
+        frameSeconds,
+        true,
+      )
+    }
     starts[index] =
       index > 0 ? Math.max(start, starts[index - 1] + MIN_WORD_SECONDS) : Math.max(start, segmentStartSeconds)
   })
 
-  return words.map((anchor, index) => {
+  return anchors.map((anchor, index) => {
     const start = starts[index]
     const nextStart = index + 1 < words.length ? starts[index + 1] : segmentEndSeconds
     const active = activityAround(anchor.start)

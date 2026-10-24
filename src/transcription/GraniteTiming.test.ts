@@ -2,6 +2,7 @@ import {
   buildSpeechSupportMask,
   computeFrameEnergies,
   ctcTokenPosteriors,
+  graniteLeadingWordOnset,
   refineGraniteWords,
   timedWordsToTranscribedRanges,
   timeGraniteWords,
@@ -188,6 +189,37 @@ test('a leading word in a pause the VAD still marks as speech moves onto the lou
   expect(geometry([which])).toEqual([{ start: 12 * 0.032, end: 15 * 0.032 }])
 })
 
+test('a first word heard after music the VAD accepts starts at Granite evidence, not the segment start', () => {
+  // An intro song runs into "welcome everybody"; Silero and energy both treat the song as speech.
+  const words = [
+    { text: 'welcome', start: 0, end: 0.08 },
+    { text: 'everybody', start: 5.92, end: 6 },
+  ]
+  const speech = new Uint8Array(250).fill(1)
+  const energies = new Float32Array(250).fill(0.1)
+  const [unaided] = refineGraniteWords(words, speech, energies, 0.032, 0, 8)
+  expect(unaided.start).toBe(0)
+  const [welcome, everybody] = refineGraniteWords(words, speech, energies, 0.032, 0, 8, 5.48)
+  expect(welcome.start).toBe(5.48)
+  expect(welcome.end).toBeLessThanOrEqual(everybody.start)
+})
+
+test('energy keeps a first-word onset near Granite evidence and loses one that settled on earlier sound', () => {
+  // The segment starts in silence, then music, then "my friends": energy relocation picks the music.
+  const words = [
+    { text: 'my', start: 10.45, end: 10.53 },
+    { text: 'friends', start: 11.36, end: 11.6 },
+  ]
+  const speech = new Uint8Array(400)
+  speech.fill(1, 330, 345)
+  speech.fill(1, 352, 365)
+  const energies = Float32Array.from(speech)
+  const refineMy = (leadingWordOnset: number) =>
+    refineGraniteWords(words, speech, energies, 0.032, 10.4, 30.4, leadingWordOnset)[0].start
+  expect(refineMy(10.6)).toBeCloseTo(330 * 0.032, 9)
+  expect(refineMy(11.28)).toBe(11.28)
+})
+
 test('unsupported leading padding is removed without cutting a VAD-supported quiet onset', () => {
   const speech = new Uint8Array(80)
   const energies = new Float32Array(80).fill(0.002)
@@ -361,6 +393,38 @@ test('a long word starts where its prefix pieces overtake the previous word, not
   const lateSpans = [spans[0], { id: 4, startFrame: 6, endFrame: 7 }]
   const lateWords = [words[0], { ...words[1], startFrame: 6, endFrame: 7 }]
   expect(graniteWordOnsetFrames(lateWords, lateSpans, logProbs, 8, (text) => prefixIds[text])).toEqual([
+    undefined,
+    undefined,
+  ])
+})
+
+test('a first word Granite emitted on frame 0 starts where its prefix pieces last show it', () => {
+  // An intro song precedes "welcome everybody". Ids: 1 "welcome" (segment-initial piece),
+  // 2 "Ġwelcome", 3 "Ġevery", 4 "Ġeverybody".
+  const prefixIds: Record<string, number[]> = { welcome: [2], everybody: [3, 4] }
+  const spans = [
+    { id: 1, startFrame: 0, endFrame: 1 },
+    { id: 4, startFrame: 9, endFrame: 10 },
+  ]
+  const words = [
+    { text: 'welcome', startFrame: 0, endFrame: 1, firstToken: 0, lastToken: 0 },
+    { text: 'everybody', startFrame: 9, endFrame: 10, firstToken: 1, lastToken: 1 },
+  ]
+  const logProbs = vocabularyLogProbs(
+    [{ 1: 1 }, {}, { 2: 0.5 }, { 3: 0.6 }, {}, { 2: 0.9 }, { 2: 0.8 }, { 2: 0.3, 4: 0.2 }, { 4: 0.5 }, { 4: 1 }],
+    6,
+  )
+  // The song's "Ġwelcome" at frame 2 and "Ġevery" at frame 3 are neither word: "welcome" is heard
+  // from frame 5, and "everybody" cannot begin before it.
+  const onsets = graniteWordOnsetFrames(words, spans, logProbs, 6, (text) => prefixIds[text])
+  expect(onsets).toEqual([5, undefined])
+  expect(graniteLeadingWordOnset(words, onsets, 10)).toBe(5.5 * 0.08)
+
+  // Evidence that touches the frame-0 spike is the word itself, spoken from the segment start.
+  const spokenAtStart = vocabularyLogProbs([{ 1: 1 }, { 2: 0.9 }, { 2: 0.7 }, {}, { 4: 1 }], 6)
+  const nearSpans = [spans[0], { id: 4, startFrame: 4, endFrame: 5 }]
+  const nearWords = [words[0], { ...words[1], startFrame: 4, endFrame: 5 }]
+  expect(graniteWordOnsetFrames(nearWords, nearSpans, spokenAtStart, 6, (text) => prefixIds[text])).toEqual([
     undefined,
     undefined,
   ])
