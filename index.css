@@ -779,6 +779,7 @@ body.tooltips-dismissed :is(.tooltipped span, .slider-value) {
   grid-area: body;
   justify-items: center;
   overscroll-behavior: none;
+  user-select: none;
 }
 
 #welcome h1 {
