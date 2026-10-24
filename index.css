@@ -771,7 +771,6 @@ body.tooltips-dismissed :is(.tooltipped span, .slider-value) {
 
 #welcome {
   display: grid;
-  gap: 1rem;
   grid-template-rows: auto;
   grid-auto-rows: auto;
   align-content: start;
@@ -799,14 +798,13 @@ body.tooltips-dismissed :is(.tooltipped span, .slider-value) {
   height: auto;
   min-height: 4rem;
   width: 70%;
-  margin: 1rem;
+  margin: .5rem;
   display: grid;
   align-items: center;
   grid-template-columns: 1fr 1fr;
   gap: 1rem;
   font-size: larger;
-  margin: 1rem;
-  border: dashed 1px;
+  border: solid 1px;
 }
 
 .welcome-header {

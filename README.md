@@ -75,6 +75,8 @@ Original compressed footage is stored with the project and included in project a
 
 ## Video recording
 
+On the welcome page, choose **Record from microphone + camera** to enable both devices and start recording immediately.
+
 **Record** captures every enabled video source along with the audio: the camera (**Enable Camera** in the header or the meeting room), screen/tab capture, and each meeting guest's camera and screen share. Each person or device records into one linked clip on its own new track, the same as the audio inputs: microphone with camera, a screen capture's audio with its picture, and each guest's audio with their video. A source without audio, such as a camera with the microphone off, records a video-only clip labeled **No audio**. The footage appears in the **Video** lane when recording stops, and the bottom panel's **Tracks** tab opens on its **Video** view.
 
 Guests' video is recorded on the recording machine as it arrives over the meeting connection, like their audio, so its quality follows that connection. Guest streams are encoded at least 720 lines high, because they start small while the connection ramps up. The camera opens at up to 1280×720 and 30 fps. Footage is encoded to MP4 (H.264, or VP9/AV1 where H.264 encoding is unavailable), at most 1080 lines high with a key frame every 2 seconds, and later frames of a different size are fitted into the first frame's box.

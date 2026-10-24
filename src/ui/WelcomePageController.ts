@@ -7,6 +7,10 @@ export class WelcomePageController {
       await LocalMediaStreams.startAudioDevice()
       await Recorder.startRecordingActiveInputs()
     }
+    document.getElementById('welcome-camera')!.onclick = async () => {
+      await Promise.all([LocalMediaStreams.startAudioDevice(), LocalMediaStreams.startVideoDevice()])
+      await Recorder.startRecordingActiveInputs()
+    }
     document.getElementById('welcome-screen')!.onclick = async () => {
       await LocalMediaStreams.startCapturingTab()
       await Recorder.startRecordingActiveInputs()
