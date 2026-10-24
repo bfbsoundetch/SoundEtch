@@ -13,6 +13,9 @@ export class PointerStateManager extends TrackListItemController {
   public activeWaveform: Waveform | null = null
   private mouseDownPoint: { x: number; y: number } | null = null
   private clipViewMoveInfo: { clipViewController: ClipViewController; startWave: Waveform } | null = null
+  private clipDragPoint: { x: number; y: number } | null = null
+  private clipDragScrollFrame: number | null = null
+  private clipDragScrollTime = 0
   private timelineRegionController: TimelineRegionController | null = null
   private selectingTranscript = false
   private pendingTranscript: {
@@ -24,6 +27,7 @@ export class PointerStateManager extends TrackListItemController {
   } | null = null
 
   private readonly timelineAreaElement = document.getElementById('timeline-area')!
+  private readonly trackScrollElement = document.getElementById('input-track-lists')!
 
   constructor(trackListController: TrackListController) {
     super(trackListController)
@@ -56,6 +60,7 @@ export class PointerStateManager extends TrackListItemController {
     window.addEventListener('blur', () => {
       this.pendingTranscript = null
       this.finishSelectingTranscript()
+      this.cancelMovingClipView()
     })
     timelineAreaElement.addEventListener(
       'mousedown',
@@ -95,6 +100,15 @@ export class PointerStateManager extends TrackListItemController {
       ) {
         pending.cancelled = true
       }
+      if (this.state === State.MOVING_CLIPVIEW) {
+        if (!(event.buttons & 1)) {
+          this.cancelMovingClipView()
+          return
+        }
+        this.clipDragPoint!.x = event.clientX
+        this.clipDragPoint!.y = event.clientY
+        this.updateMovingClipView()
+      }
     })
 
     const mouseMoveListener = async (mouseEvent: MouseEvent) => {
@@ -129,11 +143,8 @@ export class PointerStateManager extends TrackListItemController {
             )
           }
           break
-        case State.MOVING_CLIPVIEW: {
-          const shift = mouseEvent.clientX - this.mouseDownPoint!.x
-          this.clipViewMoveInfo!.clipViewController.drawMoveInProgressClipView(shift, this.activeWaveform)
+        case State.MOVING_CLIPVIEW:
           break
-        }
         case State.RESIZING_CLIPVIEW: {
           const shift = mouseEvent.clientX - this.mouseDownPoint!.x
           this.activeClipViewController!.updateClipViewResize(shift)
@@ -210,10 +221,12 @@ export class PointerStateManager extends TrackListItemController {
           } else this.changeState(State.DEFAULT)
           break
         case State.MOVING_CLIPVIEW: {
-          const droppedOnNewTrack = this.trackListController.isPointInNewTrackDropRegion(
-            mouseEvent.clientX,
-            mouseEvent.clientY,
-          )
+          this.clipDragPoint!.x = mouseEvent.clientX
+          this.clipDragPoint!.y = mouseEvent.clientY
+          this.drawMovingClipView()
+          const droppedOnNewTrack =
+            this.trackScrollElement.contains(document.elementFromPoint(mouseEvent.clientX, mouseEvent.clientY)) &&
+            this.trackListController.isPointInNewTrackDropRegion(mouseEvent.clientX, mouseEvent.clientY)
           this.changeState(State.DEFAULT)
           const moveInfo = this.clipViewMoveInfo!
           if (droppedOnNewTrack) {
@@ -341,13 +354,89 @@ export class PointerStateManager extends TrackListItemController {
     this.activeClipViewController = controller
   }
 
-  startMovingClipView(controller: ClipViewController, mouseDownX: number) {
+  startMovingClipView(controller: ClipViewController, event: MouseEvent) {
     if (!this.changeState(State.MOVING_CLIPVIEW)) {
       return
     }
     this.clipViewMoveInfo = { clipViewController: controller, startWave: controller.waveform }
-    this.mouseDownPoint = { x: mouseDownX, y: 0 }
+    this.mouseDownPoint = { x: event.clientX, y: event.clientY }
+    this.clipDragPoint = { x: event.clientX, y: event.clientY }
     this.trackListController.showNewTrackDropRegion(controller.clipView.clip.getChannelCount())
+    this.updateMovingClipView()
+  }
+
+  private drawMovingClipView() {
+    const point = this.clipDragPoint!
+    // Scrolling changes the track under a stationary pointer without a mousemove.
+    const div = document.elementFromPoint(point.x, point.y)?.closest('.waveform')
+    this.activeWaveform = this.trackListController.waveforms.find((waveform) => waveform.div === div) ?? null
+    this.clipViewMoveInfo!.clipViewController.drawMoveInProgressClipView(
+      point.x - this.mouseDownPoint!.x,
+      this.activeWaveform,
+    )
+  }
+
+  private updateMovingClipView() {
+    this.drawMovingClipView()
+    if (this.clipDragScrollSpeed() === 0) {
+      this.stopClipDragAutoscroll()
+    } else if (this.clipDragScrollFrame === null) {
+      this.clipDragScrollTime = performance.now()
+      this.clipDragScrollFrame = requestAnimationFrame(this.scrollMovingClipView)
+    }
+  }
+
+  private clipDragScrollSpeed(): number {
+    const point = this.clipDragPoint
+    if (!point) return 0
+    const bounds = this.trackScrollElement.getBoundingClientRect()
+    const top = Math.max(0, bounds.top)
+    const bottom = Math.min(window.innerHeight, bounds.bottom)
+    if (bottom <= top || point.x < bounds.left || point.x > bounds.right) return 0
+    const edge = Math.min(48, (bottom - top) / 2)
+    if (point.y < top + edge && this.trackScrollElement.scrollTop > 0) {
+      return -(80 + 520 * Math.min(1, (top + edge - point.y) / edge))
+    }
+    if (
+      point.y > bottom - edge &&
+      this.trackScrollElement.scrollTop + this.trackScrollElement.clientHeight < this.trackScrollElement.scrollHeight
+    ) {
+      return 80 + 520 * Math.min(1, (point.y - bottom + edge) / edge)
+    }
+    return 0
+  }
+
+  private readonly scrollMovingClipView = (time: number) => {
+    this.clipDragScrollFrame = null
+    const speed = this.clipDragScrollSpeed()
+    if (speed === 0) return
+    const elapsed = Math.max(0, Math.min(time - this.clipDragScrollTime, 50)) / 1000
+    this.clipDragScrollTime = time
+    const previousScrollTop = this.trackScrollElement.scrollTop
+    this.trackScrollElement.scrollTop += speed * elapsed
+    if (this.trackScrollElement.scrollTop !== previousScrollTop) {
+      this.drawMovingClipView()
+    }
+    this.clipDragScrollFrame = requestAnimationFrame(this.scrollMovingClipView)
+  }
+
+  private stopClipDragAutoscroll() {
+    if (this.clipDragScrollFrame !== null) {
+      cancelAnimationFrame(this.clipDragScrollFrame)
+      this.clipDragScrollFrame = null
+    }
+  }
+
+  private cancelMovingClipView() {
+    if (this.state !== State.MOVING_CLIPVIEW) return
+    const { clipViewController, startWave } = this.clipViewMoveInfo!
+    this.changeState(State.DEFAULT)
+    clipViewController.draggedShift = 0
+    if (clipViewController.waveform !== startWave) {
+      clipViewController.switchParent(startWave)
+    } else {
+      startWave.draw()
+    }
   }
 
   startAutomating() {
@@ -458,6 +547,8 @@ export class PointerStateManager extends TrackListItemController {
         break
     }
     if (this.state == State.MOVING_CLIPVIEW && newState != State.MOVING_CLIPVIEW) {
+      this.stopClipDragAutoscroll()
+      this.clipDragPoint = null
       this.trackListController.hideNewTrackDropRegion()
     }
     this.state = newState

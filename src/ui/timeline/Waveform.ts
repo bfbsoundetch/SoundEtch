@@ -1079,7 +1079,7 @@ export class ClipViewController extends TrackListItemController {
   }
 
   private startClipViewMove(self: ClipViewController, startMouseEvent: MouseEvent) {
-    this.trackListController.pointerStateManager.startMovingClipView(this, startMouseEvent.clientX)
+    this.trackListController.pointerStateManager.startMovingClipView(this, startMouseEvent)
   }
 
   drawBoundingBox(startSample: number, endSample: number) {

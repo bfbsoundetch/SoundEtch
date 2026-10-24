@@ -101,6 +101,10 @@ Drag one local media file onto the timeline, or onto the welcome area in an empt
 
 File drops are available while stopped or monitoring, not during playback, recording, or another local-file import. Drop one file at a time; text and link drags are left alone.
 
+## Moving clips
+
+Drag a clip's header to move it along the timeline or onto another track. Hold it near the top or bottom edge of the visible track list to scroll vertically, even while the pointer stays still. Scrolling speeds up toward the edge and stops when the pointer returns to the middle or the drag ends. To move the clip onto a new track, keep dragging down until the **+ new track** drop area appears below the last track, then release over it.
+
 ## Timeline display modes
 
 Use each track's options menu (three dots) to switch between its waveform and a WebGPU-rendered spectrogram, rename the track, show or hide its transcript, or change its height. The selected mode is session-only and resets to the waveform when a project is opened or the page is reloaded. If WebGPU is unavailable, the spectrogram view keeps its editing overlays on the selected color scheme's minimum-dB background; switching back to the waveform remains available.
