@@ -398,11 +398,17 @@ export class TrackListTrack {
       popover.style.top = `${top}px`
     }
 
+    popover.addEventListener('beforetoggle', (event) => {
+      if (event.newState !== 'open') return
+      // Closed popovers have no layout; measure invisibly before the browser reveals the menu.
+      popover.classList.add('track-display-mode-menu-positioning')
+      positionPopover()
+      popover.classList.remove('track-display-mode-menu-positioning')
+    })
     popover.addEventListener('toggle', () => {
       const isOpen = popover.matches(':popover-open')
       button.setAttribute('aria-expanded', `${isOpen}`)
       if (isOpen) {
-        positionPopover()
         if (!popover.contains(document.activeElement)) {
           optionButtons[modes.findIndex(({ mode }) => mode == currentDisplayMode)].focus()
         }
@@ -421,7 +427,6 @@ export class TrackListTrack {
       if (!popover.matches(':popover-open')) {
         popover.showPopover()
         button.setAttribute('aria-expanded', 'true')
-        positionPopover()
       }
       const items = Array.from(popover.querySelectorAll<HTMLButtonElement>('button:not([hidden])'))
       const checkedItem = optionButtons[modes.findIndex(({ mode }) => mode == currentDisplayMode)]

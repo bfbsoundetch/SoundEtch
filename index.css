@@ -2079,9 +2079,14 @@ video {
   user-select: none;
 }
 
-.track-display-mode-menu:popover-open {
+.track-display-mode-menu:popover-open,
+.track-display-mode-menu-positioning {
   display: grid;
   gap: 0.125rem;
+}
+
+.track-display-mode-menu-positioning {
+  visibility: hidden;
 }
 
 .track-display-mode-option {
