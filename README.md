@@ -71,6 +71,8 @@ The filmstrip follows timeline scrolling and zooming. Footage gaps inside a clip
 
 Original compressed footage is stored with the project and included in project archives. Video without audio keeps its full timeline duration without creating a PCM file. Import cancellation/failure removes the new media assets. This feature does not add independent video/audio edits, video compositing, or footage export; MP4 publishing remains the existing visualizer described below.
 
+**Manage Clips** shows the combined size of each clip's stored audio, waveform summary, and video files. Silent footage counts only its video files. This reflects project storage, not just the original import's compressed file size.
+
 ## Video recording
 
 **Record** captures every enabled video source along with the audio: the camera (**Enable Camera** in the header or the meeting room), screen/tab capture, and each meeting guest's camera and screen share. Each person or device records into one linked clip on its own new track, the same as the audio inputs: microphone with camera, a screen capture's audio with its picture, and each guest's audio with their video. A source without audio, such as a camera with the microphone off, records a video-only clip labeled **No audio**. The footage appears in the **Video** lane when recording stops, and the bottom panel's **Tracks** tab opens on its **Video** view.

@@ -3,11 +3,14 @@ import { Clip } from '../project/Clip'
 import { Project } from '../project/Project'
 
 export async function getClipDiskUsage(project: Project, clip: Clip): Promise<number> {
-  const [clipFile, summaryFile] = await Promise.all([
-    (await FileSystemUtils.getFileHandle(project.directoryName, clip.filename)).getFile(),
-    (await FileSystemUtils.getFileHandle(project.directoryName, `${clip.filename}_summary`)).getFile(),
-  ])
-  return clipFile.size + summaryFile.size
+  const filenames = clip.audioPresent ? [clip.filename, `${clip.filename}_summary`] : []
+  filenames.push(...clip.videoSegments.map((segment) => `${clip.filename}_video_${segment.index}`))
+  const files = await Promise.all(
+    filenames.map(async (filename) =>
+      (await FileSystemUtils.getFileHandle(project.directoryName, filename)).getFile(),
+    ),
+  )
+  return files.reduce((total, file) => total + file.size, 0)
 }
 
 export function humanizeBytes(bytes: number): string {
