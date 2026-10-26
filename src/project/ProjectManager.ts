@@ -64,6 +64,7 @@ export class ProjectManager {
       result = await DatabasePersister.getObjectById<Project>(Number(activeProjectId))
       if (result) {
         await this.populateSummaries(result)
+        await this.recoverInterruptedVideo(result)
       } else {
         result = await DatabasePersister.save(new Project(ProjectManager.DEFAULT_PROJECT_TITLE, 48000))
         await DatabasePersister.setGlobalProperty(ProjectManager.ACTIVE_PROJECT_PROPERTY_NAME, result.id)
@@ -106,6 +107,7 @@ export class ProjectManager {
     }
     ProjectManager.activeProject = Promise.resolve(project)
     await this.populateSummaries(project)
+    await this.recoverInterruptedVideo(project)
     await DatabasePersister.setGlobalProperty(ProjectManager.ACTIVE_PROJECT_PROPERTY_NAME, project.id)
     ProjectManager.projectListeners.forEach((listener) => listener(project))
     return project
@@ -175,6 +177,13 @@ export class ProjectManager {
     }
   }
 
+  private static async recoverInterruptedVideo(project: Project) {
+    if (!project.getClips().some((clip) => clip.videoRecordingInProgress)) return
+    // Imported on demand: recovery shares the recording modules, which stay out of the initial chunk.
+    const { recoverInterruptedVideoRecordings } = await import('../recording/VideoRecovery')
+    await recoverInterruptedVideoRecordings(project)
+  }
+
   static async addNewClip(clip: Clip) {
     const savedClip = await DatabasePersister.save(clip)
     const project = await ProjectManager.getActiveProject()
@@ -241,20 +250,20 @@ export class ProjectManager {
     return track
   }
 
-  static async deleteTrack(track: Track) {
+  static async deleteTrack(track: Track, project: Project | null = null) {
     if (track.id) {
       this.trackListeners.delete(track.id)
       await DatabasePersister.deleteObjectById(track.id)
     }
-    const project = await ProjectManager.getActiveProject()
+    project ??= await ProjectManager.getActiveProject()
     project.deleteTrack(track)
     await DatabasePersister.save(project)
     this.projectListeners.forEach((listener) => listener(project))
     this.trackListeners.delete(track.id!)
   }
 
-  static async deleteClip(clip: Clip) {
-    const project = await ProjectManager.getActiveProject()
+  static async deleteClip(clip: Clip, project: Project | null = null) {
+    project ??= await ProjectManager.getActiveProject()
 
     for (const track of project.getTracks()) {
       const clipViewIndexesToRemove: number[] = []

@@ -12,6 +12,8 @@ export class Clip extends DatabasePersisted {
   audioPresent = true
   videoLength = 0
   videoSegments: VideoSegment[] = []
+  /** Set while a recording writes this clip's video; still set on load means the tab closed mid-recording. */
+  videoRecordingInProgress = false
   readonly tags: Record<string, string>
   readonly sourceFilename: string | null
 

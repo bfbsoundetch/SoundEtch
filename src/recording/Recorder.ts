@@ -39,9 +39,7 @@ export class Recorder {
     const unusedAddModuleResult = audioContext.audioWorklet.addModule('./assets/recordingAudioWorklet.js')
     const videoSession =
       videoInputs.length > 0
-        ? new VideoRecordingSession(audioContext, project.directoryName, project.sampleRate, (tracks) =>
-            Recorder.showRecordedVideo(tracks),
-          )
+        ? new VideoRecordingSession(audioContext, project, (tracks) => Recorder.showRecordedVideo(tracks))
         : null
     const unpairedVideoInputs = new Map(videoInputs.map((videoInput) => [videoInput.id, videoInput]))
     const inputs = []
@@ -81,7 +79,7 @@ export class Recorder {
       const videoInput = unpairedVideoInputs.get(audioInput.id)
       if (videoInput) {
         unpairedVideoInputs.delete(audioInput.id)
-        videoSession!.add(videoInput, clipView.clip, track)
+        await videoSession!.add(videoInput, clipView.clip, track)
       }
     }
     for (const videoInput of unpairedVideoInputs.values()) {
@@ -94,8 +92,7 @@ export class Recorder {
       )
       const clip = track.clipViews[0]!.clip
       clip.audioPresent = false
-      await ProjectManager.saveClip(clip)
-      videoSession!.add(videoInput, clip, track)
+      await videoSession!.add(videoInput, clip, track)
     }
 
     if (audioWorkletNodes.length == 0) {

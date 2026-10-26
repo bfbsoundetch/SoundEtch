@@ -11,9 +11,10 @@ import {
   VideoSampleSource,
 } from 'mediabunny'
 import type { StreamTargetChunk, VideoCodec, VideoEncodingConfig } from 'mediabunny'
-import { FileSystemUtils, type BinaryFileWriter } from '../filesystem/FileSystemUtils'
+import { FileSystemUtils } from '../filesystem/FileSystemUtils'
 import type { VideoSegment } from '../project/Video'
 import { getMediaPresentation } from './MediaTiming'
+import { VideoFileWriter } from './VideoFileWriter'
 import { VideoFrameClock } from './VideoFrameClock'
 
 const PREFERRED_CODECS: VideoCodec[] = ['avc', 'vp9', 'av1']
@@ -51,11 +52,13 @@ export function getRecordingSize(width: number, height: number, minimumHeight: n
 
 /**
  * Records one camera or screen source into an MP4 sidecar. Frames are timestamped on the audio sample clock, so the
- * footage lines up with the clip's audio; a source that disappears mid-recording leaves black until it returns.
+ * footage lines up with the clip's audio; a source that disappears mid-recording leaves black until it returns. The
+ * sidecar is a fragmented MP4 written through a worker that flushes every write, so a closed tab keeps every complete
+ * fragment.
  */
 export class VideoTrackRecorder {
   private readonly clock = new VideoFrameClock()
-  private writer: BinaryFileWriter | null = null
+  private writer: VideoFileWriter | null = null
   private output: Output | null = null
   private source: VideoSampleSource | null = null
   private size: { width: number; height: number } | null = null
@@ -98,7 +101,7 @@ export class VideoTrackRecorder {
     try {
       if (this.writeError) throw this.writeError
       await this.output.finalize()
-      return await this.readSegment()
+      return await readRecordedVideoSegment(this.options.directory, this.options.filename, this.options.sampleRate)
     } catch (error) {
       this.options.onError(toError(error))
       await this.discard()
@@ -220,14 +223,14 @@ export class VideoTrackRecorder {
 
   private async open(frame: VideoFrame) {
     const size = getRecordingSize(frame.displayWidth, frame.displayHeight, this.options.minimumHeight)
-    const format = new Mp4OutputFormat({ fastStart: false })
+    const format = new Mp4OutputFormat({ fastStart: 'fragmented' })
     const supported = format.getSupportedVideoCodecs()
     const codec = await getFirstEncodableVideoCodec(
       PREFERRED_CODECS.filter((candidate) => supported.includes(candidate)),
       size,
     )
     if (!codec) throw new Error('This browser cannot encode video')
-    const writer = await FileSystemUtils.createFileWriter(this.options.directory, this.options.filename)
+    const writer = await VideoFileWriter.open(this.options.directory, this.options.filename)
     this.writer = writer
     const output = new Output({
       format,
@@ -235,12 +238,7 @@ export class VideoTrackRecorder {
         new WritableStream<StreamTargetChunk>({
           write: async ({ data, position }) => {
             try {
-              // Mediabunny flushes freshly allocated chunks; only a shared-memory view would need copying.
-              const bytes =
-                data.buffer instanceof ArrayBuffer
-                  ? new Uint8Array(data.buffer, data.byteOffset, data.byteLength)
-                  : new Uint8Array(data)
-              await writer.write(bytes, position)
+              await writer.write(data, position)
             } catch (error) {
               // Surfaced with the next frame; the muxer would only report it when finalizing.
               this.writeError ??= error
@@ -275,32 +273,6 @@ export class VideoTrackRecorder {
     this.size = size
   }
 
-  private async readSegment(): Promise<VideoSegment> {
-    const file = await FileSystemUtils.getExistingFile(this.options.directory, this.options.filename)
-    const input = new Input({ source: new BlobSource(file), formats: ALL_FORMATS })
-    try {
-      const track = (await input.getVideoTracks())[0]
-      if (!track) throw new Error('The recorded video has no video track')
-      // The clip starts with the recording, at media time zero.
-      const presentation = getMediaPresentation(
-        await track.getFirstTimestamp(),
-        await track.computeDuration(),
-        0,
-        this.options.sampleRate,
-      )
-      return {
-        index: 0,
-        trackNumber: 1,
-        startSample: presentation.videoStartSample,
-        length: presentation.videoLength,
-        mediaStartSeconds: presentation.videoMediaStartSeconds,
-        mimeType: 'video/mp4',
-      }
-    } finally {
-      input.dispose()
-    }
-  }
-
   private async fail(error: unknown) {
     if (this.failed || this.finished) return
     this.failed = true
@@ -318,7 +290,42 @@ export class VideoTrackRecorder {
     }
     this.output = null
     this.source = null
+    try {
+      await this.writer?.close()
+    } catch {
+      // The file is deleted below either way.
+    }
     if (this.writer) await FileSystemUtils.deleteFile(this.options.directory, this.options.filename)
+  }
+}
+
+/** Where the recorded sidecar `filename` sits within its clip, which starts with the recording at media time zero. */
+export async function readRecordedVideoSegment(
+  directory: string,
+  filename: string,
+  sampleRate: number,
+): Promise<VideoSegment> {
+  const file = await FileSystemUtils.getExistingFile(directory, filename)
+  const input = new Input({ source: new BlobSource(file), formats: ALL_FORMATS })
+  try {
+    const track = (await input.getVideoTracks())[0]
+    if (!track) throw new Error('The recorded video has no video track')
+    const presentation = getMediaPresentation(
+      await track.getFirstTimestamp(),
+      await track.computeDuration(),
+      0,
+      sampleRate,
+    )
+    return {
+      index: 0,
+      trackNumber: 1,
+      startSample: presentation.videoStartSample,
+      length: presentation.videoLength,
+      mediaStartSeconds: presentation.videoMediaStartSeconds,
+      mimeType: 'video/mp4',
+    }
+  } finally {
+    input.dispose()
   }
 }
 
