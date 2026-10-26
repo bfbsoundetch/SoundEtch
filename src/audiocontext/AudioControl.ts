@@ -102,6 +102,24 @@ export class AudioControl {
     })
   }
 
+  /** Starts input monitoring without replacing a recording or playback context, even when it is paused. */
+  static async startMonitoring(): Promise<EnhancedAudioContext | null> {
+    return AudioControl.runContextOperation(async () => {
+      let context = AudioControl.audioContext
+      if (context && context.state != 'closed' && context.mode != AudioState.MONITORING) {
+        return null
+      }
+      if (!context || context.state == 'closed') {
+        context = await AudioControl.replaceAudioContext(AudioState.MONITORING)
+      }
+      // Firefox rejects a pending resume if the context closes. Finish it before a queued replacement or stop.
+      if (context.state != 'running') {
+        await context.resume()
+      }
+      return context
+    })
+  }
+
   static async createNewAudioContext(
     mode: ActiveAudioState,
     position = AudioControl.startPosition,

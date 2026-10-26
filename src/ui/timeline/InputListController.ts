@@ -26,48 +26,57 @@ export class InputListController {
           this.inputListElement.hidden = false
           break
       }
+      if (state == AudioState.STOPPED && AudioInputs.gatherActiveAudioInputs().length > 0) {
+        void this.updateInputs()
+      }
     })
-    AudioInputs.addListener(async () => {
-      if (AudioControl.isTimelineActive()) {
-        return
+    AudioInputs.addListener(() => void this.updateInputs())
+  }
+
+  private async updateInputs() {
+    const state = AudioControl.getState()
+    if (state != AudioState.STOPPED && state != AudioState.MONITORING && state != AudioState.MONITORING_PAUSED) {
+      return
+    }
+    if (AudioInputs.gatherActiveAudioInputs().length == 0) {
+      this.inputInfoListElement.replaceChildren()
+      this.inputListElement.replaceChildren()
+      if (AudioControl.audioContext?.mode == AudioState.MONITORING) {
+        await AudioControl.closeAndRemoveAudioContext()
       }
-      const context = await AudioControl.getOrCreateAudioContext(AudioState.MONITORING)
-      if (context.state == 'closed') {
-        // pre-empted by a new context
-        return
+      return
+    }
+    const context = await AudioControl.startMonitoring()
+    if (!context || context.state == 'closed') {
+      return
+    }
+    const infoDivs = new Array<Node>()
+    const inputDivs = new Array<Node>()
+    const func = (input: AudioInput, type: AudioInputType) => {
+      void input.init(context)
+      const id = `${input.id}-list-item`
+      const inputController = this.inputControllers.get(id)
+      if (inputController) {
+        infoDivs.push(inputController.inputInfoDiv)
+        inputDivs.push(inputController.inputDiv)
+      } else {
+        const newInputController = new AudioInputController(id, input, type)
+        this.inputControllers.set(id, newInputController)
+        infoDivs.push(newInputController.inputInfoDiv)
+        inputDivs.push(newInputController.inputDiv)
       }
-      context.resume()
-      const infoDivs = new Array<Node>()
-      const inputDivs = new Array<Node>()
-      const func = (input: AudioInput, type: AudioInputType) => {
-        input.init(context)
-        const id = `${input.id}-list-item`
-        const inputController = this.inputControllers.get(id)
-        if (inputController) {
-          infoDivs.push(inputController.inputInfoDiv)
-          inputDivs.push(inputController.inputDiv)
-        } else {
-          const newInputController = new AudioInputController(id, input, type)
-          this.inputControllers.set(id, newInputController)
-          infoDivs.push(newInputController.inputInfoDiv)
-          inputDivs.push(newInputController.inputDiv)
-        }
-      }
-      if (LocalMediaStreams.localAVDeviceMediaStream.getAudioTracks().length > 0) {
-        func(AudioInputs.localAVDevice, AudioInputType.MIC)
-      }
-      if (LocalMediaStreams.localScreenMediaStream.getAudioTracks().length > 0) {
-        func(AudioInputs.localScreenShare, AudioInputType.SCREEN_SHARE)
-      }
-      AudioInputs.getRemoteInputs().forEach((remoteInput) => {
-        func(remoteInput, AudioInputType.REMOTE)
-      })
-      if (infoDivs.length === 0) {
-        context.close()
-      }
-      this.inputInfoListElement.replaceChildren(...infoDivs)
-      this.inputListElement.replaceChildren(...inputDivs)
+    }
+    if (LocalMediaStreams.localAVDeviceMediaStream.getAudioTracks().length > 0) {
+      func(AudioInputs.localAVDevice, AudioInputType.MIC)
+    }
+    if (LocalMediaStreams.localScreenMediaStream.getAudioTracks().length > 0) {
+      func(AudioInputs.localScreenShare, AudioInputType.SCREEN_SHARE)
+    }
+    AudioInputs.getRemoteInputs().forEach((remoteInput) => {
+      func(remoteInput, AudioInputType.REMOTE)
     })
+    this.inputInfoListElement.replaceChildren(...infoDivs)
+    this.inputListElement.replaceChildren(...inputDivs)
   }
 }
 

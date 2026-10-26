@@ -61,7 +61,7 @@ export class InputsPanelController {
         stream: LocalMediaStreams.localScreenMediaStream,
         mirrored: false,
         noVideoText: 'No picture',
-        noAudioText: 'No audio',
+        noAudioText: 'No shared audio',
       },
     ]
   }

@@ -1,5 +1,5 @@
 import { RemoteMediaClient3 } from 'remote/RemoteMediaClient3'
-import { AudioControl, AudioState } from '../audiocontext/AudioControl'
+import { AudioControl } from '../audiocontext/AudioControl'
 import { Logger } from '../global/Logger'
 import { LocalMediaStreams } from '../mediastreams/LocalMediaStreams'
 import { AudioInput } from './AudioInput'
@@ -38,17 +38,13 @@ export class AudioInputs {
       }
       AudioInputs.notifyListeners()
     })
-    AudioControl.addAudioControlListener(async (state) => {
-      const inputs = this.gatherActiveAudioInputs()
-      if (inputs.length == 0) {
+    AudioControl.addAudioControlListener(() => {
+      const context = AudioControl.audioContext
+      if (!context || context.state == 'closed') {
         return
       }
-      const context = await AudioControl.getOrCreateAudioContext()
-      if (state == AudioState.MONITORING_PAUSED) {
-        context.resume()
-      }
-      for (const input of inputs) {
-        input.init(context)
+      for (const input of this.gatherActiveAudioInputs()) {
+        void input.init(context)
       }
     })
   }

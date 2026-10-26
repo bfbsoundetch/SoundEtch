@@ -1,3 +1,5 @@
+import { NotificationsController } from '../ui/NotificationsController'
+
 type Listener = (added: boolean, track: MediaStreamTrack) => any
 
 export class LocalMediaStreams {
@@ -24,7 +26,7 @@ export class LocalMediaStreams {
     })
     console.debug(
       'Got mic with capabilities:',
-      JSON.stringify(mediaStream.getAudioTracks()[0].getCapabilities()),
+      JSON.stringify(mediaStream.getAudioTracks()[0].getCapabilities?.()),
       'and constraints:',
       JSON.stringify(mediaStream.getAudioTracks()[0].getConstraints()),
       ' and settings:',
@@ -65,7 +67,7 @@ export class LocalMediaStreams {
 
   static async startCapturingTab(): Promise<MediaStream> {
     if (LocalMediaStreams.localScreenMediaStream.getTracks().length > 0) {
-      return Promise.resolve(this.localScreenMediaStream)
+      return LocalMediaStreams.localScreenMediaStream
     }
     if (!navigator.mediaDevices.getDisplayMedia) {
       throw Error('Screen recording not supported by the browser.')
@@ -74,6 +76,7 @@ export class LocalMediaStreams {
       'Supported media device constraints: ' + JSON.stringify(navigator.mediaDevices.getSupportedConstraints()),
     )
     const mediaStream = await navigator.mediaDevices.getDisplayMedia({
+      video: true,
       audio: {
         noiseSuppression: false,
         echoCancellation: false,
@@ -83,7 +86,7 @@ export class LocalMediaStreams {
       },
     })
     mediaStream.getTracks().forEach((track) => LocalMediaStreams.localScreenMediaStream.addTrack(track))
-    // The video stream needs to stay open the entire time it's capturing audio.
+    // Firefox returns video without shared audio; both kinds remain available to the recorder.
     mediaStream.getTracks().forEach((track) => {
       track.onended = (_) => {
         LocalMediaStreams.localScreenMediaStream.removeTrack(track)
@@ -91,6 +94,11 @@ export class LocalMediaStreams {
       }
       LocalMediaStreams.updateScreenListeners(true, track)
     })
+    if (mediaStream.getAudioTracks().length == 0) {
+      NotificationsController.showLongDurationMessage(
+        'No screen audio detected.',
+      )
+    }
     return mediaStream
   }
 
