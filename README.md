@@ -125,6 +125,8 @@ Open **Settings** from the application menu to configure spectrogram rendering a
 
 Static `index.html` presentation and timeline styling live in `index.css`, including the reusable SVG icon sprite. Visibility uses semantic attributes and state selectors; controllers retain runtime geometry and bind dynamic colors through CSS custom properties. The favicon's embedded SVG keeps its own styles because it is a separate document. The ruler's `--timeline-label-font-size` also drives its tick-spacing and keyboard-step calculations.
 
+Waveform clip fills follow the system color scheme: light mode keeps the pastel palette, while dark mode uses muted coral, amber, sage, teal, periwinkle, and mauve with contrast against the black waveform trace. Both palettes use `--waveform-0` through `--waveform-5` in `index.css`.
+
 The **Downloaded models** settings section reports the persistent browser-cache footprint of DeepFilterNet, Granite, and Silero VAD separately. **Unload** removes that model's cached files, including stale Granite or VAD revision caches, without interrupting a model runtime already in use. The browser downloads those files again when a later runtime needs them.
 
 DeepFilterNet's `df_bg.wasm` and `DeepFilterNet3_onnx.tar.gz` are served from `noisereduction/` under Vite's deployment base (`import.meta.env.BASE_URL`). The configured default is `/soundetch`; for an origin-root deployment such as `https://soundetch.org/`, build with `yarn build --base /`. Resource paths resolve relative to that base, preserving subpaths without turning a root base into a protocol-relative hostname.

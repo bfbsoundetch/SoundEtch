@@ -55,12 +55,18 @@ button {
 @media (prefers-color-scheme: dark) {
   :root {
     --bg-color: #404445;
-    --color: #d2d4d5;
+    --color: #f0f1f2;
     --menu-bg: black;
     --clickable-hover: rgba(255, 255, 255, 0.25);
     --clickable-active: rgba(255, 255, 255, 0.35);
     --clickable-inactive: rgba(0, 0, 0, 0.1);
-    --alt-background: #565b5d;
+    --alt-background: #696e6f;
+    --waveform-0: #c48383;
+    --waveform-1: #b39d62;
+    --waveform-2: #7ba78c;
+    --waveform-3: #6fa7ad;
+    --waveform-4: #909bc4;
+    --waveform-5: #ad88b4;
     --record-button-red: #ff9999;
     --play-button-green: #4fce86;
     --track-mute-active: #f0a020;
