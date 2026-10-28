@@ -36,6 +36,7 @@ export class MediaStreamButtonController {
     private readonly mainElement: HTMLElement | SVGSVGElement,
     private readonly mediaType: 'audio' | 'video',
     isScreenShare: boolean,
+    onEnabled?: () => void,
   ) {
     this.iconSvg =
       mainElement.tagName === 'svg' ? (mainElement as SVGSVGElement) : mainElement.getElementsByTagName('svg')[0]!
@@ -55,8 +56,13 @@ export class MediaStreamButtonController {
       this.render()
       void this.updateDeviceAvailability()
       navigator.mediaDevices?.addEventListener('devicechange', () => void this.updateDeviceAvailability())
-      const start =
-        mediaType == 'audio' ? LocalMediaStreams.startAudioDevice : () => LocalMediaStreams.startVideoDevice()
+      const start = async () => {
+        const stream = await (mediaType == 'audio'
+          ? LocalMediaStreams.startAudioDevice()
+          : LocalMediaStreams.startVideoDevice())
+        if (this.active) onEnabled?.()
+        return stream
+      }
       const end = mediaType == 'audio' ? LocalMediaStreams.endAudioDeviceStream : LocalMediaStreams.endVideoDeviceStream
       mainElement.onclick = start
       LocalMediaStreams.registerAVDeviceListener((added, track) => {

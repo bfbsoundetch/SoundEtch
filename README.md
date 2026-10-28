@@ -137,6 +137,8 @@ DeepFilterNet's `df_bg.wasm` and `DeepFilterNet3_onnx.tar.gz` are served from `n
 
 The bottom panel stays docked below the timeline and starts minimized to its tab bar: **Inputs**, **Tracks**, and **Output**. Clicking a tab opens the panel on it; Left/Right, Home, and End move between tabs. The chevron button minimizes the panel and reopens it at its last open height, and the size button switches between half and full height below the main header.
 
+Enabling the camera with the project header's **Enable Camera** button opens **Inputs** at the panel's last open height so the live picture is visible. Disabling the camera leaves the current tab and panel height unchanged.
+
 - **Inputs** centers a card for each of this machine's enabled inputs: the microphone with the camera, and screen/tab capture. Each has its live picture (the camera mirrored, like the meeting room's self view) in a 16:9 box filling the card's height, and a peak meter beside it that widens the card rather than narrowing the picture. Meeting guests are not listed. Pictures and meters run only while the tab is showing.
 - **Tracks** shows one track, chosen with the **Track** selector above its vertical **Effects**, **Video**, and **Transcript** tabs (Up/Down, Home, and End move between them). **Effects** is the effect chain, **Video** the track's picture at the timeline cursor, and **Transcript** its transcript, or a **Transcribe track** button when it has none. A track's **Effects** button opens the **Effects** view. The effect catalog, effect editors, and automation points open over the tab, and their back button returns to it. The chain follows undo and redo.
 - **Output** is a placeholder; it will arrange the video output and hold the audio output's effects.
