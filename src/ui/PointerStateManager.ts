@@ -101,10 +101,6 @@ export class PointerStateManager extends TrackListItemController {
         pending.cancelled = true
       }
       if (this.state === State.MOVING_CLIPVIEW) {
-        if (!(event.buttons & 1)) {
-          this.cancelMovingClipView()
-          return
-        }
         this.clipDragPoint!.x = event.clientX
         this.clipDragPoint!.y = event.clientY
         this.updateMovingClipView()
@@ -238,11 +234,6 @@ export class PointerStateManager extends TrackListItemController {
               moveInfo.clipViewController.clipView,
               moveInfo.clipViewController.draggedShift,
             )
-          } else if (!this.activeWaveform) {
-            if (moveInfo.clipViewController.waveform != moveInfo.startWave) {
-              moveInfo.clipViewController.switchParent(moveInfo.startWave)
-            }
-            await moveInfo.clipViewController.moveThisClipView()
           } else if (moveInfo.startWave == this.activeWaveform) {
             if (moveInfo.clipViewController.waveform != moveInfo.startWave) {
               moveInfo.clipViewController.switchParent(moveInfo.startWave)
