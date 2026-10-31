@@ -5,6 +5,7 @@ import { MemoryBackedFileSystem } from '../filesystem/MemoryBackedFileSystem'
 import { GlobalSettings } from '../global/GlobalSettings'
 import { Clip } from './Clip'
 import { ClipView } from './ClipView'
+import { getOutputCropPosition } from './OutputScene'
 import { ProjectArchive } from './ProjectArchive'
 import { ProjectManager } from './ProjectManager'
 import { Track } from './Track'
@@ -56,8 +57,30 @@ test('project archives remap video sidecars and preserve silent and linked sourc
   await writeFile(project.directoryName, `${linked.filename}_summary`, new Uint8Array())
   const [silentTrack, linkedTrack] = project.getTracks()
   project.outputScenes = [
-    { startSample: 0, layout: 'single', fit: 'contain', tracks: [silentTrack, null] },
-    { startSample: 24_000, layout: 'side-by-side', fit: 'cover', tracks: [linkedTrack, silentTrack] },
+    {
+      startSample: 0,
+      layout: 'single',
+      fit: 'contain',
+      tracks: [silentTrack, null],
+      cornerRadius: 24,
+      margin: 16,
+      cropPositions: [
+        { x: 0.1, y: 0.2 },
+        { x: 0.3, y: 0.4 },
+      ],
+    },
+    {
+      startSample: 24_000,
+      layout: 'side-by-side',
+      fit: 'cover',
+      tracks: [linkedTrack, silentTrack],
+      cornerRadius: 80,
+      margin: 48,
+      cropPositions: [
+        { x: 0.9, y: 0.8 },
+        { x: 0.7, y: 0.6 },
+      ],
+    },
     { startSample: 36_000, layout: 'single', fit: 'cover', tracks: [null, null] },
   ]
   await ProjectManager.saveProject(project)
@@ -87,18 +110,42 @@ test('project archives remap video sidecars and preserve silent and linked sourc
   expect(restoredSilentTrack.id).not.toBe(silentTrack.id)
   expect(restoredLinkedTrack.id).not.toBe(linkedTrack.id)
   expect(restored.outputScenes).toEqual([
-    { startSample: 0, layout: 'single', fit: 'contain', tracks: [restoredSilentTrack, null] },
+    {
+      startSample: 0,
+      layout: 'single',
+      fit: 'contain',
+      tracks: [restoredSilentTrack, null],
+      cornerRadius: 24,
+      margin: 16,
+      cropPositions: [
+        { x: 0.1, y: 0.2 },
+        { x: 0.3, y: 0.4 },
+      ],
+    },
     {
       startSample: 24_000,
       layout: 'side-by-side',
       fit: 'cover',
       tracks: [restoredLinkedTrack, restoredSilentTrack],
+      cornerRadius: 80,
+      margin: 48,
+      cropPositions: [
+        { x: 0.9, y: 0.8 },
+        { x: 0.7, y: 0.6 },
+      ],
     },
     { startSample: 36_000, layout: 'single', fit: 'cover', tracks: [null, null] },
   ])
   expect(restored.outputScenes[0].tracks[0]).toBe(restoredSilentTrack)
   expect(restored.outputScenes[1].tracks[0]).toBe(restoredLinkedTrack)
   expect(restored.outputScenes[1].tracks[1]).toBe(restoredSilentTrack)
+  expect(getOutputCropPosition(restored.outputScenes[2], 0)).toEqual({ x: 0.5, y: 0.5 })
+  expect(getOutputCropPosition(restored.outputScenes[2], 1)).toEqual({ x: 0.5, y: 0.5 })
+  restored.outputScenes[0].fit = 'cover'
+  restored.outputScenes[1].cropPositions![0].x = 0
+  expect(getOutputCropPosition(restored.outputScenes[0], 0)).toEqual({ x: 0.1, y: 0.2 })
+  expect(getOutputCropPosition(restored.outputScenes[1], 1)).toEqual({ x: 0.7, y: 0.6 })
+  expect(getOutputCropPosition(project.outputScenes[1], 0)).toEqual({ x: 0.9, y: 0.8 })
   expect(
     new Uint8Array(
       await (

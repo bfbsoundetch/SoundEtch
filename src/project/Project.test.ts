@@ -4,6 +4,7 @@ import { DatabasePersister } from '../persistence/DatabasePersister'
 import { Project } from './Project'
 import { Track } from './Track'
 import { ProjectManager } from './ProjectManager'
+import { getOutputCropPosition } from './OutputScene'
 
 function attachPlayback(track: Track) {
   const playerNode = {
@@ -76,6 +77,60 @@ test('restoring older project records keeps the default output scene', async () 
   expect(restored.outputScenes).toEqual([{ startSample: 0, layout: 'single', fit: 'contain', tracks: [null, null] }])
 })
 
+test('database reload preserves per-scene and per-slot crops while legacy scenes stay centered', async () => {
+  const project = new Project('output framing', 48_000)
+  project.outputScenes = [
+    { startSample: 0, layout: 'side-by-side', fit: 'cover', tracks: [null, null] },
+    {
+      startSample: 100,
+      layout: 'side-by-side',
+      fit: 'cover',
+      tracks: [null, null],
+      cropPositions: [
+        { x: 0, y: 0.25 },
+        { x: 1, y: 0.75 },
+      ],
+    },
+    {
+      startSample: 200,
+      layout: 'single',
+      fit: 'contain',
+      tracks: [null, null],
+      cropPositions: [
+        { x: 0.2, y: 0.4 },
+        { x: 0.6, y: 0.8 },
+      ],
+    },
+  ]
+  await DatabasePersister.save(project)
+  const graph = await DatabasePersister.getPersistedObjectGraph(project.id!)
+  const restored = (await DatabasePersister.fromPersistedObject(
+    graph.find((record) => record.id === project.id)!,
+  )) as Project
+
+  expect(
+    restored.outputScenes.map((scene) => [getOutputCropPosition(scene, 0), getOutputCropPosition(scene, 1)]),
+  ).toEqual([
+    [
+      { x: 0.5, y: 0.5 },
+      { x: 0.5, y: 0.5 },
+    ],
+    [
+      { x: 0, y: 0.25 },
+      { x: 1, y: 0.75 },
+    ],
+    [
+      { x: 0.2, y: 0.4 },
+      { x: 0.6, y: 0.8 },
+    ],
+  ])
+  restored.outputScenes[1].cropPositions![0].x = 0.5
+  restored.outputScenes[2].fit = 'cover'
+  expect(getOutputCropPosition(restored.outputScenes[1], 1)).toEqual({ x: 1, y: 0.75 })
+  expect(getOutputCropPosition(restored.outputScenes[2], 0)).toEqual({ x: 0.2, y: 0.4 })
+  expect(getOutputCropPosition(project.outputScenes[1], 0)).toEqual({ x: 0, y: 0.25 })
+})
+
 test('deleting a source track clears both scene slots immutably and leaves a valid persisted graph', async () => {
   const project = new Project('output sources', 48_000)
   const removed = new Track('removed', 1)
@@ -85,7 +140,16 @@ test('deleting a source track clears both scene slots immutably and leaves a val
   project.addTrack(removed)
   project.addTrack(remaining)
   project.outputScenes = [
-    { startSample: 0, layout: 'side-by-side', fit: 'cover', tracks: [removed, remaining] },
+    {
+      startSample: 0,
+      layout: 'side-by-side',
+      fit: 'cover',
+      tracks: [removed, remaining],
+      cropPositions: [
+        { x: 0.2, y: 0.3 },
+        { x: 0.7, y: 0.8 },
+      ],
+    },
     { startSample: 100, layout: 'single', fit: 'contain', tracks: [removed, removed] },
     { startSample: 200, layout: 'single', fit: 'cover', tracks: [null, remaining] },
   ]
@@ -95,7 +159,16 @@ test('deleting a source track clears both scene slots immutably and leaves a val
   await ProjectManager.deleteTrack(removed, project)
 
   expect(project.outputScenes).toEqual([
-    { startSample: 0, layout: 'side-by-side', fit: 'cover', tracks: [null, remaining] },
+    {
+      startSample: 0,
+      layout: 'side-by-side',
+      fit: 'cover',
+      tracks: [null, remaining],
+      cropPositions: [
+        { x: 0.2, y: 0.3 },
+        { x: 0.7, y: 0.8 },
+      ],
+    },
     { startSample: 100, layout: 'single', fit: 'contain', tracks: [null, null] },
     { startSample: 200, layout: 'single', fit: 'cover', tracks: [null, remaining] },
   ])
@@ -106,11 +179,26 @@ test('deleting a source track clears both scene slots immutably and leaves a val
   expect(graph.map((record) => record.id).sort()).toEqual([project.id!, remaining.id!].sort())
   const persistedProject = graph.find((record) => record.id === project.id)!
   expect(persistedProject.outputScenes).toEqual([
-    { startSample: 0, layout: 'side-by-side', fit: 'cover', tracks: [null, { i: remaining.id }] },
+    {
+      startSample: 0,
+      layout: 'side-by-side',
+      fit: 'cover',
+      tracks: [null, { i: remaining.id }],
+      cropPositions: [
+        { x: 0.2, y: 0.3 },
+        { x: 0.7, y: 0.8 },
+      ],
+    },
     { startSample: 100, layout: 'single', fit: 'contain', tracks: [null, null] },
     { startSample: 200, layout: 'single', fit: 'cover', tracks: [null, { i: remaining.id }] },
   ])
   const restored = (await DatabasePersister.fromPersistedObject(persistedProject)) as Project
   expect(restored.outputScenes[0].tracks[1]).toBe(restored.getTracks()[0])
   expect(restored.outputScenes[1].tracks).toEqual([null, null])
+  project.outputScenes[0].cropPositions![0].x = 1
+  project.outputScenes[0].cropPositions![1].y = 0
+  expect(getOutputCropPosition(before[0], 0)).toEqual({ x: 0.2, y: 0.3 })
+  expect(getOutputCropPosition(before[0], 1)).toEqual({ x: 0.7, y: 0.8 })
+  expect(getOutputCropPosition(restored.outputScenes[0], 0)).toEqual({ x: 0.2, y: 0.3 })
+  expect(getOutputCropPosition(restored.outputScenes[0], 1)).toEqual({ x: 0.7, y: 0.8 })
 })

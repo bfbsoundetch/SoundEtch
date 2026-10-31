@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest'
-import { getOutputSceneIndex, splitOutputScene, type OutputScene } from './OutputScene'
+import { getOutputCropPosition, getOutputSceneIndex, splitOutputScene, type OutputScene } from './OutputScene'
 import { Project } from './Project'
 import { Track } from './Track'
 
@@ -35,8 +35,28 @@ test('splitting inherits the containing scene without sharing mutable scene data
   const secondTrack = new Track('second', 1)
   const scenes: readonly OutputScene[] = [
     { startSample: 0, layout: 'single', fit: 'contain', tracks: [null, null] },
-    { startSample: 100, layout: 'side-by-side', fit: 'cover', tracks: [secondTrack, firstTrack] },
-    { startSample: 400, layout: 'single', fit: 'contain', tracks: [firstTrack, null] },
+    {
+      startSample: 100,
+      layout: 'side-by-side',
+      fit: 'cover',
+      tracks: [secondTrack, firstTrack],
+      cornerRadius: 64,
+      margin: 32,
+      cropPositions: [
+        { x: 0.1, y: 0.2 },
+        { x: 0.8, y: 0.9 },
+      ],
+    },
+    {
+      startSample: 400,
+      layout: 'single',
+      fit: 'contain',
+      tracks: [firstTrack, null],
+      cropPositions: [
+        { x: 0.3, y: 0.4 },
+        { x: 0.6, y: 0.7 },
+      ],
+    },
   ]
   const split = splitOutputScene(scenes, 250, 500)!
   expect(split.map((scene) => scene.startSample)).toEqual([0, 100, 250, 400])
@@ -46,6 +66,27 @@ test('splitting inherits the containing scene without sharing mutable scene data
   expect(getOutputSceneIndex(split, 249)).toBe(1)
   expect(getOutputSceneIndex(split, 250)).toBe(2)
   expect(getOutputSceneIndex(split, 400)).toBe(3)
+  expect(getOutputCropPosition(split[2], 0)).toEqual({ x: 0.1, y: 0.2 })
+  expect(getOutputCropPosition(split[2], 1)).toEqual({ x: 0.8, y: 0.9 })
+  split[2].cropPositions![0].x = 1
+  split[2].cornerRadius = 120
+  split[1].margin = 80
+  expect(scenes[1].cornerRadius).toBe(64)
+  expect(scenes[1].margin).toBe(32)
+  expect(split[1].cornerRadius).toBe(64)
+  expect(split[2].margin).toBe(32)
+  split[2].cropPositions![1].y = 0
+  split[1].cropPositions![0].y = 1
+  split[1].cropPositions![1].x = 0
+  split[3].cropPositions![0].x = 0.5
+  expect(getOutputCropPosition(scenes[1], 0)).toEqual({ x: 0.1, y: 0.2 })
+  expect(getOutputCropPosition(scenes[1], 1)).toEqual({ x: 0.8, y: 0.9 })
+  expect(getOutputCropPosition(split[1], 0)).toEqual({ x: 0.1, y: 1 })
+  expect(getOutputCropPosition(split[1], 1)).toEqual({ x: 0, y: 0.9 })
+  expect(getOutputCropPosition(split[2], 0)).toEqual({ x: 1, y: 0.2 })
+  expect(getOutputCropPosition(split[2], 1)).toEqual({ x: 0.8, y: 0 })
+  expect(getOutputCropPosition(scenes[2], 0)).toEqual({ x: 0.3, y: 0.4 })
+  expect(getOutputCropPosition(split[3], 1)).toEqual({ x: 0.6, y: 0.7 })
   split[2].fit = 'contain'
   split[2].tracks[0] = null
   split[1].tracks[1] = null

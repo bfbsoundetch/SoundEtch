@@ -8,11 +8,13 @@ import {
   canEncodeAudio,
   canEncodeVideo,
   getFirstEncodableVideoCodec,
+  type AudioEncodingConfig,
   type StreamTargetChunk,
   type VideoCodec,
 } from 'mediabunny'
 import { registerAacEncoder } from '@mediabunny/aac-encoder'
 import { ProjectManager } from '../project/ProjectManager'
+import type { Project } from '../project/Project'
 import { Track } from '../project/Track'
 import type { SelectedRegion } from '../playback/Player'
 import { createRenderingArgument } from '../rendering/RenderingArgumentFactory'
@@ -24,25 +26,30 @@ import {
   RenderingOutputWorkerMessage,
   RenderingWorkerStartMessage,
 } from '../rendering/RenderingWorkerProtocol'
-import { OscilloscopeFrames } from './OscilloscopeFrames'
+import { measureAacEncoderDelay } from './AacEncoderTiming'
+import { setMp4PresentationWindow } from './Mp4PresentationWindow'
+import { OutputVideoCompositor } from './OutputVideoCompositor'
+import { VideoFrameClock } from './VideoFrameClock'
 
 export type VideoExportPresetName = 'youtube' | 'tiktok'
 
 type VideoExportPreset = {
   label: string
-  shapeName: string
   width: number
   height: number
   frameRate: number
   videoBitrate: number
 }
 
-const AUDIO_BITRATE = 192_000
+const AUDIO_ENCODING_CONFIG = {
+  codec: 'aac',
+  bitrate: 192_000,
+  bitrateMode: 'variable',
+} satisfies AudioEncodingConfig
 
 export const VIDEO_EXPORT_PRESETS: Record<VideoExportPresetName, VideoExportPreset> = {
   youtube: {
     label: 'YouTube',
-    shapeName: 'hamburger',
     width: 1920,
     height: 1080,
     frameRate: 60,
@@ -50,7 +57,6 @@ export const VIDEO_EXPORT_PRESETS: Record<VideoExportPresetName, VideoExportPres
   },
   tiktok: {
     label: 'TikTok',
-    shapeName: 'hotdog',
     width: 1080,
     height: 1920,
     frameRate: 60,
@@ -95,7 +101,7 @@ export class VideoRenderer {
 
     // Renderer.cancelRender() stops a running loudness-measuring pass; it is a no-op otherwise.
     VideoRenderer.cancelExportCallback = () => {
-      abortController.abort()
+      abortController.abort(new DOMException('Video export canceled', 'AbortError'))
       Renderer.cancelRender()
     }
 
@@ -105,11 +111,12 @@ export class VideoRenderer {
       const channelCount = VideoRenderer.getOutputChannelCount(tracks)
       const videoCodec = await VideoRenderer.getVideoCodec(preset)
       await VideoRenderer.ensureAacEncoder(channelCount, project.sampleRate)
+      const audioDelay = await measureAacEncoderDelay(AUDIO_ENCODING_CONFIG, project.sampleRate, channelCount, signal)
       VideoRenderer.throwIfAborted(signal)
 
       const argument = createRenderingArgument(project, channelCount, startPosition, projectLength, tracks)
       const writeVideo = (createSource: () => AudioSourceWorker) =>
-        VideoRenderer.writeVideo(file, preset, project.title, argument, videoCodec, createSource, signal)
+        VideoRenderer.writeVideo(file, preset, project, argument, videoCodec, audioDelay, createSource, signal)
       if (loudnessTargetLufs === null) {
         await writeVideo(() => Renderer.createRenderingSource(argument))
       } else {
@@ -120,6 +127,9 @@ export class VideoRenderer {
           writeVideo,
         )
       }
+    } catch (error) {
+      if (signal.aborted) throw signal.reason
+      throw error
     } finally {
       VideoRenderer.cancelExportCallback = null
     }
@@ -132,16 +142,22 @@ export class VideoRenderer {
   private static async writeVideo(
     file: FileSystemFileHandle,
     preset: VideoExportPreset,
-    title: string,
+    project: Project,
     argument: RenderingArgument,
     videoCodec: VideoCodec,
+    audioDelay: number,
     createSource: () => AudioSourceWorker,
     signal: AbortSignal,
   ): Promise<void> {
     let output: Output | null = null
+    let writable: FileSystemWritableFileStream | null = null
+    let compositor: OutputVideoCompositor | null = null
+    const movieMetadata: { data: Uint8Array | null; position: number } = { data: null, position: 0 }
 
     try {
-      const writable = await file.createWritable()
+      VideoRenderer.throwIfAborted(signal)
+      writable = await file.createWritable()
+      VideoRenderer.throwIfAborted(signal)
       const canvas = document.createElement('canvas')
       canvas.width = preset.width
       canvas.height = preset.height
@@ -149,64 +165,74 @@ export class VideoRenderer {
       if (!context) {
         throw new Error('Could not create a canvas context for video rendering')
       }
+      compositor = new OutputVideoCompositor(project, context, preset.width, preset.height, signal)
 
       const videoSource = new CanvasSource(canvas, {
         codec: videoCodec,
         bitrate: preset.videoBitrate,
         keyFrameInterval: 2,
       })
-      const audioSource = new AudioSampleSource({
-        codec: 'aac',
-        bitrate: AUDIO_BITRATE,
-        bitrateMode: 'variable',
-      })
+      const audioSource = new AudioSampleSource(AUDIO_ENCODING_CONFIG)
 
       output = new Output({
-        format: new Mp4OutputFormat(),
-        target: new StreamTarget(writable as unknown as WritableStream<StreamTargetChunk>, {
+        format: new Mp4OutputFormat({
+          fastStart: false,
+          onMoov: (data, position) => {
+            movieMetadata.data = data
+            movieMetadata.position = position
+          },
+        }),
+        // StreamTarget closes even on cancellation. Keep the file transaction open until successful finalization.
+        target: new StreamTarget(new WritableStream<StreamTargetChunk>({ write: (chunk) => writable!.write(chunk) }), {
           chunked: true,
           chunkSize: 2 ** 20,
         }),
       })
+      // Keep the muxer's fine-grained default timescale: 60 ticks rounds a partial final frame up.
       output.addVideoTrack(videoSource, {
-        frameRate: preset.frameRate,
-        name: `${preset.label} visual`,
+        name: 'Output scenes',
       })
       output.addAudioTrack(audioSource, { name: 'Project audio' })
-      output.setMetadataTags({ title })
+      output.setMetadataTags({ title: project.title })
 
       await output.start()
       VideoRenderer.setProcessingProgress(0.05)
 
-      const scope = new OscilloscopeFrames(
-        argument.sampleRate,
-        preset.frameRate,
-        argument.length,
-        argument.channelCount,
-      )
+      const clock = new VideoFrameClock(argument.sampleRate, preset.frameRate, argument.length, argument.startPosition)
       const duration = argument.length / argument.sampleRate
-      const trackNames = argument.trackSubsets.map((track) => track.name)
+      const composition = compositor
       await VideoRenderer.pipeRenderedAudioToSource(createSource(), argument, audioSource, signal, async (audio) => {
-        await scope.addAudio(audio, async (samples, sampleCount, frame) => {
-          VideoRenderer.throwIfAborted(signal)
-          const timestamp = frame / preset.frameRate
-          const frameDuration = Math.min(1 / preset.frameRate, duration - timestamp)
-          VideoRenderer.drawFrame(context, preset, samples, sampleCount, trackNames)
-          await videoSource.add(timestamp, frameDuration, { keyFrame: frame % (preset.frameRate * 2) === 0 })
-          // Report completed video work within each audio chunk; leave 5% for finalization.
-          VideoRenderer.setProcessingProgress(0.05 + 0.9 * Math.min(1, (timestamp + frameDuration) / duration))
-        })
+        await clock.addSamples(
+          audio.length / argument.channelCount,
+          async (frame, timestamp, frameDuration, sample) => {
+            VideoRenderer.throwIfAborted(signal)
+            await composition.drawFrame(sample)
+            VideoRenderer.throwIfAborted(signal)
+            await videoSource.add(timestamp, frameDuration, { keyFrame: frame % (preset.frameRate * 2) === 0 })
+            VideoRenderer.setProcessingProgress(0.05 + 0.9 * Math.min(1, (timestamp + frameDuration) / duration))
+          },
+        )
       })
       videoSource.close()
 
       VideoRenderer.throwIfAborted(signal)
       await output.finalize()
+      VideoRenderer.throwIfAborted(signal)
+      if (!movieMetadata.data) throw new Error('Video export did not produce MP4 metadata')
+      const metadata = setMp4PresentationWindow(movieMetadata.data, duration, audioDelay)
+      await writable.write({ type: 'write', position: movieMetadata.position, data: metadata })
+      await writable.truncate(movieMetadata.position + metadata.byteLength)
+      VideoRenderer.throwIfAborted(signal)
+      await writable.close()
       VideoRenderer.setProcessingProgress(1)
     } catch (error) {
       if (output && output.state !== 'canceled' && output.state !== 'finalized') {
         await output.cancel().catch(() => {})
       }
+      await writable?.abort().catch(() => {})
       throw error
+    } finally {
+      compositor?.dispose()
     }
   }
 
@@ -217,6 +243,10 @@ export class VideoRenderer {
     signal: AbortSignal,
     onAudio: (audio: Float32Array) => Promise<void>,
   ): Promise<void> {
+    if (signal.aborted) {
+      source.worker.terminate()
+      VideoRenderer.throwIfAborted(signal)
+    }
     const channel = new MessageChannel()
     let queue = Promise.resolve()
     let writtenFrames = 0
@@ -244,7 +274,7 @@ export class VideoRenderer {
         cleanup()
         resolve()
       }
-      const abort = () => fail(new Error('Video export canceled'))
+      const abort = () => fail(signal.reason)
 
       signal.addEventListener('abort', abort, { once: true })
       source.worker.onerror = (error) => fail(error)
@@ -271,6 +301,8 @@ export class VideoRenderer {
               return
             }
 
+            if (writtenFrames !== argument.length)
+              throw new Error('Audio rendering ended before the export was complete')
             audioSource.close()
             complete()
           })
@@ -278,7 +310,9 @@ export class VideoRenderer {
       }
       channel.port1.start()
 
-      source.worker.postMessage({ ...source.startMessage, encodingPort: channel.port2 }, [channel.port2])
+      source.worker.postMessage({ ...source.startMessage, encodingPort: channel.port2, waitForConsumer: true }, [
+        channel.port2,
+      ])
     })
   }
 
@@ -306,166 +340,6 @@ export class VideoRenderer {
     }
   }
 
-  private static drawFrame(
-    context: CanvasRenderingContext2D,
-    preset: VideoExportPreset,
-    samples: Float32Array,
-    sampleCount: number,
-    trackNames: Array<string>,
-  ) {
-    const width = preset.width
-    const height = preset.height
-    const left = width * 0.07
-    const right = width * 0.93
-    const center = height * 0.52
-    const amplitudeScale = height * (width > height ? 0.28 : 0.22)
-    let peak = 0
-    for (let i = 0; i < sampleCount; ++i) {
-      peak = Math.max(peak, Math.abs(samples[i]))
-    }
-
-    const background = context.createLinearGradient(0, 0, width, height)
-    background.addColorStop(0, '#111827')
-    background.addColorStop(0.48, '#1e1b4b')
-    background.addColorStop(1, '#020617')
-    context.fillStyle = background
-    context.fillRect(0, 0, width, height)
-    VideoRenderer.drawGlow(context, width, height, Math.min(1, peak))
-
-    context.save()
-    context.strokeStyle = 'rgba(148, 163, 184, 0.15)'
-    context.lineWidth = 1
-    context.beginPath()
-    for (let division = 0; division <= 10; ++division) {
-      const x = left + ((right - left) * division) / 10
-      context.moveTo(x, center - amplitudeScale)
-      context.lineTo(x, center + amplitudeScale)
-    }
-    for (let division = -4; division <= 4; ++division) {
-      const y = center + (amplitudeScale * division) / 4
-      context.moveTo(left, y)
-      context.lineTo(right, y)
-    }
-    context.stroke()
-    context.strokeStyle = 'rgba(148, 163, 184, 0.4)'
-    context.beginPath()
-    context.moveTo(left, center)
-    context.lineTo(right, center)
-    context.stroke()
-    context.restore()
-
-    VideoRenderer.drawOscilloscope(context, samples, sampleCount, left, right, center, amplitudeScale, height)
-    VideoRenderer.drawTrackNames(context, width, height, trackNames)
-
-    context.save()
-    const fontSize = Math.round(Math.min(width, height) * 0.021)
-    context.font = `${fontSize}px system-ui, -apple-system, BlinkMacSystemFont, sans-serif`
-    context.fillStyle = 'rgba(203, 213, 225, 0.7)'
-    context.textAlign = 'right'
-    context.textBaseline = 'middle'
-    context.fillText('+1', left - fontSize * 0.6, center - amplitudeScale)
-    context.fillText('0', left - fontSize * 0.6, center)
-    context.fillText('−1', left - fontSize * 0.6, center + amplitudeScale)
-    context.restore()
-  }
-
-  private static drawGlow(context: CanvasRenderingContext2D, width: number, height: number, amplitude: number) {
-    context.save()
-    context.globalCompositeOperation = 'lighter'
-    const radius = Math.max(width, height) * (0.28 + amplitude * 0.12)
-    const gradient = context.createRadialGradient(width * 0.5, height * 0.5, 0, width * 0.5, height * 0.5, radius)
-    gradient.addColorStop(0, `rgba(56, 189, 248, ${0.18 + amplitude * 0.2})`)
-    gradient.addColorStop(0.45, `rgba(168, 85, 247, ${0.12 + amplitude * 0.18})`)
-    gradient.addColorStop(1, 'rgba(15, 23, 42, 0)')
-    context.fillStyle = gradient
-    context.fillRect(0, 0, width, height)
-    context.restore()
-  }
-
-  private static drawOscilloscope(
-    context: CanvasRenderingContext2D,
-    samples: Float32Array,
-    sampleCount: number,
-    left: number,
-    right: number,
-    center: number,
-    amplitudeScale: number,
-    height: number,
-  ) {
-    context.save()
-    // Keep a fixed full-scale display; do not normalize away gain changes or invent signal outside the window.
-    context.beginPath()
-    context.rect(left, center - amplitudeScale, right - left, amplitudeScale * 2)
-    context.clip()
-    context.lineJoin = 'round'
-    context.lineCap = 'round'
-    context.beginPath()
-    const step = (right - left) / Math.max(1, sampleCount - 1)
-    for (let i = 0; i < sampleCount; ++i) {
-      const x = left + i * step
-      const y = center - samples[i] * amplitudeScale
-      if (i === 0) {
-        context.moveTo(x, y)
-      } else {
-        context.lineTo(x, y)
-      }
-    }
-    if (sampleCount === 1) {
-      context.lineTo(right, center - samples[0] * amplitudeScale)
-    }
-    context.shadowColor = 'rgba(34, 211, 238, 0.8)'
-    context.shadowBlur = Math.max(6, height * 0.008)
-    context.strokeStyle = '#7dd3fc'
-    context.lineWidth = Math.max(2, height * 0.002)
-    context.stroke()
-    context.restore()
-  }
-
-  private static drawTrackNames(
-    context: CanvasRenderingContext2D,
-    width: number,
-    height: number,
-    trackNames: Array<string>,
-  ) {
-    const fontSize = Math.round(Math.min(width, height) * 0.023)
-    const rowHeight = fontSize * 1.65
-    const paddingX = fontSize * 0.75
-    const left = width * 0.07
-    const right = width * 0.93
-    let x = left
-    let y = height * 0.08
-
-    context.save()
-    context.textBaseline = 'middle'
-    context.font = `600 ${fontSize}px system-ui, -apple-system, BlinkMacSystemFont, sans-serif`
-    for (let index = 0; index < Math.min(8, trackNames.length); ++index) {
-      const text = VideoRenderer.truncateText(trackNames[index], 34)
-      const pillWidth = context.measureText(text).width + paddingX * 2
-      if (x + pillWidth > right && x > left) {
-        x = left
-        y += rowHeight * 1.25
-      }
-      if (y + rowHeight > height * 0.22) {
-        break
-      }
-      context.beginPath()
-      context.roundRect(x, y - rowHeight * 0.45, pillWidth, rowHeight * 0.9, rowHeight * 0.45)
-      context.fillStyle = 'rgba(15, 23, 42, 0.5)'
-      context.fill()
-      context.fillStyle = 'rgba(226, 232, 240, 0.8)'
-      context.fillText(text, x + paddingX, y)
-      x += pillWidth + paddingX
-    }
-    context.restore()
-  }
-
-  private static truncateText(text: string, maxLength: number): string {
-    if (text.length <= maxLength) {
-      return text
-    }
-    return `${text.slice(0, Math.max(0, maxLength - 3))}...`
-  }
-
   private static async getVideoCodec(preset: VideoExportPreset): Promise<VideoCodec> {
     const options = { width: preset.width, height: preset.height, bitrate: preset.videoBitrate }
     if (await canEncodeVideo('avc', options)) {
@@ -480,7 +354,7 @@ export class VideoRenderer {
   }
 
   private static async ensureAacEncoder(channelCount: number, sampleRate: number) {
-    const options = { numberOfChannels: channelCount, sampleRate, bitrate: AUDIO_BITRATE }
+    const options = { numberOfChannels: channelCount, sampleRate, bitrate: AUDIO_ENCODING_CONFIG.bitrate }
     if (await canEncodeAudio('aac', options)) {
       return
     }
@@ -509,9 +383,7 @@ export class VideoRenderer {
   }
 
   private static throwIfAborted(signal: AbortSignal) {
-    if (signal.aborted) {
-      throw new Error('Video export canceled')
-    }
+    signal.throwIfAborted()
   }
 
   private static toError(error: unknown): Error {

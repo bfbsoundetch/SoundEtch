@@ -3266,7 +3266,8 @@ body:has(.bottom-panel.resizing, .bottom-panel.layout-resize) #topdiv,
   margin: 0;
 }
 
-.track-panel-content {
+.track-panel-content,
+.output-panel-content {
   display: grid;
   grid-template-columns: 11rem minmax(0, 1fr);
   grid-template-rows: minmax(0, 1fr);
@@ -3274,7 +3275,8 @@ body:has(.bottom-panel.resizing, .bottom-panel.layout-resize) #topdiv,
   min-height: 0;
 }
 
-.track-panel-nav {
+.track-panel-nav,
+.output-panel-nav {
   display: flex;
   flex-direction: column;
   gap: 0.35rem;
@@ -3298,13 +3300,15 @@ body:has(.bottom-panel.resizing, .bottom-panel.layout-resize) #topdiv,
   background: var(--bg-color);
 }
 
-.track-panel-tabs {
+.track-panel-tabs,
+.output-panel-tabs {
   display: flex;
   flex-direction: column;
   border-top: 1px solid var(--color);
 }
 
-.track-panel-tab {
+.track-panel-tab,
+.output-panel-tab {
   padding: 0.65rem 0.75rem;
   border-bottom: 1px solid var(--color);
   font-variant: small-caps;
@@ -3313,18 +3317,22 @@ body:has(.bottom-panel.resizing, .bottom-panel.layout-resize) #topdiv,
   cursor: pointer;
 }
 
-.track-panel-tab[aria-selected='true'] {
+.track-panel-tab[aria-selected='true'],
+.output-panel-tab[aria-selected='true'] {
   font-weight: bold;
   background: var(--bg-color);
   box-shadow: inset 3px 0 0 currentColor;
 }
 
 .track-panel-tab:focus-visible,
-.track-panel-section:focus-visible {
+.track-panel-section:focus-visible,
+.output-panel-tab:focus-visible,
+.output-panel-section:focus-visible {
   outline-offset: -4px;
 }
 
-.track-panel-section {
+.track-panel-section,
+.output-panel-section {
   min-width: 0;
   min-height: 0;
   height: 100%;
@@ -3958,7 +3966,8 @@ body:has(.bottom-panel.resizing, .bottom-panel.layout-resize) #topdiv,
     padding: 0 0.75rem;
   }
 
-  .track-panel-content {
+  .track-panel-content,
+  .output-panel-content {
     grid-template-columns: 8rem minmax(0, 1fr);
   }
 }
@@ -4467,9 +4476,9 @@ input::placeholder {
 }
 
 /* Output scene editor and composed preview. */
-.output-panel-content {
+.output-panel-video {
   display: grid;
-  grid-template-columns: minmax(13rem, 18rem) minmax(0, 1fr);
+  grid-template-columns: minmax(0, 1fr) minmax(13rem, 18rem);
   grid-template-rows: minmax(0, 1fr);
   height: 100%;
   min-height: 0;
@@ -4477,6 +4486,10 @@ input::placeholder {
   padding: 1rem;
   box-sizing: border-box;
   align-items: stretch;
+}
+
+.output-panel-video > .bottom-panel-message {
+  grid-column: 1 / -1;
 }
 
 .output-panel-controls {
@@ -4502,9 +4515,15 @@ input::placeholder {
   gap: 0.35rem;
 }
 
-.output-panel-field select {
+.output-panel-field select,
+.output-panel-controls input[type='range'] {
   width: 100%;
   min-width: 0;
+  box-sizing: border-box;
+}
+
+.output-panel-controls input[type='range'] {
+  margin: 0;
 }
 
 .output-panel-controls button {
@@ -4547,6 +4566,7 @@ input::placeholder {
   position: relative;
   min-width: 0;
   min-height: 0;
+  margin: var(--output-frame-margin, 0px);
   overflow: hidden;
   background: #000;
 }
@@ -4557,6 +4577,19 @@ input::placeholder {
   width: 100%;
   height: 100%;
   display: block;
+}
+
+.output-panel-preview-slot.is-pannable canvas {
+  cursor: grab;
+  touch-action: none;
+}
+
+.output-panel-preview-slot.is-panning canvas {
+  cursor: grabbing;
+}
+
+.output-panel-preview-slot canvas:focus-visible {
+  outline-offset: -3px;
 }
 
 .output-panel-preview-status {
@@ -4578,7 +4611,7 @@ input::placeholder {
 }
 
 @media (max-width: 700px) {
-  .output-panel-content {
+  .output-panel-video {
     grid-template-columns: minmax(0, 1fr);
     grid-template-rows: minmax(0, 1fr) minmax(0, 1fr);
     gap: 1rem;

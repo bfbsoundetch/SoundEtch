@@ -2,7 +2,7 @@ import { Track } from './Track'
 import { Clip } from './Clip'
 import { DatabasePersisted } from '../persistence/DatabasePersisted'
 import { Restorable } from '../persistence/Restoration'
-import type { OutputScene } from './OutputScene'
+import { cloneOutputScene, type OutputScene } from './OutputScene'
 
 @Restorable('Project')
 export class Project extends DatabasePersisted {
@@ -53,17 +53,13 @@ export class Project extends DatabasePersisted {
       return
     }
     this.tracks.splice(index, 1)
-    this.outputScenes = this.outputScenes.map<OutputScene>((scene) =>
-      scene.tracks.includes(track)
-        ? {
-            ...scene,
-            tracks: [
-              scene.tracks[0] === track ? null : scene.tracks[0],
-              scene.tracks[1] === track ? null : scene.tracks[1],
-            ],
-          }
-        : scene,
-    )
+    this.outputScenes = this.outputScenes.map((scene) => {
+      if (!scene.tracks.includes(track)) return scene
+      const copy = cloneOutputScene(scene)
+      if (copy.tracks[0] === track) copy.tracks[0] = null
+      if (copy.tracks[1] === track) copy.tracks[1] = null
+      return copy
+    })
     track.stopPlayback()
     this.updateTrackAudibility()
   }

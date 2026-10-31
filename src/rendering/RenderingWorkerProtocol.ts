@@ -6,6 +6,8 @@ import { EffectData } from '../effects/EffectData'
 export type RenderingWorkerStartMessage = {
   argument: RenderingArgument
   encodingPort: MessagePort
+  /** Bound queued PCM when a slow consumer, such as offline video encoding, acknowledges each chunk. */
+  waitForConsumer?: boolean
 }
 
 export type RenderingEncodingInitMessage = {
@@ -57,8 +59,8 @@ export type RenderingEncodingPortMessage =
       type: 'stop'
     }
 
-// Consumer → source, one per processed 'audio' message. Sources that throttle (LoudnessNormalizingWorker)
-// wait for these; RenderingJob ignores them.
+// Consumer → source, one per processed 'audio' message. Normalization and opted-in RenderingJob producers
+// wait for these before producing more audio.
 export type RenderingConsumerPortMessage = { type: 'consumed' }
 
 export type RenderingOutputWorkerMessage = {

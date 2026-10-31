@@ -941,7 +941,7 @@
             <option value="flac">FLAC - Lossless Compression</option>
             <option value="mp3" selected>MP3 - Lossy Compression</option>
             <option value="opus">Opus - Modern Lossy Codec</option>
-            <option value="video">Video - MP4 Visualizer</option>
+            <option value="video">Video - MP4 Output Scenes</option>
           </select>
         </div>
 
@@ -960,15 +960,16 @@
         <div id="video-options-container" class="export-options-container" hidden>
           <div class="export-option-row">
             <div class="radio-group">
-              <label id="video-preset-label">Video Shape</label>
+              <label id="video-preset-label">Video Size</label>
               <div class="radio-option" role="radiogroup" aria-labelledby="video-preset-label">
                 <input type="radio" id="video-preset-youtube" name="video-preset" value="youtube" checked />
-                <label for="video-preset-youtube">Hamburger - YouTube 1920x1080</label>
+                <label for="video-preset-youtube">Landscape - YouTube 1920x1080</label>
                 <input type="radio" id="video-preset-tiktok" name="video-preset" value="tiktok" />
-                <label for="video-preset-tiktok">Hotdog - TikTok 1080x1920</label>
+                <label for="video-preset-tiktok">Portrait - TikTok 1080x1920</label>
               </div>
             </div>
           </div>
+          <p>Exports Output scenes with the mixed audio at 60 fps. Portrait letterboxes the 16:9 scene.</p>
         </div>
 
         <div id="loudness-container" class="form-group">

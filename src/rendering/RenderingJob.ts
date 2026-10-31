@@ -3,7 +3,7 @@ import { RawDataAudioContext } from '@descript/web-audio-js'
 import type { api } from '@descript/web-audio-js'
 import { FileSystemUtils } from '../filesystem/FileSystemUtils'
 import { FileSystemSyncAccessHandle } from '../filesystem/FileSystemSyncAccessHandle'
-import { RenderingWorkerStartMessage } from './RenderingWorkerProtocol'
+import { RenderingWorkerStartMessage, type RenderingConsumerPortMessage } from './RenderingWorkerProtocol'
 import { createRenderingAudioSource } from './RenderingAudioSource'
 import type { RenderingAudioSource } from './RenderingAudioSource'
 import { scheduleParameterValues } from '../effects/ParameterScheduling'
@@ -33,7 +33,7 @@ const RENDER_CHUNK_SAMPLE_CAPACITY = 1024 * 1024
 const RENDER_CHUNK_MAX_INTERVAL_MS = 100
 
 self.onmessage = async (e) => {
-  const { argument, encodingPort } = e.data as RenderingWorkerStartMessage
+  const { argument, encodingPort, waitForConsumer = false } = e.data as RenderingWorkerStartMessage
 
   const length = argument.length
 
@@ -112,13 +112,26 @@ self.onmessage = async (e) => {
   const pendingChunk = new Float32Array(RENDER_CHUNK_SAMPLE_CAPACITY)
   let pendingLength = 0
   let lastFlushTime = performance.now()
+  let acknowledge: (() => void) | null = null
+  if (waitForConsumer) {
+    encodingPort.onmessage = (event) => {
+      if ((event.data as RenderingConsumerPortMessage).type !== 'consumed') return
+      acknowledge?.()
+      acknowledge = null
+    }
+  }
 
-  const flushPendingChunk = () => {
+  const flushPendingChunk = async () => {
     if (pendingLength === 0) {
       return
     }
 
     const chunk = pendingChunk.slice(0, pendingLength)
+    const consumed = waitForConsumer
+      ? new Promise<void>((resolve) => {
+          acknowledge = resolve
+        })
+      : null
     encodingPort.postMessage(
       {
         type: 'audio',
@@ -128,6 +141,7 @@ self.onmessage = async (e) => {
       [chunk.buffer],
     )
     pendingLength = 0
+    if (consumed) await consumed
     lastFlushTime = performance.now()
   }
 
@@ -141,7 +155,7 @@ self.onmessage = async (e) => {
     const frameCount = Math.min(BLOCK_SIZE, length - i)
     const samplesToWrite = frameCount * argument.channelCount
     if (pendingLength + samplesToWrite > pendingChunk.length) {
-      flushPendingChunk()
+      await flushPendingChunk()
     }
 
     for (let frame = 0; frame < frameCount; ++frame) {
@@ -151,13 +165,13 @@ self.onmessage = async (e) => {
     }
 
     if (performance.now() - lastFlushTime >= RENDER_CHUNK_MAX_INTERVAL_MS) {
-      flushPendingChunk()
+      await flushPendingChunk()
     }
   }
 
   trackSources.forEach(({ node }) => node.disconnect())
   connectedEffectModules.forEach((effectModule) => effectModule.disconnect())
-  flushPendingChunk()
+  await flushPendingChunk()
   encodingPort.postMessage({ type: 'stop' })
 }
 

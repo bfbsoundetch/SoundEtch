@@ -149,7 +149,7 @@ export class PublishProjectController {
     try {
       await VideoRenderer.exportProject(presetName, selectedRegion, this.getLoudnessTargetLufs())
     } catch (e) {
-      NotificationsController.showError(e as Error)
+      if (!(e instanceof DOMException && e.name === 'AbortError')) NotificationsController.showError(e as Error)
     } finally {
       this.appWindow.processingModalController?.hide()
     }

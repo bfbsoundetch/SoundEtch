@@ -2,6 +2,7 @@ import { ALL_FORMATS, BlobSource, EncodedPacketSink, Input, VideoSampleSink } fr
 import type { VideoSample } from 'mediabunny'
 import { FileSystemUtils } from '../filesystem/FileSystemUtils'
 import type { VideoFrameTarget } from './VideoFrameResolver'
+import { paintVideoFrame } from './VideoFramePainter'
 
 /**
  * A restart must skip more than this much decoding to pay for a new decoder and the frames the running one has
@@ -48,6 +49,10 @@ export class VideoPreview {
   private shown: VideoSample | null = null
   private shownOriginal: VideoSample | null = null
   private fit: 'contain' | 'cover' = 'contain'
+  private cropX = 0.5
+  private cropY = 0.5
+  private cornerRadius = 0
+  private readonly cropOverflow = { x: 0, y: 0 }
 
   constructor(
     private readonly canvas: HTMLCanvasElement,
@@ -56,10 +61,26 @@ export class VideoPreview {
   ) {}
 
   /** Changes composition without decoding the retained picture again. Track previews default to contain. */
-  setFit(fit: 'contain' | 'cover'): void {
-    if (fit === this.fit) return
+  setFraming(fit: 'contain' | 'cover', x = 0.5, y = 0.5, cornerRadius = this.cornerRadius): void {
+    x = Math.max(0, Math.min(1, x))
+    y = Math.max(0, Math.min(1, y))
+    cornerRadius = Math.max(0, cornerRadius)
+    const radiusChanged = cornerRadius !== this.cornerRadius
+    const fitChanged =
+      fit !== this.fit &&
+      this.shown !== null &&
+      this.shown.displayWidth * this.canvas.height !== this.shown.displayHeight * this.canvas.width
+    const cropChanged = (x !== this.cropX && this.cropOverflow.x > 0) || (y !== this.cropY && this.cropOverflow.y > 0)
     this.fit = fit
-    if (this.shown) this.paint(this.shown)
+    this.cropX = x
+    this.cropY = y
+    this.cornerRadius = cornerRadius
+    if (this.shown && (fitChanged || radiusChanged || (fit === 'cover' && cropChanged))) this.paint(this.shown)
+  }
+
+  /** CSS-pixel travel of the displayed picture; the cached object is updated by each paint. */
+  getCropOverflow(): Readonly<{ x: number; y: number }> | null {
+    return this.shown && this.fit === 'cover' ? this.cropOverflow : null
   }
 
   /** `redraw` repaints the displayed picture after the canvas size changes; it never decodes again. */
@@ -252,21 +273,40 @@ export class VideoPreview {
 
   private paint(frame: VideoSample): void {
     const ratio = window.devicePixelRatio || 1
-    const width = Math.max(1, Math.round(this.canvas.clientWidth * ratio))
-    const height = Math.max(1, Math.round(this.canvas.clientHeight * ratio))
+    const cssWidth = this.canvas.clientWidth
+    const cssHeight = this.canvas.clientHeight
+    const width = Math.max(1, Math.round(cssWidth * ratio))
+    const height = Math.max(1, Math.round(cssHeight * ratio))
     if (this.canvas.width !== width) this.canvas.width = width
     if (this.canvas.height !== height) this.canvas.height = height
     const context = this.canvas.getContext('2d', { alpha: false })
     if (!context) throw new Error('Video preview requires a 2D canvas')
     context.fillStyle = '#000'
     context.fillRect(0, 0, width, height)
-    frame.drawWithFit(context, { fit: this.fit })
+    paintVideoFrame(
+      context,
+      frame,
+      0,
+      0,
+      width,
+      height,
+      this.fit,
+      this.cropX,
+      this.cropY,
+      this.cornerRadius * ratio,
+      this.cropOverflow,
+    )
+    // Account for rounded backing dimensions rather than assuming an exact integer DPR.
+    this.cropOverflow.x = (this.cropOverflow.x * cssWidth) / width
+    this.cropOverflow.y = (this.cropOverflow.y * cssHeight) / height
   }
 
   private blank(): void {
     this.shown?.close()
     this.shown = null
     this.shownOriginal = null
+    this.cropOverflow.x = 0
+    this.cropOverflow.y = 0
     const context = this.canvas.getContext('2d', { alpha: false })
     if (!context) return
     context.fillStyle = '#000'

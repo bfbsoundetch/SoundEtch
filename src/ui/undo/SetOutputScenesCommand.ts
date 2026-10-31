@@ -1,4 +1,4 @@
-import type { OutputScene } from '../../project/OutputScene'
+import { cloneOutputScene, type OutputScene } from '../../project/OutputScene'
 import type { Project } from '../../project/Project'
 import { ProjectManager } from '../../project/ProjectManager'
 import type { Undoable } from './Undoable'
@@ -13,16 +13,16 @@ export class SetOutputScenesCommand implements Undoable {
     newScenes: readonly OutputScene[],
     private readonly description = 'change output scene',
   ) {
-    this.oldScenes = copyScenes(oldScenes)
-    this.newScenes = copyScenes(newScenes)
+    this.oldScenes = oldScenes.map(cloneOutputScene)
+    this.newScenes = newScenes.map(cloneOutputScene)
   }
 
   async perform() {
-    this.project.outputScenes = copyScenes(this.newScenes)
+    this.project.outputScenes = this.newScenes.map(cloneOutputScene)
   }
 
   async undo() {
-    this.project.outputScenes = copyScenes(this.oldScenes)
+    this.project.outputScenes = this.oldScenes.map(cloneOutputScene)
   }
 
   async save() {
@@ -32,8 +32,4 @@ export class SetOutputScenesCommand implements Undoable {
   toString() {
     return this.description
   }
-}
-
-function copyScenes(scenes: readonly OutputScene[]): OutputScene[] {
-  return scenes.map((scene): OutputScene => ({ ...scene, tracks: [...scene.tracks] }))
 }
