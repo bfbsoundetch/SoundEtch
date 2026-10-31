@@ -44,6 +44,7 @@ import type { ProcessingModalController } from '../ProcessingModalController'
 import { TrackPanelController } from '../TrackPanelController'
 import { getTrackTranscriptEntries } from '../transcript/TrackTranscript'
 import type { TrackTranscriptEntry } from '../transcript/TrackTranscript'
+import { OutputTimelineController } from './OutputTimelineController'
 
 interface Selection {
   startSample: number
@@ -112,6 +113,7 @@ export class TrackListController {
 
   private readonly tracklistElement = document.getElementById('track-list')!
   private readonly tracklistInfoElement = document.getElementById('track-info-list')!
+  readonly outputTimelineController = new OutputTimelineController(this)
   private readonly newTrackDropRegion = document.createElement('div')
   private readonly resizeCallback
   private readonly infoWaveformPairs = new Map<

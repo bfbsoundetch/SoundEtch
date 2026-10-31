@@ -106,6 +106,8 @@ export class PointerStateManager extends TrackListItemController {
         this.updateMovingClipView()
       }
     })
+    const outputLaneFor = (target: EventTarget | null) =>
+      target instanceof Element ? target.closest<HTMLElement>('.timeline-output-lane') : null
 
     const mouseMoveListener = async (mouseEvent: MouseEvent) => {
       if (Math.abs(mouseEvent.x - this.trackListController.positionMarkerController.x) < 2) {
@@ -117,7 +119,7 @@ export class PointerStateManager extends TrackListItemController {
         case State.DEFAULT:
           break
         case State.MARKING:
-          if (mouseEvent.buttons == 1 && mouseEvent.button == 0) {
+          if (mouseEvent.buttons == 1) {
             this.markPointerDown(mouseEvent)
           }
           break
@@ -153,6 +155,7 @@ export class PointerStateManager extends TrackListItemController {
       }
     }
     const mouseDownListener = async (mouseEvent: MouseEvent) => {
+      if (outputLaneFor(mouseEvent.target)) return
       if (Math.abs(mouseEvent.x - this.trackListController.positionMarkerController.x) < 2) {
         this.startMovingMark()
         return
@@ -297,7 +300,29 @@ export class PointerStateManager extends TrackListItemController {
     document.getElementById('timeline')!.addEventListener('wheel', scrollListener, { passive: false })
 
     timelineAreaElement.addEventListener('mousedown', mouseDownListener)
-    timelineAreaElement.addEventListener('mousemove', mouseMoveListener)
+    timelineAreaElement.addEventListener('mousemove', (event) => {
+      if (!outputLaneFor(event.target)) void mouseMoveListener(event)
+    })
+    timelineAreaElement.addEventListener('pointerdown', (event) => {
+      const lane = outputLaneFor(event.target)
+      if (!lane || !event.isPrimary || event.button !== 0 || !trackListController.canEdit()) return
+      event.preventDefault()
+      lane.setPointerCapture(event.pointerId)
+      this.activeWaveform = null
+      this.activeClipViewController = null
+      this.markPointerDown(event)
+      this.startMovingMark()
+    })
+    timelineAreaElement.addEventListener('pointermove', (event) => {
+      if (event.isPrimary && outputLaneFor(event.target)) void mouseMoveListener(event)
+    })
+    for (const eventName of ['pointerup', 'pointercancel', 'lostpointercapture'] as const) {
+      timelineAreaElement.addEventListener(eventName, (event) => {
+        if (event.isPrimary && outputLaneFor(event.target) && this.state === State.MARKING) {
+          this.changeState(State.DEFAULT)
+        }
+      })
+    }
 
     timelineElement.addEventListener('mousedown', mouseDownListener)
     timelineElement.addEventListener('mousemove', mouseMoveListener)
@@ -481,7 +506,7 @@ export class PointerStateManager extends TrackListItemController {
   }
 
   private markPointerDown(mouseEvent: MouseEvent) {
-    AudioControl.startPosition = Math.round(this.sampleForMouseEvent(mouseEvent))
+    AudioControl.startPosition = Math.max(0, Math.round(this.sampleForMouseEvent(mouseEvent)))
     this.trackListController.positionMarkerController.draw()
     this.trackListController.clearSelection()
     this.timelineRegionController = null

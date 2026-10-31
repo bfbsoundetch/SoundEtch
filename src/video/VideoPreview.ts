@@ -47,12 +47,20 @@ export class VideoPreview {
   private failedSource: string | null = null
   private shown: VideoSample | null = null
   private shownOriginal: VideoSample | null = null
+  private fit: 'contain' | 'cover' = 'contain'
 
   constructor(
     private readonly canvas: HTMLCanvasElement,
     private readonly onStatus: (message: string) => void,
     private readonly onError: (error: Error) => void,
   ) {}
+
+  /** Changes composition without decoding the retained picture again. Track previews default to contain. */
+  setFit(fit: 'contain' | 'cover'): void {
+    if (fit === this.fit) return
+    this.fit = fit
+    if (this.shown) this.paint(this.shown)
+  }
 
   /** `redraw` repaints the displayed picture after the canvas size changes; it never decodes again. */
   request(directory: string, sampleRate: number, target: VideoFrameTarget, redraw = false): void {
@@ -252,7 +260,7 @@ export class VideoPreview {
     if (!context) throw new Error('Video preview requires a 2D canvas')
     context.fillStyle = '#000'
     context.fillRect(0, 0, width, height)
-    frame.drawWithFit(context, { fit: 'contain' })
+    frame.drawWithFit(context, { fit: this.fit })
   }
 
   private blank(): void {

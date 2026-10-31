@@ -2,6 +2,7 @@ import { Track } from './Track'
 import { Clip } from './Clip'
 import { DatabasePersisted } from '../persistence/DatabasePersisted'
 import { Restorable } from '../persistence/Restoration'
+import type { OutputScene } from './OutputScene'
 
 @Restorable('Project')
 export class Project extends DatabasePersisted {
@@ -9,6 +10,7 @@ export class Project extends DatabasePersisted {
   private clips: Clip[] = []
 
   description: string = ''
+  outputScenes: OutputScene[] = [{ startSample: 0, layout: 'single', fit: 'contain', tracks: [null, null] }]
 
   constructor(
     public title: string,
@@ -51,6 +53,17 @@ export class Project extends DatabasePersisted {
       return
     }
     this.tracks.splice(index, 1)
+    this.outputScenes = this.outputScenes.map<OutputScene>((scene) =>
+      scene.tracks.includes(track)
+        ? {
+            ...scene,
+            tracks: [
+              scene.tracks[0] === track ? null : scene.tracks[0],
+              scene.tracks[1] === track ? null : scene.tracks[1],
+            ],
+          }
+        : scene,
+    )
     track.stopPlayback()
     this.updateTrackAudibility()
   }

@@ -50,6 +50,7 @@ export class PositionMarkerController extends TrackListItemController {
     ) {
       if (AudioControl.startPosition == 0) {
         this.hidePositionMarker()
+        this.trackListController.outputTimelineController?.draw(0)
         return
       }
       position = AudioControl.startPosition
@@ -69,6 +70,7 @@ export class PositionMarkerController extends TrackListItemController {
     }
 
     const realPosition = positionOverride ?? position
+    this.trackListController.outputTimelineController?.draw(realPosition)
     this.x = this.getXValueForSample(realPosition) + 14 * this.trackListController.rootFontSize
 
     this.positionLineSvg.x1.baseVal.value = this.x

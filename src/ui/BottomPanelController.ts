@@ -298,12 +298,27 @@ export class BottomPanelController {
     if (focusWasInside && !tab.panel.contains(document.activeElement)) tab.focusView()
   }
 
-  /** Selects a tab and opens the panel if it is minimized; focus from outside the panel moves to the view. */
-  reveal(id: BottomPanelTabId): void {
+  /** Reveals a tab; an optional timeline anchor stays visible instead of reopening at full height. */
+  reveal(id: BottomPanelTabId, timelineAnchor?: HTMLElement): void {
     const focusWasOutside = !this.root.contains(document.activeElement)
     this.selectTab(id)
-    if (this.size === 'collapsed') this.setSize(this.openSize)
+    if (this.size === 'collapsed') {
+      this.setSize(timelineAnchor && this.openSize === 'full' ? 'half' : this.openSize)
+    } else if (timelineAnchor && this.size === 'full') {
+      this.setSize('half')
+    }
     if (focusWasOutside) this.tabs[id].focusView()
+    if (!timelineAnchor) return
+    const scrollToAnchor = () => timelineAnchor.scrollIntoView({ block: 'nearest', inline: 'nearest' })
+    scrollToAnchor()
+    const animations = this.topElement.getAnimations()
+    if (animations.length === 0) return
+    const resizeObserver = new ResizeObserver(scrollToAnchor)
+    resizeObserver.observe(this.topElement)
+    void Promise.allSettled(animations.map((animation) => animation.finished)).then(() => {
+      resizeObserver.disconnect()
+      scrollToAnchor()
+    })
   }
 
   /** Removes the owner's view; its tab goes back to the root view registered for it. */

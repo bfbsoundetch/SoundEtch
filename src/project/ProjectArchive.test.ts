@@ -54,6 +54,12 @@ test('project archives remap video sidecars and preserve silent and linked sourc
     new Uint8Array(new Float32Array([0.1, -0.2, 0.3, -0.4]).buffer),
   )
   await writeFile(project.directoryName, `${linked.filename}_summary`, new Uint8Array())
+  const [silentTrack, linkedTrack] = project.getTracks()
+  project.outputScenes = [
+    { startSample: 0, layout: 'single', fit: 'contain', tracks: [silentTrack, null] },
+    { startSample: 24_000, layout: 'side-by-side', fit: 'cover', tracks: [linkedTrack, silentTrack] },
+    { startSample: 36_000, layout: 'single', fit: 'cover', tracks: [null, null] },
+  ]
   await ProjectManager.saveProject(project)
 
   const parts: Uint8Array<ArrayBuffer>[] = []
@@ -77,6 +83,22 @@ test('project archives remap video sidecars and preserve silent and linked sourc
   expect(restoredLinked.summary.length).toBe(4)
   expect(restoredLinked.videoSegments).toEqual(linked.videoSegments)
   expect(restored.getTracks()[0].clipViews[0].clip).toBe(restoredSilent)
+  const [restoredSilentTrack, restoredLinkedTrack] = restored.getTracks()
+  expect(restoredSilentTrack.id).not.toBe(silentTrack.id)
+  expect(restoredLinkedTrack.id).not.toBe(linkedTrack.id)
+  expect(restored.outputScenes).toEqual([
+    { startSample: 0, layout: 'single', fit: 'contain', tracks: [restoredSilentTrack, null] },
+    {
+      startSample: 24_000,
+      layout: 'side-by-side',
+      fit: 'cover',
+      tracks: [restoredLinkedTrack, restoredSilentTrack],
+    },
+    { startSample: 36_000, layout: 'single', fit: 'cover', tracks: [null, null] },
+  ])
+  expect(restored.outputScenes[0].tracks[0]).toBe(restoredSilentTrack)
+  expect(restored.outputScenes[1].tracks[0]).toBe(restoredLinkedTrack)
+  expect(restored.outputScenes[1].tracks[1]).toBe(restoredSilentTrack)
   expect(
     new Uint8Array(
       await (

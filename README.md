@@ -115,6 +115,18 @@ File drops are available while stopped or monitoring, not during playback, recor
 
 Drag a clip's header to move it along the timeline or onto another track. Hold it near the top or bottom edge of the visible track list to scroll vertically, even while the pointer stays still. Scrolling speeds up toward the edge and stops when the pointer returns to the middle or the drag ends. To move the clip onto a new track, keep dragging down until the **+ new track** drop area appears below the last track, then release over it.
 
+## Timeline output
+
+The timeline's **Output** section follows all tracks and the **+ new track** drop area. Its scene blocks share the tracks' zoom and horizontal pan: pinch/Ctrl+wheel zooms, and a horizontal wheel gesture pans. Click or drag in the lane to move the position marker and open the bottom panel's **Output** tab. The lane also supports keyboard cursor movement by ruler ticks, Home/End, Page Up/Down, and +/− zoom; Enter opens Output.
+
+Opening Output from its lane, including keyboard activation, scrolls the lane into view throughout the panel's resize animation. If the panel was last full-height, lane activation opens it at half height so the timeline stays visible.
+
+Like tracks, Output pairs a header in the information column with a lane in the shared timeline surface. The position marker is clipped to that surface, so panning it off the left edge never paints over the headers. Hovering the marker shows the resize cursor; mouse and touch drags use the shared pointer manager.
+
+The Output panel edits the scene at the position marker. Choose **Single video** or **Side by side**, then **Fit (contain)** to preserve the whole picture with black bars or **Crop (cover)** to fill each area without stretching. Each area can use a chosen video track; **Automatic** uses the first video track for the left/single area and the second for the right. The 16:9 preview follows the marker and playback, uses the tracks' linked clip timing, and shows black in footage gaps. It decodes only while Output is visible.
+
+**Split at position marker** starts a new scene with the current scene's layout, framing, and sources. Splits cannot create empty scenes at zero, the project end, or an existing boundary. A boundary belongs to the scene on its right, and the last scene follows the project duration. Layout, framing, sources, and splits support undo/redo, survive reloads, and travel in project archives. Scenes currently affect this preview only; video export remains the MP4 visualizer, and output audio effects and automation are not implemented.
+
 ## Timeline display modes
 
 Use each track's options menu (three dots) to switch between its waveform and a WebGPU-rendered spectrogram, rename the track, show or hide its transcript, or change its height. The selected mode is session-only and resets to the waveform when a project is opened or the page is reloaded. If WebGPU is unavailable, the spectrogram view keeps its editing overlays on the selected color scheme's minimum-dB background; switching back to the waveform remains available.
@@ -141,7 +153,7 @@ Enabling the camera with the project header's **Enable Camera** button opens **I
 
 - **Inputs** centers a card for each of this machine's enabled inputs: the microphone with the camera, and screen/tab capture. Each has its live picture (the camera mirrored, like the meeting room's self view) in a 16:9 box filling the card's height, and a peak meter beside it that widens the card rather than narrowing the picture. Meeting guests are not listed. Pictures and meters run only while the tab is showing.
 - **Tracks** shows one track, chosen with the **Track** selector above its vertical **Effects**, **Video**, and **Transcript** tabs (Up/Down, Home, and End move between them). **Effects** is the effect chain, **Video** the track's picture at the timeline cursor, and **Transcript** its transcript, or a **Transcribe track** button when it has none. A track's **Effects** button opens the **Effects** view. The effect catalog, effect editors, and automation points open over the tab, and their back button returns to it. The chain follows undo and redo.
-- **Output** is a placeholder; it will arrange the video output and hold the audio output's effects.
+- **Output** edits the scene at the position marker: its single/side-by-side layout, Fit/Crop framing, video sources, and split action, alongside the composed video preview.
 
 Drag the tab bar or its centered grip to resize the panel. Release snaps to minimized, half height, or full height: the one nearest the release, but at least one step in the drag's direction once the drag covers 24px. Smaller gestures keep the current size. The panel follows the pointer, then eases into its chosen size over 100ms on release while the timeline boundary moves with it; no intermediate height is retained. Reduced-motion preferences disable the animation. Viewport/header changes update the bounds without cancelling an active drag, and tracking continues outside the moving header or after pointer-capture loss until release. A cancelled gesture or window focus loss restores the previously chosen size. With the grip focused, Up and Down step between the three sizes, Home minimizes, and End selects full height.
 
