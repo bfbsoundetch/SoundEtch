@@ -5,7 +5,7 @@ import { MemoryBackedFileSystem } from '../filesystem/MemoryBackedFileSystem'
 import { GlobalSettings } from '../global/GlobalSettings'
 import { Clip } from './Clip'
 import { ClipView } from './ClipView'
-import { getOutputCropPosition } from './OutputScene'
+import { getOutputCropPosition, getOutputCropScale } from './OutputScene'
 import { ProjectArchive } from './ProjectArchive'
 import { ProjectManager } from './ProjectManager'
 import { Track } from './Track'
@@ -65,8 +65,8 @@ test('project archives remap video sidecars and preserve silent and linked sourc
       cornerRadius: 24,
       margin: 16,
       cropPositions: [
-        { x: 0.1, y: 0.2 },
-        { x: 0.3, y: 0.4 },
+        { x: 0.1, y: 0.2, scale: 1.7 },
+        { x: 0.3, y: 0.4, scale: 2.3 },
       ],
     },
     {
@@ -77,8 +77,8 @@ test('project archives remap video sidecars and preserve silent and linked sourc
       cornerRadius: 80,
       margin: 48,
       cropPositions: [
-        { x: 0.9, y: 0.8 },
-        { x: 0.7, y: 0.6 },
+        { x: 0.9, y: 0.8, scale: 3.4 },
+        { x: 0.7, y: 0.6, scale: 1.2 },
       ],
     },
     { startSample: 36_000, layout: 'single', fit: 'cover', tracks: [null, null] },
@@ -118,8 +118,8 @@ test('project archives remap video sidecars and preserve silent and linked sourc
       cornerRadius: 24,
       margin: 16,
       cropPositions: [
-        { x: 0.1, y: 0.2 },
-        { x: 0.3, y: 0.4 },
+        { x: 0.1, y: 0.2, scale: 1.7 },
+        { x: 0.3, y: 0.4, scale: 2.3 },
       ],
     },
     {
@@ -130,8 +130,8 @@ test('project archives remap video sidecars and preserve silent and linked sourc
       cornerRadius: 80,
       margin: 48,
       cropPositions: [
-        { x: 0.9, y: 0.8 },
-        { x: 0.7, y: 0.6 },
+        { x: 0.9, y: 0.8, scale: 3.4 },
+        { x: 0.7, y: 0.6, scale: 1.2 },
       ],
     },
     { startSample: 36_000, layout: 'single', fit: 'cover', tracks: [null, null] },
@@ -141,11 +141,17 @@ test('project archives remap video sidecars and preserve silent and linked sourc
   expect(restored.outputScenes[1].tracks[1]).toBe(restoredSilentTrack)
   expect(getOutputCropPosition(restored.outputScenes[2], 0)).toEqual({ x: 0.5, y: 0.5 })
   expect(getOutputCropPosition(restored.outputScenes[2], 1)).toEqual({ x: 0.5, y: 0.5 })
+  expect(restored.outputScenes.map((scene) => [getOutputCropScale(scene, 0), getOutputCropScale(scene, 1)])).toEqual([
+    [1.7, 2.3],
+    [3.4, 1.2],
+    [1, 1],
+  ])
   restored.outputScenes[0].fit = 'cover'
   restored.outputScenes[1].cropPositions![0].x = 0
-  expect(getOutputCropPosition(restored.outputScenes[0], 0)).toEqual({ x: 0.1, y: 0.2 })
-  expect(getOutputCropPosition(restored.outputScenes[1], 1)).toEqual({ x: 0.7, y: 0.6 })
-  expect(getOutputCropPosition(project.outputScenes[1], 0)).toEqual({ x: 0.9, y: 0.8 })
+  restored.outputScenes[1].cropPositions![0].scale = 4
+  expect(getOutputCropPosition(restored.outputScenes[0], 0)).toEqual({ x: 0.1, y: 0.2, scale: 1.7 })
+  expect(getOutputCropPosition(restored.outputScenes[1], 1)).toEqual({ x: 0.7, y: 0.6, scale: 1.2 })
+  expect(getOutputCropPosition(project.outputScenes[1], 0)).toEqual({ x: 0.9, y: 0.8, scale: 3.4 })
   expect(
     new Uint8Array(
       await (

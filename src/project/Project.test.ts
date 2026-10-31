@@ -4,7 +4,7 @@ import { DatabasePersister } from '../persistence/DatabasePersister'
 import { Project } from './Project'
 import { Track } from './Track'
 import { ProjectManager } from './ProjectManager'
-import { getOutputCropPosition } from './OutputScene'
+import { getOutputCropPosition, getOutputCropScale } from './OutputScene'
 
 function attachPlayback(track: Track) {
   const playerNode = {
@@ -87,8 +87,8 @@ test('database reload preserves per-scene and per-slot crops while legacy scenes
       fit: 'cover',
       tracks: [null, null],
       cropPositions: [
-        { x: 0, y: 0.25 },
-        { x: 1, y: 0.75 },
+        { x: 0, y: 0.25, scale: 1.8 },
+        { x: 1, y: 0.75, scale: 2.4 },
       ],
     },
     {
@@ -97,8 +97,8 @@ test('database reload preserves per-scene and per-slot crops while legacy scenes
       fit: 'contain',
       tracks: [null, null],
       cropPositions: [
-        { x: 0.2, y: 0.4 },
-        { x: 0.6, y: 0.8 },
+        { x: 0.2, y: 0.4, scale: 3.2 },
+        { x: 0.6, y: 0.8, scale: 1.2 },
       ],
     },
   ]
@@ -116,19 +116,25 @@ test('database reload preserves per-scene and per-slot crops while legacy scenes
       { x: 0.5, y: 0.5 },
     ],
     [
-      { x: 0, y: 0.25 },
-      { x: 1, y: 0.75 },
+      { x: 0, y: 0.25, scale: 1.8 },
+      { x: 1, y: 0.75, scale: 2.4 },
     ],
     [
-      { x: 0.2, y: 0.4 },
-      { x: 0.6, y: 0.8 },
+      { x: 0.2, y: 0.4, scale: 3.2 },
+      { x: 0.6, y: 0.8, scale: 1.2 },
     ],
+  ])
+  expect(restored.outputScenes.map((scene) => [getOutputCropScale(scene, 0), getOutputCropScale(scene, 1)])).toEqual([
+    [1, 1],
+    [1.8, 2.4],
+    [3.2, 1.2],
   ])
   restored.outputScenes[1].cropPositions![0].x = 0.5
   restored.outputScenes[2].fit = 'cover'
-  expect(getOutputCropPosition(restored.outputScenes[1], 1)).toEqual({ x: 1, y: 0.75 })
-  expect(getOutputCropPosition(restored.outputScenes[2], 0)).toEqual({ x: 0.2, y: 0.4 })
-  expect(getOutputCropPosition(project.outputScenes[1], 0)).toEqual({ x: 0, y: 0.25 })
+  restored.outputScenes[1].cropPositions![0].scale = 4
+  expect(getOutputCropPosition(restored.outputScenes[1], 1)).toEqual({ x: 1, y: 0.75, scale: 2.4 })
+  expect(getOutputCropPosition(restored.outputScenes[2], 0)).toEqual({ x: 0.2, y: 0.4, scale: 3.2 })
+  expect(getOutputCropPosition(project.outputScenes[1], 0)).toEqual({ x: 0, y: 0.25, scale: 1.8 })
 })
 
 test('deleting a source track clears both scene slots immutably and leaves a valid persisted graph', async () => {

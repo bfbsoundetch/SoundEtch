@@ -2,8 +2,12 @@ import { AudioControl, AudioState, isRecordingState } from '../audiocontext/Audi
 import { TimeUtils } from '../global/TimeUtils'
 import type { Project } from '../project/Project'
 import {
+  clampOutputCropScale,
   cloneOutputScene,
   getOutputCropPosition,
+  getOutputCropScale,
+  MAX_OUTPUT_CROP_SCALE,
+  MIN_OUTPUT_CROP_SCALE,
   getOutputSceneIndex,
   splitOutputScene,
   type OutputScene,
@@ -14,11 +18,12 @@ import { resolveVideoFrame } from '../video/VideoFrameResolver'
 import { VideoPreview } from '../video/VideoPreview'
 import { BottomPanelController } from './BottomPanelController'
 import { NotificationsController } from './NotificationsController'
+import type { TrackListController } from './timeline/TrackListController'
 import { editorHistory } from './undo/EditorHistory'
 import { SetOutputScenesCommand } from './undo/SetOutputScenesCommand'
 
 interface OutputPanelWindow extends Window {
-  readonly trackListController?: { canEdit(): boolean }
+  readonly trackListController?: Pick<TrackListController, 'canEdit' | 'outputTimelineController'>
 }
 
 type PreviewSlot = {
@@ -87,6 +92,8 @@ export class OutputPanelController {
   private readonly marginInput = document.createElement('input')
   private readonly sourceSelects = [document.createElement('select'), document.createElement('select')]
   private readonly sourceFields: HTMLLabelElement[] = []
+  private readonly scaleFields: HTMLDivElement[] = []
+  private readonly scaleButtons: [HTMLButtonElement, HTMLButtonElement][] = []
   private readonly splitButton = document.createElement('button')
   private readonly stage = document.createElement('div')
   private readonly emptyMessage = document.createElement('p')
@@ -104,7 +111,6 @@ export class OutputPanelController {
   private controlSample = NaN
   private cropDrag: CropDrag | null = null
   private frameStyleEdit: FrameStyleEdit | null = null
-  private renderedFrameMargin = NaN
 
   constructor() {
     this.content.id = 'output-panel-content'
@@ -204,6 +210,34 @@ export class OutputPanelController {
       const field = this.field(index === 0 ? 'Video source' : 'Right video source', select)
       this.sourceFields.push(field)
       this.controls.appendChild(field)
+      const scaleField = document.createElement('div')
+      scaleField.className = 'output-panel-field'
+      scaleField.setAttribute('role', 'group')
+      const scaleLabel = document.createElement('span')
+      scaleLabel.id = `output-panel-scale-${index + 1}`
+      scaleLabel.textContent = 'Scale'
+      scaleField.setAttribute('aria-labelledby', scaleLabel.id)
+      const buttons = document.createElement('div')
+      buttons.className = 'output-panel-scale-buttons'
+      const decrease = document.createElement('button')
+      const increase = document.createElement('button')
+      for (const [button, direction, text] of [
+        [decrease, -1, '−'],
+        [increase, 1, '+'],
+      ] as const) {
+        button.type = 'button'
+        button.className = 'bordered clickable'
+        button.textContent = text
+        const label = `${direction < 0 ? 'Decrease' : 'Increase'} ${index === 0 ? 'left video' : 'right video'} scale`
+        button.setAttribute('aria-label', label)
+        button.title = label
+        button.addEventListener('click', () => this.changeCropScale(index, direction))
+        buttons.appendChild(button)
+      }
+      scaleField.append(scaleLabel, buttons)
+      this.scaleFields.push(scaleField)
+      this.scaleButtons.push([decrease, increase])
+      this.controls.appendChild(scaleField)
       select.addEventListener('change', () => {
         const track = this.videoTracks[select.selectedIndex - 1] ?? null
         void this.editScene((scene) => {
@@ -348,7 +382,7 @@ export class OutputPanelController {
 
   private canEdit(): boolean {
     const trackList = (window as OutputPanelWindow).trackListController
-    if (trackList) return trackList.canEdit()
+    if (trackList) return trackList.canEdit() && !trackList.outputTimelineController.isEditing
     const state = AudioControl.getState()
     return state === AudioState.STOPPED || state === AudioState.MONITORING || state === AudioState.MONITORING_PAUSED
   }
@@ -383,8 +417,11 @@ export class OutputPanelController {
       }
     }
     const sample = this.cursorSample()
-    const index = getOutputSceneIndex(project.outputScenes, sample)
-    const scene = project.outputScenes[index]
+    const scenes =
+      (window as OutputPanelWindow).trackListController?.outputTimelineController.getScenes(project) ??
+      project.outputScenes
+    const index = getOutputSceneIndex(scenes, sample)
+    const scene = scenes[index]
     if (!scene) return null
     if (scene !== this.controlScene || sample !== this.controlSample) {
       const time = TimeUtils.positionToString(sample, project.sampleRate, false)
@@ -426,6 +463,18 @@ export class OutputPanelController {
       }
       select.disabled = !editable
       this.sourceFields[slot].hidden = slot === 1 && scene.layout === 'single'
+      const scale = getOutputCropScale(scene, slot)
+      this.scaleFields[slot].hidden = scene.fit !== 'cover' || (slot === 1 && scene.layout === 'single')
+      this.scaleButtons[slot][0].disabled = !editable || scale <= MIN_OUTPUT_CROP_SCALE
+      this.scaleButtons[slot][1].disabled = !editable || scale >= MAX_OUTPUT_CROP_SCALE
+      this.scaleButtons[slot].forEach((button, direction) => {
+        const video = slot === 1 ? 'right video' : scene.layout === 'single' ? 'video' : 'left video'
+        const label = `${direction === 0 ? 'Decrease' : 'Increase'} ${video} scale`
+        if (button.title !== label) {
+          button.title = label
+          button.setAttribute('aria-label', label)
+        }
+      })
     })
     const marker = AudioControl.startPosition
     const validSplit =
@@ -458,11 +507,6 @@ export class OutputPanelController {
     const frameMargin = Math.max(0, Math.min(MAX_FRAME_MARGIN, this.frameStyleValue(scene, 'margin'))) * frameScale
     const frameRadius =
       Math.max(0, Math.min(MAX_CORNER_RADIUS, this.frameStyleValue(scene, 'cornerRadius'))) * frameScale
-    if (frameMargin !== this.renderedFrameMargin) {
-      this.stage.style.setProperty('--output-frame-margin', `${frameMargin}px`)
-      this.renderedFrameMargin = frameMargin
-      this.geometryChanged = true
-    }
     const recording = isRecordingState(AudioControl.getState())
     const sample = this.cursorSample()
     for (let index = 0; index < count; ++index) {
@@ -475,7 +519,14 @@ export class OutputPanelController {
           : null
       const position = getOutputCropPosition(scene, index)
       const drag = this.cropDrag?.slot === slot ? this.cropDrag : null
-      slot.preview.setFraming(scene.fit, drag?.x ?? position.x, drag?.y ?? position.y, frameRadius)
+      slot.preview.setFraming(
+        scene.fit,
+        drag?.x ?? position.x,
+        drag?.y ?? position.y,
+        frameRadius,
+        getOutputCropScale(scene, index),
+        frameMargin,
+      )
       if (!target) {
         if (!slot.empty) slot.preview.clear()
         slot.empty = true
@@ -698,7 +749,35 @@ export class OutputPanelController {
       { x: 0.5, y: 0.5 },
       { x: 0.5, y: 0.5 },
     ]
-    scene.cropPositions[slot] = { x, y }
+    scene.cropPositions[slot] = { ...scene.cropPositions[slot], x, y }
+  }
+
+  private changeCropScale(index: number, direction: -1 | 1): void {
+    const project = this.project
+    if (!project || !this.running || !this.canEdit() || this.editing || this.cropDrag) return
+    const scene = project.outputScenes[getOutputSceneIndex(project.outputScenes, this.cursorSample())]
+    if (!scene || scene.fit !== 'cover' || (index === 1 && scene.layout === 'single')) return
+    const oldScale = getOutputCropScale(scene, index)
+    const scale = clampOutputCropScale(Math.round((oldScale + direction * 0.1) * 10) / 10)
+    if (scale === oldScale) return
+    const position = getOutputCropPosition(scene, index)
+    let { x, y } = position
+    const slot = this.slots[index]
+    const overflow = slot && !slot.empty ? slot.preview.getCropOverflow() : null
+    if (slot && overflow) {
+      const ratio = scale / oldScale
+      const recenter = (offset: number, size: number, travel: number): number => {
+        const newTravel = (size + travel) * ratio - size
+        if (size <= 0 || newTravel <= 0) return offset
+        return Math.max(0, Math.min(1, ((size / 2 + offset * travel) * ratio - size / 2) / newTravel))
+      }
+      x = recenter(x, slot.canvas.clientWidth, overflow.x)
+      y = recenter(y, slot.canvas.clientHeight, overflow.y)
+    }
+    void this.editScene((current) => {
+      this.setSceneCropPosition(current, index, x, y)
+      current.cropPositions![index].scale = scale
+    }, 'scale output video')
   }
 
   private moveCropWithKeyboard(slot: PreviewSlot, event: KeyboardEvent): void {

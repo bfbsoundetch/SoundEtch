@@ -1,5 +1,15 @@
 import { expect, test } from 'vitest'
-import { getOutputCropPosition, getOutputSceneIndex, splitOutputScene, type OutputScene } from './OutputScene'
+import {
+  clampOutputCropScale,
+  getOutputCropPosition,
+  getOutputCropScale,
+  getOutputSceneIndex,
+  MAX_OUTPUT_CROP_SCALE,
+  MIN_OUTPUT_CROP_SCALE,
+  moveOutputSceneBoundary,
+  splitOutputScene,
+  type OutputScene,
+} from './OutputScene'
 import { Project } from './Project'
 import { Track } from './Track'
 
@@ -117,4 +127,132 @@ test('splits next to either project endpoint create positive-length scenes', () 
   expect(splitOutputScene(lastSplit, 199, 200)).toBeNull()
   expect(splitOutputScene(scenes, 1, 0)).toBeNull()
   expect(splitOutputScene([], 1, 200)).toBeNull()
+})
+
+test('crop scales default to base cover and clamp without changing saved scene data', () => {
+  const scene = new Project('crop scales', 48_000).outputScenes[0]
+  expect(getOutputCropScale(scene, 0)).toBe(MIN_OUTPUT_CROP_SCALE)
+  expect(getOutputCropScale(scene, 1)).toBe(MIN_OUTPUT_CROP_SCALE)
+  scene.cropPositions = [
+    { x: 0.1, y: 0.2 },
+    { x: 0.8, y: 0.9, scale: 2.3 },
+  ]
+  expect(getOutputCropScale(scene, 0)).toBe(1)
+  expect(getOutputCropScale(scene, 1)).toBe(2.3)
+  scene.cropPositions[0].scale = 0.5
+  scene.cropPositions[1].scale = 5
+  expect(getOutputCropScale(scene, 0)).toBe(MIN_OUTPUT_CROP_SCALE)
+  expect(getOutputCropScale(scene, 1)).toBe(MAX_OUTPUT_CROP_SCALE)
+  expect(scene.cropPositions.map((position) => position.scale)).toEqual([0.5, 5])
+  expect(clampOutputCropScale(NaN)).toBe(1)
+  expect(clampOutputCropScale(-Infinity)).toBe(1)
+  expect(clampOutputCropScale(Infinity)).toBe(4)
+})
+
+test('splits inherit independent per-slot scales and Fit remembers saved crop zoom', () => {
+  const scene: OutputScene = {
+    startSample: 0,
+    layout: 'side-by-side',
+    fit: 'cover',
+    tracks: [null, null],
+    cropPositions: [
+      { x: 0.2, y: 0.3, scale: 1.4 },
+      { x: 0.7, y: 0.8, scale: 2.6 },
+    ],
+  }
+  const split = splitOutputScene([scene], 100, 200)!
+  expect(split.map((part) => [getOutputCropScale(part, 0), getOutputCropScale(part, 1)])).toEqual([
+    [1.4, 2.6],
+    [1.4, 2.6],
+  ])
+  split[1].cropPositions![0].scale = 3.1
+  split[1].cropPositions![0].x = 0.9
+  split[1].fit = 'contain'
+  split[1].layout = 'single'
+  split[1].tracks[0] = new Track('replacement', 1)
+  expect(getOutputCropScale(split[1], 0)).toBe(3.1)
+  expect(getOutputCropScale(split[1], 1)).toBe(2.6)
+  expect(getOutputCropScale(split[0], 0)).toBe(1.4)
+  expect(getOutputCropScale(scene, 0)).toBe(1.4)
+  split[1].fit = 'cover'
+  split[1].layout = 'side-by-side'
+  expect(getOutputCropPosition(split[1], 0)).toEqual({ x: 0.9, y: 0.3, scale: 3.1 })
+  expect(getOutputCropPosition(split[1], 1)).toEqual({ x: 0.7, y: 0.8, scale: 2.6 })
+})
+
+test('moving a boundary changes scene ownership without shifting other scenes or their styling', () => {
+  const source = new Track('camera', 1)
+  const scenes: OutputScene[] = [
+    { startSample: 0, layout: 'single', fit: 'contain', tracks: [null, null] },
+    {
+      startSample: 100,
+      layout: 'side-by-side',
+      fit: 'cover',
+      tracks: [source, source],
+      margin: 32,
+      cornerRadius: 64,
+      cropPositions: [
+        { x: 0.2, y: 0.3, scale: 1.5 },
+        { x: 0.8, y: 0.7, scale: 2 },
+      ],
+    },
+    { startSample: 250, layout: 'single', fit: 'cover', tracks: [source, null] },
+  ]
+  const moved = moveOutputSceneBoundary(scenes, 1, 175, 400)!
+  expect(moved.map((scene) => scene.startSample)).toEqual([0, 175, 250])
+  expect(moved[1]).toEqual({ ...scenes[1], startSample: 175 })
+  expect(moved[1].tracks[0]).toBe(source)
+  expect(getOutputSceneIndex(moved, 174)).toBe(0)
+  expect(getOutputSceneIndex(moved, 175)).toBe(1)
+  expect(getOutputSceneIndex(moved, 250)).toBe(2)
+  expect(scenes[1].startSample).toBe(100)
+})
+
+test.each([
+  [1, 0, [0, 200], [1, 2]],
+  [1, -50, [0, 200], [1, 2]],
+  [1, 200, [0, 200], [0, 2]],
+  [1, 350, [0, 200], [0, 2]],
+  [2, 100, [0, 100], [0, 2]],
+  [2, 0, [0, 100], [0, 2]],
+  [2, 300, [0, 100], [0, 1]],
+  [2, 400, [0, 100], [0, 1]],
+])('boundary %s moved to %s removes just the scene collapsed to zero', (index, sample, starts, survivors) => {
+  const scenes: OutputScene[] = [0, 100, 200].map((startSample, index) => ({
+    startSample,
+    layout: 'single',
+    fit: 'contain',
+    tracks: [null, null],
+    margin: index * 20,
+  }))
+  const moved = moveOutputSceneBoundary(scenes, index, sample, 300)!
+  expect(moved.map((scene) => scene.startSample)).toEqual(starts)
+  expect(moved.map((scene) => scene.margin)).toEqual(survivors.map((index) => scenes[index].margin))
+  expect(moved.every((scene, i) => (moved[i + 1]?.startSample ?? 300) > scene.startSample)).toBe(true)
+  expect(scenes.map((scene) => scene.startSample)).toEqual([0, 100, 200])
+})
+
+test('collapsing either end scene leaves one scene covering the entire project', () => {
+  const scenes: OutputScene[] = [
+    { startSample: 0, layout: 'single', fit: 'contain', tracks: [null, null] },
+    { startSample: 100, layout: 'side-by-side', fit: 'cover', tracks: [null, null] },
+  ]
+  expect(moveOutputSceneBoundary(scenes, 1, 0, 200)).toEqual([{ ...scenes[1], startSample: 0 }])
+  expect(moveOutputSceneBoundary(scenes, 1, 200, 200)).toEqual([scenes[0]])
+  expect(moveOutputSceneBoundary([scenes[0]], 0, 200, 200)).toBeNull()
+})
+
+test.each([NaN, Infinity, -Infinity, 0.5])('invalid boundary position %s cannot change scenes', (sample) => {
+  const scenes = splitOutputScene(new Project('test', 48_000).outputScenes, 100, 200)!
+  expect(moveOutputSceneBoundary(scenes, 1, sample, 200)).toBeNull()
+})
+
+test('unchanged, nonexistent, and non-interior boundaries do not produce scene edits', () => {
+  const scenes = splitOutputScene(new Project('test', 48_000).outputScenes, 100, 200)!
+  expect(moveOutputSceneBoundary(scenes, 1, 100, 200)).toBeNull()
+  for (const index of [-1, 0, 0.5, 2, NaN]) {
+    expect(moveOutputSceneBoundary(scenes, index, 150, 200)).toBeNull()
+  }
+  expect(moveOutputSceneBoundary(scenes, 1, 150, 0)).toBeNull()
+  expect(moveOutputSceneBoundary([], 1, 150, 200)).toBeNull()
 })

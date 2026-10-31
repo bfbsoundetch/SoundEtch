@@ -1880,6 +1880,47 @@ video {
   display: none;
 }
 
+.output-scene-boundary {
+  position: absolute;
+  top: 0.5rem;
+  bottom: 0.5rem;
+  width: 14px;
+  transform: translateX(-50%);
+  z-index: 3;
+  cursor: col-resize;
+  touch-action: none;
+}
+
+.output-scene-boundary::after {
+  content: '';
+  position: absolute;
+  inset: 0 calc(50% - 2px);
+  border-radius: 2px;
+  background: var(--color);
+}
+
+.output-scene-boundary:focus-visible {
+  outline: 2px solid var(--color);
+  outline-offset: 2px;
+}
+
+.output-scene-boundary.is-dragging {
+  z-index: 4;
+}
+
+.output-scene-boundary[aria-disabled='true'] {
+  cursor: default;
+  opacity: 0.5;
+}
+
+.output-scene-boundary[hidden] {
+  display: none;
+}
+
+.timeline-output-lane.is-resizing-scene {
+  cursor: col-resize;
+}
+
 #input-list {
   width: 100%;
 }
@@ -4532,6 +4573,16 @@ input::placeholder {
   box-sizing: border-box;
 }
 
+.output-panel-scale-buttons {
+  display: flex;
+  gap: 0.5rem;
+}
+
+.output-panel-scale-buttons button {
+  flex: 1;
+  width: auto;
+}
+
 .output-panel-note {
   margin: 0;
   font-size: 0.85rem;
@@ -4566,7 +4617,6 @@ input::placeholder {
   position: relative;
   min-width: 0;
   min-height: 0;
-  margin: var(--output-frame-margin, 0px);
   overflow: hidden;
   background: #000;
 }

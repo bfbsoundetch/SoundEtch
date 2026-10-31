@@ -33,8 +33,8 @@ test('scene commands snapshot inputs and restore exact persisted before and afte
       cornerRadius: 24,
       margin: 16,
       cropPositions: [
-        { x: 0.1, y: 0.2 },
-        { x: 0.3, y: 0.4 },
+        { x: 0.1, y: 0.2, scale: 1.3 },
+        { x: 0.3, y: 0.4, scale: 2.1 },
       ],
     },
   ]
@@ -49,8 +49,8 @@ test('scene commands snapshot inputs and restore exact persisted before and afte
       cornerRadius: 80,
       margin: 48,
       cropPositions: [
-        { x: 0.8, y: 0.9 },
-        { x: 0.6, y: 0.7 },
+        { x: 0.8, y: 0.9, scale: 2.8 },
+        { x: 0.6, y: 0.7, scale: 1.7 },
       ],
     },
     {
@@ -61,8 +61,8 @@ test('scene commands snapshot inputs and restore exact persisted before and afte
       cornerRadius: 40,
       margin: 20,
       cropPositions: [
-        { x: 0.2, y: 0.3 },
-        { x: 0.4, y: 0.5 },
+        { x: 0.2, y: 0.3, scale: 1.2 },
+        { x: 0.4, y: 0.5, scale: 3.4 },
       ],
     },
   ]
@@ -75,8 +75,8 @@ test('scene commands snapshot inputs and restore exact persisted before and afte
       cornerRadius: 24,
       margin: 16,
       cropPositions: [
-        { x: 0.1, y: 0.2 },
-        { x: 0.3, y: 0.4 },
+        { x: 0.1, y: 0.2, scale: 1.3 },
+        { x: 0.3, y: 0.4, scale: 2.1 },
       ],
     },
   ]
@@ -89,8 +89,8 @@ test('scene commands snapshot inputs and restore exact persisted before and afte
       cornerRadius: 80,
       margin: 48,
       cropPositions: [
-        { x: 0.8, y: 0.9 },
-        { x: 0.6, y: 0.7 },
+        { x: 0.8, y: 0.9, scale: 2.8 },
+        { x: 0.6, y: 0.7, scale: 1.7 },
       ],
     },
     {
@@ -101,8 +101,8 @@ test('scene commands snapshot inputs and restore exact persisted before and afte
       cornerRadius: 40,
       margin: 20,
       cropPositions: [
-        { x: 0.2, y: 0.3 },
-        { x: 0.4, y: 0.5 },
+        { x: 0.2, y: 0.3, scale: 1.2 },
+        { x: 0.4, y: 0.5, scale: 3.4 },
       ],
     },
   ]
@@ -115,8 +115,10 @@ test('scene commands snapshot inputs and restore exact persisted before and afte
   after[0].margin = 0
   before[0].cropPositions![0].x = 1
   before[0].cropPositions![1].y = 0
+  before[0].cropPositions![0].scale = 4
   after[0].cropPositions![0].y = 0
   after[0].cropPositions![1].x = 1
+  after[0].cropPositions![1].scale = 1
   after[1].cropPositions![1] = { x: 0, y: 1 }
   const history = new BackStack()
   await history.execute(command)
@@ -130,6 +132,7 @@ test('scene commands snapshot inputs and restore exact persisted before and afte
   performed[0].tracks[1] = null
   performed[0].cropPositions![0].x = 0
   performed[0].cropPositions![1].y = 1
+  performed[0].cropPositions![0].scale = 1
   performed[0].margin = 0
   performed.pop()
   await history.undo()
@@ -144,6 +147,7 @@ test('scene commands snapshot inputs and restore exact persisted before and afte
   undone[0].tracks[0] = null
   undone[0].cropPositions![0].y = 1
   undone[0].cropPositions![1].x = 0
+  undone[0].cropPositions![1].scale = 4
   undone[0].cornerRadius = 0
   await history.redo()
   expect(project.outputScenes).toEqual(expectedAfter)

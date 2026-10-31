@@ -52,6 +52,8 @@ export class VideoPreview {
   private cropX = 0.5
   private cropY = 0.5
   private cornerRadius = 0
+  private zoom = 1
+  private margin = 0
   private readonly cropOverflow = { x: 0, y: 0 }
 
   constructor(
@@ -61,21 +63,32 @@ export class VideoPreview {
   ) {}
 
   /** Changes composition without decoding the retained picture again. Track previews default to contain. */
-  setFraming(fit: 'contain' | 'cover', x = 0.5, y = 0.5, cornerRadius = this.cornerRadius): void {
+  setFraming(
+    fit: 'contain' | 'cover',
+    x = 0.5,
+    y = 0.5,
+    cornerRadius = this.cornerRadius,
+    zoom = this.zoom,
+    margin = this.margin,
+  ): void {
     x = Math.max(0, Math.min(1, x))
     y = Math.max(0, Math.min(1, y))
     cornerRadius = Math.max(0, cornerRadius)
-    const radiusChanged = cornerRadius !== this.cornerRadius
-    const fitChanged =
-      fit !== this.fit &&
-      this.shown !== null &&
-      this.shown.displayWidth * this.canvas.height !== this.shown.displayHeight * this.canvas.width
+    zoom = Math.max(1, Math.min(4, zoom))
+    margin = Math.max(0, margin)
+    const maskChanged = cornerRadius !== this.cornerRadius || margin !== this.margin
+    const zoomChanged = zoom !== this.zoom
+    const fitChanged = fit !== this.fit
     const cropChanged = (x !== this.cropX && this.cropOverflow.x > 0) || (y !== this.cropY && this.cropOverflow.y > 0)
     this.fit = fit
     this.cropX = x
     this.cropY = y
     this.cornerRadius = cornerRadius
-    if (this.shown && (fitChanged || radiusChanged || (fit === 'cover' && cropChanged))) this.paint(this.shown)
+    this.zoom = zoom
+    this.margin = margin
+    if (this.shown && (fitChanged || maskChanged || zoomChanged || (fit === 'cover' && cropChanged))) {
+      this.paint(this.shown)
+    }
   }
 
   /** CSS-pixel travel of the displayed picture; the cached object is updated by each paint. */
@@ -283,22 +296,30 @@ export class VideoPreview {
     if (!context) throw new Error('Video preview requires a 2D canvas')
     context.fillStyle = '#000'
     context.fillRect(0, 0, width, height)
-    paintVideoFrame(
-      context,
-      frame,
-      0,
-      0,
-      width,
-      height,
-      this.fit,
-      this.cropX,
-      this.cropY,
-      this.cornerRadius * ratio,
-      this.cropOverflow,
-    )
-    // Account for rounded backing dimensions rather than assuming an exact integer DPR.
-    this.cropOverflow.x = (this.cropOverflow.x * cssWidth) / width
-    this.cropOverflow.y = (this.cropOverflow.y * cssHeight) / height
+    if (cssWidth <= 0 || cssHeight <= 0) return
+    context.save()
+    try {
+      // Use exact CSS-to-backing scales, including fractional DPR rounding on each axis.
+      // Geometry and cached pan travel remain in CSS pixels; the transform scales the mask too.
+      context.scale(width / cssWidth, height / cssHeight)
+      paintVideoFrame(
+        context,
+        frame,
+        0,
+        0,
+        cssWidth,
+        cssHeight,
+        this.fit,
+        this.cropX,
+        this.cropY,
+        this.cornerRadius,
+        this.zoom,
+        this.margin,
+        this.cropOverflow,
+      )
+    } finally {
+      context.restore()
+    }
   }
 
   private blank(): void {

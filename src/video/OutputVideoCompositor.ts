@@ -1,5 +1,11 @@
 import type { VideoSample } from 'mediabunny'
-import { cloneOutputScene, getOutputCropPosition, getOutputSceneIndex, type OutputScene } from '../project/OutputScene'
+import {
+  cloneOutputScene,
+  getOutputCropPosition,
+  getOutputCropScale,
+  getOutputSceneIndex,
+  type OutputScene,
+} from '../project/OutputScene'
 import type { Project } from '../project/Project'
 import type { Track } from '../project/Track'
 import { paintVideoFrame } from './VideoFramePainter'
@@ -77,8 +83,6 @@ export class OutputVideoCompositor {
       const margin = Math.max(0, Math.min(240, scene.margin ?? 0)) * this.scale
       const radius = Math.max(0, Math.min(540, scene.cornerRadius ?? 0)) * this.scale
       const cellWidth = this.viewportWidth / count
-      const slotWidth = cellWidth - 2 * margin
-      const slotHeight = this.viewportHeight - 2 * margin
       let firstTarget: VideoFrameTarget | null = null
       let firstFrame: VideoSample | null = null
       for (let slot = 0; slot < count; ++slot) {
@@ -109,14 +113,16 @@ export class OutputVideoCompositor {
         paintVideoFrame(
           context,
           frame,
-          this.viewportX + slot * cellWidth + margin,
-          this.viewportY + margin,
-          slotWidth,
-          slotHeight,
+          this.viewportX + slot * cellWidth,
+          this.viewportY,
+          cellWidth,
+          this.viewportHeight,
           scene.fit,
           crop.x,
           crop.y,
           radius,
+          getOutputCropScale(scene, slot),
+          margin,
         )
       }
     } finally {
