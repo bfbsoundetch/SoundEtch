@@ -45,6 +45,7 @@ import { TrackPanelController } from '../TrackPanelController'
 import { getTrackTranscriptEntries } from '../transcript/TrackTranscript'
 import type { TrackTranscriptEntry } from '../transcript/TrackTranscript'
 import { OutputTimelineController } from './OutputTimelineController'
+import { TranscriptBoundaryController } from './TranscriptBoundaryController'
 
 interface Selection {
   startSample: number
@@ -100,6 +101,7 @@ export class TrackListController {
   readonly positionMarkerController = new PositionMarkerController(this)
   readonly history = editorHistory
   readonly pointerStateManager = new PointerStateManager(this)
+  readonly transcriptBoundaries = new TranscriptBoundaryController(this)
   readonly selectionController = new TimelineRegionController(
     false,
     (event: PointerEvent) => this.timelineSelectionContextMenu.draw(event.clientX, event.clientY),
@@ -624,6 +626,7 @@ export class TrackListController {
     controller.draw()
     pair.info.querySelector<HTMLSelectElement>('.automation-parameter-select')?.focus()
     announce(`${parameterMetadata.displayName} automation for ${track.name}`)
+    this.transcriptBoundaries.refresh()
   }
 
   exitAutomationMode() {
@@ -644,6 +647,7 @@ export class TrackListController {
     if (hadFocus) mode.infoElement.querySelector<HTMLElement>('.track-effect-selector')?.focus()
     this.automationMode = null
     this.pointerStateManager.stopAutomating()
+    this.transcriptBoundaries.refresh()
   }
 
   private createAutomationModeInfo(
@@ -1043,6 +1047,15 @@ export class TrackListController {
     }
     this.translationUnits = Math.max(0, Math.round(sample / this.sampleScale - this.width / 2))
     this.draw()
+  }
+
+  /** Centers the timeline view on this sample position unless it is already on screen. */
+  keepSampleVisible(sample: number) {
+    const min = this.translation * this.sampleScale
+    const max = (this.translation + this.width) * this.sampleScale
+    if (sample < min || sample > max) {
+      this.goToSample(sample)
+    }
   }
 
   /**

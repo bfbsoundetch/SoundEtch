@@ -519,6 +519,15 @@ export class Waveform extends TrackListItemController {
     this.drawAudioDataForCanvasXRange(this, this.getTopSvgElement(), 0, this.width)
   }
 
+  /** Redraws just the transcript lanes, as a boundary drag does on every pointer move. */
+  drawTranscriptionOverlays() {
+    const startSample = this.getSampleForXValue(0)
+    const endSample = this.getSampleForXValue(this.width)
+    for (const controller of this.getClipViewControllers()) {
+      controller.drawTranscriptionOverlay(startSample, endSample)
+    }
+  }
+
   resize() {
     this.draw()
   }
@@ -715,8 +724,31 @@ export class Waveform extends TrackListItemController {
         this.removeClipViewController(clipViewController)
       }
     }
+    this.orderHandleGroups(waveform.track.clipViews)
     this.requestSpectrogramDraw()
     this.requestVideoDraw()
+  }
+
+  /** Keeps tab order along the timeline: each clip's boundary handles follow earlier clips'. */
+  private orderHandleGroups(clipViews: readonly ClipView[]) {
+    const groups = new Array<SVGGElement>()
+    for (const clipView of clipViews) {
+      const group = this.clipViewControllerMap.get(clipView)?.handleElementsGroup
+      if (group?.parentNode === this.aboveClipViewGroupElement) groups.push(group)
+    }
+    const ordered = groups.every(
+      (group, index) =>
+        index === 0 || (groups[index - 1].compareDocumentPosition(group) & Node.DOCUMENT_POSITION_FOLLOWING) !== 0,
+    )
+    if (ordered) return
+    // Moving a node blurs it, so the group holding focus stays put and the others move around it.
+    const anchor = groups.findIndex((group) => group.contains(document.activeElement))
+    if (anchor < 0) {
+      for (const group of groups) this.aboveClipViewGroupElement.appendChild(group)
+      return
+    }
+    for (let index = anchor - 1; index >= 0; --index) groups[index + 1].before(groups[index])
+    for (let index = anchor + 1; index < groups.length; ++index) groups[index - 1].after(groups[index])
   }
 
   drawClipViewOver(clipViewController: ClipViewController) {
@@ -802,7 +834,7 @@ export class ClipViewController extends TrackListItemController {
   public draggedShift = 0
   private readonly clipElementsGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g')
   private readonly videoHitElement = document.createElementNS('http://www.w3.org/2000/svg', 'rect')
-  private readonly handleElementsGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g')
+  readonly handleElementsGroup = document.createElementNS('http://www.w3.org/2000/svg', 'g')
 
   readonly rectElement = document.createElementNS('http://www.w3.org/2000/svg', 'rect')
   private readonly spectrogramFallbackElement = document.createElementNS('http://www.w3.org/2000/svg', 'rect')
@@ -962,6 +994,7 @@ export class ClipViewController extends TrackListItemController {
       this.trackListController,
       this.clipView.clip,
       this.clipElementsGroup,
+      this.handleElementsGroup,
     )
 
     this.svgPathElement.classList = 'waveform-path'
@@ -1146,7 +1179,7 @@ export class ClipViewController extends TrackListItemController {
     this.infoButton.tabIndex = infoX < 0 || infoX > this.waveform.width - Waveform.HEADER_HEIGHT ? -1 : 0
   }
 
-  private drawTranscriptionOverlay(viewportStartSample: number, viewportEndSample: number): void {
+  drawTranscriptionOverlay(viewportStartSample: number, viewportEndSample: number): void {
     const sourceStartSample = this.fullClipPreview ? 0 : this.clipView.offset
     const sourceEndSample = this.fullClipPreview
       ? this.clipView.clip.length

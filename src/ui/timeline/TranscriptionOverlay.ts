@@ -1,11 +1,20 @@
+import { TimeUtils } from '../../global/TimeUtils'
 import type { Clip } from '../../project/Clip'
-import type { TranscribedRange, TranscriptGapKind } from '../../project/Transcription'
+import {
+  findTranscriptBoundary,
+  type TranscribedRange,
+  type TranscriptBoundary,
+  type TranscriptGapKind,
+} from '../../project/Transcription'
 import { formatTranscriptGap } from '../transcript/TranscriptFormatting'
 import type { TrackListController } from './TrackListController'
 import { TrackListItemController } from './TrackListItemController'
+import type { TranscriptBoundaryGrab } from './TranscriptBoundaryController'
 
 const SVG_NAMESPACE = 'http://www.w3.org/2000/svg'
 const MIN_READABLE_WORD_FRACTION = 0.75
+const BOUNDARY_KEYBOARD_HELP =
+  'Drag or use the arrow keys to move this boundary by a ruler tick; Page Up and Page Down move further, and Home and End to its limits. Plus and minus zoom; Escape cancels a drag.'
 
 export const TRANSCRIPTION_LANE_HEIGHT = 32
 
@@ -95,12 +104,40 @@ interface DrawCache {
   readonly laneHeight: number
   readonly samplesPerUnit: number
   readonly translation: number
+  readonly activeSample: number | null
+  readonly editable: boolean
+}
+
+function describeRange(range: TranscribedRange): string {
+  if (range.kind === 'silence') return 'silence'
+  if (range.kind === 'untranscribed') return 'untranscribed audio'
+  const text = range.text.trim()
+  return text ? `“${text}”` : 'a word'
+}
+
+/** Names the ranges a boundary separates, for assistive technology. */
+function describeBoundary(ranges: readonly TranscribedRange[], boundary: TranscriptBoundary | null): string {
+  const ending = boundary && boundary.ending >= 0 ? describeRange(ranges[boundary.ending]) : null
+  const starting = boundary && boundary.starting >= 0 ? describeRange(ranges[boundary.starting]) : null
+  if (ending && starting) return `Boundary between ${ending} and ${starting}`
+  if (ending) return `End of ${ending}`
+  if (starting) return `Start of ${starting}`
+  return 'Transcript boundary'
 }
 
 export class TranscriptionOverlayController extends TrackListItemController {
   private readonly overlayElement = document.createElementNS(SVG_NAMESPACE, 'svg')
   private readonly boundaryPathElement = document.createElementNS(SVG_NAMESPACE, 'path')
+  private readonly activeBoundaryPathElement = document.createElementNS(SVG_NAMESPACE, 'path')
   private readonly placeholderPathElement = document.createElementNS(SVG_NAMESPACE, 'path')
+  /** Focusable sliders over the drawn boundaries, above the timeline selection, that start drags. */
+  private readonly handlesElement = document.createElementNS(SVG_NAMESPACE, 'g')
+  private readonly handles = new Array<SVGLineElement>()
+  /** The drawn boundaries in clip source samples, in timeline order, one per handle. */
+  private boundarySamples: number[] = []
+  /** The boundary keyboard focus stays on while it is drawn, in clip source samples. */
+  private focusSample: number | null = null
+  private restoringFocus = false
   private readonly labels = new Array<LabelNode>()
   private cache: DrawCache | null = null
   private labelStyles: { speech: LabelStyle; gap: LabelStyle } | null = null
@@ -110,15 +147,25 @@ export class TranscriptionOverlayController extends TrackListItemController {
     trackListController: TrackListController,
     private readonly clip: Clip,
     parentElement: SVGGElement,
+    handleParentElement: SVGGElement,
   ) {
     super(trackListController)
     this.overlayElement.classList.add('transcription-overlay')
     this.overlayElement.setAttribute('aria-hidden', 'true')
     this.boundaryPathElement.classList.add('transcription-range-boundaries')
     this.overlayElement.appendChild(this.boundaryPathElement)
+    this.activeBoundaryPathElement.classList.add('transcription-range-boundary-active')
+    this.overlayElement.appendChild(this.activeBoundaryPathElement)
     this.placeholderPathElement.classList.add('transcription-range-placeholders')
     this.overlayElement.appendChild(this.placeholderPathElement)
     parentElement.appendChild(this.overlayElement)
+    this.handlesElement.classList.add('transcription-boundary-handles')
+    this.handlesElement.addEventListener('pointerdown', (event) => this.grabBoundary(event))
+    this.handlesElement.addEventListener('keydown', (event) => {
+      const grab = this.grabAt(this.handleSample(event.target))
+      if (grab) this.trackListController.transcriptBoundaries.handleKey(event, grab)
+    })
+    handleParentElement.appendChild(this.handlesElement)
   }
 
   draw(
@@ -131,7 +178,10 @@ export class TranscriptionOverlayController extends TrackListItemController {
     laneTop: number,
     laneHeight: number,
   ): void {
-    const transcription = this.clip.transcription
+    const boundaries = this.trackListController.transcriptBoundaries
+    const transcription = boundaries.transcription(this.clip)
+    const activeSample = boundaries.activeSample(this.clip)
+    const editable = this.trackListController.canEdit()
     if (
       this.cache?.transcription === transcription &&
       this.cache.transcriptionLength === transcription.length &&
@@ -144,10 +194,15 @@ export class TranscriptionOverlayController extends TrackListItemController {
       this.cache.laneTop === laneTop &&
       this.cache.laneHeight === laneHeight &&
       this.cache.samplesPerUnit === this.samplesPerUnit &&
-      this.cache.translation === this.translation
+      this.cache.translation === this.translation &&
+      this.cache.activeSample === activeSample &&
+      this.cache.editable === editable
     ) {
       return
     }
+    // Handles are reassigned below, so focus is put back on its boundary afterwards.
+    const hadFocus = this.handlesElement.contains(document.activeElement)
+    if (hadFocus && activeSample !== null) this.focusSample = activeSample
 
     const footprintEndSample = timelineStartSample + sourceEndSample - sourceStartSample
     const overlayX = Math.max(0, this.getXValueForSample(timelineStartSample))
@@ -157,6 +212,7 @@ export class TranscriptionOverlayController extends TrackListItemController {
     this.overlayElement.setAttribute('y', `${laneTop}`)
     this.overlayElement.setAttribute('width', `${overlayWidth}`)
     this.overlayElement.setAttribute('height', `${Math.max(0, laneHeight)}`)
+    this.handlesElement.setAttribute('transform', `translate(${overlayX} ${laneTop})`)
 
     const visibleSourceStart = Math.max(sourceStartSample, sourceStartSample + viewportStartSample - timelineStartSample)
     const visibleSourceEnd = Math.min(sourceEndSample, sourceStartSample + viewportEndSample - timelineStartSample)
@@ -171,6 +227,8 @@ export class TranscriptionOverlayController extends TrackListItemController {
       }
     }
     let boundaryPath = ''
+    const boundarySamples = new Array<number>()
+    const boundaryXs = new Array<number>()
     let previousBoundarySample: number | null = null
     for (
       let index = firstIntersectingRange(transcription, visibleSourceStart);
@@ -219,16 +277,58 @@ export class TranscriptionOverlayController extends TrackListItemController {
       }
       if (range.startSample >= visibleSourceStart && previousBoundarySample !== startSample) {
         boundaryPath += `M ${rangeStartX} 0 V ${laneHeight} `
+        boundarySamples.push(range.startSample)
+        boundaryXs.push(rangeStartX)
         previousBoundarySample = startSample
       }
       if (range.endSample <= visibleSourceEnd && previousBoundarySample !== endSample) {
         boundaryPath += `M ${rangeEndX} 0 V ${laneHeight} `
+        boundarySamples.push(range.endSample)
+        boundaryXs.push(rangeEndX)
         previousBoundarySample = endSample
       }
     }
     flushPlaceholder()
     this.placeholderPathElement.setAttribute('d', placeholderPath)
     this.boundaryPathElement.setAttribute('d', boundaryPath)
+    const timelineShift = timelineStartSample - sourceStartSample
+    const limits = {
+      minimumSample: sourceStartSample,
+      maximumSample: sourceEndSample,
+      tolerance: boundaries.tolerance(),
+    }
+    const seconds = (sample: number) => ((sample + timelineShift) / this.sampleRate).toFixed(3)
+    boundarySamples.forEach((sample, index) => {
+      const handle = this.getHandle(index)
+      handle.setAttribute('x1', `${boundaryXs[index]}`)
+      handle.setAttribute('x2', `${boundaryXs[index]}`)
+      handle.setAttribute('y2', `${laneHeight}`)
+      handle.tabIndex = editable ? 0 : -1
+      handle.setAttribute('aria-disabled', String(!editable))
+      const boundary = findTranscriptBoundary(transcription, sample, limits)
+      handle.setAttribute('aria-label', describeBoundary(transcription, boundary))
+      handle.setAttribute('aria-valuemin', seconds(boundary?.lowestSample ?? sample))
+      handle.setAttribute('aria-valuemax', seconds(boundary?.highestSample ?? sample))
+      handle.setAttribute('aria-valuenow', seconds(sample))
+      handle.setAttribute(
+        'aria-valuetext',
+        TimeUtils.toSpokenString(((sample + timelineShift) * 1000) / this.sampleRate),
+      )
+    })
+    while (this.handles.length > boundarySamples.length) {
+      this.handles.pop()!.remove()
+    }
+    this.boundarySamples = boundarySamples
+    this.activeBoundaryPathElement.setAttribute(
+      'd',
+      activeSample !== null &&
+        overlayWidth > 0 &&
+        laneHeight > 0 &&
+        activeSample >= visibleSourceStart &&
+        activeSample <= visibleSourceEnd
+        ? `M ${this.getXValueForSample(timelineStartSample + activeSample - sourceStartSample) - overlayX} 0 V ${laneHeight}`
+        : '',
+    )
     while (this.labels.length > labelCount) {
       this.labels.pop()!.foreignObject.remove()
     }
@@ -246,7 +346,10 @@ export class TranscriptionOverlayController extends TrackListItemController {
       laneHeight,
       samplesPerUnit: this.samplesPerUnit,
       translation: this.translation,
+      activeSample,
+      editable,
     }
+    if (hadFocus) this.restoreFocus()
   }
 
   invalidate(): void {
@@ -260,6 +363,113 @@ export class TranscriptionOverlayController extends TrackListItemController {
 
   remove(): void {
     this.overlayElement.remove()
+    if (this.handlesElement.contains(document.activeElement)) this.focusTrack()
+    this.handlesElement.remove()
+  }
+
+  /** Hands the drawn boundary nearest the pointer to the drag controller, and focuses it. */
+  private grabBoundary(event: PointerEvent): void {
+    const cache = this.cache
+    if (!cache || this.boundarySamples.length === 0) return
+    const timelineShift = cache.timelineStartSample - cache.sourceStartSample
+    const x = this.mouseXToSvgCoord(event.clientX)
+    let sample = this.boundarySamples[0]
+    let distance = Infinity
+    for (const candidate of this.boundarySamples) {
+      const candidateDistance = Math.abs(this.getXValueForSample(candidate + timelineShift) - x)
+      if (candidateDistance < distance) {
+        sample = candidate
+        distance = candidateDistance
+      }
+    }
+    this.trackListController.transcriptBoundaries.start(event, this.handlesElement, this.grabAt(sample)!)
+    if (event.defaultPrevented) this.focusBoundary(sample, true)
+  }
+
+  private grabAt(sample: number | null): TranscriptBoundaryGrab | null {
+    const cache = this.cache
+    if (!cache || sample === null) return null
+    return {
+      clip: this.clip,
+      sample,
+      minimumSample: cache.sourceStartSample,
+      maximumSample: cache.sourceEndSample,
+      timelineShift: cache.timelineStartSample - cache.sourceStartSample,
+      focus: (boundary) => this.focusBoundary(boundary),
+    }
+  }
+
+  /** The boundary a handle stands for, in clip source samples. */
+  private handleSample(target: EventTarget | null): number | null {
+    const index = this.handles.findIndex((handle) => handle === target)
+    return index < 0 ? null : this.boundarySamples[index]
+  }
+
+  private getHandle(index: number): SVGLineElement {
+    const existing = this.handles[index]
+    if (existing) {
+      return existing
+    }
+    const handle = document.createElementNS(SVG_NAMESPACE, 'line')
+    handle.classList.add('transcription-boundary-handle')
+    handle.setAttribute('role', 'slider')
+    handle.setAttribute('aria-orientation', 'horizontal')
+    handle.setAttribute('aria-description', BOUNDARY_KEYBOARD_HELP)
+    handle.setAttribute('y1', '0')
+    // On the handle itself: a focus listener on the group would make Chromium focus the group.
+    handle.addEventListener('focus', () => {
+      if (!this.restoringFocus) this.focusSample = this.handleSample(handle)
+    })
+    this.handlesElement.appendChild(handle)
+    this.handles.push(handle)
+    return handle
+  }
+
+  /** Keeps keyboard focus on the boundary now at `sample`; `take` also brings focus here from elsewhere. */
+  private focusBoundary(sample: number, take = false): void {
+    this.focusSample = sample
+    if (take || this.handlesElement.contains(document.activeElement)) this.restoreFocus()
+  }
+
+  /** Focuses the focused boundary's handle, the nearest handle once it is gone, or else the track. */
+  private restoreFocus(): void {
+    const target = this.cache?.activeSample ?? this.focusSample
+    if (target === null) return
+    let index = this.boundarySamples.indexOf(target)
+    if (index < 0) {
+      // A committing move draws its boundary shortly; keep focus until then.
+      if (
+        this.trackListController.transcriptBoundaries.isEditing &&
+        this.handlesElement.contains(document.activeElement)
+      ) {
+        return
+      }
+      let distance = Infinity
+      this.boundarySamples.forEach((sample, candidate) => {
+        if (Math.abs(sample - target) < distance) {
+          distance = Math.abs(sample - target)
+          index = candidate
+        }
+      })
+    }
+    if (index < 0) {
+      this.focusTrack()
+      return
+    }
+    const handle = this.handles[index]
+    if (handle === document.activeElement) return
+    this.restoringFocus = true
+    try {
+      handle.focus({ preventScroll: true })
+    } finally {
+      this.restoringFocus = false
+    }
+  }
+
+  /** Hands keyboard focus to the track's timeline control when no boundary can keep it. */
+  private focusTrack(): void {
+    const waveform = this.trackListController.waveforms.find((candidate) => candidate.div.contains(this.handlesElement))
+    if (waveform) this.trackListController.timelineKeyboard.focus(waveform)
   }
 
   private getLabelStyles(): { speech: LabelStyle; gap: LabelStyle } {

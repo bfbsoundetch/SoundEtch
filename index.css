@@ -2916,6 +2916,36 @@ video {
   pointer-events: none;
 }
 
+.transcription-range-boundary-active {
+  fill: none;
+  stroke: var(--color);
+  stroke-width: 3;
+  vector-effect: non-scaling-stroke;
+  pointer-events: none;
+}
+
+/* The group also styles the cursor while it captures a drag. */
+.transcription-boundary-handles {
+  cursor: col-resize;
+}
+
+.transcription-boundary-handle {
+  stroke: transparent;
+  stroke-width: 7;
+  pointer-events: stroke;
+  touch-action: none;
+  outline: none;
+}
+
+.transcription-boundary-handle:focus-visible {
+  stroke: var(--color);
+  stroke-opacity: 0.5;
+}
+
+#track-list.transcript-boundaries-locked .transcription-boundary-handle {
+  pointer-events: none;
+}
+
 .transcription-range-placeholders {
   fill: none;
   stroke: var(--muted-text-color);

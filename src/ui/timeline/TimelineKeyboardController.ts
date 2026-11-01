@@ -231,7 +231,7 @@ export class TimelineKeyboardController {
     AudioControl.startPosition = position
     this.trackList.clearSelection()
     this.trackList.positionMarkerController.draw()
-    this.keepVisible(position)
+    this.trackList.keepSampleVisible(position)
     this.refresh()
   }
 
@@ -259,7 +259,7 @@ export class TimelineKeyboardController {
       this.trackList.selectionController.setSelection(start, end, waveforms)
       this.lastKeyboardRegion = { start, end }
     }
-    this.keepVisible(position)
+    this.trackList.keepSampleVisible(position)
     this.refresh()
   }
 
@@ -267,15 +267,6 @@ export class TimelineKeyboardController {
     this.anchorSample = null
     this.focusSample = null
     this.lastKeyboardRegion = null
-  }
-
-  private keepVisible(position: number) {
-    const trackList = this.trackList
-    const min = trackList.translation * trackList.sampleScale
-    const max = (trackList.translation + trackList.width) * trackList.sampleScale
-    if (position < min || position > max) {
-      trackList.goToSample(position)
-    }
   }
 
   private anchorX(waveform: Waveform) {
@@ -294,7 +285,7 @@ export class TimelineKeyboardController {
     const region = this.trackList.selectedRegion
     const inRegion = region !== null && this.trackList.selectionController.isInRegion(waveform)
     const sample = inRegion ? region.startSample : AudioControl.startPosition
-    this.keepVisible(sample)
+    this.trackList.keepSampleVisible(sample)
     const bounds = waveform.div.getBoundingClientRect()
     const x = bounds.left + Math.min(Math.max(waveform.getXValueForSample(sample), 0), bounds.width)
     const y = bounds.top + waveform.audioLaneTop
