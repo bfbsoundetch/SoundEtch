@@ -5,8 +5,10 @@ import { WorkerController } from '../audiocontext/WorkerController'
 import { JobType } from '../audiocontext/ControllableWorkerJob'
 import { AudioControl, AudioState } from '../audiocontext/AudioControl'
 import { Track } from '../project/Track'
+import { OutputBus } from '../project/OutputBus'
 import { EffectIndex } from '../effects/EffectIndex'
 import { EffectChain } from '../effects/EffectChain'
+import type { EffectData } from '../effects/EffectData'
 import { scheduleParameterValues } from '../effects/ParameterScheduling'
 
 export type SelectedRegion = {
@@ -40,6 +42,14 @@ export class Player {
     // Even though they'll all be used on the audio thread, I think this needs
     // to be shared because it's created on the main thread.
     const underrunBits = new BigUint64Array(new SharedArrayBuffer(8))
+    const outputBus = OutputBus.of(project)
+    const outputChain = await Player.connectEffectChain(
+      audioContext,
+      project.outputEffects,
+      audioContext.destination,
+      startSample,
+    )
+    outputBus.registerNewPlayback(outputChain, audioContext)
     for (const [i, track] of project.getTracks().entries()) {
       if (loopRegion && !loopRegion.tracks.find((t) => t == track)) {
         continue
@@ -63,32 +73,11 @@ export class Player {
       const pannerNode = audioContext.createStereoPanner()
       pannerNode.pan.value = track.getPan()
 
-      const chainEffects = []
-      for (const effectData of track.effectRegions) {
-        const effectModule = await EffectIndex.getInstance().getEffectById(effectData.id)
-        if (!effectModule) {
-          console.error(`Effect ${effectData.id} is unavailable`)
-          continue
-        }
-        effectModule.setState?.(effectData.state)
-        const parameters = await effectModule.getParameters(audioContext)
-        for (const [name, sequence] of Object.entries(effectData.params)) {
-          const parameter = parameters[name]
-          if (parameter) {
-            scheduleParameterValues(parameter, sequence, audioContext, startSample)
-          }
-        }
-        chainEffects.push({
-          effect: { instanceId: effectData.instanceId, module: effectModule, audioContext },
-          bypassed: effectData.bypassed ?? false,
-        })
-      }
-
-      const effectChain = await EffectChain.connect(audioContext, chainEffects, gainNode)
+      const effectChain = await Player.connectEffectChain(audioContext, track.effectRegions, gainNode, startSample)
       playerNode.connect(effectChain.input)
       gainNode.connect(pannerNode)
       const analyzerOutput = await track.attachAnalyzer(pannerNode)
-      analyzerOutput.connect(audioContext.destination)
+      analyzerOutput.connect(outputChain.input)
 
       playbackInfos.push({
         clipViews: track.clipViews
@@ -120,6 +109,36 @@ export class Player {
       loop: !!loopRegion,
       playbackInfos: playbackInfos,
     })
+  }
+
+  /** Builds `effects` in order in front of `destination`, with their automation scheduled from `startSample`. */
+  private static async connectEffectChain(
+    audioContext: BaseAudioContext,
+    effects: readonly EffectData[],
+    destination: AudioNode,
+    startSample: number,
+  ) {
+    const chainEffects = []
+    for (const effectData of effects) {
+      const effectModule = await EffectIndex.getInstance().getEffectById(effectData.id)
+      if (!effectModule) {
+        console.error(`Effect ${effectData.id} is unavailable`)
+        continue
+      }
+      effectModule.setState?.(effectData.state)
+      const parameters = await effectModule.getParameters(audioContext)
+      for (const [name, sequence] of Object.entries(effectData.params)) {
+        const parameter = parameters[name]
+        if (parameter) {
+          scheduleParameterValues(parameter, sequence, audioContext, startSample)
+        }
+      }
+      chainEffects.push({
+        effect: { instanceId: effectData.instanceId, module: effectModule, audioContext },
+        bypassed: effectData.bypassed ?? false,
+      })
+    }
+    return EffectChain.connect(audioContext, chainEffects, destination)
   }
 
   static getReadingWorkerController(): WorkerController {

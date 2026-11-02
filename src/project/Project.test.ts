@@ -5,6 +5,7 @@ import { Project } from './Project'
 import { Track } from './Track'
 import { ProjectManager } from './ProjectManager'
 import { getOutputCropPosition, getOutputCropScale } from './OutputScene'
+import { ParameterValueSequence, ParamValueTransition } from '../effects/ParameterValueSequence'
 
 function attachPlayback(track: Track) {
   const playerNode = {
@@ -75,6 +76,41 @@ test('restoring older project records keeps the default output scene', async () 
 
   expect(restored.title).toBe('legacy project')
   expect(restored.outputScenes).toEqual([{ startSample: 0, layout: 'single', fit: 'contain', tracks: [null, null] }])
+})
+
+test('output effects survive a database reload, and older project records restore without any', async () => {
+  const legacy = DatabasePersister.toPersistedObject(new Project('legacy project', 48_000), true)
+  delete legacy.outputEffects
+  expect(((await DatabasePersister.fromPersistedObject(legacy)) as Project).outputEffects).toEqual([])
+
+  const project = new Project('output chain', 48_000)
+  const volume = new ParameterValueSequence(0.5)
+  volume.transitionSequence.push(new ParamValueTransition('scurve', 1, 48_000))
+  project.outputEffects.push(
+    { instanceId: 'fade', id: 'soundetch.fade', params: { gain: volume }, bypassed: true },
+    { instanceId: 'limiter', id: 'soundetch.limiter', params: { ceiling: new ParameterValueSequence(-1) } },
+  )
+  await DatabasePersister.save(project)
+  const graph = await DatabasePersister.getPersistedObjectGraph(project.id!)
+  const restored = (await DatabasePersister.fromPersistedObject(
+    graph.find((record) => record.id === project.id)!,
+  )) as Project
+
+  expect(restored.outputEffects).toEqual([
+    {
+      instanceId: 'fade',
+      id: 'soundetch.fade',
+      params: {
+        gain: { initialValue: 0.5, transitionSequence: [{ type: 'scurve', startValue: 1, startSample: 48_000 }] },
+      },
+      bypassed: true,
+    },
+    {
+      instanceId: 'limiter',
+      id: 'soundetch.limiter',
+      params: { ceiling: { initialValue: -1, transitionSequence: [] } },
+    },
+  ])
 })
 
 test('database reload preserves per-scene and per-slot crops while legacy scenes stay centered', async () => {

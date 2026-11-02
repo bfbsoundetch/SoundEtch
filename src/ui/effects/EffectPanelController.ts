@@ -6,17 +6,20 @@ import { EffectIndex } from '../../effects/EffectIndex'
 import { ParameterMetadata } from '../../effects/ParameterMetadata'
 import { ParameterValueSequence } from '../../effects/ParameterValueSequence'
 import { TimeUtils } from '../../global/TimeUtils'
+import type { EffectHost } from '../../project/EffectHost'
+import { OutputBus } from '../../project/OutputBus'
 import { Track } from '../../project/Track'
-import { BottomPanelController } from '../BottomPanelController'
+import { BottomPanelController, type BottomPanelTabId } from '../BottomPanelController'
 import { NotificationsController } from '../NotificationsController'
 import { announce } from '../LiveAnnouncer'
+import type { OutputPanelController } from '../OutputPanelController'
 import { createArrowIcon, createSvgIcon } from '../SvgIcon'
 import { TrackListController } from '../timeline/TrackListController'
 import { editorHistory } from '../undo/EditorHistory'
-import { cloneEffectData, SetTrackEffectsCommand } from './SetTrackEffectsCommand'
+import { cloneEffectData, SetEffectsCommand } from './SetEffectsCommand'
 
 type EffectViewSession = {
-  track: Track
+  host: EffectHost
   effectInstanceId: string
   module: EffectModule
   parameters: Record<string, AudioParam>
@@ -38,6 +41,16 @@ function withCause(context: string, error: unknown): Error {
   return new Error(`${context}: ${cause}`)
 }
 
+/** The bottom panel tab that shows `host`'s effect chain. */
+function panelTab(host: EffectHost): BottomPanelTabId {
+  return host instanceof OutputBus ? 'output' : 'tracks'
+}
+
+/** What the chain belongs to, as undo descriptions and messages name it. */
+function chainOwner(host: EffectHost): 'output' | 'track' {
+  return host instanceof OutputBus ? 'output' : 'track'
+}
+
 export class EffectPanelController {
   private static instance: EffectPanelController | null = null
 
@@ -48,6 +61,8 @@ export class EffectPanelController {
   private readonly effectIndex = EffectIndex.getInstance()
   private readonly bottomPanelController = BottomPanelController.getInstance()
   private activeEffectView: EffectViewSession | null = null
+  /** The tab holding this controller's view, which is in one tab at a time. */
+  private viewTab: BottomPanelTabId | null = null
   private viewVersion = 0
   private chainChangePending = false
   private effectViewRebindRequested = false
@@ -57,34 +72,35 @@ export class EffectPanelController {
     editorHistory.addChangeListener(() => this.refreshOwnedEffectView())
   }
 
-  async showEffectForTrack(metadata: EffectMetadata, track: Track, effectIndex?: number) {
+  async showEffect(metadata: EffectMetadata, host: EffectHost, effectIndex?: number) {
+    this.closeViewInOtherTab(host)
     const viewVersion = ++this.viewVersion
     await this.closeEffectView()
     if (viewVersion != this.viewVersion) {
       return
     }
 
-    const resolvedIndex = effectIndex ?? track.effectRegions.findIndex((effect) => effect.id == metadata.id)
-    const effectData = track.effectRegions[resolvedIndex]
+    const resolvedIndex = effectIndex ?? host.effectRegions.findIndex((effect) => effect.id == metadata.id)
+    const effectData = host.effectRegions[resolvedIndex]
     if (!effectData || effectData.id != metadata.id) {
-      this.showMessage('Effect unavailable', 'This effect is no longer on the track.', track)
+      this.showMessage('Effect unavailable', `This effect is no longer on the ${chainOwner(host)}.`, host)
       return
     }
 
     const loadingElement = document.createElement('div')
     loadingElement.className = 'effect-panel-message'
     loadingElement.textContent = `Loading ${metadata.name}...`
-    this.openSubview(metadata.name, track.name, loadingElement, track)
+    this.openSubview(metadata.name, host.name, loadingElement, host)
     announce(`Loading ${metadata.name}`)
 
     try {
-      const session = await this.startEffectSession(track, effectData)
+      const session = await this.startEffectSession(host, effectData)
       if (viewVersion != this.viewVersion) {
         this.destroyEffectSession(session)
         return
       }
       this.activeEffectView = session
-      const unsubscribePlaybackChange = session.track.addPlaybackChangeListener(() => this.requestEffectViewRebind())
+      const unsubscribePlaybackChange = session.host.addPlaybackChangeListener(() => this.requestEffectViewRebind())
       const handleContextStateChange = () => {
         if (session.audioContext.state == 'closed') {
           this.requestEffectViewRebind()
@@ -100,45 +116,45 @@ export class EffectPanelController {
         this.destroyEffectSession(session)
         return
       }
-      this.bottomPanelController.open({
-        tab: 'tracks',
-        owner: this,
-        title: metadata.name,
-        subtitle: track.name,
-        body,
-        onBack: () => this.showTrackEffectsList(track),
-        onClose: () => this.handlePanelClose(),
-      })
+      this.openSubview(metadata.name, host.name, body, host)
       if (!this.effectViewMatchesPlayback()) {
         this.requestEffectViewRebind()
       }
     } catch (error) {
       console.error(`Failed to open effect ${metadata.id}`, error)
       if (viewVersion == this.viewVersion) {
-        this.showMessage('Effect failed to load', String(error), track)
+        this.showMessage('Effect failed to load', String(error), host)
       }
     }
   }
 
-  /** Opens the Tracks tab on `track`'s effect chain. */
-  async showTrackEffectsList(track: Track) {
+  /** Opens the bottom panel on `host`'s effect chain: a track's Effects view, or the output's Audio view. */
+  async showEffectsList(host: EffectHost) {
+    this.closeViewInOtherTab(host)
     const viewVersion = ++this.viewVersion
     await this.closeEffectView()
     if (viewVersion != this.viewVersion) {
       return
     }
-    this.trackListController.trackPanelController.show(track, 'effects')
+    if (host instanceof OutputBus) {
+      this.outputPanelController.show('audio')
+    } else {
+      this.trackListController.trackPanelController.show(host, 'effects')
+    }
   }
 
-  createTrackEffectsChain(track: Track): HTMLElement {
+  createEffectsChain(host: EffectHost): HTMLElement {
+    const output = host instanceof OutputBus
     const bodyElement = document.createElement('div')
     bodyElement.className = 'effect-list-body'
-    bodyElement.appendChild(this.createChainEndpoint('Track', track.name))
+    bodyElement.appendChild(
+      output ? this.createChainEndpoint('All tracks') : this.createChainEndpoint('Track', host.name),
+    )
 
-    track.effectRegions.forEach((effectData, index) => {
+    host.effectRegions.forEach((effectData, index) => {
       bodyElement.appendChild(this.createChainArrow())
       bodyElement.appendChild(
-        this.createEffectChainItem(track, index, effectData, this.effectIndex.getEffectMetadataById(effectData.id)),
+        this.createEffectChainItem(host, index, effectData, this.effectIndex.getEffectMetadataById(effectData.id)),
       )
     })
 
@@ -148,15 +164,18 @@ export class EffectPanelController {
     addEffectElement.className = 'effect-list-item effect-chain-item effect-chain-add clickable'
     addEffectElement.append('Add New Effect', createSvgIcon('plus', { className: 'effect-chain-add-icon' }))
     addEffectElement.style.fontWeight = 'bold'
-    addEffectElement.addEventListener('click', () => void this.showAvailableEffectsList(track))
+    addEffectElement.addEventListener('click', () => void this.showAvailableEffectsList(host))
     bodyElement.appendChild(addEffectElement)
 
     bodyElement.appendChild(this.createChainArrow())
-    bodyElement.appendChild(this.createChainEndpoint('Output'))
+    bodyElement.appendChild(
+      output ? this.createChainEndpoint('Final mix', 'Playback and export') : this.createChainEndpoint('Output'),
+    )
     return bodyElement
   }
 
-  async showAvailableEffectsList(track: Track) {
+  async showAvailableEffectsList(host: EffectHost) {
+    this.closeViewInOtherTab(host)
     const viewVersion = ++this.viewVersion
     await this.closeEffectView()
     if (viewVersion != this.viewVersion) {
@@ -187,17 +206,17 @@ export class EffectPanelController {
       const categoryItemsElement = document.createElement('div')
       categoryItemsElement.className = 'effect-category-items'
       for (const metadata of effects) {
-        categoryItemsElement.appendChild(this.createEffectCatalogItem(track, metadata))
+        categoryItemsElement.appendChild(this.createEffectCatalogItem(host, metadata))
       }
 
       categoryElement.append(categorySummaryElement, categoryItemsElement)
       bodyElement.appendChild(categoryElement)
     }
-    this.openSubview('Add Effect', track.name, bodyElement, track)
+    this.openSubview('Add Effect', host.name, bodyElement, host)
   }
 
-  private async startEffectSession(track: Track, effectData: EffectData): Promise<EffectViewSession> {
-    const playbackEffect = track.getPlaybackEffect(effectData.instanceId)
+  private async startEffectSession(host: EffectHost, effectData: EffectData): Promise<EffectViewSession> {
+    const playbackEffect = host.getPlaybackEffect(effectData.instanceId)
     const module = playbackEffect?.module ?? (await this.effectIndex.getEffectById(effectData.id))
     if (!module) {
       throw new Error(`Effect ${effectData.id} is unavailable`)
@@ -214,7 +233,7 @@ export class EffectPanelController {
       }
     }
     return {
-      track,
+      host,
       effectInstanceId: effectData.instanceId,
       module,
       parameters,
@@ -257,7 +276,7 @@ export class EffectPanelController {
     }
 
     for (const parameterMetadata of metadata.parameters) {
-      const effectData = session.track.effectRegions.find((effect) => effect.instanceId == session.effectInstanceId)
+      const effectData = session.host.effectRegions.find((effect) => effect.instanceId == session.effectInstanceId)
       const sequence = effectData?.params[parameterMetadata.id]
       const audioParameter = session.parameters[parameterMetadata.id]
       if (!sequence || !audioParameter) {
@@ -317,7 +336,7 @@ export class EffectPanelController {
   }
 
   private async commitParameterValue(session: EffectViewSession, metadata: ParameterMetadata, value: number) {
-    const state = session.track.effectRegions.find((effect) => effect.instanceId == session.effectInstanceId)?.state
+    const state = session.host.effectRegions.find((effect) => effect.instanceId == session.effectInstanceId)?.state
     await this.commitEffectValues(session, { [metadata.id]: value }, state, `change ${metadata.id}`)
   }
 
@@ -329,13 +348,13 @@ export class EffectPanelController {
   ) {
     const commit = async () => {
       try {
-        const effectIndex = session.track.effectRegions.findIndex(
+        const effectIndex = session.host.effectRegions.findIndex(
           (effect) => effect.instanceId == session.effectInstanceId,
         )
         if (effectIndex < 0) {
           return
         }
-        const oldEffects = cloneEffectData(session.track.effectRegions)
+        const oldEffects = cloneEffectData(session.host.effectRegions)
         const newEffects = cloneEffectData(oldEffects)
         const effect = newEffects[effectIndex]
         let changed = JSON.stringify(effect.state) != JSON.stringify(state)
@@ -351,7 +370,7 @@ export class EffectPanelController {
         if (!changed) {
           return
         }
-        await editorHistory.execute(new SetTrackEffectsCommand(session.track, oldEffects, newEffects, description))
+        await editorHistory.execute(new SetEffectsCommand(session.host, oldEffects, newEffects, description))
       } catch (error) {
         await this.refreshOwnedEffectView()
         NotificationsController.showError(withCause('Could not persist the latest effect setting', error))
@@ -367,7 +386,7 @@ export class EffectPanelController {
     if (!session || session.closed || !session.ownsModule) {
       return
     }
-    const effectData = session.track.effectRegions.find((effect) => effect.instanceId == session.effectInstanceId)
+    const effectData = session.host.effectRegions.find((effect) => effect.instanceId == session.effectInstanceId)
     if (!effectData) {
       return
     }
@@ -407,7 +426,7 @@ export class EffectPanelController {
     if (!session || session.closed) {
       return true
     }
-    const playbackEffect = session.track.getPlaybackEffect(session.effectInstanceId)
+    const playbackEffect = session.host.getPlaybackEffect(session.effectInstanceId)
     return playbackEffect
       ? playbackEffect.module == session.module && playbackEffect.audioContext == session.audioContext
       : session.ownsModule && session.audioContext.state != 'closed'
@@ -418,17 +437,22 @@ export class EffectPanelController {
     if (!session || session.closed || this.effectViewMatchesPlayback()) {
       return
     }
-    const effectIndex = session.track.effectRegions.findIndex((effect) => effect.instanceId == session.effectInstanceId)
+    const effectIndex = session.host.effectRegions.findIndex((effect) => effect.instanceId == session.effectInstanceId)
     const metadata =
-      effectIndex >= 0 ? this.effectIndex.getEffectMetadataById(session.track.effectRegions[effectIndex].id) : null
+      effectIndex >= 0 ? this.effectIndex.getEffectMetadataById(session.host.effectRegions[effectIndex].id) : null
     if (!metadata) {
       return
     }
 
-    await this.showEffectForTrack(metadata, session.track, effectIndex)
+    await this.showEffect(metadata, session.host, effectIndex)
   }
 
-  private createEffectChainItem(track: Track, index: number, effectData: EffectData, metadata: EffectMetadata | null) {
+  private createEffectChainItem(
+    host: EffectHost,
+    index: number,
+    effectData: EffectData,
+    metadata: EffectMetadata | null,
+  ) {
     const bypassed = effectData.bypassed ?? false
     const item = document.createElement('article')
     item.className = 'effect-list-item effect-chain-item effect-chain-effect'
@@ -448,7 +472,7 @@ export class EffectPanelController {
     openButton.append(nameElement, typeElement)
     openButton.disabled = !metadata
     if (metadata) {
-      openButton.addEventListener('click', () => void this.showEffectForTrack(metadata, track, index))
+      openButton.addEventListener('click', () => void this.showEffect(metadata, host, index))
     } else {
       openButton.title = 'Effect metadata could not be loaded'
     }
@@ -458,23 +482,23 @@ export class EffectPanelController {
     const bypassButton = this.createControlButton('Bypass', 'power')
     bypassButton.classList.add('effect-chain-bypass')
     bypassButton.setAttribute('aria-pressed', String(bypassed))
-    bypassButton.addEventListener('click', () => void this.setEffectBypassed(track, effectData.instanceId, !bypassed))
+    bypassButton.addEventListener('click', () => void this.setEffectBypassed(host, effectData.instanceId, !bypassed))
     const automationButton = this.createControlButton('Automate', 'automation')
     automationButton.disabled = !metadata?.parameters.length
     if (metadata?.parameters.length) {
-      automationButton.addEventListener('click', () => this.openAutomationView(track, effectData, metadata))
+      automationButton.addEventListener('click', () => this.openAutomationView(host, effectData, metadata))
     }
     const moveLeftButton = this.createControlButton('Move left', 'arrow-right', 'effect-icon-left')
     moveLeftButton.classList.add('effect-chain-move-left')
     moveLeftButton.disabled = index == 0
-    moveLeftButton.addEventListener('click', () => void this.moveEffect(track, index, index - 1))
+    moveLeftButton.addEventListener('click', () => void this.moveEffect(host, index, index - 1))
     const moveRightButton = this.createControlButton('Move right', 'arrow-right')
     moveRightButton.classList.add('effect-chain-move-right')
-    moveRightButton.disabled = index == track.effectRegions.length - 1
-    moveRightButton.addEventListener('click', () => void this.moveEffect(track, index, index + 1))
+    moveRightButton.disabled = index == host.effectRegions.length - 1
+    moveRightButton.addEventListener('click', () => void this.moveEffect(host, index, index + 1))
     const removeButton = this.createControlButton('Remove', 'trash')
     removeButton.classList.add('effect-chain-remove')
-    removeButton.addEventListener('click', () => void this.removeEffect(track, index))
+    removeButton.addEventListener('click', () => void this.removeEffect(host, index))
     const buttons = [bypassButton, automationButton, moveLeftButton, moveRightButton, removeButton]
     for (const button of buttons) {
       button.setAttribute('aria-describedby', nameId)
@@ -519,14 +543,14 @@ export class EffectPanelController {
     return button
   }
 
-  private async addEffect(track: Track, metadata: EffectMetadata) {
+  private async addEffect(host: EffectHost, metadata: EffectMetadata) {
     if (this.chainChangePending) {
       return
     }
     this.chainChangePending = true
     const viewVersion = this.viewVersion
     try {
-      const oldEffects = cloneEffectData(track.effectRegions)
+      const oldEffects = cloneEffectData(host.effectRegions)
       const newEffects = cloneEffectData(oldEffects)
       const params = Object.fromEntries(
         metadata.parameters.map((parameter) => [parameter.id, new ParameterValueSequence(parameter.defaultValue)]),
@@ -538,12 +562,10 @@ export class EffectPanelController {
         params,
         state: metadata.createDefaultState?.(),
       })
-      await editorHistory.execute(
-        new SetTrackEffectsCommand(track, oldEffects, newEffects, `add ${metadata.name} effect`),
-      )
+      await editorHistory.execute(new SetEffectsCommand(host, oldEffects, newEffects, `add ${metadata.name} effect`))
       if (viewVersion == this.viewVersion) {
-        await this.showTrackEffectsList(track)
-        this.chainItem(instanceId)?.querySelector<HTMLElement>('.effect-chain-open')?.focus()
+        await this.showEffectsList(host)
+        this.chainItem(host, instanceId)?.querySelector<HTMLElement>('.effect-chain-open')?.focus()
         announce(`Added ${metadata.name}`)
       }
     } finally {
@@ -551,28 +573,30 @@ export class EffectPanelController {
     }
   }
 
-  private async moveEffect(track: Track, fromIndex: number, toIndex: number) {
+  private async moveEffect(host: EffectHost, fromIndex: number, toIndex: number) {
     if (
       this.chainChangePending ||
       fromIndex == toIndex ||
       fromIndex < 0 ||
       toIndex < 0 ||
-      fromIndex >= track.effectRegions.length ||
-      toIndex >= track.effectRegions.length
+      fromIndex >= host.effectRegions.length ||
+      toIndex >= host.effectRegions.length
     ) {
       return
     }
     this.chainChangePending = true
     const viewVersion = this.viewVersion
     try {
-      const oldEffects = cloneEffectData(track.effectRegions)
+      const oldEffects = cloneEffectData(host.effectRegions)
       const newEffects = cloneEffectData(oldEffects)
       const [effect] = newEffects.splice(fromIndex, 1)
       newEffects.splice(toIndex, 0, effect)
-      await editorHistory.execute(new SetTrackEffectsCommand(track, oldEffects, newEffects, 'reorder track effects'))
+      await editorHistory.execute(
+        new SetEffectsCommand(host, oldEffects, newEffects, `reorder ${chainOwner(host)} effects`),
+      )
       if (viewVersion == this.viewVersion) {
-        await this.showTrackEffectsList(track)
-        const item = this.chainItem(effect.instanceId)
+        await this.showEffectsList(host)
+        const item = this.chainItem(host, effect.instanceId)
         const moveButton = item?.querySelector<HTMLButtonElement>(
           toIndex < fromIndex ? '.effect-chain-move-left' : '.effect-chain-move-right',
         )
@@ -587,27 +611,29 @@ export class EffectPanelController {
     }
   }
 
-  private async removeEffect(track: Track, index: number) {
-    if (this.chainChangePending || index < 0 || index >= track.effectRegions.length) {
+  private async removeEffect(host: EffectHost, index: number) {
+    if (this.chainChangePending || index < 0 || index >= host.effectRegions.length) {
       return
     }
     this.chainChangePending = true
     const viewVersion = this.viewVersion
     try {
-      const oldEffects = cloneEffectData(track.effectRegions)
+      const oldEffects = cloneEffectData(host.effectRegions)
       const newEffects = cloneEffectData(oldEffects)
       const removed = oldEffects[index]
       const name = this.effectIndex.getEffectMetadataById(removed.id)?.name ?? removed.id
       const neighbourId = (oldEffects[index + 1] ?? oldEffects[index - 1])?.instanceId
       newEffects.splice(index, 1)
-      await editorHistory.execute(new SetTrackEffectsCommand(track, oldEffects, newEffects, 'remove track effect'))
+      await editorHistory.execute(
+        new SetEffectsCommand(host, oldEffects, newEffects, `remove ${chainOwner(host)} effect`),
+      )
       if (viewVersion == this.viewVersion) {
-        await this.showTrackEffectsList(track)
-        const neighbour = neighbourId === undefined ? null : this.chainItem(neighbourId)
+        await this.showEffectsList(host)
+        const neighbour = neighbourId === undefined ? null : this.chainItem(host, neighbourId)
         if (neighbour) {
           neighbour.querySelector<HTMLElement>('.effect-chain-open')?.focus()
         } else {
-          document.querySelector<HTMLElement>('#bottom-panel .effect-chain-add')?.focus()
+          document.querySelector<HTMLElement>(`#bottom-panel-${panelTab(host)} .effect-chain-add`)?.focus()
         }
         announce(`Removed ${name}`)
       }
@@ -616,27 +642,27 @@ export class EffectPanelController {
     }
   }
 
-  private async setEffectBypassed(track: Track, instanceId: string, bypassed: boolean) {
-    const index = track.effectRegions.findIndex((effect) => effect.instanceId == instanceId)
+  private async setEffectBypassed(host: EffectHost, instanceId: string, bypassed: boolean) {
+    const index = host.effectRegions.findIndex((effect) => effect.instanceId == instanceId)
     if (this.chainChangePending || index < 0) {
       return
     }
     this.chainChangePending = true
     const viewVersion = this.viewVersion
     try {
-      const oldEffects = cloneEffectData(track.effectRegions)
+      const oldEffects = cloneEffectData(host.effectRegions)
       const newEffects = cloneEffectData(oldEffects)
       const effect = newEffects[index]
       const name = this.effectIndex.getEffectMetadataById(effect.id)?.name ?? effect.id
       if ((effect.bypassed ?? false) != bypassed) {
         effect.bypassed = bypassed
         await editorHistory.execute(
-          new SetTrackEffectsCommand(track, oldEffects, newEffects, `${bypassed ? 'bypass' : 'enable'} ${name} effect`),
+          new SetEffectsCommand(host, oldEffects, newEffects, `${bypassed ? 'bypass' : 'enable'} ${name} effect`),
         )
       }
       if (viewVersion == this.viewVersion) {
-        await this.showTrackEffectsList(track)
-        this.chainItem(instanceId)?.querySelector<HTMLElement>('.effect-chain-bypass')?.focus()
+        await this.showEffectsList(host)
+        this.chainItem(host, instanceId)?.querySelector<HTMLElement>('.effect-chain-bypass')?.focus()
         announce(`${bypassed ? 'Bypassed' : 'Enabled'} ${name}`)
       }
     } finally {
@@ -644,21 +670,27 @@ export class EffectPanelController {
     }
   }
 
-  private chainItem(instanceId: string) {
-    return document.querySelector<HTMLElement>(`#bottom-panel [data-instance-id="${CSS.escape(instanceId)}"]`)
+  private chainItem(host: EffectHost, instanceId: string) {
+    return document.querySelector<HTMLElement>(
+      `#bottom-panel-${panelTab(host)} [data-instance-id="${CSS.escape(instanceId)}"]`,
+    )
   }
 
   private get trackListController() {
     return (window as any).trackListController as TrackListController
   }
 
-  private openAutomationView(track: Track, effectData: EffectData, metadata: EffectMetadata) {
+  private get outputPanelController() {
+    return (window as any).outputPanelController as OutputPanelController
+  }
+
+  private openAutomationView(host: EffectHost, effectData: EffectData, metadata: EffectMetadata) {
     const parameters = metadata.parameters.filter((parameter) => effectData.params[parameter.id])
     if (parameters.length == 0) {
       return
     }
     this.bottomPanelController.close(this)
-    this.trackListController.enterAutomationMode(track, effectData.instanceId, parameters)
+    this.trackListController.enterAutomationMode(host, effectData.instanceId, parameters)
   }
 
   private async closeEffectView() {
@@ -688,42 +720,51 @@ export class EffectPanelController {
     return Math.min(maximum, Math.max(minimum, value))
   }
 
-  private openSubview(title: string, subtitle: string, body: HTMLElement, track: Track) {
+  private openSubview(title: string, subtitle: string, body: HTMLElement, host: EffectHost) {
+    this.viewTab = panelTab(host)
     this.bottomPanelController.open({
-      tab: 'tracks',
+      tab: this.viewTab,
       owner: this,
       title,
       subtitle,
       body,
-      onBack: () => this.showTrackEffectsList(track),
+      onBack: () => this.showEffectsList(host),
       onClose: () => this.handlePanelClose(),
     })
   }
 
+  /** Gives a view left in the other tab back to that tab's own view; its session would be gone. */
+  private closeViewInOtherTab(host: EffectHost) {
+    if (this.viewTab !== null && this.viewTab != panelTab(host)) {
+      this.bottomPanelController.close(this)
+    }
+  }
+
   private async handlePanelClose() {
+    this.viewTab = null
     ++this.viewVersion
     await this.closeEffectView()
   }
 
-  private showMessage(title: string, message: string, track: Track) {
+  private showMessage(title: string, message: string, host: EffectHost) {
     const body = document.createElement('div')
     body.className = 'effect-panel-message'
     body.textContent = message
     announce(`${title}. ${message}`, 'assertive')
-    this.openSubview(title, track.name, body, track)
+    this.openSubview(title, host.name, body, host)
   }
 
-  private createEffectCatalogItem(track: Track, metadata: EffectMetadata) {
+  private createEffectCatalogItem(host: EffectHost, metadata: EffectMetadata) {
     const listItemElement = document.createElement('article')
     listItemElement.className = 'effect-list-item effect-catalog-item'
 
     const addEffectButton = document.createElement('button')
     addEffectButton.type = 'button'
     addEffectButton.className = 'clickable effect-catalog-add'
-    addEffectButton.textContent = 'Add to track'
+    addEffectButton.textContent = `Add to ${chainOwner(host)}`
     addEffectButton.addEventListener('click', () => {
       addEffectButton.disabled = true
-      void this.addEffect(track, metadata).catch((error) => {
+      void this.addEffect(host, metadata).catch((error) => {
         addEffectButton.disabled = false
         NotificationsController.showError(withCause('Could not add the effect', error))
       })

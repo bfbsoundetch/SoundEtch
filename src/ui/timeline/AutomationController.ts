@@ -1,8 +1,9 @@
 import { ParameterMetadata } from '../../effects/ParameterMetadata'
 import { ParameterValueSequence, ParamValueTransition, type TransitionType } from '../../effects/ParameterValueSequence'
-import { Track } from '../../project/Track'
-import { cloneEffectData, SetTrackEffectsCommand } from '../effects/SetTrackEffectsCommand'
-import { BottomPanelController } from '../BottomPanelController'
+import type { EffectHost } from '../../project/EffectHost'
+import { OutputBus } from '../../project/OutputBus'
+import { cloneEffectData, SetEffectsCommand } from '../effects/SetEffectsCommand'
+import { BottomPanelController, type BottomPanelTabId } from '../BottomPanelController'
 import { TrackListItemController } from './TrackListItemController'
 import { TrackListController } from './TrackListController'
 import { AudioControl } from '../../audiocontext/AudioControl'
@@ -32,6 +33,8 @@ export class AutomationController extends TrackListItemController {
   private readonly blockerElement = document.createElementNS('http://www.w3.org/2000/svg', 'rect')
   private readonly scaleForeignObject = document.createElementNS('http://www.w3.org/2000/svg', 'foreignObject')
   private readonly bottomPanelController = BottomPanelController.getInstance()
+  /** The point editor opens in the tab that shows the host's effect chain. */
+  private readonly panelTab: BottomPanelTabId
   private readonly pointEditorControls = new Map<ParamValueTransition, PointEditorControls>()
   private pointEditorTableBody: HTMLTableSectionElement | null = null
   private pointEditorIsOpen = false
@@ -44,14 +47,15 @@ export class AutomationController extends TrackListItemController {
     trackListController: TrackListController,
     private readonly effectInstanceId: string,
     private readonly svgElement: SVGSVGElement,
-    private readonly track: Track,
+    private readonly host: EffectHost,
     private readonly parameterMetadata: ParameterMetadata,
     private readonly topOffset: number,
   ) {
     super(trackListController)
+    this.panelTab = host instanceof OutputBus ? 'output' : 'tracks'
     this.width = svgElement.viewBox.baseVal.width || svgElement.clientWidth
     this.height = svgElement.viewBox.baseVal.height || svgElement.clientHeight
-    const effectData = track.effectRegions.find((effect) => effect.instanceId == effectInstanceId)
+    const effectData = host.effectRegions.find((effect) => effect.instanceId == effectInstanceId)
     if (!effectData?.params[parameterMetadata.id]) {
       throw new Error(`Parameter ${parameterMetadata.id} is unavailable`)
     }
@@ -71,7 +75,7 @@ export class AutomationController extends TrackListItemController {
     this.blockerElement.addEventListener('dblclick', (event) => {
       event.preventDefault()
       event.stopPropagation()
-      const oldEffects = cloneEffectData(this.track.effectRegions)
+      const oldEffects = cloneEffectData(this.host.effectRegions)
       const point = this.eventToLocalPoint(event)
       this.addNewPoint(point.x, point.y)
       void this.recordAppliedChange(oldEffects, `add ${parameterMetadata.displayName} automation point`)
@@ -174,7 +178,7 @@ export class AutomationController extends TrackListItemController {
   }
 
   private get paramVals(): ParameterValueSequence {
-    const sequence = this.track.effectRegions.find((effect) => effect.instanceId == this.effectInstanceId)?.params[
+    const sequence = this.host.effectRegions.find((effect) => effect.instanceId == this.effectInstanceId)?.params[
       this.parameterMetadata.id
     ]
     if (!sequence) {
@@ -225,10 +229,10 @@ export class AutomationController extends TrackListItemController {
     }
     this.pointEditorIsOpen = true
     this.bottomPanelController.open({
-      tab: 'tracks',
+      tab: this.panelTab,
       owner: this,
       title: `${this.parameterMetadata.displayName} automation`,
-      subtitle: `${this.track.name} · ${this.paramVals.transitionSequence.length} points`,
+      subtitle: `${this.host.name} · ${this.paramVals.transitionSequence.length} points`,
       body: this.createPointEditor(),
       onBack: () => this.bottomPanelController.close(this),
       onClose: () => {
@@ -237,7 +241,7 @@ export class AutomationController extends TrackListItemController {
         this.pointEditorTableBody = null
       },
     })
-    this.bottomPanelController.reveal('tracks')
+    this.bottomPanelController.reveal(this.panelTab, this.svgElement)
   }
 
   private createPointEditor() {
@@ -254,7 +258,7 @@ export class AutomationController extends TrackListItemController {
       const value =
         this.paramVals.transitionSequence.findLast((transition) => transition.startSample <= sample)?.startValue ??
         this.paramVals.initialValue
-      const oldEffects = cloneEffectData(this.track.effectRegions)
+      const oldEffects = cloneEffectData(this.host.effectRegions)
       const point = this.insertPoint(sample, value)
       void this.recordAppliedChange(oldEffects, `add ${this.parameterMetadata.displayName} automation point`)
       this.pointEditorControls.get(point)?.position.focus()
@@ -398,7 +402,7 @@ export class AutomationController extends TrackListItemController {
       return
     }
     const points = this.paramVals.transitionSequence
-    this.bottomPanelController.setSubtitle(this, `${this.track.name} · ${points.length} points`)
+    this.bottomPanelController.setSubtitle(this, `${this.host.name} · ${points.length} points`)
     if (points.length == 0) {
       if (this.pointEditorControls.size > 0 || this.pointEditorTableBody) {
         this.rebuildPointEditor()
@@ -426,10 +430,11 @@ export class AutomationController extends TrackListItemController {
   }
 
   private rebuildPointEditor() {
+    const panel = `#bottom-panel-${this.panelTab}`
     const hadFocus =
-      document.querySelector('#bottom-panel .automation-point-editor')?.contains(document.activeElement) ?? false
+      document.querySelector(`${panel} .automation-point-editor`)?.contains(document.activeElement) ?? false
     this.bottomPanelController.setBody(this, this.createPointEditor())
-    if (hadFocus) document.querySelector<HTMLElement>('#bottom-panel .automation-add-point-button')?.focus()
+    if (hadFocus) document.querySelector<HTMLElement>(`${panel} .automation-add-point-button`)?.focus()
   }
 
   private updatePointEditorControls(point: ParamValueTransition, index: number, controls: PointEditorControls) {
@@ -453,7 +458,7 @@ export class AutomationController extends TrackListItemController {
   }
 
   private commitPointEdit(point: ParamValueTransition, description: string, apply: () => void) {
-    const oldEffects = cloneEffectData(this.track.effectRegions)
+    const oldEffects = cloneEffectData(this.host.effectRegions)
     apply()
     this.paramVals.transitionSequence.sort((first, second) => first.startSample - second.startSample)
     this.draw()
@@ -475,7 +480,7 @@ export class AutomationController extends TrackListItemController {
     event.preventDefault()
     event.stopPropagation()
     this.openPointEditor()
-    const oldEffects = cloneEffectData(this.track.effectRegions)
+    const oldEffects = cloneEffectData(this.host.effectRegions)
     const move = (moveEvent: MouseEvent) => {
       const position = this.eventToLocalPoint(moveEvent)
       this.modifyPoint(point, position.x, position.y)
@@ -518,7 +523,7 @@ export class AutomationController extends TrackListItemController {
 
   private async recordAppliedChange(oldEffects: ReturnType<typeof cloneEffectData>, description: string) {
     await this.trackListController.history.recordApplied(
-      new SetTrackEffectsCommand(this.track, oldEffects, this.track.effectRegions, description),
+      new SetEffectsCommand(this.host, oldEffects, this.host.effectRegions, description),
     )
   }
 

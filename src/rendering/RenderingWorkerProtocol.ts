@@ -86,5 +86,7 @@ export type RenderingArgument = {
   channelCount: number
   startPosition: number
   trackSubsets: Array<TrackSubset>
+  /** Applied in order to the sum of the tracks. */
+  outputEffects: Array<EffectData>
   length: number
 }

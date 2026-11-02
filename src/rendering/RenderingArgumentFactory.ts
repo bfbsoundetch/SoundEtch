@@ -1,13 +1,16 @@
 import { Project } from '../project/Project'
 import { Track } from '../project/Track'
+import type { EffectData } from '../effects/EffectData'
 import { RenderingArgument } from './RenderingWorkerProtocol'
 
+/** `outputEffects` process the sum of `tracks`: the project's output chain for exports, none for Freeze. */
 export function createRenderingArgument(
   project: Project,
   outputChannelCount: number,
   startPosition: number,
   projectLength: number,
   tracks: Array<Track>,
+  outputEffects: readonly EffectData[],
 ): RenderingArgument {
   return {
     projectId: project.id!,
@@ -36,5 +39,6 @@ export function createRenderingArgument(
         effects: structuredClone(track.effectRegions),
       }
     }),
+    outputEffects: structuredClone(outputEffects) as EffectData[],
   }
 }

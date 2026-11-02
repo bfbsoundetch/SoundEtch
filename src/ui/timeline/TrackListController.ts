@@ -21,6 +21,8 @@ import {
   SetClipTranscriptionCommand,
 } from '../undo/UndoableActions'
 import { Track } from '../../project/Track'
+import type { EffectHost } from '../../project/EffectHost'
+import { OutputBus } from '../../project/OutputBus'
 import { TimelineRegionController } from './TimelineRegionController'
 import { NotificationsController } from '../NotificationsController'
 import { ParameterMetadata } from '../../effects/ParameterMetadata'
@@ -55,6 +57,7 @@ interface Selection {
 
 interface AutomationMode {
   controller: AutomationController
+  host: EffectHost
   infoElement: HTMLElement
   originalInfoElements: Node[]
 }
@@ -279,6 +282,7 @@ export class TrackListController {
     this.resizeCallback = async () => {
       this.timelineController.resize()
       this.waveforms.forEach((w) => w.resize())
+      this.outputTimelineController.sizeAutomation()
       this.automationMode?.controller.resize()
       this.positionMarkerController.resize()
       if (!Number.isFinite(this.msPerUnit)) {
@@ -332,9 +336,12 @@ export class TrackListController {
       const waveformDivs = new Array<Node>()
       const nextWaveforms = new Array<Waveform>()
       const trackIds = new Set(project.getTracks().map((track) => `${track.id}`))
+      const automationHost = this.automationMode?.host
       if (
-        this.automationMode &&
-        !project.getTracks().some((track) => `${track.id}` == this.automationMode!.infoElement.dataset.trackId)
+        automationHost &&
+        (automationHost instanceof OutputBus
+          ? automationHost.project !== project
+          : !project.getTracks().some((track) => track.id == automationHost.id))
       ) {
         this.exitAutomationMode()
       }
@@ -567,19 +574,22 @@ export class TrackListController {
     this.selectionController.remove()
   }
 
-  enterAutomationMode(track: Track, effectInstanceId: string, parameters: ParameterMetadata[]) {
+  /** Draws automation over the host's lane, a track's waveform or the Output lane, and dims the other tracks. */
+  enterAutomationMode(host: EffectHost, effectInstanceId: string, parameters: ParameterMetadata[]) {
     this.exitAutomationMode()
-    const pair = this.infoWaveformPairs.get(`${track.id}`)
+    const output = host instanceof OutputBus
+    const pair = output ? undefined : this.infoWaveformPairs.get(`${host.id}`)
     const parameterMetadata = parameters[0]
-    if (!pair || !parameterMetadata) {
+    if ((!output && !pair) || !parameterMetadata) {
       return
     }
 
     this.clearSelection()
     this.pointerStateManager.startAutomating()
 
+    this.outputTimelineController.setDimmed(!output)
     for (const [trackId, candidate] of this.infoWaveformPairs) {
-      const isActive = trackId == `${track.id}`
+      const isActive = !output && trackId == `${host.id}`
       candidate.info.inert = !isActive
       candidate.waveform.inert = !isActive
       candidate.info.classList.toggle('automation-dimmed', !isActive)
@@ -588,44 +598,35 @@ export class TrackListController {
       candidate.controller.setMediaOverlayVisible(false)
     }
 
-    const originalInfoElements = Array.from(pair.info.childNodes)
+    const infoElement = pair?.info ?? this.outputTimelineController.infoElement
+    const svgElement = pair?.controller.topSvgElement ?? this.outputTimelineController.startAutomation()
+    const topOffset = pair?.controller.audioLaneTop ?? 0
+    const createController = (parameter: ParameterMetadata) =>
+      new AutomationController(this, effectInstanceId, svgElement, host, parameter, topOffset)
+    const originalInfoElements = Array.from(infoElement.childNodes)
     const selectParameter = (selectedParameter: ParameterMetadata) => {
       const mode = this.automationMode
       if (!mode) {
         return
       }
       mode.controller.remove()
-      mode.controller = new AutomationController(
-        this,
-        effectInstanceId,
-        pair.controller.topSvgElement,
-        track,
-        selectedParameter,
-        pair.controller.audioLaneTop,
-      )
+      mode.controller = createController(selectedParameter)
       mode.controller.draw()
     }
-    const modeInfoElement = this.createAutomationModeInfo(track, parameters, parameterMetadata, selectParameter)
-    pair.info.replaceChildren(modeInfoElement)
+    const modeInfoElement = this.createAutomationModeInfo(host, parameters, parameterMetadata, selectParameter)
+    infoElement.replaceChildren(modeInfoElement)
     const infoResizeHandle = originalInfoElements.find(
       (element) => element instanceof HTMLElement && element.classList.contains('track-resize-handle'),
     )
     if (infoResizeHandle) {
-      pair.info.appendChild(infoResizeHandle)
+      infoElement.appendChild(infoResizeHandle)
     }
 
-    const controller = new AutomationController(
-      this,
-      effectInstanceId,
-      pair.controller.topSvgElement,
-      track,
-      parameterMetadata,
-      pair.controller.audioLaneTop,
-    )
-    this.automationMode = { controller, infoElement: pair.info, originalInfoElements }
+    const controller = createController(parameterMetadata)
+    this.automationMode = { controller, host, infoElement, originalInfoElements }
     controller.draw()
-    pair.info.querySelector<HTMLSelectElement>('.automation-parameter-select')?.focus()
-    announce(`${parameterMetadata.displayName} automation for ${track.name}`)
+    infoElement.querySelector<HTMLSelectElement>('.automation-parameter-select')?.focus()
+    announce(`${parameterMetadata.displayName} automation for ${host.name}`)
     this.transcriptBoundaries.refresh()
   }
 
@@ -636,6 +637,10 @@ export class TrackListController {
     }
     const hadFocus = mode.infoElement.contains(document.activeElement)
     mode.controller.remove()
+    if (mode.host instanceof OutputBus) {
+      this.outputTimelineController.stopAutomation()
+    }
+    this.outputTimelineController.setDimmed(false)
     mode.infoElement.replaceChildren(...mode.originalInfoElements)
     for (const pair of this.infoWaveformPairs.values()) {
       pair.info.classList.remove('automation-dimmed')
@@ -651,7 +656,7 @@ export class TrackListController {
   }
 
   private createAutomationModeInfo(
-    track: Track,
+    host: EffectHost,
     parameters: ParameterMetadata[],
     parameterMetadata: ParameterMetadata,
     selectParameter: (parameter: ParameterMetadata) => void,
@@ -666,9 +671,9 @@ export class TrackListController {
     const trackRow = document.createElement('span')
     trackRow.className = 'automation-context-row'
     const trackLabel = document.createElement('small')
-    trackLabel.textContent = 'Track'
+    trackLabel.textContent = host instanceof OutputBus ? 'Lane' : 'Track'
     const trackName = document.createElement('span')
-    trackName.textContent = track.name
+    trackName.textContent = host.name
     trackRow.append(trackLabel, trackName)
     const parameterRow = document.createElement('span')
     parameterRow.className = 'automation-context-row'

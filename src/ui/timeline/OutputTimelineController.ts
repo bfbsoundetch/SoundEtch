@@ -2,8 +2,10 @@ import { AudioControl, AudioState } from '../../audiocontext/AudioControl'
 import { TimeUtils } from '../../global/TimeUtils'
 import type { Project } from '../../project/Project'
 import { ProjectManager } from '../../project/ProjectManager'
+import { OutputBus } from '../../project/OutputBus'
 import { getOutputSceneIndex, moveOutputSceneBoundary } from '../../project/OutputScene'
 import type { OutputScene } from '../../project/OutputScene'
+import { EffectPanelController } from '../effects/EffectPanelController'
 import { NotificationsController } from '../NotificationsController'
 import { SetOutputScenesCommand } from '../undo/SetOutputScenesCommand'
 import type { OutputPanelController } from '../OutputPanelController'
@@ -30,7 +32,12 @@ const cancelledBoundaryEdit = new Error('The output scene boundary is no longer 
 
 /** Scene boundaries own their drag gestures; seeking uses the shared PointerStateManager. */
 export class OutputTimelineController {
+  /** The Output row's header in the timeline's information column. */
+  readonly infoElement = document.getElementById('timeline-output-info')!
+  private readonly effectsButton = document.getElementById('timeline-output-effects')!
   private readonly lane = document.querySelector<HTMLElement>('.timeline-output-lane')!
+  private readonly automationSvg = document.createElementNS('http://www.w3.org/2000/svg', 'svg')
+  private automating = false
   private readonly blocks: HTMLElement[] = []
   private readonly boundaries: HTMLElement[] = []
   private drag: BoundaryDrag | null = null
@@ -55,7 +62,7 @@ export class OutputTimelineController {
       'Click to move the position marker and open Output. Drag a scene boundary to resize; collapse a scene to remove it. Arrow keys move by a ruler tick; Enter opens Output.',
     )
     this.lane.addEventListener('pointerdown', (event) => {
-      if (event.button !== 0 || !event.isPrimary) return
+      if (event.button !== 0 || !event.isPrimary || this.automating) return
       const boundary =
         event.target instanceof Element ? event.target.closest<HTMLElement>('.output-scene-boundary') : null
       if (boundary) {
@@ -111,8 +118,20 @@ export class OutputTimelineController {
     void ProjectManager.addProjectListener((project) => {
       this.project = project
       this.renderedScenes = null
+      this.updateEffectsButton()
       this.draw()
     })
+    // Output effect edits are saved without notifying project listeners.
+    this.timeline.history.addChangeListener(() => this.updateEffectsButton())
+    this.effectsButton.addEventListener('click', () => {
+      if (this.project) void EffectPanelController.getInstance().showEffectsList(OutputBus.of(this.project))
+    })
+    this.automationSvg.classList.add('output-automation')
+  }
+
+  private updateEffectsButton(): void {
+    const effectCount = this.project?.outputEffects.length ?? 0
+    this.effectsButton.textContent = 'Effects' + (effectCount > 0 ? ` (${effectCount})` : '')
   }
 
   draw(sample = this.currentSample()): void {
@@ -209,6 +228,39 @@ export class OutputTimelineController {
 
   get isEditing(): boolean {
     return this.drag !== null || this.editing
+  }
+
+  /** Covers the lane with a surface for an AutomationController until `stopAutomation`. */
+  startAutomation(): SVGSVGElement {
+    this.clearBoundaryDrag()
+    this.automating = true
+    this.infoElement.classList.add('is-automating')
+    this.lane.classList.add('is-automating')
+    this.lane.appendChild(this.automationSvg)
+    this.sizeAutomation()
+    return this.automationSvg
+  }
+
+  stopAutomation(): void {
+    this.automating = false
+    this.infoElement.classList.remove('is-automating')
+    this.lane.classList.remove('is-automating')
+    this.automationSvg.remove()
+  }
+
+  /** Keeps the automation surface's units equal to the lane's CSS pixels. */
+  sizeAutomation(): void {
+    if (this.automating) {
+      this.automationSvg.setAttribute('viewBox', `0 0 ${this.lane.clientWidth} ${this.lane.clientHeight}`)
+    }
+  }
+
+  /** Dims and disables the Output row while a track's automation is edited. */
+  setDimmed(dimmed: boolean): void {
+    for (const element of [this.infoElement, this.lane]) {
+      element.inert = dimmed
+      element.classList.toggle('automation-dimmed', dimmed)
+    }
   }
 
   /** A drag previews scenes without exposing uncommitted edits to persistence or export. */
@@ -373,11 +425,11 @@ export class OutputTimelineController {
   }
 
   private showPanel(): void {
-    ;(window as OutputTimelineWindow).outputPanelController?.show(this.lane)
+    ;(window as OutputTimelineWindow).outputPanelController?.show('video', this.lane)
   }
 
   private handleKeyDown(event: KeyboardEvent): void {
-    if (event.ctrlKey || event.metaKey || event.altKey) return
+    if (event.ctrlKey || event.metaKey || event.altKey || this.automating) return
     const boundary =
       event.target instanceof Element ? event.target.closest<HTMLElement>('.output-scene-boundary') : null
     if (boundary) {

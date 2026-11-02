@@ -12,11 +12,13 @@ import {
   splitOutputScene,
   type OutputScene,
 } from '../project/OutputScene'
+import { OutputBus } from '../project/OutputBus'
 import { ProjectManager } from '../project/ProjectManager'
 import type { Track } from '../project/Track'
 import { resolveVideoFrame } from '../video/VideoFrameResolver'
 import { VideoPreview } from '../video/VideoPreview'
 import { BottomPanelController } from './BottomPanelController'
+import { EffectPanelController } from './effects/EffectPanelController'
 import { NotificationsController } from './NotificationsController'
 import type { TrackListController } from './timeline/TrackListController'
 import { editorHistory } from './undo/EditorHistory'
@@ -67,7 +69,7 @@ type FrameStyleEdit = {
   value: number
 }
 
-type OutputSection = 'audio' | 'video'
+export type OutputSection = 'audio' | 'video'
 
 const SECTIONS: readonly OutputSection[] = ['audio', 'video']
 const SECTION_LABELS: Record<OutputSection, string> = { audio: 'Audio', video: 'Video' }
@@ -77,13 +79,14 @@ const MAX_FRAME_MARGIN = 240
 
 const cancelledEdit = new Error('The output scene is no longer editable.')
 
-/** Edits the scene at the timeline marker and previews its composed video output. */
+/** Edits the output effect chain, and the scene at the timeline marker with a preview of its composed video. */
 export class OutputPanelController {
   private readonly shell = BottomPanelController.getInstance()
   private readonly content = document.createElement('section')
   private readonly nav = document.createElement('div')
   private readonly sectionTabs = {} as Record<OutputSection, HTMLButtonElement>
   private readonly sectionPanels = {} as Record<OutputSection, HTMLElement>
+  private readonly effects = document.createElement('div')
   private readonly controls = document.createElement('div')
   private readonly sceneLabel = document.createElement('p')
   private readonly layoutSelect = document.createElement('select')
@@ -100,6 +103,8 @@ export class OutputPanelController {
   private readonly resizeObserver: ResizeObserver
   private readonly slots: PreviewSlot[] = []
   private project: Project | null = null
+  /** What the effect chain was last built from; refreshes rebuild it only when it changes. */
+  private renderedEffects = ''
   private videoTracks: Track[] = []
   private section: OutputSection = 'video'
   private rootShown = false
@@ -169,10 +174,8 @@ export class OutputPanelController {
       event.preventDefault()
       event.stopPropagation()
     })
-    const audioMessage = document.createElement('p')
-    audioMessage.className = 'bottom-panel-message'
-    audioMessage.textContent = 'Output audio effects and automation are not available yet.'
-    this.sectionPanels.audio.appendChild(audioMessage)
+    this.effects.className = 'output-panel-effects'
+    this.sectionPanels.audio.appendChild(this.effects)
 
     this.controls.className = 'output-panel-controls'
     this.sceneLabel.id = 'output-panel-scene'
@@ -305,17 +308,37 @@ export class OutputPanelController {
         this.videoTracks = []
         // The options must also reset when two projects happen to have identical track names.
         this.sourceSelects.forEach((select) => select.replaceChildren())
+        // Views over the tab, such as effect editors, show the previous project's data.
+        this.openRoot()
       }
       if (this.running) this.render()
       else this.refreshControls()
+      this.refreshEffects()
     }).catch((error) => NotificationsController.showError(error))
+    // Output effect edits are saved without notifying project listeners.
+    editorHistory.addChangeListener(() => this.refreshEffects())
   }
 
-  /** Selects Output and opens the bottom panel without requiring a track selection. */
-  show(timelineAnchor?: HTMLElement): void {
-    if (timelineAnchor) this.setSection('video')
+  /** Selects Output on `section` and opens the bottom panel without requiring a track selection. */
+  show(section: OutputSection, timelineAnchor?: HTMLElement): void {
+    this.setSection(section)
     this.openRoot()
     this.shell.reveal('output', timelineAnchor)
+  }
+
+  private refreshEffects(): void {
+    const project = this.project
+    const effects = project
+      ? [
+          project.id,
+          ...project.outputEffects.map((effect) => `${effect.instanceId}:${effect.id}:${effect.bypassed ?? false}`),
+        ].join('|')
+      : ''
+    if (effects === this.renderedEffects) return
+    this.renderedEffects = effects
+    if (project)
+      this.effects.replaceChildren(EffectPanelController.getInstance().createEffectsChain(OutputBus.of(project)))
+    else this.effects.replaceChildren()
   }
 
   private setSection(section: OutputSection): void {

@@ -259,7 +259,7 @@ export class TrackPanelController {
       ].join('|')
       if (track !== this.renderedTrack || effects !== this.renderedEffects) {
         this.renderedEffects = effects
-        this.effects.replaceChildren(EffectPanelController.getInstance().createTrackEffectsChain(track))
+        this.effects.replaceChildren(EffectPanelController.getInstance().createEffectsChain(track))
       }
       const video = hasVideo(track)
       this.stage.hidden = !video

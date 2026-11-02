@@ -114,7 +114,14 @@ export class VideoRenderer {
       const audioDelay = await measureAacEncoderDelay(AUDIO_ENCODING_CONFIG, project.sampleRate, channelCount, signal)
       VideoRenderer.throwIfAborted(signal)
 
-      const argument = createRenderingArgument(project, channelCount, startPosition, projectLength, tracks)
+      const argument = createRenderingArgument(
+        project,
+        channelCount,
+        startPosition,
+        projectLength,
+        tracks,
+        project.outputEffects,
+      )
       const writeVideo = (createSource: () => AudioSourceWorker) =>
         VideoRenderer.writeVideo(file, preset, project, argument, videoCodec, audioDelay, createSource, signal)
       if (loudnessTargetLufs === null) {

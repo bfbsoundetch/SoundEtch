@@ -299,7 +299,7 @@ export class BottomPanelController {
   }
 
   /** Reveals a tab; an optional timeline anchor stays visible instead of reopening at full height. */
-  reveal(id: BottomPanelTabId, timelineAnchor?: HTMLElement): void {
+  reveal(id: BottomPanelTabId, timelineAnchor?: Element): void {
     const focusWasOutside = !this.root.contains(document.activeElement)
     this.selectTab(id)
     if (this.size === 'collapsed') {

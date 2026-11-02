@@ -64,6 +64,7 @@ export class Renderer {
       selectedRegion?.startSample ?? 0,
       projectLength,
       tracks,
+      project.outputEffects,
     )
 
     const encode = (createSource: () => AudioSourceWorker) =>
@@ -189,7 +190,8 @@ export class Renderer {
     ...tracks: Array<Track>
   ) {
     const channelCount = clip.getChannelCount()
-    const argument = createRenderingArgument(project, channelCount, startPosition, length, tracks)
+    // The frozen clip plays on a track, so the output chain still processes it later.
+    const argument = createRenderingArgument(project, channelCount, startPosition, length, tracks, [])
     const writingWorker = new Worker(new URL('./RenderingFileWritingWorker.ts', import.meta.url), { type: 'module' })
     writingWorker.addEventListener('message', clip.summary.getWorkerMessageListener())
     const writingInitMessage: Omit<RenderingFileWritingInitMessage, 'encodingPort'> = {

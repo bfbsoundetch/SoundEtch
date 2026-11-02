@@ -1,4 +1,6 @@
 import type { EffectModule } from './Effect'
+import type { EffectData } from './EffectData'
+import { scheduleParameterValues } from './ParameterScheduling'
 
 export interface PlaybackEffect {
   readonly instanceId: string
@@ -75,6 +77,39 @@ export class EffectChain {
       insert.output.connect(insert.next)
     }
     insert.bypassed = bypassed
+  }
+
+  /** Follows `effects`' bypass flags; effects that are not in this chain are ignored. */
+  applyBypass(effects: readonly EffectData[]) {
+    for (const effectData of effects) {
+      this.setBypassed(effectData.instanceId, effectData.bypassed ?? false)
+    }
+  }
+
+  /** Applies `effects`' bypass, state, and values, scheduling automation from the current play position. */
+  async applySettings(effects: readonly EffectData[]) {
+    this.applyBypass(effects)
+    for (const effectData of effects) {
+      const playbackEffect = this.getEffect(effectData.instanceId)
+      if (!playbackEffect) {
+        continue
+      }
+      playbackEffect.module.setState?.(effectData.state)
+      const parameters = await playbackEffect.module.getParameters(playbackEffect.audioContext)
+      const position =
+        'getPosition' in playbackEffect.audioContext ? (playbackEffect.audioContext.getPosition as () => number)() : 0
+      for (const [name, sequence] of Object.entries(effectData.params)) {
+        const parameter = parameters[name]
+        if (!parameter) {
+          continue
+        }
+        if (sequence.transitionSequence.length > 0) {
+          scheduleParameterValues(parameter, sequence, playbackEffect.audioContext, position)
+        } else {
+          parameter.setValueAtTime(sequence.initialValue, playbackEffect.audioContext.currentTime)
+        }
+      }
+    }
   }
 
   disconnect() {

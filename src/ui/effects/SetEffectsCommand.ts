@@ -1,18 +1,19 @@
 import { EffectData } from '../../effects/EffectData'
+import type { EffectHost } from '../../project/EffectHost'
+import { OutputBus } from '../../project/OutputBus'
 import { ProjectManager } from '../../project/ProjectManager'
-import { Track } from '../../project/Track'
 import { Undoable } from '../undo/Undoable'
 
 export function cloneEffectData(effectData: readonly EffectData[]) {
   return structuredClone(effectData) as EffectData[]
 }
 
-export class SetTrackEffectsCommand implements Undoable {
+export class SetEffectsCommand implements Undoable {
   private readonly oldEffects: EffectData[]
   private readonly newEffects: EffectData[]
 
   constructor(
-    private readonly track: Track,
+    private readonly host: EffectHost,
     oldEffects: readonly EffectData[],
     newEffects: readonly EffectData[],
     private readonly description: string,
@@ -22,17 +23,21 @@ export class SetTrackEffectsCommand implements Undoable {
   }
 
   async perform() {
-    this.track.setEffectRegions(cloneEffectData(this.newEffects))
-    await this.track.applyPlaybackEffectSettings()
+    this.host.setEffectRegions(cloneEffectData(this.newEffects))
+    await this.host.applyPlaybackEffectSettings()
   }
 
   async undo() {
-    this.track.setEffectRegions(cloneEffectData(this.oldEffects))
-    await this.track.applyPlaybackEffectSettings()
+    this.host.setEffectRegions(cloneEffectData(this.oldEffects))
+    await this.host.applyPlaybackEffectSettings()
   }
 
   async save() {
-    await ProjectManager.saveTrack(this.track)
+    if (this.host instanceof OutputBus) {
+      await ProjectManager.saveOutputEffects(this.host.project)
+    } else {
+      await ProjectManager.saveTrack(this.host)
+    }
   }
 
   toString() {

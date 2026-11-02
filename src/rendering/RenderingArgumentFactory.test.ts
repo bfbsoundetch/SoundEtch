@@ -15,12 +15,12 @@ test('rendering uses the project mute and solo mix', () => {
   project.addTrack(second)
   project.setTrackSoloed(second, true)
 
-  const soloedMix = createRenderingArgument(project, 2, 0, 48000, [first, second])
+  const soloedMix = createRenderingArgument(project, 2, 0, 48000, [first, second], [])
 
   expect(soloedMix.trackSubsets.map((track) => track.gain)).toEqual([0, 0.75])
 
   project.setTrackMuted(second, true)
-  const mutedSoloMix = createRenderingArgument(project, 2, 0, 48000, [first, second])
+  const mutedSoloMix = createRenderingArgument(project, 2, 0, 48000, [first, second], [])
 
   expect(mutedSoloMix.trackSubsets.map((track) => track.gain)).toEqual([0, 0])
 })
@@ -38,7 +38,7 @@ test('video duration retains the timeline while PCM reads exclude silent clips a
   track.addClipView(new ClipView(linked, 60_000, 168_000, 36_000))
   project.addTrack(track)
 
-  const argument = createRenderingArgument(project, 1, 0, track.length, [track])
+  const argument = createRenderingArgument(project, 1, 0, track.length, [track], [])
 
   expect(argument.length).toBe(204_000)
   expect(argument.trackSubsets[0].length).toBe(204_000)

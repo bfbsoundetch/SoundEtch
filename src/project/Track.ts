@@ -5,7 +5,6 @@ import { Analyzable } from '../analyzers/Analyzable'
 import { EffectData } from 'effects/EffectData'
 import { EffectChain } from '../effects/EffectChain'
 import { SimpleAnalyzer } from '../analyzers/SimpleAnalyzer'
-import { scheduleParameterValues } from '../effects/ParameterScheduling'
 
 type PlaybackChangeListener = () => void
 
@@ -227,7 +226,7 @@ export class Track extends DatabasePersisted implements Analyzable {
     }
     this.playback = new Playback(playerNode, gainNode, pannerNode, effectChain, playbackCleanup, audible)
     // Bypass may have changed while the playback graph was being built.
-    this.applyPlaybackEffectBypass()
+    effectChain?.applyBypass(this.effectRegions)
     gainNode.gain.value = audible ? this.gain : 0
     this.notifyPlaybackChange()
   }
@@ -267,39 +266,7 @@ export class Track extends DatabasePersisted implements Analyzable {
   }
 
   async applyPlaybackEffectSettings() {
-    const effectChain = this.playback?.effectChain
-    if (!effectChain) {
-      return
-    }
-    this.applyPlaybackEffectBypass()
-    for (const effectData of this.effectRegions) {
-      const playbackEffect = effectChain.getEffect(effectData.instanceId)
-      if (!playbackEffect) {
-        continue
-      }
-      playbackEffect.module.setState?.(effectData.state)
-      const parameters = await playbackEffect.module.getParameters(playbackEffect.audioContext)
-      const position =
-        'getPosition' in playbackEffect.audioContext ? (playbackEffect.audioContext.getPosition as () => number)() : 0
-      for (const [name, sequence] of Object.entries(effectData.params)) {
-        const parameter = parameters[name]
-        if (!parameter) {
-          continue
-        }
-        if (sequence.transitionSequence.length > 0) {
-          scheduleParameterValues(parameter, sequence, playbackEffect.audioContext, position)
-        } else {
-          parameter.setValueAtTime(sequence.initialValue, playbackEffect.audioContext.currentTime)
-        }
-      }
-    }
-  }
-
-  private applyPlaybackEffectBypass() {
-    const effectChain = this.playback?.effectChain
-    for (const effectData of this.effectRegions) {
-      effectChain?.setBypassed(effectData.instanceId, effectData.bypassed ?? false)
-    }
+    await this.playback?.effectChain?.applySettings(this.effectRegions)
   }
 
   setEffectRegions(effectRegions: readonly EffectData[]) {

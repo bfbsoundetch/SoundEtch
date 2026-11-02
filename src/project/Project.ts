@@ -3,6 +3,7 @@ import { Clip } from './Clip'
 import { DatabasePersisted } from '../persistence/DatabasePersisted'
 import { Restorable } from '../persistence/Restoration'
 import { cloneOutputScene, type OutputScene } from './OutputScene'
+import type { EffectData } from '../effects/EffectData'
 
 @Restorable('Project')
 export class Project extends DatabasePersisted {
@@ -11,6 +12,8 @@ export class Project extends DatabasePersisted {
 
   description: string = ''
   outputScenes: OutputScene[] = [{ startSample: 0, layout: 'single', fit: 'contain', tracks: [null, null] }]
+  /** Applied in order to the mix of all tracks, for playback and export alike. */
+  readonly outputEffects: EffectData[] = []
 
   constructor(
     public title: string,

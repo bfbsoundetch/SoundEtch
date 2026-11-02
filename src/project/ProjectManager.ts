@@ -49,6 +49,14 @@ export class ProjectManager {
     ProjectManager.projectListeners.forEach((listener) => listener(project))
   }
 
+  /**
+   * Persists `project`'s output effect chain without notifying project listeners: they rebuild the timeline and
+   * clear its selection, which effect edits, made during playback too, must not do.
+   */
+  static async saveOutputEffects(project: Project) {
+    await DatabasePersister.save(project)
+  }
+
   static async getActiveProject(): Promise<Project> {
     if (ProjectManager.activeProject) {
       return ProjectManager.activeProject

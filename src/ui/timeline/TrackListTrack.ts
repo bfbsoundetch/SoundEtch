@@ -80,7 +80,7 @@ export class TrackListTrack {
     effectButton.classList = 'track-effect-selector clickable'
     effectButton.innerText = 'Effects'
     effectButton.addEventListener('click', () => {
-      EffectPanelController.getInstance().showTrackEffectsList(track)
+      EffectPanelController.getInstance().showEffectsList(track)
     })
     ProjectManager.addTrackListener(track, () => {
       effectButton.innerText = 'Effects' + (track.effectRegions.length > 0 ? ` (${track.effectRegions.length})` : '')
