@@ -1939,6 +1939,24 @@ video {
   display: none;
 }
 
+/* Where a scene transition plays, centered on its boundary. */
+.output-scene-transition {
+  position: absolute;
+  top: 0.5rem;
+  bottom: 0.5rem;
+  z-index: 2;
+  pointer-events: none;
+  background: repeating-linear-gradient(
+    135deg,
+    color-mix(in srgb, var(--color) 30%, transparent) 0 2px,
+    transparent 2px 6px
+  );
+}
+
+.output-scene-transition[hidden] {
+  display: none;
+}
+
 .timeline-output-lane.is-resizing-scene {
   cursor: col-resize;
 }
@@ -1951,7 +1969,8 @@ video {
   height: 100%;
 }
 
-.timeline-output-lane.is-automating > .output-scene-boundary {
+.timeline-output-lane.is-automating > .output-scene-boundary,
+.timeline-output-lane.is-automating > .output-scene-transition {
   display: none;
 }
 
@@ -4664,14 +4683,22 @@ input::placeholder {
 }
 
 .output-panel-preview {
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
+  position: relative;
   width: min(100%, calc(100cqh * 16 / 9));
   max-width: 64rem;
   aspect-ratio: 16 / 9;
   overflow: hidden;
   background: #000;
   color: #fff;
+}
+
+/* One scene's composed picture; a transition stacks, moves, and fades two of them. */
+.output-panel-preview-layer {
+  position: absolute;
+  inset: 0;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr);
+  background: #000;
 }
 
 .output-panel-preview-split {

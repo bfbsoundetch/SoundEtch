@@ -8,6 +8,18 @@ export interface CropPosition {
   scale?: number
 }
 
+export type OutputTransitionKind = 'fade' | 'crossfade' | 'slide' | 'push' | 'zoom'
+export type OutputTransitionDirection = 'left' | 'right' | 'up' | 'down'
+
+/** How a scene replaces the previous one. It plays centered on their boundary. */
+export interface OutputTransition {
+  kind: OutputTransitionKind
+  /** Seconds; playback shortens it to at most half of either adjacent scene. */
+  duration: number
+  /** The way Slide and Push move the pictures; other kinds ignore it. */
+  direction: OutputTransitionDirection
+}
+
 export interface OutputScene {
   startSample: number
   layout: 'single' | 'side-by-side'
@@ -17,7 +29,13 @@ export interface OutputScene {
   /** Frame styling in pixels on the 1920×1080 output canvas; absent values are zero. */
   cornerRadius?: number
   margin?: number
+  /** The change from the previous scene at this scene's start; absent values cut. The first scene has none. */
+  transition?: OutputTransition
 }
+
+export const OUTPUT_TRANSITION_KINDS: readonly OutputTransitionKind[] = ['fade', 'crossfade', 'slide', 'push', 'zoom']
+export const OUTPUT_TRANSITION_DIRECTIONS: readonly OutputTransitionDirection[] = ['left', 'right', 'up', 'down']
+export const DEFAULT_OUTPUT_TRANSITION_DURATION = 0.5
 
 export const MIN_OUTPUT_CROP_SCALE = 1
 export const MAX_OUTPUT_CROP_SCALE = 4
@@ -38,12 +56,19 @@ export function getOutputCropScale(scene: OutputScene, slot: number): number {
   return clampOutputCropScale(getOutputCropPosition(scene, slot).scale ?? MIN_OUTPUT_CROP_SCALE)
 }
 
+/** The transition into scene `index`, or null where the scenes cut. */
+export function getOutputTransition(scenes: readonly OutputScene[], index: number): Readonly<OutputTransition> | null {
+  const transition = index > 0 ? scenes[index]?.transition : undefined
+  return transition && OUTPUT_TRANSITION_KINDS.includes(transition.kind) ? transition : null
+}
+
 /** Copy editable scene data while retaining source track identities. */
 export function cloneOutputScene(scene: OutputScene): OutputScene {
   const copy: OutputScene = { ...scene, tracks: [...scene.tracks] }
   if (scene.cropPositions) {
     copy.cropPositions = [{ ...scene.cropPositions[0] }, { ...scene.cropPositions[1] }]
   }
+  if (scene.transition) copy.transition = { ...scene.transition }
   return copy
 }
 
@@ -77,11 +102,13 @@ export function splitOutputScene(
   const result = scenes.map(cloneOutputScene)
   const inherited = cloneOutputScene(result[index])
   inherited.startSample = sample
+  // The new boundary starts as a cut; the containing scene keeps the transition at its own start.
+  delete inherited.transition
   result.splice(index + 1, 0, inherited)
   return result
 }
 
-/** Move an interior boundary; collapsing either adjacent scene removes only that scene. */
+/** Move an interior boundary; collapsing either adjacent scene removes only that scene and its transition. */
 export function moveOutputSceneBoundary(
   scenes: readonly OutputScene[],
   index: number,
@@ -106,6 +133,8 @@ export function moveOutputSceneBoundary(
   if (target === minimum) {
     result.splice(index - 1, 1)
     result[index - 1].startSample = target
+    // A scene that becomes the first one has nothing to transition from.
+    if (index === 1) delete result[0].transition
   } else if (target === maximum) {
     result.splice(index, 1)
   } else {

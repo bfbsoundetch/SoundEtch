@@ -2,7 +2,7 @@ import type { VideoSample } from 'mediabunny'
 
 /** Paints in canvas coordinates; optional overflow storage is owned and reused by the caller. */
 export function paintVideoFrame(
-  context: CanvasRenderingContext2D,
+  context: CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D,
   frame: VideoSample,
   x: number,
   y: number,

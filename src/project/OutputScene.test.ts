@@ -4,6 +4,7 @@ import {
   getOutputCropPosition,
   getOutputCropScale,
   getOutputSceneIndex,
+  getOutputTransition,
   MAX_OUTPUT_CROP_SCALE,
   MIN_OUTPUT_CROP_SCALE,
   moveOutputSceneBoundary,
@@ -255,4 +256,44 @@ test('unchanged, nonexistent, and non-interior boundaries do not produce scene e
   }
   expect(moveOutputSceneBoundary(scenes, 1, 150, 0)).toBeNull()
   expect(moveOutputSceneBoundary([], 1, 150, 200)).toBeNull()
+})
+
+test('a split leaves the new boundary a cut while the containing scene keeps its transition', () => {
+  const scenes: OutputScene[] = [
+    { startSample: 0, layout: 'single', fit: 'contain', tracks: [null, null] },
+    {
+      startSample: 100,
+      layout: 'single',
+      fit: 'cover',
+      tracks: [null, null],
+      transition: { kind: 'push', duration: 1, direction: 'up' },
+    },
+  ]
+  const split = splitOutputScene(scenes, 150, 200)!
+  expect(split.map((_, index) => getOutputTransition(split, index))).toEqual([
+    null,
+    { kind: 'push', duration: 1, direction: 'up' },
+    null,
+  ])
+  split[1].transition!.duration = 2
+  expect(scenes[1].transition!.duration).toBe(1)
+})
+
+test('collapsing a scene removes its transition, and a scene that becomes first loses its own', () => {
+  const scenes: OutputScene[] = (['crossfade', 'fade', 'slide'] as const).map((kind, index) => ({
+    startSample: index * 100,
+    layout: 'single',
+    fit: 'contain',
+    tracks: [null, null],
+    transition: { kind, duration: 0.5, direction: 'left' },
+  }))
+  const kinds = (moved: OutputScene[]) => moved.map((_, index) => getOutputTransition(moved, index)?.kind ?? null)
+  // Either way scene 2 is removed with its fade, and the slide into scene 3 remains.
+  expect(kinds(moveOutputSceneBoundary(scenes, 1, 200, 300)!)).toEqual([null, 'slide'])
+  expect(kinds(moveOutputSceneBoundary(scenes, 2, 100, 300)!)).toEqual([null, 'slide'])
+  const firstRemoved = moveOutputSceneBoundary(scenes, 1, 0, 300)!
+  expect(firstRemoved.map((scene) => [scene.startSample, scene.transition?.kind])).toEqual([
+    [0, undefined],
+    [200, 'slide'],
+  ])
 })

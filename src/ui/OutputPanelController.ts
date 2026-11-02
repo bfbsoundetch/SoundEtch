@@ -4,17 +4,23 @@ import type { Project } from '../project/Project'
 import {
   clampOutputCropScale,
   cloneOutputScene,
+  DEFAULT_OUTPUT_TRANSITION_DURATION,
   getOutputCropPosition,
   getOutputCropScale,
+  getOutputTransition,
   MAX_OUTPUT_CROP_SCALE,
   MIN_OUTPUT_CROP_SCALE,
   getOutputSceneIndex,
+  OUTPUT_TRANSITION_DIRECTIONS,
+  OUTPUT_TRANSITION_KINDS,
   splitOutputScene,
   type OutputScene,
+  type OutputTransitionDirection,
 } from '../project/OutputScene'
 import { OutputBus } from '../project/OutputBus'
 import { ProjectManager } from '../project/ProjectManager'
 import type { Track } from '../project/Track'
+import { getOutputSceneLayers, OUTPUT_TRANSITION_LABELS, type OutputSceneLayer } from '../video/OutputTransition'
 import { resolveVideoFrame } from '../video/VideoFrameResolver'
 import { VideoPreview } from '../video/VideoPreview'
 import { BottomPanelController } from './BottomPanelController'
@@ -29,11 +35,24 @@ interface OutputPanelWindow extends Window {
 }
 
 type PreviewSlot = {
+  layer: PreviewLayer
+  /** Position in the layer's scene: 0 is the single or left video. */
+  index: number
   element: HTMLDivElement
   canvas: HTMLCanvasElement
   status: HTMLParagraphElement
   preview: VideoPreview
   empty: boolean
+}
+
+/** One scene's composed picture. A transition shows two, moved and faded like the export's. */
+type PreviewLayer = {
+  element: HTMLDivElement
+  slots: PreviewSlot[]
+  /** Start of the scene shown by the last render; NaN while hidden. */
+  sceneStart: number
+  /** The applied stacking order, opacity, and transform. */
+  style: string
 }
 
 type CropDrag = {
@@ -76,6 +95,13 @@ const SECTION_LABELS: Record<OutputSection, string> = { audio: 'Audio', video: '
 const FRAME_REFERENCE_HEIGHT = 1080
 const MAX_CORNER_RADIUS = FRAME_REFERENCE_HEIGHT / 2
 const MAX_FRAME_MARGIN = 240
+const DIRECTION_LABELS: Record<OutputTransitionDirection, string> = {
+  left: 'Left',
+  right: 'Right',
+  up: 'Up',
+  down: 'Down',
+}
+const TRANSITION_DURATIONS = [0.25, 0.5, 0.75, 1, 1.5, 2]
 
 const cancelledEdit = new Error('The output scene is no longer editable.')
 
@@ -97,11 +123,21 @@ export class OutputPanelController {
   private readonly sourceFields: HTMLLabelElement[] = []
   private readonly scaleFields: HTMLDivElement[] = []
   private readonly scaleButtons: [HTMLButtonElement, HTMLButtonElement][] = []
+  private readonly transitionSelect = document.createElement('select')
+  private readonly directionSelect = document.createElement('select')
+  private readonly durationSelect = document.createElement('select')
+  private readonly transitionField: HTMLLabelElement
+  private readonly directionField: HTMLLabelElement
+  private readonly durationField: HTMLLabelElement
   private readonly splitButton = document.createElement('button')
   private readonly stage = document.createElement('div')
   private readonly emptyMessage = document.createElement('p')
   private readonly resizeObserver: ResizeObserver
-  private readonly slots: PreviewSlot[] = []
+  /** Each layer keeps showing its scene across frames, so its decoders continue. */
+  private readonly layers: readonly [PreviewLayer, PreviewLayer]
+  /** The layer showing the scene at the position marker, which crop gestures and scale buttons edit. */
+  private controlLayer: PreviewLayer | null = null
+  private transitioning = false
   private project: Project | null = null
   /** What the effect chain was last built from; refreshes rebuild it only when it changes. */
   private renderedEffects = ''
@@ -249,6 +285,47 @@ export class OutputPanelController {
         }, 'change output video source')
       })
     })
+    this.transitionSelect.id = 'output-panel-transition'
+    this.transitionSelect.append(
+      new Option('Cut', ''),
+      ...OUTPUT_TRANSITION_KINDS.map((kind) => new Option(OUTPUT_TRANSITION_LABELS[kind], kind)),
+    )
+    this.directionSelect.id = 'output-panel-transition-direction'
+    this.directionSelect.append(
+      ...OUTPUT_TRANSITION_DIRECTIONS.map((direction) => new Option(DIRECTION_LABELS[direction], direction)),
+    )
+    this.durationSelect.id = 'output-panel-transition-duration'
+    this.durationSelect.append(...TRANSITION_DURATIONS.map((seconds) => new Option(`${seconds} s`, String(seconds))))
+    this.transitionField = this.field('Transition from previous scene', this.transitionSelect)
+    this.directionField = this.field('Direction', this.directionSelect)
+    this.durationField = this.field('Duration', this.durationSelect)
+    this.controls.append(this.transitionField, this.directionField, this.durationField)
+    this.transitionSelect.addEventListener('change', () => {
+      const kind = OUTPUT_TRANSITION_KINDS.find((candidate) => candidate === this.transitionSelect.value)
+      void this.editScene((scene) => {
+        if (!kind) {
+          delete scene.transition
+          return
+        }
+        scene.transition = {
+          kind,
+          duration: scene.transition?.duration ?? DEFAULT_OUTPUT_TRANSITION_DURATION,
+          direction: scene.transition?.direction ?? 'left',
+        }
+      }, 'change output transition')
+    })
+    this.directionSelect.addEventListener('change', () => {
+      const direction = OUTPUT_TRANSITION_DIRECTIONS.find((candidate) => candidate === this.directionSelect.value)
+      void this.editScene((scene) => {
+        if (scene.transition && direction) scene.transition.direction = direction
+      }, 'change output transition direction')
+    })
+    this.durationSelect.addEventListener('change', () => {
+      const duration = Number(this.durationSelect.value)
+      void this.editScene((scene) => {
+        if (scene.transition) scene.transition.duration = duration
+      }, 'change output transition duration')
+    })
     this.layoutSelect.addEventListener('change', () => {
       const layout = this.layoutSelect.value === 'side-by-side' ? 'side-by-side' : 'single'
       void this.editScene((scene) => {
@@ -275,7 +352,7 @@ export class OutputPanelController {
     const note = document.createElement('p')
     note.className = 'output-panel-note'
     note.textContent =
-      'Automatic uses the first video track, then the second for the right side. Gaps stay black. Video publishing renders these scenes with the project audio mix.'
+      'Automatic uses the first video track, then the second for the right side. Gaps stay black. A transition plays centered on the start of its scene. Video publishing renders these scenes with the project audio mix.'
     this.controls.append(this.splitButton, note)
 
     const previewArea = document.createElement('div')
@@ -283,6 +360,7 @@ export class OutputPanelController {
     this.stage.id = 'output-panel-preview'
     this.stage.className = 'output-panel-preview'
     this.stage.setAttribute('aria-label', 'Composed output preview, 16 by 9')
+    this.layers = [this.createLayer(), this.createLayer()]
     previewArea.appendChild(this.stage)
     this.emptyMessage.className = 'bottom-panel-message'
     this.emptyMessage.textContent = 'No project is open.'
@@ -403,6 +481,14 @@ export class OutputPanelController {
       : AudioControl.startPosition
   }
 
+  /** Includes a scene boundary drag in progress on the timeline. */
+  private getScenes(project: Project): readonly OutputScene[] {
+    return (
+      (window as OutputPanelWindow).trackListController?.outputTimelineController.getScenes(project) ??
+      project.outputScenes
+    )
+  }
+
   private canEdit(): boolean {
     const trackList = (window as OutputPanelWindow).trackListController
     if (trackList) return trackList.canEdit() && !trackList.outputTimelineController.isEditing
@@ -410,7 +496,7 @@ export class OutputPanelController {
     return state === AudioState.STOPPED || state === AudioState.MONITORING || state === AudioState.MONITORING_PAUSED
   }
 
-  private refreshControls(): OutputScene | null {
+  private refreshControls(sample = this.cursorSample()): OutputScene | null {
     const project = this.project
     this.controls.hidden = !project
     this.stage.parentElement!.hidden = !project
@@ -439,10 +525,7 @@ export class OutputPanelController {
         )
       }
     }
-    const sample = this.cursorSample()
-    const scenes =
-      (window as OutputPanelWindow).trackListController?.outputTimelineController.getScenes(project) ??
-      project.outputScenes
+    const scenes = this.getScenes(project)
     const index = getOutputSceneIndex(scenes, sample)
     const scene = scenes[index]
     if (!scene) return null
@@ -499,6 +582,21 @@ export class OutputPanelController {
         }
       })
     })
+    const transition = getOutputTransition(scenes, index)
+    // The first scene starts the video, so it has nothing to transition from.
+    this.transitionField.hidden = index === 0
+    this.directionField.hidden = index === 0 || (transition?.kind !== 'slide' && transition?.kind !== 'push')
+    this.durationField.hidden = index === 0 || !transition
+    const kind = transition?.kind ?? ''
+    if (this.transitionSelect.value !== kind) this.transitionSelect.value = kind
+    if (transition) {
+      if (this.directionSelect.value !== transition.direction) this.directionSelect.value = transition.direction
+      const duration = String(transition.duration)
+      if (this.durationSelect.value !== duration) this.durationSelect.value = duration
+    }
+    this.transitionSelect.disabled = !editable
+    this.directionSelect.disabled = !editable
+    this.durationSelect.disabled = !editable
     const marker = AudioControl.startPosition
     const validSplit =
       Number.isInteger(marker) &&
@@ -512,42 +610,99 @@ export class OutputPanelController {
   private render(): void {
     if (this.cropDrag && !this.isCropDragValid(this.cropDrag)) this.cancelCropDrag()
     if (this.frameStyleEdit && !this.isFrameStyleEditValid(this.frameStyleEdit)) this.frameStyleEdit = null
-    const scene = this.refreshControls()
+    const sample = this.cursorSample()
+    const scene = this.refreshControls(sample)
     const project = this.project
     if (!project || !scene || !this.running) return
+    const scenes = this.getScenes(project)
+    const visible = getOutputSceneLayers(scenes, sample, project.sampleRate, project.getLength())
+    const layers = this.assignLayers(visible.map((composition) => scenes[composition.index]))
+    const control = getOutputSceneIndex(scenes, sample)
+    this.controlLayer = layers[visible.findIndex((composition) => composition.index === control)] ?? null
+    this.transitioning = visible.length > 1
+    for (const layer of this.layers) if (!layers.includes(layer)) this.hideLayer(layer)
+    const recording = isRecordingState(AudioControl.getState())
+    visible.forEach((composition, order) =>
+      this.renderLayer(layers[order], scenes[composition.index], composition, order, project, sample, recording),
+    )
+    this.geometryChanged = false
+  }
+
+  /** Keeps each layer on the scene it showed, so its decoders continue; other scenes take the remaining layers. */
+  private assignLayers(scenes: readonly OutputScene[]): PreviewLayer[] {
+    const kept = scenes.map((scene) => this.layers.find((layer) => layer.sceneStart === scene.startSample))
+    // A layer that showed a scene in the last frame goes first: at a cut, the next scene continues decoding there.
+    const free = this.layers
+      .filter((layer) => !kept.includes(layer))
+      .sort((a, b) => Number(Number.isNaN(a.sceneStart)) - Number(Number.isNaN(b.sceneStart)))
+    return kept.map((layer) => layer ?? free.shift()!)
+  }
+
+  private hideLayer(layer: PreviewLayer): void {
+    if (layer.element.hidden) return
+    layer.element.hidden = true
+    layer.sceneStart = NaN
+    for (const slot of layer.slots) {
+      if (!slot.empty) slot.preview.clear()
+      slot.empty = true
+    }
+  }
+
+  private renderLayer(
+    layer: PreviewLayer,
+    scene: OutputScene,
+    composition: OutputSceneLayer,
+    order: number,
+    project: Project,
+    sample: number,
+    recording: boolean,
+  ): void {
+    let redraw = this.geometryChanged || layer.element.hidden
+    layer.element.hidden = false
+    layer.sceneStart = scene.startSample
     const count = scene.layout === 'single' ? 1 : 2
-    if (this.slots.length !== count) {
-      while (this.slots.length > count) {
-        const slot = this.slots.pop()!
+    if (layer.slots.length !== count) {
+      while (layer.slots.length > count) {
+        const slot = layer.slots.pop()!
         slot.preview.release()
         slot.element.remove()
       }
-      while (this.slots.length < count) this.addSlot()
-      this.geometryChanged = true
+      while (layer.slots.length < count) this.addSlot(layer)
+      redraw = true
     }
-    this.stage.classList.toggle('output-panel-preview-split', count === 2)
+    layer.element.classList.toggle('output-panel-preview-split', count === 2)
+    const { x, y, scale } = composition
+    const transform = x !== 0 || y !== 0 || scale !== 1 ? `translate(${x * 100}%, ${y * 100}%) scale(${scale})` : ''
+    const opacity = composition.opacity === 1 ? '' : String(composition.opacity)
+    const style = `${order}|${opacity}|${transform}`
+    if (layer.style !== style) {
+      // As in the export, the incoming scene paints over the outgoing one, each with its black background.
+      layer.style = style
+      layer.element.style.zIndex = String(order)
+      layer.element.style.opacity = opacity
+      layer.element.style.transform = transform
+    }
     const frameScale = this.stage.clientHeight / FRAME_REFERENCE_HEIGHT
     const frameMargin = Math.max(0, Math.min(MAX_FRAME_MARGIN, this.frameStyleValue(scene, 'margin'))) * frameScale
     const frameRadius =
       Math.max(0, Math.min(MAX_CORNER_RADIUS, this.frameStyleValue(scene, 'cornerRadius'))) * frameScale
-    const recording = isRecordingState(AudioControl.getState())
-    const sample = this.cursorSample()
-    for (let index = 0; index < count; ++index) {
-      const slot = this.slots[index]
-      const selected = scene.tracks[index]
-      const track = selected === null ? this.videoTracks[index] : selected
+    // Reframing edits the scene at the marker, and only while no transition moves or fades its picture.
+    const reframable = layer === this.controlLayer && !this.transitioning && this.canEdit() && !this.editing
+    for (const slot of layer.slots) {
+      const selected = scene.tracks[slot.index]
+      const track = selected === null ? this.videoTracks[slot.index] : selected
       const target =
         !recording && track && project.getTracks().includes(track)
           ? resolveVideoFrame(track.clipViews, sample, project.sampleRate)
           : null
-      const position = getOutputCropPosition(scene, index)
+      const position = getOutputCropPosition(scene, slot.index)
       const drag = this.cropDrag?.slot === slot ? this.cropDrag : null
       slot.preview.setFraming(
         scene.fit,
         drag?.x ?? position.x,
         drag?.y ?? position.y,
         frameRadius,
-        getOutputCropScale(scene, index),
+        getOutputCropScale(scene, slot.index),
         frameMargin,
       )
       if (!target) {
@@ -568,9 +723,9 @@ export class OutputPanelController {
       slot.empty = false
       slot.canvas.setAttribute(
         'aria-label',
-        `Output ${count === 1 ? 'video' : index === 0 ? 'left video' : 'right video'}: ${track!.name}`,
+        `Output ${count === 1 ? 'video' : slot.index === 0 ? 'left video' : 'right video'}: ${track!.name}`,
       )
-      slot.preview.request(project.directoryName, project.sampleRate, target, this.geometryChanged)
+      slot.preview.request(project.directoryName, project.sampleRate, target, redraw)
       const overflow = slot.preview.getCropOverflow()
       if (
         drag &&
@@ -585,14 +740,21 @@ export class OutputPanelController {
         drag.overflowX = overflow.x
         drag.overflowY = overflow.y
       }
-      const pannable = this.canEdit() && !this.editing && overflow !== null && (overflow.x > 0 || overflow.y > 0)
+      const pannable = reframable && overflow !== null && (overflow.x > 0 || overflow.y > 0)
       slot.element.classList.toggle('is-pannable', pannable)
       slot.canvas.tabIndex = pannable ? 0 : -1
     }
-    this.geometryChanged = false
   }
 
-  private addSlot(): void {
+  private createLayer(): PreviewLayer {
+    const element = document.createElement('div')
+    element.className = 'output-panel-preview-layer'
+    element.hidden = true
+    this.stage.appendChild(element)
+    return { element, slots: [], sceneStart: NaN, style: '' }
+  }
+
+  private addSlot(layer: PreviewLayer): void {
     const element = document.createElement('div')
     element.className = 'output-panel-preview-slot'
     const canvas = document.createElement('canvas')
@@ -607,6 +769,8 @@ export class OutputPanelController {
     status.setAttribute('role', 'status')
     element.append(canvas, status)
     const slot: PreviewSlot = {
+      layer,
+      index: layer.slots.length,
       element,
       canvas,
       status,
@@ -625,8 +789,8 @@ export class OutputPanelController {
     // only end signal. Every deliberate cancel clears the drag first, so capture loss still pending commits it.
     canvas.addEventListener('lostpointercapture', (event) => this.finishCropDrag(event, true))
     canvas.addEventListener('keydown', (event) => this.moveCropWithKeyboard(slot, event))
-    this.slots.push(slot)
-    this.stage.appendChild(element)
+    layer.slots.push(slot)
+    layer.element.appendChild(element)
   }
 
   private setStatus(slot: PreviewSlot, message: string): void {
@@ -637,9 +801,15 @@ export class OutputPanelController {
   private releaseSlots(): void {
     this.cancelCropDrag()
     this.frameStyleEdit = null
-    for (const slot of this.slots) slot.preview.release()
-    this.slots.length = 0
-    this.stage.replaceChildren()
+    for (const layer of this.layers) {
+      for (const slot of layer.slots) slot.preview.release()
+      layer.slots.length = 0
+      layer.element.replaceChildren()
+      layer.element.hidden = true
+      layer.sceneStart = NaN
+    }
+    this.controlLayer = null
+    this.transitioning = false
     this.geometryChanged = true
   }
 
@@ -653,7 +823,9 @@ export class OutputPanelController {
       this.editing ||
       !this.running ||
       !this.canEdit() ||
-      slot.empty
+      slot.empty ||
+      slot.layer !== this.controlLayer ||
+      this.transitioning
     )
       return
     const sample = this.cursorSample()
@@ -663,13 +835,13 @@ export class OutputPanelController {
     event.preventDefault()
     event.stopPropagation()
     slot.canvas.focus({ preventScroll: true })
-    const position = getOutputCropPosition(scene, this.slots.indexOf(slot))
+    const position = getOutputCropPosition(scene, slot.index)
     this.cropDrag = {
       project,
       scene,
       sample,
       slot,
-      slotIndex: this.slots.indexOf(slot),
+      slotIndex: slot.index,
       pointerId: event.pointerId,
       clientX: event.clientX,
       clientY: event.clientY,
@@ -785,7 +957,7 @@ export class OutputPanelController {
     if (scale === oldScale) return
     const position = getOutputCropPosition(scene, index)
     let { x, y } = position
-    const slot = this.slots[index]
+    const slot = this.controlLayer?.slots[index]
     const overflow = slot && !slot.empty ? slot.preview.getCropOverflow() : null
     if (slot && overflow) {
       const ratio = scale / oldScale
@@ -817,7 +989,9 @@ export class OutputPanelController {
       this.cropDrag ||
       this.editing ||
       !this.canEdit() ||
-      slot.empty
+      slot.empty ||
+      slot.layer !== this.controlLayer ||
+      this.transitioning
     )
       return
     let dx = 0
@@ -845,7 +1019,7 @@ export class OutputPanelController {
     if (!scene || scene.fit !== 'cover' || !overflow || (overflow.x === 0 && overflow.y === 0)) return
     event.preventDefault()
     event.stopPropagation()
-    const index = this.slots.indexOf(slot)
+    const index = slot.index
     const position = getOutputCropPosition(scene, index)
     const x = overflow.x > 0 ? Math.max(0, Math.min(1, position.x - dx / overflow.x)) : position.x
     const y = overflow.y > 0 ? Math.max(0, Math.min(1, position.y - dy / overflow.y)) : position.y

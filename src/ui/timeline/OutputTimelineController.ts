@@ -3,7 +3,7 @@ import { TimeUtils } from '../../global/TimeUtils'
 import type { Project } from '../../project/Project'
 import { ProjectManager } from '../../project/ProjectManager'
 import { OutputBus } from '../../project/OutputBus'
-import { getOutputSceneIndex, moveOutputSceneBoundary } from '../../project/OutputScene'
+import { getOutputSceneIndex, getOutputTransition, moveOutputSceneBoundary } from '../../project/OutputScene'
 import type { OutputScene } from '../../project/OutputScene'
 import { EffectPanelController } from '../effects/EffectPanelController'
 import { NotificationsController } from '../NotificationsController'
@@ -11,6 +11,7 @@ import { SetOutputScenesCommand } from '../undo/SetOutputScenesCommand'
 import type { OutputPanelController } from '../OutputPanelController'
 import type { TrackListController } from './TrackListController'
 import { stepTimelinePosition } from './TimelineKeyboardSteps'
+import { getOutputTransitionWindow, OUTPUT_TRANSITION_LABELS } from '../../video/OutputTransition'
 
 interface OutputTimelineWindow extends Window {
   readonly outputPanelController?: OutputPanelController
@@ -40,6 +41,8 @@ export class OutputTimelineController {
   private automating = false
   private readonly blocks: HTMLElement[] = []
   private readonly boundaries: HTMLElement[] = []
+  /** One per boundary: where its transition plays, if any. */
+  private readonly transitionBands: HTMLElement[] = []
   private drag: BoundaryDrag | null = null
   private editing = false
   private renderedDrag: BoundaryDrag | null = null
@@ -171,6 +174,23 @@ export class OutputTimelineController {
         block.textContent = `Scene ${index + 1} · ${scene.layout === 'single' ? 'One video' : 'Side by side'} · ${scene.fit === 'contain' ? 'Fit' : 'Crop'}`
         block.classList.toggle('is-active', index === active)
       }
+      while (this.transitionBands.length > Math.max(0, scenes.length - 1)) this.transitionBands.pop()!.remove()
+      for (let index = 1; index < scenes.length; ++index) {
+        let band = this.transitionBands[index - 1]
+        if (!band) {
+          band = document.createElement('div')
+          band.className = 'output-scene-transition'
+          band.setAttribute('aria-hidden', 'true')
+          this.lane.appendChild(band)
+          this.transitionBands.push(band)
+        }
+        const span = getOutputTransitionWindow(scenes, index, project.sampleRate, length)
+        const left = span ? Math.max(0, span.start / this.timeline.sampleScale - this.timeline.translation) : 0
+        const right = span ? Math.min(width, span.end / this.timeline.sampleScale - this.timeline.translation) : 0
+        band.hidden = right <= left
+        band.style.left = `${left}px`
+        band.style.width = `${Math.max(0, right - left)}px`
+      }
       this.renderedScenes = scenes
       this.renderedScale = this.timeline.sampleScale
       this.renderedTranslation = this.timeline.translation
@@ -206,7 +226,12 @@ export class OutputTimelineController {
         boundary.dataset.sceneBoundary = String(index)
         boundary.tabIndex = editable ? 0 : -1
         boundary.setAttribute('aria-disabled', String(!editable))
-        boundary.setAttribute('aria-label', `Boundary between scenes ${index} and ${index + 1}`)
+        const transition = getOutputTransition(original, index)
+        boundary.setAttribute(
+          'aria-label',
+          `Boundary between scenes ${index} and ${index + 1}` +
+            (transition ? `, ${OUTPUT_TRANSITION_LABELS[transition.kind]} transition` : ''),
+        )
         boundary.setAttribute('aria-valuemin', String(original[index - 1].startSample))
         boundary.setAttribute('aria-valuemax', String(Math.min(original[index + 1]?.startSample ?? length, length)))
         boundary.setAttribute('aria-valuenow', String(position))
