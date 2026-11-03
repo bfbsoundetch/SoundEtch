@@ -14,7 +14,7 @@ export interface TrackTranscriptEntry {
   readonly kind?: TranscriptGapKind
 }
 
-export function getTrackTranscriptEntries(track: Track): TrackTranscriptEntry[] {
+export function getTrackTranscriptEntries(track: Pick<Track, 'clipViews'>): TrackTranscriptEntry[] {
   const entries: TrackTranscriptEntry[] = []
   track.clipViews.forEach((clipView, placementIndex) => {
     if (clipView.length <= 0) return

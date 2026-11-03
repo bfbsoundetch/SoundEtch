@@ -71,6 +71,35 @@ export class Summary {
     return result
   }
 
+  /**
+   * Channel-averaged power estimate from waveform peaks, weighted by covered samples.
+   * NaN means the represented audio's summary buckets have not arrived yet, not silence.
+   */
+  getMeanSquaredPeak(startSample: number, endSample: number): number {
+    const start = Math.max(0, startSample)
+    const end = Math.min(this.samplesRepresented[0], endSample)
+    if (end <= start) return 0
+    let energy = 0
+    for (
+      let sample = Math.floor(start / Summary.SAMPLES_PER_SUMMARY) * Summary.SAMPLES_PER_SUMMARY;
+      sample < end;
+      sample += Summary.SAMPLES_PER_SUMMARY
+    ) {
+      const values = this.summaryValues[this.getChunkIndex(sample)]
+      if (!values) return NaN
+      const position = this.getChunkPosition(sample)
+      const weight = Math.min(end, sample + Summary.SAMPLES_PER_SUMMARY) - Math.max(start, sample)
+      for (let channel = 0; channel < this.channelCount; ++channel) {
+        const peak = Math.max(
+          Math.abs(this.int16ToFloat(values[position + channel * 2])),
+          Math.abs(this.int16ToFloat(values[position + channel * 2 + 1])),
+        )
+        energy += peak * peak * weight
+      }
+    }
+    return energy / ((end - start) * this.channelCount)
+  }
+
   summarizeInterleavedData(data: Float32Array, length: number) {
     if (data.length % this.channelCount != 0) {
       throw new Error(`Input array length ${data.length} is not a multiple of ${this.channelCount} channel count`)

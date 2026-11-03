@@ -4,6 +4,7 @@ import { DatabasePersisted } from '../persistence/DatabasePersisted'
 import { Restorable } from '../persistence/Restoration'
 import { cloneOutputScene, type OutputScene } from './OutputScene'
 import type { EffectData } from '../effects/EffectData'
+import { DEFAULT_OUTPUT_CAPTIONS, type OutputCaptionSettings } from './OutputCaptions'
 
 @Restorable('Project')
 export class Project extends DatabasePersisted {
@@ -14,6 +15,7 @@ export class Project extends DatabasePersisted {
   outputScenes: OutputScene[] = [{ startSample: 0, layout: 'single', fit: 'contain', tracks: [null, null] }]
   /** Applied in order to the mix of all tracks, for playback and export alike. */
   readonly outputEffects: EffectData[] = []
+  outputCaptions: OutputCaptionSettings = { ...DEFAULT_OUTPUT_CAPTIONS }
 
   constructor(
     public title: string,
@@ -63,6 +65,9 @@ export class Project extends DatabasePersisted {
       if (copy.tracks[1] === track) copy.tracks[1] = null
       return copy
     })
+    if (this.outputCaptions.track === track) {
+      this.outputCaptions = { ...this.outputCaptions, enabled: false, track: null }
+    }
     track.stopPlayback()
     this.updateTrackAudibility()
   }

@@ -122,3 +122,57 @@ test('separate channel multiple input test', async () => {
   expect(secondChannelSummary[6]).toBeCloseTo(0.4, 4)
   expect(secondChannelSummary[7]).toBeCloseTo(-0.4, 4)
 })
+
+test('speaker level estimates weight partial buckets and average channels across chunk boundaries', () => {
+  const summary = new Summary(2, 8)
+  const data = new Float32Array(1024 * 2)
+  for (let sample = 0; sample < 1024; ++sample) {
+    const bucket = Math.floor(sample / 256)
+    data[sample * 2] = [0.25, 1, 0, -0.75][bucket]
+    data[sample * 2 + 1] = [-0.5, 0, 0, 0.75][bucket]
+  }
+  summary.summarizeInterleavedData(data, data.length)
+
+  expect(summary.getMeanSquaredPeak(128, 640)).toBeCloseTo((0.15625 * 128 + 0.5 * 256) / 512, 4)
+  expect(summary.getMeanSquaredPeak(512, 768)).toBe(0)
+  expect(summary.getMeanSquaredPeak(768, 1024)).toBeCloseTo(0.5625, 4)
+  expect(summary.getMeanSquaredPeak(768, 1200)).toBeCloseTo(0.5625, 4)
+})
+
+test('speaker level estimates use negative peaks and return zero outside represented audio', () => {
+  const summary = new Summary(1)
+  expect(summary.getMeanSquaredPeak(0, 256)).toBe(0)
+  const data = new Float32Array(256)
+  data[3] = -0.8
+  data[100] = 0.1
+  summary.summarizeInterleavedData(data, data.length)
+
+  expect(summary.getMeanSquaredPeak(-100, 256)).toBeCloseTo(0.64, 4)
+  expect(summary.getMeanSquaredPeak(256, 512)).toBe(0)
+  expect(summary.getMeanSquaredPeak(100, 100)).toBe(0)
+})
+
+test('speaker levels read restored summaries and their partial final bucket', async () => {
+  const summary = new Summary(1)
+  const values = new Int16Array([8192, -8192, 16384, -16384, 32767, -32768])
+  await summary.populateFromFile(
+    new File([values], 'summary'),
+    new File([new Float32Array(600)], 'audio'),
+    1,
+  )
+
+  expect(summary.getMeanSquaredPeak(512, 768)).toBe(1)
+  expect(summary.getMeanSquaredPeak(128, 600)).toBeCloseTo((0.0625 * 128 + 0.25 * 256 + 88) / 472, 4)
+})
+
+test('a pending summary level is unknown rather than a fabricated silent level', async () => {
+  const summary = new Summary(1)
+  summary.length = 256
+  expect(summary.getMeanSquaredPeak(0, 256)).toBeNaN()
+  await summary.populateFromFile(
+    new File([new Int16Array([16384, -16384])], 'summary'),
+    new File([new Float32Array(256)], 'audio'),
+    1,
+  )
+  expect(summary.getMeanSquaredPeak(0, 256)).toBeCloseTo(0.25, 4)
+})

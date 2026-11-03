@@ -1,7 +1,11 @@
 import type { VideoSample } from 'mediabunny'
+import type { OutputCaptionSettings } from '../project/OutputCaptions'
 import { cloneOutputScene, getOutputCropPosition, getOutputCropScale, type OutputScene } from '../project/OutputScene'
 import type { Project } from '../project/Project'
 import type { Track } from '../project/Track'
+import { findOutputCaptionWord } from './OutputCaptionCues'
+import { OutputCaptionSource } from './OutputCaptionSource'
+import { paintOutputCaption } from './OutputCaptionPainter'
 import { getOutputSceneLayers, getOutputTransitionWindow } from './OutputTransition'
 import { paintVideoFrame } from './VideoFramePainter'
 import { VideoFrameReader } from './VideoFrameReader'
@@ -13,6 +17,8 @@ type ReaderPair = readonly [VideoFrameReader, VideoFrameReader]
 export class OutputVideoCompositor {
   private readonly scenes: readonly OutputScene[]
   private readonly projectLength: number
+  private readonly captionSettings: Readonly<OutputCaptionSettings>
+  private readonly captionSource: OutputCaptionSource | null
   /**
    * The reader pair of each scene. A cut keeps the previous scene's pair, so its decoders continue; a transition
    * switches pairs, so both of its scenes decode sequentially while it plays.
@@ -44,6 +50,8 @@ export class OutputVideoCompositor {
     this.scenes = project.outputScenes.map(cloneOutputScene)
     this.sampleRate = project.sampleRate
     this.projectLength = project.getLength()
+    this.captionSettings = { ...project.outputCaptions }
+    this.captionSource = this.captionSettings.enabled ? new OutputCaptionSource(project, this.captionSettings) : null
     let pair: 0 | 1 = 0
     for (let index = 0; index < this.scenes.length; ++index) {
       if (getOutputTransitionWindow(this.scenes, index, this.sampleRate, this.projectLength)) pair = pair === 0 ? 1 : 0
@@ -140,6 +148,20 @@ export class OutputVideoCompositor {
         context.setTransform(1, 0, 0, 1, 0, 0)
         context.globalAlpha = 1
       })
+      // Captions are project-wide: draw last, in the fixed viewport, never inside a moving/fading scene.
+      const cue = this.captionSource?.getCue(projectSample)
+      if (cue) {
+        paintOutputCaption(
+          context,
+          cue,
+          findOutputCaptionWord(cue, projectSample),
+          this.captionSettings,
+          this.viewportX,
+          this.viewportY,
+          this.viewportWidth,
+          this.viewportHeight,
+        )
+      }
     } finally {
       context.restore()
     }

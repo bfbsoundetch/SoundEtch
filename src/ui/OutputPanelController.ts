@@ -26,6 +26,7 @@ import { VideoPreview } from '../video/VideoPreview'
 import { BottomPanelController } from './BottomPanelController'
 import { EffectPanelController } from './effects/EffectPanelController'
 import { NotificationsController } from './NotificationsController'
+import { OutputCaptionsController } from './OutputCaptionsController'
 import type { TrackListController } from './timeline/TrackListController'
 import { editorHistory } from './undo/EditorHistory'
 import { SetOutputScenesCommand } from './undo/SetOutputScenesCommand'
@@ -131,6 +132,7 @@ export class OutputPanelController {
   private readonly durationField: HTMLLabelElement
   private readonly splitButton = document.createElement('button')
   private readonly stage = document.createElement('div')
+  private readonly captions: OutputCaptionsController
   private readonly emptyMessage = document.createElement('p')
   private readonly resizeObserver: ResizeObserver
   /** Each layer keeps showing its scene across frames, so its decoders continue. */
@@ -214,6 +216,7 @@ export class OutputPanelController {
     this.sectionPanels.audio.appendChild(this.effects)
 
     this.controls.className = 'output-panel-controls'
+    this.captions = new OutputCaptionsController(this.stage, () => this.canEdit() && !this.editing)
     this.sceneLabel.id = 'output-panel-scene'
     this.sceneLabel.className = 'output-panel-scene'
     this.controls.appendChild(this.sceneLabel)
@@ -316,6 +319,7 @@ export class OutputPanelController {
       this.createControlsSection('Video sources', ...sourceControls),
       this.createControlsSection('Frame style', ...frameStyleFields),
       this.transitionSection,
+      this.createControlsSection('Captions', this.captions.controls),
     )
     this.transitionSelect.addEventListener('change', () => {
       const kind = OUTPUT_TRANSITION_KINDS.find((candidate) => candidate === this.transitionSelect.value)
@@ -406,12 +410,16 @@ export class OutputPanelController {
         // Views over the tab, such as effect editors, show the previous project's data.
         this.openRoot()
       }
+      this.captions.setProject(project)
       if (this.running) this.render()
       else this.refreshControls()
       this.refreshEffects()
     }).catch((error) => NotificationsController.showError(error))
     // Output effect edits are saved without notifying project listeners.
-    editorHistory.addChangeListener(() => this.refreshEffects())
+    editorHistory.addChangeListener(() => {
+      this.refreshEffects()
+      if (this.project) this.captions.setProject(this.project)
+    })
   }
 
   /** Selects Output on `section` and opens the bottom panel without requiring a track selection. */
@@ -643,6 +651,7 @@ export class OutputPanelController {
     const sample = this.cursorSample()
     const scene = this.refreshControls(sample)
     const project = this.project
+    this.captions.render(sample)
     if (!project || !scene || !this.running) return
     const scenes = this.getScenes(project)
     const visible = getOutputSceneLayers(scenes, sample, project.sampleRate, project.getLength())
