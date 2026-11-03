@@ -126,7 +126,7 @@ export class OutputPanelController {
   private readonly transitionSelect = document.createElement('select')
   private readonly directionSelect = document.createElement('select')
   private readonly durationSelect = document.createElement('select')
-  private readonly transitionField: HTMLLabelElement
+  private readonly transitionSection: HTMLDetailsElement
   private readonly directionField: HTMLLabelElement
   private readonly durationField: HTMLLabelElement
   private readonly splitButton = document.createElement('button')
@@ -221,7 +221,13 @@ export class OutputPanelController {
     this.layoutSelect.append(new Option('Single video', 'single'), new Option('Side by side', 'side-by-side'))
     this.fitSelect.id = 'output-panel-fit'
     this.fitSelect.append(new Option('Fit (contain)', 'contain'), new Option('Crop (cover)', 'cover'))
-    this.controls.append(this.field('Layout', this.layoutSelect), this.field('Framing', this.fitSelect))
+    const layoutSection = this.createControlsSection(
+      'Layout',
+      this.field('Layout', this.layoutSelect),
+      this.field('Framing', this.fitSelect),
+    )
+    layoutSection.open = true
+    const frameStyleFields: HTMLLabelElement[] = []
     for (const [property, label, input, maximum, id] of [
       ['cornerRadius', 'Corner radius', this.cornerRadiusInput, MAX_CORNER_RADIUS, 'output-panel-radius'],
       ['margin', 'Margin', this.marginInput, MAX_FRAME_MARGIN, 'output-panel-margin'],
@@ -242,13 +248,14 @@ export class OutputPanelController {
         event.stopPropagation()
         this.cancelFrameStyleEdit(input)
       })
-      this.controls.appendChild(this.field(label, input))
+      frameStyleFields.push(this.field(label, input))
     }
+    const sourceControls: HTMLElement[] = []
     this.sourceSelects.forEach((select, index) => {
       select.id = `output-panel-source-${index + 1}`
       const field = this.field(index === 0 ? 'Video source' : 'Right video source', select)
       this.sourceFields.push(field)
-      this.controls.appendChild(field)
+      sourceControls.push(field)
       const scaleField = document.createElement('div')
       scaleField.className = 'output-panel-field'
       scaleField.setAttribute('role', 'group')
@@ -276,7 +283,7 @@ export class OutputPanelController {
       scaleField.append(scaleLabel, buttons)
       this.scaleFields.push(scaleField)
       this.scaleButtons.push([decrease, increase])
-      this.controls.appendChild(scaleField)
+      sourceControls.push(scaleField)
       select.addEventListener('change', () => {
         const track = this.videoTracks[select.selectedIndex - 1] ?? null
         void this.editScene((scene) => {
@@ -296,10 +303,20 @@ export class OutputPanelController {
     )
     this.durationSelect.id = 'output-panel-transition-duration'
     this.durationSelect.append(...TRANSITION_DURATIONS.map((seconds) => new Option(`${seconds} s`, String(seconds))))
-    this.transitionField = this.field('Transition from previous scene', this.transitionSelect)
     this.directionField = this.field('Direction', this.directionSelect)
     this.durationField = this.field('Duration', this.durationSelect)
-    this.controls.append(this.transitionField, this.directionField, this.durationField)
+    this.transitionSection = this.createControlsSection(
+      'Transition',
+      this.field('Transition from previous scene', this.transitionSelect),
+      this.directionField,
+      this.durationField,
+    )
+    this.controls.append(
+      layoutSection,
+      this.createControlsSection('Video sources', ...sourceControls),
+      this.createControlsSection('Frame style', ...frameStyleFields),
+      this.transitionSection,
+    )
     this.transitionSelect.addEventListener('change', () => {
       const kind = OUTPUT_TRANSITION_KINDS.find((candidate) => candidate === this.transitionSelect.value)
       void this.editScene((scene) => {
@@ -428,6 +445,19 @@ export class OutputPanelController {
       this.sectionPanels[other].hidden = !selected
     }
     this.updateVisibility()
+  }
+
+  private createControlsSection(title: string, ...fields: HTMLElement[]): HTMLDetailsElement {
+    const section = document.createElement('details')
+    section.className = 'output-panel-controls-section'
+    const summary = document.createElement('summary')
+    summary.className = 'output-panel-controls-summary'
+    summary.textContent = title
+    const content = document.createElement('div')
+    content.className = 'output-panel-controls-section-content'
+    content.append(...fields)
+    section.append(summary, content)
+    return section
   }
 
   private field(text: string, control: HTMLSelectElement | HTMLInputElement): HTMLLabelElement {
@@ -584,9 +614,9 @@ export class OutputPanelController {
     })
     const transition = getOutputTransition(scenes, index)
     // The first scene starts the video, so it has nothing to transition from.
-    this.transitionField.hidden = index === 0
-    this.directionField.hidden = index === 0 || (transition?.kind !== 'slide' && transition?.kind !== 'push')
-    this.durationField.hidden = index === 0 || !transition
+    this.transitionSection.hidden = index === 0
+    this.directionField.hidden = transition?.kind !== 'slide' && transition?.kind !== 'push'
+    this.durationField.hidden = !transition
     const kind = transition?.kind ?? ''
     if (this.transitionSelect.value !== kind) this.transitionSelect.value = kind
     if (transition) {
