@@ -29,6 +29,13 @@ type BoundaryDrag = {
   sample: number
 }
 
+/** A boundary edit while it saves. */
+type PendingBoundaryEdit = {
+  project: Project
+  before: readonly OutputScene[]
+  after: readonly OutputScene[]
+}
+
 const cancelledBoundaryEdit = new Error('The output scene boundary is no longer editable.')
 
 /** Scene boundaries own their drag gestures; seeking uses the shared PointerStateManager. */
@@ -44,7 +51,8 @@ export class OutputTimelineController {
   /** One per boundary: where its transition plays, if any. */
   private readonly transitionBands: HTMLElement[] = []
   private drag: BoundaryDrag | null = null
-  private editing = false
+  /** Shown in place of `before` until the project holds it. */
+  private pendingEdit: PendingBoundaryEdit | null = null
   private renderedDrag: BoundaryDrag | null = null
   private renderedEditable = false
   private project: Project | null = null
@@ -83,24 +91,16 @@ export class OutputTimelineController {
       this.drag.clientX = event.clientX
       this.draw()
     })
-    this.lane.addEventListener('pointerup', (event) => {
-      const drag = this.drag
-      if (!drag || event.pointerId !== drag.pointerId) return
+    this.lane.addEventListener('pointerup', (event) => this.finishBoundaryDrag(event))
+    // Chrome on macOS can drop pointerup after a fast release (crbug.com/489633223), leaving capture loss as the
+    // only end signal. Every deliberate cancel clears the drag first, so capture loss still pending commits it.
+    this.lane.addEventListener('lostpointercapture', (event) => this.finishBoundaryDrag(event))
+    this.lane.addEventListener('pointercancel', (event) => {
+      if (event.pointerId !== this.drag?.pointerId) return
       event.stopPropagation()
-      drag.clientX = event.clientX
-      this.draw()
-      if (this.drag !== drag) return
       this.clearBoundaryDrag()
-      void this.commitBoundaryEdit(drag.project, drag.before, drag.preview)
+      this.draw()
     })
-    for (const name of ['pointercancel', 'lostpointercapture'] as const) {
-      this.lane.addEventListener(name, (event) => {
-        if (event.pointerId !== this.drag?.pointerId) return
-        event.stopPropagation()
-        this.clearBoundaryDrag()
-        this.draw()
-      })
-    }
     window.addEventListener('blur', () => {
       this.clearBoundaryDrag()
       this.draw()
@@ -200,7 +200,7 @@ export class OutputTimelineController {
       this.blocks[this.activeIndex]?.classList.remove('is-active')
       this.blocks[active]?.classList.add('is-active')
     }
-    const editable = this.timeline.canEdit() && !this.editing
+    const editable = this.timeline.canEdit() && !this.pendingEdit
     if (geometryChanged || this.renderedDrag !== this.drag || this.renderedEditable !== editable) {
       const original = this.drag?.before ?? scenes
       const count = Math.max(0, original.length - 1)
@@ -252,7 +252,7 @@ export class OutputTimelineController {
   }
 
   get isEditing(): boolean {
-    return this.drag !== null || this.editing
+    return this.drag !== null || this.pendingEdit !== null
   }
 
   /** Covers the lane with a surface for an AutomationController until `stopAutomation`. */
@@ -288,9 +288,11 @@ export class OutputTimelineController {
     }
   }
 
-  /** A drag previews scenes without exposing uncommitted edits to persistence or export. */
+  /** Drags and edits still saving preview scenes without exposing them to persistence or export. */
   getScenes(project: Project): readonly OutputScene[] {
-    return this.drag?.project === project && this.isDragValid(this.drag) ? this.drag.preview : project.outputScenes
+    if (this.drag?.project === project && this.isDragValid(this.drag)) return this.drag.preview
+    const edit = this.pendingEdit
+    return edit?.project === project && project.outputScenes === edit.before ? edit.after : project.outputScenes
   }
 
   private isDragValid(drag: BoundaryDrag): boolean {
@@ -346,6 +348,18 @@ export class OutputTimelineController {
     drag.preview = moveOutputSceneBoundary(drag.before, drag.index, sample, drag.length) ?? drag.before
   }
 
+  private finishBoundaryDrag(event: PointerEvent): void {
+    const drag = this.drag
+    if (!drag || event.pointerId !== drag.pointerId) return
+    event.stopPropagation()
+    // Only pointerup reports where the pointer ended; capture loss keeps the last move's position.
+    if (event.type === 'pointerup') drag.clientX = event.clientX
+    this.draw()
+    if (this.drag !== drag) return
+    this.clearBoundaryDrag()
+    void this.commitBoundaryEdit(drag.project, drag.before, drag.preview)
+  }
+
   private clearBoundaryDrag(): void {
     const drag = this.drag
     if (!drag) return
@@ -364,7 +378,7 @@ export class OutputTimelineController {
       return
     }
     const length = project.getLength()
-    this.editing = true
+    this.pendingEdit = { project, before, after }
     this.draw()
     const description = after.length < before.length ? 'remove output scene' : 'move output scene boundary'
     let command: SetOutputScenesCommand | null = null
@@ -392,7 +406,7 @@ export class OutputTimelineController {
       if (error !== cancelledBoundaryEdit)
         NotificationsController.showError(error instanceof Error ? error : new Error(String(error)))
     } finally {
-      this.editing = false
+      this.pendingEdit = null
       this.draw()
     }
   }

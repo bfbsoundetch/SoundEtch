@@ -481,7 +481,7 @@ export class OutputPanelController {
       : AudioControl.startPosition
   }
 
-  /** Includes a scene boundary drag in progress on the timeline. */
+  /** Includes a scene boundary drag or edit in progress on the timeline. */
   private getScenes(project: Project): readonly OutputScene[] {
     return (
       (window as OutputPanelWindow).trackListController?.outputTimelineController.getScenes(project) ??
