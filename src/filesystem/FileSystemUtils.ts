@@ -1,5 +1,6 @@
 import { GlobalSettings } from '../global/GlobalSettings'
 import { MemoryBackedFileSystem } from './MemoryBackedFileSystem'
+import type { FileSystemSyncAccessHandle } from './FileSystemSyncAccessHandle'
 
 export interface DirectoryFile {
   readonly path: string
@@ -41,6 +42,15 @@ export class FileSystemUtils {
       const nodefs = await import('./NodeFileSystemSyncAccessHandle')
       return nodefs.NodeFileSystemSyncAccessHandle.create(dirName + '/' + fileName)
     }
+  }
+
+  /** Immutable source PCM can be read by playback, export, and transcription concurrently. */
+  static async getReadOnlySyncAccessHandle(dirName: string, fileName: string): Promise<FileSystemSyncAccessHandle> {
+    // The DOM types omit the worker-only sync access API and its lock mode.
+    const file = (await FileSystemUtils.getFileHandle(dirName, fileName)) as FileSystemFileHandle & {
+      createSyncAccessHandle(options: { mode: 'read-only' }): Promise<FileSystemSyncAccessHandle>
+    }
+    return file.createSyncAccessHandle({ mode: 'read-only' })
   }
 
   static async getExistingFile(dirName: string, fileName: string): Promise<Blob> {

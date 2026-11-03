@@ -97,6 +97,8 @@ Export follows scene boundaries, Single video or Side by side layouts, source ch
 
 The audio uses the existing final mix, including track gain, mute/solo, effects, automation, and stereo pan when exporting stereo tracks, followed by the Output effect chain and its automation. A selected region exports that time range and mixes its selected tracks; video source choices remain those configured in Output. Frame timing follows the project sample clock across render chunks and selection offsets. Silent footage exports without requiring a source PCM file.
 
+Source audio uses shared read-only access, so tracks and crossfades can reuse a clip during publishing, including while playback is reading it.
+
 MP4 uses H.264 when available, with the existing MP4-compatible video codec fallbacks, and native or fallback AAC encoding. Browser video decoding/encoding and AAC decoding support are required. A short encoder timing probe measures AAC priming; MP4 presentation edits exclude that delay and trailing padding so the audio stays aligned with the pictures.
 
 Export streams encoded data to the chosen file and bounds queued audio while video frames are rendered. Progress advances after each encoded picture and reaches 100% only after finalization and file commit. Canceling or encountering an error releases the decoders and audio worker and aborts the file transaction, preserving any existing output file.

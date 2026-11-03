@@ -197,8 +197,10 @@ class ReadingOfflineProcessor {
         this.writePosition = Math.max(this.startPosition, clipView.startPosition + this.writingClipInitialOffset)
         this.writingClipInitialOffset = 0
         this.clipFileOffset = clipView.offset * Float32Array.BYTES_PER_ELEMENT * this.channelCount
-        const file = await FileSystemUtils.getFileHandle(`${this.projectId}`, `${clipView.clip.id}`)
-        this.clipViewFile = (await (file as any).createSyncAccessHandle()) as FileSystemSyncAccessHandle
+        this.clipViewFile = await FileSystemUtils.getReadOnlySyncAccessHandle(
+          `${this.projectId}`,
+          `${clipView.clip.id}`,
+        )
       }
       const bufferWriteStart = this.bufferWritePosition
       const writeStart = this.writePosition
@@ -257,8 +259,7 @@ class ReadingOfflineProcessor {
     const crossfadeBuffer = new Float32Array(crossfadeFrames * this.channelCount)
     let crossfadeFile = this.clipViewFile
     if (nextClipView.clip.id != clipView.clip.id) {
-      const file = await FileSystemUtils.getFileHandle(`${this.projectId}`, `${nextClipView.clip.id}`)
-      crossfadeFile = (await (file as any).createSyncAccessHandle()) as FileSystemSyncAccessHandle
+      crossfadeFile = await FileSystemUtils.getReadOnlySyncAccessHandle(`${this.projectId}`, `${nextClipView.clip.id}`)
     }
     crossfadeFile!.read(crossfadeBuffer.buffer, {
       at:

@@ -6,10 +6,11 @@ export class AudioFileCache {
 
   static async getHandle(dirName: string, fileName: string) {
     const key = `${dirName}/${fileName}`
-    if (this.cache.has(key)) {
-      return this.cache.get(key)
+    const cached = this.cache.get(key)
+    if (cached) {
+      return cached
     }
-    const handle = FileSystemUtils.getFileHandle(dirName, fileName).then((h: any) => h.createSyncAccessHandle())
+    const handle = FileSystemUtils.getReadOnlySyncAccessHandle(dirName, fileName)
     this.cache.set(key, handle)
     return handle
   }

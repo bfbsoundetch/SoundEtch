@@ -18,7 +18,6 @@ import {
   SILERO_VAD_REVISION,
   TRANSCRIPTION_ASSET_BYTES as ASSET_MANIFEST,
 } from '../ModelCache'
-import type { FileSystemSyncAccessHandle } from '../filesystem/FileSystemSyncAccessHandle'
 import type { TranscribedRange } from '../project/Transcription'
 import type {
   SerializedTranscriptionError,
@@ -387,12 +386,10 @@ async function readSelectedAudio16k(command: TranscribeCommand, interval: Worker
   )
   await resampler.init(undefined, { wasmBinary: await getSoxrWasmBinary() })
 
-  const fileHandle = await FileSystemUtils.getFileHandle(String(command.projectId), String(interval.clipId))
-  const accessHandle = (await (
-    fileHandle as FileSystemFileHandle & {
-      createSyncAccessHandle(): Promise<FileSystemSyncAccessHandle>
-    }
-  ).createSyncAccessHandle()) as FileSystemSyncAccessHandle
+  const accessHandle = await FileSystemUtils.getReadOnlySyncAccessHandle(
+    String(command.projectId),
+    String(interval.clipId),
+  )
   const bytesPerSourceFrame = interval.channelCount * Float32Array.BYTES_PER_ELEMENT
   const interleaved = new Float32Array(AUDIO_READ_CHUNK_FRAMES * interval.channelCount)
   const interleavedBytes = new Uint8Array(interleaved.buffer)
