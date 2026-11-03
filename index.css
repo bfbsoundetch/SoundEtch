@@ -39,6 +39,8 @@ button {
   /* Modals and the bottom panel sit above the main surfaces; the raised rule below applies these. */
   --raised-bg-color: #f8f9fa; /* https://www.color-hex.com/color/c0cbcd */
   --raised-alt-background: #e7eef1; /* https://www.color-hex.com/color/d8e4e9 */
+  --panel-header-bg: var(--color);
+  --panel-header-text: var(--raised-bg-color);
   /* A tint of the text color, so a button stands apart from whichever surface holds it. */
   --button-bg: color-mix(in srgb, var(--color) 12%, transparent);
   --waveform-0: hsla(0, 100%, 90%, 1);
@@ -3212,7 +3214,7 @@ video {
   box-sizing: border-box;
   background: var(--bg-color);
   color: var(--color);
-  border-top: 2px solid var(--color);
+  border-top: 1px solid var(--panel-header-text);
   box-shadow: 0 -0.5rem 1.5rem rgba(0, 0, 0, 0.2);
   transition:
     height 0.1s ease,
@@ -3238,13 +3240,17 @@ body:has(.bottom-panel.resizing, .bottom-panel.layout-resize) #topdiv,
 }
 
 .bottom-panel-header {
+  --color: var(--panel-header-text);
+  --clickable-hover: color-mix(in srgb, var(--color) 15%, transparent);
+  --clickable-active: color-mix(in srgb, var(--color) 25%, transparent);
   position: relative;
   display: flex;
   align-items: stretch;
   justify-content: space-between;
   gap: 1rem;
   height: 2.75rem;
-  background: var(--alt-background);
+  background: var(--panel-header-bg);
+  color: var(--color);
   border-bottom: 1px solid var(--color);
   cursor: ns-resize;
   touch-action: none;
