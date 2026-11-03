@@ -363,11 +363,12 @@ export class PointerStateManager extends TrackListItemController {
     this.changeState(State.MARKING)
   }
 
-  startResizingClipView(controller: ClipViewController) {
+  startResizingClipView(controller: ClipViewController, event: MouseEvent) {
     if (!this.changeState(State.RESIZING_CLIPVIEW)) {
       return
     }
     this.activeClipViewController = controller
+    this.mouseDownPoint = { x: event.clientX, y: event.clientY }
   }
 
   startMovingClipView(controller: ClipViewController, event: MouseEvent) {

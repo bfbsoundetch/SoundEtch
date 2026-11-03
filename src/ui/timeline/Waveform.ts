@@ -1424,7 +1424,7 @@ export class ClipViewController extends TrackListItemController {
     )
   }
 
-  private readonly leftHandleMouseDownListener = (_: MouseEvent) => {
+  private readonly leftHandleMouseDownListener = (event: MouseEvent) => {
     this.fullClipPreview = true
     const clipView = this.clipView
     const maxLeftShift = this.clipView.offset / this.samplesPerUnit
@@ -1452,10 +1452,10 @@ export class ClipViewController extends TrackListItemController {
     this.waveform.requestVideoDraw()
 
     this.leftHandle.dataset.active = 'true'
-    this.trackListController.pointerStateManager.startResizingClipView(this)
+    this.trackListController.pointerStateManager.startResizingClipView(this, event)
   }
 
-  private readonly rightHandleMouseDownListener = (_: MouseEvent) => {
+  private readonly rightHandleMouseDownListener = (event: MouseEvent) => {
     this.fullClipPreview = true
     const clipView = this.clipView
     const maxRightShift = (clipView.clip.length - clipView.length - clipView.offset) / this.samplesPerUnit
@@ -1484,6 +1484,6 @@ export class ClipViewController extends TrackListItemController {
     this.fullClipGrayFilter.height.baseVal.value = this.waveformHeight + this.waveform.videoLaneHeight
 
     this.rightHandle.dataset.active = 'true'
-    this.trackListController.pointerStateManager.startResizingClipView(this)
+    this.trackListController.pointerStateManager.startResizingClipView(this, event)
   }
 }
