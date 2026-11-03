@@ -26,7 +26,7 @@ button {
 }
 
 :root {
-  --bg-color: #f8f9fa; /* https://www.color-hex.com/color/c0cbcd */
+  --bg-color: #e9ecee;
   --color: #46494a;
   --menu-bg: white;
   --waveform-stroke: #000000;
@@ -35,7 +35,12 @@ button {
   --clickable-hover: rgba(0, 0, 0, 0.15);
   --clickable-active: rgba(0, 0, 0, 0.25);
   --clickable-inactive: rgba(255, 255, 255, 0.4);
-  --alt-background: #e7eef1; /* https://www.color-hex.com/color/d8e4e9 */
+  --alt-background: #d5dde1;
+  /* Modals and the bottom panel sit above the main surfaces; the raised rule below applies these. */
+  --raised-bg-color: #f8f9fa; /* https://www.color-hex.com/color/c0cbcd */
+  --raised-alt-background: #e7eef1; /* https://www.color-hex.com/color/d8e4e9 */
+  /* A tint of the text color, so a button stands apart from whichever surface holds it. */
+  --button-bg: color-mix(in srgb, var(--color) 12%, transparent);
   --waveform-0: hsla(0, 100%, 90%, 1);
   --waveform-1: hsla(60, 100%, 90%, 1);
   --waveform-2: hsla(120, 100%, 90%, 1);
@@ -54,13 +59,16 @@ button {
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg-color: #404445;
+    --bg-color: #525758;
     --color: #f0f1f2;
     --menu-bg: black;
     --clickable-hover: rgba(255, 255, 255, 0.25);
     --clickable-active: rgba(255, 255, 255, 0.35);
     --clickable-inactive: rgba(0, 0, 0, 0.1);
-    --alt-background: #696e6f;
+    --alt-background: #696e6f; /* The lightest grey that keeps --color text at 4.5:1 contrast. */
+    /* Here the raised surfaces are darker than the main ones, like the black menus. */
+    --raised-bg-color: #404445;
+    --raised-alt-background: #696e6f;
     --waveform-0: #c48383;
     --waveform-1: #b39d62;
     --waveform-2: #7ba78c;
@@ -76,6 +84,13 @@ button {
     --placeholder-color: #b4b7b8;
     --meter-clip: #ff9999;
   }
+}
+
+/* Raised surfaces: their contents take the raised palette, so they stand out from the main surfaces beneath. */
+dialog.overlay,
+.bottom-panel {
+  --bg-color: var(--raised-bg-color);
+  --alt-background: var(--raised-alt-background);
 }
 
 .slider-value {
@@ -106,6 +121,7 @@ body {
 
 .bordered {
   border: solid 1px var(--color);
+  background-color: var(--button-bg);
 }
 
 .visually-hidden {
@@ -247,7 +263,7 @@ dialog.overlay {
 
 dialog.overlay::backdrop {
   backdrop-filter: blur(12px);
-  background: rgba(0, 0, 0, 0.2);
+  background: rgba(0, 0, 0, 0.4);
 }
 
 dialog.overlay:not([open]) {
@@ -405,6 +421,7 @@ dialog.overlay[open] {
 .mute-button {
   grid-area: mute;
   border: 1px solid var(--color);
+  background-color: var(--button-bg);
   padding: 0.25rem;
   display: grid;
   place-items: center;
@@ -462,6 +479,7 @@ dialog.overlay[open] {
   position: relative;
   user-select: none;
   border: 1px dotted;
+  background-color: var(--button-bg);
   margin: 0.3rem;
 }
 
@@ -684,7 +702,6 @@ body.tooltips-dismissed :is(.tooltipped span, .slider-value) {
 .model-cache-unload-button {
   padding: 0.45rem 0.75rem;
   color: inherit;
-  background: var(--bg-color);
   font: inherit;
 }
 
@@ -739,7 +756,6 @@ body.tooltips-dismissed :is(.tooltipped span, .slider-value) {
 
 .settings-actions button {
   color: inherit;
-  background: var(--bg-color);
   padding: 0.45rem 0.75rem;
   font: inherit;
 }
@@ -812,6 +828,7 @@ body.tooltips-dismissed :is(.tooltipped span, .slider-value) {
   gap: 1rem;
   font-size: larger;
   border: solid 1px;
+  background-color: var(--button-bg);
 }
 
 .welcome-header {
@@ -888,7 +905,6 @@ body.tooltips-dismissed :is(.tooltipped span, .slider-value) {
 .add-clip-url-option {
   font-size: 1.1rem;
   border: 1px solid;
-  background-color: var(--alt-background);
   box-sizing: border-box;
 }
 
@@ -913,6 +929,7 @@ body.tooltips-dismissed :is(.tooltipped span, .slider-value) {
   flex-direction: column;
   gap: 0.5rem;
   padding: 0.75rem;
+  background-color: var(--alt-background);
 }
 
 .add-clip-existing-option {
@@ -1371,7 +1388,7 @@ video {
 .meeting-join-request-button {
   padding: 0.35rem 0.75rem;
   border: 1px solid var(--color);
-  background: transparent;
+  background: var(--button-bg);
   color: inherit;
 }
 
@@ -1599,7 +1616,7 @@ video {
   display: block;
   padding: 0.45rem 0.55rem;
   border: 1px solid var(--color);
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--button-bg);
   color: inherit;
   font-size: 0.85rem;
   text-align: left;
@@ -1616,13 +1633,13 @@ video {
 }
 
 .meeting-link:disabled:hover {
-  background: rgba(255, 255, 255, 0.04);
+  background: var(--button-bg);
 }
 
 .meeting-settings-copy-button {
   padding: 0.45rem 0.55rem;
   border: 1px solid var(--color);
-  background: transparent;
+  background: var(--button-bg);
   color: inherit;
   font-size: 0.9rem;
   text-align: left;
@@ -2547,6 +2564,7 @@ video {
   width: 100%;
   padding: 0.4rem;
   border: 1px solid currentColor;
+  background-color: var(--button-bg);
   color: inherit;
   font: inherit;
   box-sizing: border-box;
@@ -2842,7 +2860,6 @@ video {
 
 .go-to-time-buttons button {
   padding: 0.25rem 1rem;
-  background: transparent;
   color: var(--color);
 }
 
@@ -3196,10 +3213,17 @@ video {
   background: var(--bg-color);
   color: var(--color);
   border-top: 2px solid var(--color);
-  transition: height 0.1s ease;
+  box-shadow: 0 -0.5rem 1.5rem rgba(0, 0, 0, 0.2);
+  transition:
+    height 0.1s ease,
+    box-shadow 0.1s ease;
   z-index: 1001;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr);
+}
+
+.bottom-panel.expanded {
+  box-shadow: none;
 }
 
 body:has(.bottom-panel.resizing, .bottom-panel.layout-resize) #topdiv,
@@ -3906,6 +3930,7 @@ body:has(.bottom-panel.resizing, .bottom-panel.layout-resize) #topdiv,
 .effect-chain-add {
   align-content: center;
   gap: 1rem;
+  background: var(--button-bg);
   color: inherit;
   font: inherit;
 }

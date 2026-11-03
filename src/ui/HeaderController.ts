@@ -75,7 +75,7 @@ export class HeaderController {
     ;(this.secondHeaderButton.getElementsByClassName('play')[0] as SVGUseElement).style.opacity = '0'
     this.secondHeaderButton.getElementsByTagName('span')[0].innerText = 'Pause'
     this.secondHeaderButton.onclick = AudioControl.pause
-    this.secondHeaderButton.style.background = 'none'
+    this.secondHeaderButton.style.background = ''
     ;(this.thirdHeaderButton.getElementsByClassName('stop')[0] as SVGUseElement).style.opacity = '1'
     ;(this.thirdHeaderButton.getElementsByClassName('plus')[0] as SVGUseElement).style.opacity = '0'
     this.thirdHeaderButton.getElementsByTagName('span')[0].innerText = 'Stop'
@@ -113,7 +113,7 @@ export class HeaderController {
     ;(this.firstHeaderButton.getElementsByClassName('record')[0] as SVGUseElement).style.opacity = '1'
     this.firstHeaderButton.getElementsByTagName('span')[0].innerText = 'Record'
     this.recordButtonController.configureStoppedState()
-    this.firstHeaderButton.style.background = 'none'
+    this.firstHeaderButton.style.background = ''
     ;(this.secondHeaderButton.getElementsByClassName('pause')[0] as SVGUseElement).style.opacity = '0'
     ;(this.secondHeaderButton.getElementsByClassName('play')[0] as SVGUseElement).style.opacity = '1'
     this.secondHeaderButton.getElementsByTagName('span')[0].innerText = 'Play'
@@ -122,7 +122,7 @@ export class HeaderController {
       const { Player } = await import('../playback/Player')
       await Player.playActiveProject2(((window as any).trackListController as TrackListController).selectedRegion)
     }
-    this.secondHeaderButton.style.background = 'none'
+    this.secondHeaderButton.style.background = ''
     ;(this.thirdHeaderButton.getElementsByClassName('stop')[0] as SVGUseElement).style.opacity = '0'
     ;(this.thirdHeaderButton.getElementsByClassName('plus')[0] as SVGUseElement).style.opacity = '1'
     this.thirdHeaderButton.getElementsByTagName('span')[0].innerText = 'Add clip...'

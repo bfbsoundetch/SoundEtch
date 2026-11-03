@@ -166,14 +166,12 @@ export class NoiseReductionEffect implements EffectModule {
     actions.className = 'noise-reduction-editor-actions'
     const resetButton = document.createElement('button')
     resetButton.type = 'button'
-    resetButton.className = 'clickable'
-    resetButton.style.border = 'solid 1px'
+    resetButton.className = 'bordered clickable'
     resetButton.style.padding = '.2rem'
     resetButton.textContent = 'Reset defaults'
     const applyButton = document.createElement('button')
     applyButton.type = 'button'
-    applyButton.className = 'clickable primary'
-    applyButton.style.border = 'solid 1px'
+    applyButton.className = 'bordered clickable primary'
     applyButton.style.padding = '.2rem'
     applyButton.textContent = 'Apply'
     applyButton.disabled = true

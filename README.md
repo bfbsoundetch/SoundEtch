@@ -149,6 +149,8 @@ Static `index.html` presentation and timeline styling live in `index.css`, inclu
 
 Waveform clip fills follow the system color scheme: light mode keeps the pastel palette, while dark mode uses muted coral, amber, sage, teal, periwinkle, and mauve with contrast against the black waveform trace. Both palettes use `--waveform-0` through `--waveform-5` in `index.css`.
 
+Surfaces are layered in both color schemes. The page, header, timeline, and track controls use the main `--bg-color` and `--alt-background`. Modal dialogs and the bottom panel re-declare those two tokens from `--raised-bg-color` and `--raised-alt-background`, so everything inside them stands out from the main surfaces: the raised palette is lighter than the main one in light mode and darker in dark mode, matching the white and black menus. Modal backdrops also dim the page. Outlined buttons fill with `--button-bg`, a 12% tint of the text color, so they stand apart from whichever surface holds them.
+
 The **Downloaded models** settings section reports the persistent browser-cache footprint of DeepFilterNet, Granite, and Silero VAD separately. **Unload** removes that model's cached files, including stale Granite or VAD revision caches, without interrupting a model runtime already in use. The browser downloads those files again when a later runtime needs them.
 
 DeepFilterNet's `df_bg.wasm` and `DeepFilterNet3_onnx.tar.gz` are served from `noisereduction/` under Vite's deployment base (`import.meta.env.BASE_URL`). The configured default is `/soundetch`; for an origin-root deployment such as `https://soundetch.org/`, build with `yarn build --base /`. Resource paths resolve relative to that base, preserving subpaths without turning a root base into a protocol-relative hostname.
@@ -157,7 +159,7 @@ DeepFilterNet's `df_bg.wasm` and `DeepFilterNet3_onnx.tar.gz` are served from `n
 
 ## Bottom panel
 
-The bottom panel stays docked below the timeline and starts minimized to its tab bar: **Inputs**, **Tracks**, and **Output**. Clicking a tab opens the panel on it; Left/Right, Home, and End move between tabs. The chevron button minimizes the panel and reopens it at its last open height, and the size button switches between half and full height below the main header.
+The bottom panel stays docked below the timeline and starts minimized to its tab bar: **Inputs**, **Tracks**, and **Output**. Clicking a tab opens the panel on it; Left/Right, Home, and End move between tabs. The chevron button minimizes the panel and reopens it at its last open height, and the size button switches between half and full height below the main header. The panel casts a shadow over the timeline at every height except full height.
 
 Enabling the camera with the project header's **Enable Camera** button opens **Inputs** at the panel's last open height so the live picture is visible. Disabling the camera leaves the current tab and panel height unchanged.
 
