@@ -12,6 +12,9 @@ export interface OutputCaptionSettings {
   fontSize: number
   color: string
   highlightColor: string
+  /** Missing values retain the dark border used by older projects. */
+  borderEnabled?: boolean
+  borderColor?: string
 }
 
 export const OUTPUT_CAPTION_FONTS = [
@@ -29,6 +32,8 @@ export const DEFAULT_OUTPUT_CAPTIONS: Readonly<OutputCaptionSettings> = Object.f
   fontSize: 64,
   color: '#ffffff',
   highlightColor: '#ffd54f',
+  borderEnabled: true,
+  borderColor: '#000000',
 })
 
 export interface OutputCaptionWord {

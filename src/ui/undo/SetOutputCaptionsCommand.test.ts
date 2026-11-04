@@ -29,6 +29,8 @@ test('caption source and styling survive persisted undo and redo without sharing
     fontSize: 96,
     color: '#11ccff',
     highlightColor: '#ff2266',
+    borderEnabled: false,
+    borderColor: '#44dd88',
   }
   const expected = { ...after }
   const command = new SetOutputCaptionsCommand(project, before, after)

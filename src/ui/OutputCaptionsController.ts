@@ -27,6 +27,8 @@ export class OutputCaptionsController {
   private readonly sizeLabel: HTMLSpanElement
   private readonly color = document.createElement('input')
   private readonly highlight = document.createElement('input')
+  private readonly borderEnabled = document.createElement('input')
+  private readonly borderColor = document.createElement('input')
   private readonly note = document.createElement('p')
   private readonly canvas = document.createElement('canvas')
   private readonly context: CanvasRenderingContext2D
@@ -63,6 +65,12 @@ export class OutputCaptionsController {
     this.color.type = 'color'
     this.highlight.id = 'output-captions-highlight'
     this.highlight.type = 'color'
+    this.borderEnabled.id = 'output-captions-border-enabled'
+    this.borderEnabled.type = 'checkbox'
+    const borderLabel = this.field('Text border', this.borderEnabled)
+    borderLabel.classList.add('output-panel-caption-toggle')
+    this.borderColor.id = 'output-captions-border-color'
+    this.borderColor.type = 'color'
     this.note.className = 'output-panel-note'
     this.note.setAttribute('role', 'status')
     this.controls.append(
@@ -72,12 +80,14 @@ export class OutputCaptionsController {
       sizeField,
       this.field('Text color', this.color),
       this.field('Spoken word color', this.highlight),
+      borderLabel,
+      this.field('Border color', this.borderColor),
       this.note,
     )
-    for (const control of [this.enabled, this.source, this.font, this.size, this.color, this.highlight]) {
+    for (const control of [this.enabled, this.source, this.font, this.size, this.color, this.highlight, this.borderEnabled, this.borderColor]) {
       control.addEventListener('change', () => void this.commit())
     }
-    for (const control of [this.size, this.color, this.highlight]) {
+    for (const control of [this.size, this.color, this.highlight, this.borderColor]) {
       control.addEventListener('input', () => {
         if (!this.canEdit() || this.saving) return
         this.draft = this.readSettings()
@@ -142,10 +152,12 @@ export class OutputCaptionsController {
     if (this.enabled.disabled === editable) this.enabled.disabled = !editable
     if (controlsEditable !== this.controlsEditable) {
       this.controlsEditable = controlsEditable
-      for (const control of [this.source, this.font, this.size, this.color, this.highlight]) {
+      for (const control of [this.source, this.font, this.size, this.color, this.highlight, this.borderEnabled]) {
         control.disabled = !controlsEditable
       }
     }
+    const borderColorEditable = controlsEditable && settings.borderEnabled !== false
+    if (this.borderColor.disabled === borderColorEditable) this.borderColor.disabled = !borderColorEditable
     if (settings.fontSize !== this.shownSize) {
       this.shownSize = settings.fontSize
       this.sizeLabel.textContent = `Font size (${settings.fontSize} px)`
@@ -195,6 +207,8 @@ export class OutputCaptionsController {
       fontSize: this.size.valueAsNumber,
       color: this.color.value,
       highlightColor: this.highlight.value,
+      borderEnabled: this.borderEnabled.checked,
+      borderColor: this.borderColor.value,
     }
   }
 
@@ -207,6 +221,8 @@ export class OutputCaptionsController {
     this.size.value = String(settings.fontSize)
     this.color.value = settings.color
     this.highlight.value = settings.highlightColor
+    this.borderEnabled.checked = settings.borderEnabled !== false
+    this.borderColor.value = settings.borderColor ?? DEFAULT_OUTPUT_CAPTIONS.borderColor!
     this.controlsEditable = null
   }
 
