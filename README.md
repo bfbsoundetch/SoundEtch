@@ -175,7 +175,7 @@ DeepFilterNet's `df_bg.wasm` and `DeepFilterNet3_onnx.tar.gz` are served from `n
 
 ## Bottom panel
 
-The bottom panel stays docked below the timeline and starts minimized to its tab bar: **Inputs**, **Tracks**, and **Output**. Clicking a tab opens the panel on it; Left/Right, Home, and End move between tabs. The chevron button minimizes the panel and reopens it at its last open height, and the size button switches between half and full height below the main header. The panel casts a shadow over the timeline at every height except full height.
+The bottom panel stays docked below the timeline and starts minimized to its tab bar: **Inputs**, **Tracks**, and **Output**. Clicking a tab opens the panel on it; Left/Right, Home, and End move between tabs. The active tab uses a filled, inverted-color pressed treatment like the header's microphone, camera, and screen-capture buttons, with a contrasting keyboard-focus outline. The chevron button minimizes the panel and reopens it at its last open height, and the size button switches between half and full height below the main header. The panel casts a shadow over the timeline at every height except full height.
 
 Enabling the camera with the project header's **Enable Camera** button opens **Inputs** at the panel's last open height so the live picture is visible. Disabling the camera leaves the current tab and panel height unchanged.
 

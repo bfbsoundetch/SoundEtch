@@ -3316,8 +3316,13 @@ body:has(.bottom-panel.resizing, .bottom-panel.layout-resize) #topdiv,
 }
 
 .bottom-panel-tab[aria-selected='true'] {
+  background: var(--color);
+  color: var(--panel-header-bg);
   font-weight: bold;
-  box-shadow: inset 0 -3px 0 currentColor;
+}
+
+.bottom-panel-tab:focus-visible {
+  outline-color: currentColor;
 }
 
 .bottom-panel-tab:focus-visible,
@@ -4610,6 +4615,7 @@ input::placeholder {
 @media (forced-colors: active) {
   .track-mute-button[aria-pressed='true'],
   .media-stream-button[aria-pressed='true'],
+  .bottom-panel-tab[aria-selected='true'],
   .track-solo-button[aria-pressed='true'],
   .track-display-mode-option[aria-checked='true'],
   #transcript-panel-content .transcript-word.playing,
