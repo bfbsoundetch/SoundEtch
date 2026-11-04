@@ -1852,7 +1852,7 @@ video {
 }
 
 .timeline-output-row {
-  min-height: 7rem;
+  min-height: 5rem;
   margin: 1rem 0 0;
   box-sizing: border-box;
   border-block: 2px solid var(--color);
@@ -1910,6 +1910,7 @@ video {
   overflow: hidden;
   white-space: nowrap;
   text-overflow: ellipsis;
+  text-align: center;
 }
 
 .output-scene-block.is-active {
