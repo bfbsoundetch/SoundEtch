@@ -4843,6 +4843,10 @@ input::placeholder {
   pointer-events: none;
 }
 
+.output-panel-preview:has(.output-panel-captions[data-position='middle']:not([hidden])) .output-panel-preview-status {
+  align-items: flex-start;
+}
+
 .output-panel-content [hidden] {
   display: none;
 }

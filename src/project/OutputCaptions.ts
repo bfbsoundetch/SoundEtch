@@ -10,6 +10,8 @@ export interface OutputCaptionSettings {
   fontFamily: string
   /** Pixels on the 1920×1080 composition. */
   fontSize: number
+  /** Missing values keep the original bottom placement. */
+  position?: 'bottom' | 'middle' | 'top'
   color: string
   highlightColor: string
   /** Missing values retain the dark border used by older projects. */
@@ -30,6 +32,7 @@ export const DEFAULT_OUTPUT_CAPTIONS: Readonly<OutputCaptionSettings> = Object.f
   followLoudest: true,
   fontFamily: OUTPUT_CAPTION_FONTS[0].value,
   fontSize: 64,
+  position: 'bottom',
   color: '#ffffff',
   highlightColor: '#ffd54f',
   borderEnabled: true,

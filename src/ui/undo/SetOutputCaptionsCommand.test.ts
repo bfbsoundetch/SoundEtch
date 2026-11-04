@@ -27,6 +27,7 @@ test('caption source and styling survive persisted undo and redo without sharing
     followLoudest: false,
     fontFamily: 'Georgia, serif',
     fontSize: 96,
+    position: 'top' as const,
     color: '#11ccff',
     highlightColor: '#ff2266',
     borderEnabled: false,

@@ -22,6 +22,7 @@ export class OutputCaptionsController {
   readonly controls = document.createElement('div')
   private readonly enabled = document.createElement('input')
   private readonly source = document.createElement('select')
+  private readonly position = document.createElement('select')
   private readonly font = document.createElement('select')
   private readonly size = document.createElement('input')
   private readonly sizeLabel: HTMLSpanElement
@@ -52,6 +53,8 @@ export class OutputCaptionsController {
     const enabledLabel = this.field('Show transcript captions', this.enabled)
     enabledLabel.classList.add('output-panel-caption-toggle')
     this.source.id = 'output-captions-source'
+    this.position.id = 'output-captions-position'
+    this.position.append(new Option('Bottom', 'bottom'), new Option('Middle', 'middle'), new Option('Top', 'top'))
     this.font.id = 'output-captions-font'
     this.font.append(...OUTPUT_CAPTION_FONTS.map((font) => new Option(font.label, font.value)))
     this.size.id = 'output-captions-size'
@@ -76,6 +79,7 @@ export class OutputCaptionsController {
     this.controls.append(
       enabledLabel,
       this.field('Transcript track', this.source),
+      this.field('Position', this.position),
       this.field('Font', this.font),
       sizeField,
       this.field('Text color', this.color),
@@ -84,7 +88,7 @@ export class OutputCaptionsController {
       this.field('Border color', this.borderColor),
       this.note,
     )
-    for (const control of [this.enabled, this.source, this.font, this.size, this.color, this.highlight, this.borderEnabled, this.borderColor]) {
+    for (const control of [this.enabled, this.source, this.position, this.font, this.size, this.color, this.highlight, this.borderEnabled, this.borderColor]) {
       control.addEventListener('change', () => void this.commit())
     }
     for (const control of [this.size, this.color, this.highlight, this.borderColor]) {
@@ -152,7 +156,7 @@ export class OutputCaptionsController {
     if (this.enabled.disabled === editable) this.enabled.disabled = !editable
     if (controlsEditable !== this.controlsEditable) {
       this.controlsEditable = controlsEditable
-      for (const control of [this.source, this.font, this.size, this.color, this.highlight, this.borderEnabled]) {
+      for (const control of [this.source, this.position, this.font, this.size, this.color, this.highlight, this.borderEnabled]) {
         control.disabled = !controlsEditable
       }
     }
@@ -175,6 +179,7 @@ export class OutputCaptionsController {
     if (cue !== this.paintedCue || word !== this.paintedWord || settings !== this.paintedSettings) {
       this.context.clearRect(0, 0, this.canvas.width, this.canvas.height)
       paintOutputCaption(this.context, cue, word, settings, 0, 0, this.canvas.width, this.canvas.height)
+      this.canvas.dataset.position = settings.position ?? 'bottom'
       const text = cue.words.map((word) => word.text).join(' ')
       this.canvas.setAttribute('aria-label', `Captions: ${text}${word < 0 ? '' : ` — spoken word: ${cue.words[word].text}`}`)
       this.paintedCue = cue
@@ -203,6 +208,7 @@ export class OutputCaptionsController {
       enabled: this.enabled.checked,
       track: this.tracks[this.source.selectedIndex - 2] ?? null,
       followLoudest: this.source.value === 'loudest',
+      position: this.position.value as OutputCaptionSettings['position'],
       fontFamily: this.font.value,
       fontSize: this.size.valueAsNumber,
       color: this.color.value,
@@ -217,6 +223,7 @@ export class OutputCaptionsController {
     this.enabled.checked = settings.enabled
     const trackIndex = settings.track === null ? -1 : this.tracks.indexOf(settings.track)
     this.source.selectedIndex = settings.followLoudest ? 1 : trackIndex < 0 ? 0 : trackIndex + 2
+    this.position.value = settings.position ?? 'bottom'
     this.font.value = settings.fontFamily
     this.size.value = String(settings.fontSize)
     this.color.value = settings.color

@@ -12,7 +12,8 @@ interface CaptionLayout {
   height: number
   font: string
   scale: number
-  bottomInset: number
+  edgeInset: number
+  textHeight: number
   words: { text: string; x: number; y: number }[]
 }
 
@@ -64,6 +65,7 @@ function createLayout(
   const lineHeight = Math.max(settings.fontSize, ascent + descent) * 1.25
   const textHeight = ascent + descent + (lines.length - 1) * lineHeight
   const shrink = Math.min(1, availableWidth / Math.max(1, widest), (height / viewportScale * 0.3) / textHeight)
+  const scale = viewportScale * shrink
   const words: CaptionLayout['words'] = []
   let start = 0
   lines.forEach((end, line) => {
@@ -84,13 +86,14 @@ function createLayout(
     width,
     height,
     font,
-    scale: viewportScale * shrink,
-    bottomInset: 72 * viewportScale,
+    scale,
+    edgeInset: 72 * viewportScale,
+    textHeight: textHeight * scale,
     words,
   }
 }
 
-/** Paints the final, bottom-centered overlay in the supplied 16:9 viewport without clearing or resetting transforms. */
+/** Paints the final, horizontally centered overlay in the supplied 16:9 viewport without clearing or resetting transforms. */
 export function paintOutputCaption(
   context: CaptionContext,
   cue: OutputCaptionCue,
@@ -124,7 +127,12 @@ export function paintOutputCaption(
     }
     context.font = layout.font
     context.letterSpacing = layout.letterSpacing
-    context.translate(x + width / 2, y + height - layout.bottomInset)
+    const bottom = settings.position === 'top'
+      ? layout.edgeInset + layout.textHeight
+      : settings.position === 'middle'
+        ? (height + layout.textHeight) / 2
+        : height - layout.edgeInset
+    context.translate(x + width / 2, y + bottom)
     context.scale(layout.scale, layout.scale)
     context.globalCompositeOperation = 'source-over'
     context.shadowColor = 'transparent'
