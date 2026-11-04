@@ -35,6 +35,11 @@ export interface TimedGraniteWord {
   readonly end: number
 }
 
+/** Letters (and apostrophes) in a word: the length proxy for its expected duration. */
+function wordLetters(text: string): number {
+  return text.replace(/[^a-z']/gi, '').length
+}
+
 function logAdd(first: number, second: number): number {
   if (first === -Infinity) {
     return second
@@ -203,13 +208,23 @@ export function ctcTokenPosteriors(
   return boundaries
 }
 
-/** Share of the non-blank distribution that a word's prefix pieces need to show the word has begun. */
-const PREFIX_ONSET_SHARE = 0.4
+/**
+ * Share of the non-blank distribution that a long word's prefix pieces need to
+ * show the word has begun. On TIMIT, 10% moved more late starts onto their
+ * words than 40% did without making more starts early.
+ */
+const PREFIX_ONSET_SHARE = 0.1
+/**
+ * Share a segment's first word emitted on frame 0 needs. Its search runs back
+ * through audio before the word, such as music the VAD accepted, where its
+ * pieces can hold small shares.
+ */
+const LEADING_PREFIX_ONSET_SHARE = 0.4
 /**
  * Prefix evidence must lead the word's spike by this many 80 ms frames to move
- * its start; within two frames it is as often early as the spike is late.
+ * its start; one frame ahead is within the spike's own timing error.
  */
-const MIN_PREFIX_ONSET_LEAD_FRAMES = 3
+const MIN_PREFIX_ONSET_LEAD_FRAMES = 2
 /** The previous word still occupies the frame after its spike or relocated onset. */
 const MIN_PREFIX_ONSET_FRAMES_AFTER_PREVIOUS_SPIKE = 2
 /**
@@ -226,8 +241,8 @@ const MIN_PREFIX_ONSET_LETTERS = 6
  * "agriculture") take over from the previous word's. For each word of at
  * least six letters, returns the first frame, from the second frame after the
  * previous word's spike (or its relocated onset, when later), where its prefix
- * pieces hold at least 40% of the non-blank distribution and more than the
- * previous word's pieces, if that frame leads its spike by at least three
+ * pieces hold at least 10% of the non-blank distribution and more than the
+ * previous word's pieces, if that frame leads its spike by at least two
  * frames. Pieces that spell a prefix of both words ("Ġi" for "i issued") count
  * for neither.
  *
@@ -252,7 +267,7 @@ export function graniteWordOnsetFrames(
 ): Array<number | undefined> {
   const frameCount = Math.floor(vocabularyLogProbs.length / vocabularySize)
   const prefixIds = words.map((word) => prefixTokenIds(word.text))
-  const showsWord = (frame: number, ownIds: readonly number[], otherIds: readonly number[]): boolean => {
+  const showsWord = (frame: number, ownIds: readonly number[], otherIds: readonly number[], share: number): boolean => {
     const row = frame * vocabularySize
     let own = 0
     for (const id of ownIds) {
@@ -262,7 +277,7 @@ export function graniteWordOnsetFrames(
     for (const id of otherIds) {
       other += Math.exp(vocabularyLogProbs[row + id])
     }
-    return own >= PREFIX_ONSET_SHARE && own > other
+    return own >= share && own > other
   }
   const onsets = new Array<number | undefined>()
   for (const [index, word] of words.entries()) {
@@ -272,16 +287,16 @@ export function graniteWordOnsetFrames(
       const ownIds = prefixIds[0].filter((id) => !nextIds.includes(id))
       const otherIds = nextIds.filter((id) => !prefixIds[0].includes(id))
       let frame = Math.min(frameCount, tokenSpans[word.firstToken + 1]?.startFrame ?? frameCount) - 1
-      while (frame >= spike.endFrame && !showsWord(frame, ownIds, otherIds)) {
+      while (frame >= spike.endFrame && !showsWord(frame, ownIds, otherIds, LEADING_PREFIX_ONSET_SHARE)) {
         --frame
       }
-      while (frame > spike.endFrame && showsWord(frame - 1, ownIds, otherIds)) {
+      while (frame > spike.endFrame && showsWord(frame - 1, ownIds, otherIds, LEADING_PREFIX_ONSET_SHARE)) {
         --frame
       }
       onsets.push(frame > spike.endFrame ? frame : undefined)
       continue
     }
-    if (word.text.replace(/[^a-z']/gi, '').length < MIN_PREFIX_ONSET_LETTERS) {
+    if (wordLetters(word.text) < MIN_PREFIX_ONSET_LETTERS) {
       onsets.push(undefined)
       continue
     }
@@ -295,7 +310,7 @@ export function graniteWordOnsetFrames(
         : 0
     let onset: number | undefined
     for (let frame = firstFrame; frame <= spike.startFrame - MIN_PREFIX_ONSET_LEAD_FRAMES; ++frame) {
-      if (showsWord(frame, ownIds, otherIds)) {
+      if (showsWord(frame, ownIds, otherIds, PREFIX_ONSET_SHARE)) {
         onset = frame
         break
       }
@@ -306,9 +321,27 @@ export function graniteWordOnsetFrames(
 }
 
 /**
+ * Granite's spike, and so its posterior start, leads a short word and lags a
+ * long one: Granite predicts a short word from the audio after it but needs
+ * much of a long word to identify it. On TIMIT the CTC start fell about 55 ms
+ * before two-letter words and 50 ms after words of ten or more letters, so
+ * starts move by 65 ms minus 11 ms per letter.
+ */
+const CTC_START_SHIFT_SECONDS = 0.065
+const CTC_START_SHIFT_SECONDS_PER_LETTER = 0.011
+/** The length correction stays within one 80 ms frame either way. */
+const MAX_CTC_START_SHIFT_SECONDS = 0.08
+
+function ctcStartShiftSeconds(text: string): number {
+  const shift = CTC_START_SHIFT_SECONDS - CTC_START_SHIFT_SECONDS_PER_LETTER * Math.max(1, wordLetters(text))
+  return Math.max(-MAX_CTC_START_SHIFT_SECONDS, Math.min(MAX_CTC_START_SHIFT_SECONDS, shift))
+}
+
+/**
  * Word extents in segment seconds from CTC posterior medians, or the frame
- * path without posteriors. A word with prefix evidence from
- * `graniteWordOnsetFrames` starts at the middle of that frame when earlier.
+ * path without posteriors, with starts corrected for word length. A word with
+ * prefix evidence from `graniteWordOnsetFrames` starts at the middle of that
+ * frame when earlier.
  */
 export function timeGraniteWords(
   words: readonly RawGraniteWord[],
@@ -320,12 +353,11 @@ export function timeGraniteWords(
     const posteriorStart = posteriors?.[word.firstToken]?.start.median
     const posteriorEnd = posteriors?.[word.lastToken]?.end.median
     const onsetFrame = onsetFrames[index]
-    const startFrames = Math.min(
-      posteriorStart ?? word.startFrame,
-      onsetFrame === undefined ? Infinity : onsetFrame + 0.5,
-    )
+    const spikeStart =
+      (posteriorStart ?? word.startFrame) * GRANITE_TIMING_FRAME_SECONDS + ctcStartShiftSeconds(word.text)
+    const onsetStart = onsetFrame === undefined ? Infinity : (onsetFrame + 0.5) * GRANITE_TIMING_FRAME_SECONDS
     const endFrames = posteriorEnd ?? word.endFrame
-    const start = Math.max(0, Math.min(durationSeconds, startFrames * GRANITE_TIMING_FRAME_SECONDS))
+    const start = Math.max(0, Math.min(durationSeconds, spikeStart, onsetStart))
     const end = Math.max(start + 0.02, Math.min(durationSeconds, endFrames * GRANITE_TIMING_FRAME_SECONDS))
     return { text: word.text, start, end }
   })
@@ -374,8 +406,19 @@ const SHORT_DIP_FRAMES = 3
 /** Quiet frames an end bridges while the word is shorter than expected (the /st/ of "states"). */
 const LONG_DIP_FRAMES = 6
 const EXPECTED_SECONDS_PER_LETTER = 0.045
-const MAX_SECONDS_PER_LETTER = 0.09
-const MIN_LONGEST_WORD_SECONDS = 0.3
+const MAX_SECONDS_PER_LETTER = 0.12
+const MIN_LONGEST_WORD_SECONDS = 0.4
+/**
+ * Word ends also follow sound at least 12 dB above the local noise floor:
+ * word-final /s/, /z/, stop releases, and nasals often sit 20–40 dB below the
+ * vowel peak, under the 10% activity threshold.
+ */
+const END_TAIL_NOISE_FLOOR_RATIO = 10 ** (12 / 20)
+/** The end tail threshold stays within 45 dB of the nearby peak, so digital silence has a floor too. */
+const END_TAIL_MIN_PEAK_RATIO = 10 ** (-45 / 20)
+/** The noise floor is this quantile of frame energies within the window around the segment. */
+const NOISE_FLOOR_QUANTILE = 0.1
+const NOISE_FLOOR_WINDOW_SECONDS = 10
 const MIN_WORD_SECONDS = 0.02
 /**
  * Energy places a first word's onset on 32 ms frames, so it is kept within
@@ -510,10 +553,12 @@ function speechOnsetStart(
 /**
  * Word extents for one Granite segment. Granite emits one sharp CTC spike per
  * word, usually near its onset, so a word starts at its spike (or where speech
- * resumes after a spike that sits in a pause) and ends where its speech stops.
- * Ends bridge quiet stretches up to 96 ms (stop closures), or up to 192 ms
- * while the word is shorter than its letters suggest (quiet fricatives), and
- * never pass the next word's start, a letter-based length cap, or the segment.
+ * resumes after a spike that sits in a pause) and ends where its sound stops:
+ * speech activity, or sound at least 12 dB above the local noise floor (quiet
+ * word-final consonants). Ends bridge quiet stretches up to 96 ms (stop
+ * closures), or up to 192 ms while the word is shorter than its letters
+ * suggest (quiet fricatives), and never pass the next word's start, a
+ * letter-based length cap, or the segment.
  *
  * `leadingWordOnset` (from `graniteLeadingWordOnset`, in interval seconds) is
  * where Granite's prefix evidence hears a first word it emitted on frame 0.
@@ -536,14 +581,27 @@ export function refineGraniteWords(
     frameEnergies.length,
     Math.ceil(segmentEndSeconds / frameSeconds),
   )
-  const activityAround = (seconds: number): ((frame: number) => boolean) => {
+  const floorMargin = Math.round(NOISE_FLOOR_WINDOW_SECONDS / frameSeconds)
+  const nearbyEnergies = frameEnergies
+    .slice(Math.max(0, segmentFirstFrame - floorMargin), Math.min(frameEnergies.length, segmentLastFrame + floorMargin))
+    .sort()
+  const noiseFloor =
+    nearbyEnergies.length > 0 ? nearbyEnergies[Math.floor(nearbyEnergies.length * NOISE_FLOOR_QUANTILE)] : 0
+  /** Speech activity near `seconds`; `endTail` also accepts quiet sound well above the noise floor. */
+  const activityAround = (seconds: number, endTail = false): ((frame: number) => boolean) => {
     const from = Math.max(segmentFirstFrame, Math.floor((seconds - ACTIVITY_PEAK_WINDOW_SECONDS) / frameSeconds))
     const to = Math.min(segmentLastFrame, Math.ceil((seconds + ACTIVITY_PEAK_WINDOW_SECONDS) / frameSeconds))
     let peak = 0
     for (let frame = from; frame < to; ++frame) {
       peak = Math.max(peak, frameEnergies[frame])
     }
-    const threshold = Math.max(1e-5, peak * ACTIVITY_RATIO)
+    const activityThreshold = Math.max(1e-5, peak * ACTIVITY_RATIO)
+    const threshold = endTail
+      ? Math.min(
+          activityThreshold,
+          Math.max(1e-5, noiseFloor * END_TAIL_NOISE_FLOOR_RATIO, peak * END_TAIL_MIN_PEAK_RATIO),
+        )
+      : activityThreshold
     return (frame) =>
       frame >= segmentFirstFrame &&
       frame < segmentLastFrame &&
@@ -593,8 +651,8 @@ export function refineGraniteWords(
   return anchors.map((anchor, index) => {
     const start = starts[index]
     const nextStart = index + 1 < words.length ? starts[index + 1] : segmentEndSeconds
-    const active = activityAround(anchor.start)
-    const letters = Math.max(1, anchor.text.replace(/[^a-z']/gi, '').length)
+    const active = activityAround(anchor.start, true)
+    const letters = Math.max(1, wordLetters(anchor.text))
     const expectedSeconds = EXPECTED_SECONDS_PER_LETTER * letters
     const latestEnd = Math.min(
       nextStart,

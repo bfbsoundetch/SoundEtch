@@ -257,8 +257,27 @@ test('continuous speech extends an end only up to a letter-based length cap', ()
   ]
   const speech = new Uint8Array(100).fill(1)
   expect(geometry(refineGraniteWords(words, speech, Float32Array.from(speech), 0.032, 0, 3.2))).toEqual([
-    { start: 0.4, end: 0.4 + 0.3 },
-    { start: 2.4, end: 2.4 + 0.3 },
+    { start: 0.4, end: 0.4 + 0.4 },
+    { start: 2.4, end: 2.4 + 0.4 },
+  ])
+})
+
+test('a quiet final fricative after a stop closure stays in its word unless it is near the noise floor', () => {
+  // "distance": the vowel, a /t/ closure, then an /s/ 24 dB under the vowel, then silence.
+  const speech = new Uint8Array(100).fill(1)
+  const energies = (floor: number) => {
+    const frames = new Float32Array(100).fill(floor)
+    frames.fill(0.1, 10, 20) // "dis-"
+    frames.fill(0.006, 22, 26) // final /s/
+    return frames
+  }
+  const words = [{ text: 'distance', start: 0.32, end: 0.4 }]
+  expect(geometry(refineGraniteWords(words, speech, energies(0.0005), 0.032, 0, 3.2))).toEqual([
+    { start: 0.32, end: 26 * 0.032 },
+  ])
+  // With a noise floor 3.5 dB under the /s/, the same level is noise, and the word ends with its vowel.
+  expect(geometry(refineGraniteWords(words, speech, energies(0.004), 0.032, 0, 3.2))).toEqual([
+    { start: 0.32, end: 20 * 0.032 },
   ])
 })
 
@@ -337,17 +356,26 @@ test('speech support distinguishes VAD, energy, and frames outside padded segmen
   ).toEqual([1, 2, 0])
 })
 
-test('word timing uses posterior medians, earlier prefix onsets, a 20 ms minimum, and raw-frame fallback', () => {
+test('word timing uses length-corrected posterior medians, earlier prefix onsets, a 20 ms minimum, and raw-frame fallback', () => {
   const word = { text: 'word', startFrame: 2, endFrame: 3, firstToken: 0, lastToken: 0 }
   const posterior: CtcTokenBoundary = {
     start: { low: 2, median: 3, high: 4 },
     end: { low: 2, median: 3, high: 4 },
   }
-  expect(timeGraniteWords([word], [posterior], [], 1)).toEqual([{ text: 'word', start: 0.24, end: 0.26 }])
-  expect(timeGraniteWords([word], null, [], 1)).toEqual([{ text: 'word', start: 0.16, end: 0.24 }])
-  // An onset starts the word mid-frame when earlier than the posterior start, and never delays it.
-  expect(timeGraniteWords([word], [posterior], [1], 1)).toEqual([{ text: 'word', start: 0.12, end: 0.24 }])
-  expect(timeGraniteWords([word], [posterior], [5], 1)).toEqual([{ text: 'word', start: 0.24, end: 0.26 }])
+  const extents = (...args: Parameters<typeof timeGraniteWords>) =>
+    timeGraniteWords(...args).map(({ start, end }) => [start, end])
+  // Starts move 65 ms minus 11 ms per letter: 21 ms later for four letters.
+  expect(extents([word], [posterior], [], 1)[0][0]).toBeCloseTo(0.261, 9)
+  expect(extents([word], [posterior], [], 1)[0][1]).toBeCloseTo(0.281, 9)
+  expect(extents([word], null, [], 1)[0][0]).toBeCloseTo(0.181, 9)
+  expect(extents([word], null, [], 1)[0][1]).toBeCloseTo(0.24, 9)
+  // Short words move later and long ones earlier, by at most one 80 ms frame.
+  expect(extents([{ ...word, text: 'a' }], [posterior], [], 1)[0][0]).toBeCloseTo(0.294, 9)
+  expect(extents([{ ...word, text: 'internationalization' }], [posterior], [], 1)[0][0]).toBeCloseTo(0.16, 9)
+  // An onset starts the word mid-frame when earlier than the corrected start, and never delays it.
+  expect(extents([word], [posterior], [1], 1)[0][0]).toBeCloseTo(0.12, 9)
+  expect(extents([word], [posterior], [1], 1)[0][1]).toBeCloseTo(0.24, 9)
+  expect(extents([word], [posterior], [5], 1)[0][0]).toBeCloseTo(0.261, 9)
 })
 
 // Non-blank vocabulary log-probabilities, one row per frame; ids absent from a row share the remainder.
@@ -389,9 +417,9 @@ test('a long word starts where its prefix pieces overtake the previous word, not
   )
   // Frames 0–2 precede or still belong to the previous word; frame 3 holds 34%; frame 4 holds 55% against 30%.
   expect(graniteWordOnsetFrames(words, spans, logProbs, 8, (text) => prefixIds[text])).toEqual([undefined, 4])
-  // Evidence must lead the spike by three frames.
-  const lateSpans = [spans[0], { id: 4, startFrame: 6, endFrame: 7 }]
-  const lateWords = [words[0], { ...words[1], startFrame: 6, endFrame: 7 }]
+  // Evidence must lead the spike by two frames.
+  const lateSpans = [spans[0], { id: 4, startFrame: 5, endFrame: 6 }]
+  const lateWords = [words[0], { ...words[1], startFrame: 5, endFrame: 6 }]
   expect(graniteWordOnsetFrames(lateWords, lateSpans, logProbs, 8, (text) => prefixIds[text])).toEqual([
     undefined,
     undefined,
@@ -415,9 +443,9 @@ test('a first word Granite emitted on frame 0 starts where its prefix pieces las
     6,
   )
   // The song's "Ġwelcome" at frame 2 and "Ġevery" at frame 3 are neither word: "welcome" is heard
-  // from frame 5, and "everybody" cannot begin before it.
+  // from frame 5, and "everybody" cannot begin before frame 7, where its pieces overtake "Ġwelcome".
   const onsets = graniteWordOnsetFrames(words, spans, logProbs, 6, (text) => prefixIds[text])
-  expect(onsets).toEqual([5, undefined])
+  expect(onsets).toEqual([5, 7])
   expect(graniteLeadingWordOnset(words, onsets, 10)).toBe(5.5 * 0.08)
 
   // Evidence that touches the frame-0 spike is the word itself, spoken from the segment start.
@@ -461,10 +489,11 @@ test('prefix onsets skip short words and pieces that spell a prefix of the previ
     ],
     6,
   )
-  // "Ġi" is no evidence for "issued"; "to" is too short despite leading "Ġto" frames.
+  // "Ġi" at frames 1–2 is no evidence for "issued"; "Ġis" at 20% in frame 3 is. "to" is too short
+  // despite leading "Ġto" frames.
   expect(graniteWordOnsetFrames(words, spans, logProbs, 6, (text) => prefixIds[text])).toEqual([
     undefined,
-    undefined,
+    3,
     undefined,
   ])
 })
