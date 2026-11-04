@@ -58,6 +58,7 @@ interface Selection {
 interface AutomationMode {
   controller: AutomationController
   host: EffectHost
+  effectInstanceId: string
   infoElement: HTMLElement
   originalInfoElements: Node[]
 }
@@ -274,6 +275,10 @@ export class TrackListController {
     this.tracklistElement.appendChild(this.newTrackDropRegion)
 
     this.history.addChangeListener(() => {
+      const mode = this.automationMode
+      if (mode && !mode.host.effectRegions.some((effect) => effect.instanceId == mode.effectInstanceId)) {
+        this.exitAutomationMode()
+      }
       this.draw()
       this.trackPanelController.refreshData()
     })
@@ -623,7 +628,7 @@ export class TrackListController {
     }
 
     const controller = createController(parameterMetadata)
-    this.automationMode = { controller, host, infoElement, originalInfoElements }
+    this.automationMode = { controller, host, effectInstanceId, infoElement, originalInfoElements }
     controller.draw()
     infoElement.querySelector<HTMLSelectElement>('.automation-parameter-select')?.focus()
     announce(`${parameterMetadata.displayName} automation for ${host.name}`)
@@ -924,11 +929,20 @@ export class TrackListController {
   }
 
   private handleKeyDown(event: KeyboardEvent) {
-    if (event.defaultPrevented || this.shouldIgnoreKeyboardShortcut(event.target)) {
+    if (event.defaultPrevented) {
       return
     }
     const usesModifier = event.metaKey || event.ctrlKey
     if (!usesModifier) {
+      return
+    }
+    const isHistoryShortcut = event.code == 'KeyZ' || (event.ctrlKey && event.code == 'KeyY')
+    const automationHistoryTarget =
+      isHistoryShortcut &&
+      this.automationMode &&
+      event.target instanceof HTMLElement &&
+      event.target.closest('.automation-point-editor, .automation-parameter-select')
+    if (this.shouldIgnoreKeyboardShortcut(event.target) && !automationHistoryTarget) {
       return
     }
     if (!event.shiftKey && event.code == 'KeyC') {
@@ -969,7 +983,7 @@ export class TrackListController {
     }
     if (event.code == 'KeyZ') {
       event.preventDefault()
-      if (!this.canEdit()) {
+      if (!this.canChangeHistory()) {
         return
       }
       if (event.shiftKey) {
@@ -981,7 +995,7 @@ export class TrackListController {
     }
     if (event.ctrlKey && event.code == 'KeyY') {
       event.preventDefault()
-      if (!this.canEdit()) {
+      if (!this.canChangeHistory()) {
         return
       }
       void this.redo()
@@ -1017,11 +1031,14 @@ export class TrackListController {
   }
 
   canEdit() {
+    return !this.automationMode && this.canChangeHistory()
+  }
+
+  private canChangeHistory() {
     return (
-      !this.automationMode &&
-      (AudioControl.getState() == AudioState.STOPPED ||
-        AudioControl.getState() == AudioState.MONITORING ||
-        AudioControl.getState() == AudioState.MONITORING_PAUSED)
+      AudioControl.getState() == AudioState.STOPPED ||
+      AudioControl.getState() == AudioState.MONITORING ||
+      AudioControl.getState() == AudioState.MONITORING_PAUSED
     )
   }
 

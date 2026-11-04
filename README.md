@@ -193,6 +193,8 @@ During playback, toggling bypass takes effect immediately. Each effect sits betw
 
 Exports and Freeze hand rendered audio to the encoder, and so advance their progress, at least every 100 ms, even while a slow effect such as the noise remover takes seconds per render chunk.
 
+Choose **Automate** on a track or Output effect to edit its timeline points. Each point's row in the bottom panel has a **Delete** button; deleting the last point leaves the parameter's initial value unchanged. Automation edits are saved with the project and support **Ctrl/⌘+Z** to undo and **Ctrl/⌘+Shift+Z** to redo without leaving automation, including when point fields or the parameter selector have focus. The Edit menu offers the same actions. Undoing the addition of the effect being automated exits automation safely. **Back** in either the point editor or the timeline header exits automation, clears the timeline overlay, and restores the normal timeline controls.
+
 ### Output effects
 
 The Output effect chain processes the mix of all tracks, after each track's own effects, gain, mute/solo, and pan, during playback and in every audio and MP4 export. Open it with the Output header's **Effects** button or the Output panel's **Audio** view. It runs from **All tracks** to **Final mix** with the same catalog and controls as a track's chain: effect editors, **Bypass** (immediate during playback), reordering, removal, undo/redo, and live parameter changes while playing. The chain is saved with the project, travels in project archives, and starts empty in projects created before it existed. Freeze renders only its tracks' chains: the frozen track still plays through the Output chain, which would otherwise apply twice.

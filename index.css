@@ -2669,6 +2669,10 @@ video {
   font: inherit;
 }
 
+.automation-delete-point-button {
+  padding: 0.3rem 0.75rem;
+}
+
 .automation-point-value-field {
   display: grid;
   grid-template-columns: minmax(7rem, 1fr) auto;

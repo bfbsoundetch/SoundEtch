@@ -25,6 +25,7 @@ interface PointEditorControls {
   value: HTMLInputElement
   valuePreview: HTMLOutputElement
   transition: HTMLSelectElement
+  deleteButton: HTMLButtonElement
 }
 
 export class AutomationController extends TrackListItemController {
@@ -234,7 +235,7 @@ export class AutomationController extends TrackListItemController {
       title: `${this.parameterMetadata.displayName} automation`,
       subtitle: `${this.host.name} · ${this.paramVals.transitionSequence.length} points`,
       body: this.createPointEditor(),
-      onBack: () => this.bottomPanelController.close(this),
+      onBack: () => this.trackListController.exitAutomationMode(),
       onClose: () => {
         this.pointEditorIsOpen = false
         this.pointEditorControls.clear()
@@ -276,7 +277,7 @@ export class AutomationController extends TrackListItemController {
     table.className = 'automation-point-table'
     const head = document.createElement('thead')
     const headingRow = document.createElement('tr')
-    for (const heading of ['Point', 'Time (seconds)', this.parameterMetadata.displayName, 'Transition to point']) {
+    for (const heading of ['Point', 'Time (seconds)', this.parameterMetadata.displayName, 'Transition to point', 'Actions']) {
       const cell = document.createElement('th')
       cell.scope = 'col'
       cell.textContent = heading
@@ -384,7 +385,24 @@ export class AutomationController extends TrackListItemController {
     })
     transitionCell.appendChild(transition)
 
-    row.append(number, positionCell, valueCell, transitionCell)
+    const actionsCell = document.createElement('td')
+    const deleteButton = document.createElement('button')
+    deleteButton.type = 'button'
+    deleteButton.className = 'bordered clickable automation-delete-point-button'
+    deleteButton.textContent = 'Delete'
+    deleteButton.addEventListener('click', () => {
+      const points = this.paramVals.transitionSequence
+      const pointIndex = points.indexOf(point)
+      if (pointIndex < 0) {
+        return
+      }
+      this.commitPointEdit(point, `delete ${this.parameterMetadata.displayName} automation point`, () => {
+        points.splice(pointIndex, 1)
+      })
+    })
+    actionsCell.appendChild(deleteButton)
+
+    row.append(number, positionCell, valueCell, transitionCell, actionsCell)
     this.pointEditorControls.set(point, {
       row,
       number,
@@ -392,6 +410,7 @@ export class AutomationController extends TrackListItemController {
       value,
       valuePreview,
       transition,
+      deleteButton,
     })
     this.updatePointEditorControls(point, index, this.pointEditorControls.get(point)!)
     return row
@@ -446,6 +465,7 @@ export class AutomationController extends TrackListItemController {
     controls.valuePreview.textContent = this.parameterMetadata.displayValue(point.startValue)
     controls.transition.value = point.type
     controls.transition.setAttribute('aria-label', `Point ${index + 1} transition type`)
+    controls.deleteButton.setAttribute('aria-label', `Delete point ${index + 1}`)
   }
 
   private formatEditableValue(value: number) {
