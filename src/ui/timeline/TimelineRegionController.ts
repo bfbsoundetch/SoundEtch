@@ -50,6 +50,7 @@ export class TimelineRegionController extends TrackListItemController {
     position = Math.max(position, 0)
     if (this.waveformElements.size == 0) {
       this.firstPosition = position
+      this.draggedFirstWaveform = waveform
     }
     this.secondPosition = position
     if (this.singleWaveform || !dragged || !waveform) {
@@ -93,6 +94,7 @@ export class TimelineRegionController extends TrackListItemController {
     this.clearElements()
     this.firstPosition = startSample
     this.secondPosition = endSample
+    this.draggedFirstWaveform = waveforms.values().next().value ?? null
     waveforms.forEach((w) => this.setUpElementsForWaveform(w))
     this.trackListController.positionMarkerController.hidePositionMarker()
     this.draw()

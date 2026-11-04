@@ -154,6 +154,32 @@ export class PointerStateManager extends TrackListItemController {
           break
       }
     }
+    const shiftMouseDownListener = (event: MouseEvent) => {
+      if (
+        !event.shiftKey ||
+        event.button !== 0 ||
+        event.altKey ||
+        event.ctrlKey ||
+        event.metaKey ||
+        outputLaneFor(event.target) ||
+        !trackListController.canEdit() ||
+        (this.state !== State.DEFAULT && this.state !== State.SELECTING)
+      )
+        return
+      const div = event.target instanceof Element ? event.target.closest('.waveform') : null
+      const waveform = trackListController.waveforms.find((w) => w.div === div) ?? null
+      this.pendingTranscript = null
+      this.mouseDownPoint = { x: event.clientX, y: event.clientY }
+      this.timelineRegionController = trackListController.selectionController
+      if (!trackListController.selectedRegion) {
+        this.timelineRegionController.updateSelection(AudioControl.startPosition, waveform, false)
+      }
+      this.timelineRegionController.updateSelection(this.sampleForMouseEvent(event), waveform, true)
+      trackListController.positionMarkerController.hidePositionMarker()
+      this.changeState(State.SELECTING)
+      event.preventDefault()
+      event.stopPropagation()
+    }
     const mouseDownListener = async (mouseEvent: MouseEvent) => {
       if (outputLaneFor(mouseEvent.target)) return
       if (Math.abs(mouseEvent.x - this.trackListController.positionMarkerController.x) < 2) {
@@ -299,6 +325,8 @@ export class PointerStateManager extends TrackListItemController {
     this.timelineAreaElement.addEventListener('wheel', scrollListener, { passive: false })
     document.getElementById('timeline')!.addEventListener('wheel', scrollListener, { passive: false })
 
+    timelineAreaElement.addEventListener('mousedown', shiftMouseDownListener, true)
+    timelineElement.addEventListener('mousedown', shiftMouseDownListener, true)
     timelineAreaElement.addEventListener('mousedown', mouseDownListener)
     timelineAreaElement.addEventListener('mousemove', (event) => {
       if (!outputLaneFor(event.target)) void mouseMoveListener(event)

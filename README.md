@@ -115,6 +115,10 @@ Drag one local media file onto the timeline, or onto the welcome area in an empt
 
 File drops are available while stopped or monitoring, not during playback, recording, or another local-file import. Drop one file at a time; text and link drags are left alone.
 
+## Selecting on the timeline
+
+Click a track's timeline to place the cursor, then **Shift-click** another point to select the time range and every track between the two points, including both endpoint tracks. Shift-click also extends an existing selection; further Shift-clicks move its endpoint while keeping the original anchor. Shift-click the ruler to adjust the time range without changing the selected tracks.
+
 ## Moving clips
 
 Drag a clip's header to move it along the timeline or onto another track. Drag toward the top or bottom edge of the visible track list to scroll vertically, even while the pointer then stays still. A header already near an edge does not start scrolling just from being grabbed: horizontal moves and small vertical pointer jitter leave the track list still, including with the bottom panel open. Scrolling speeds up toward the edge and stops when the pointer returns to the middle or the drag ends. To move the clip onto a new track, keep dragging down until the **+ new track** drop area appears below the last track, then release over it.
