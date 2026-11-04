@@ -411,11 +411,14 @@ export class PointerStateManager extends TrackListItemController {
     const bottom = Math.min(window.innerHeight, bounds.bottom)
     if (bottom <= top || point.x < bounds.left || point.x > bounds.right) return 0
     const edge = Math.min(48, (bottom - top) / 2)
-    if (point.y < top + edge && this.trackScrollElement.scrollTop > 0) {
+    // A clip header can already be inside an edge zone when the drag starts.
+    const startY = this.mouseDownPoint!.y
+    const verticalSlop = 8
+    if (point.y < Math.min(top + edge, startY - verticalSlop) && this.trackScrollElement.scrollTop > 0) {
       return -(80 + 520 * Math.min(1, (top + edge - point.y) / edge))
     }
     if (
-      point.y > bottom - edge &&
+      point.y > Math.max(bottom - edge, startY + verticalSlop) &&
       this.trackScrollElement.scrollTop + this.trackScrollElement.clientHeight < this.trackScrollElement.scrollHeight
     ) {
       return 80 + 520 * Math.min(1, (point.y - bottom + edge) / edge)

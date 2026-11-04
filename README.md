@@ -117,7 +117,7 @@ File drops are available while stopped or monitoring, not during playback, recor
 
 ## Moving clips
 
-Drag a clip's header to move it along the timeline or onto another track. Hold it near the top or bottom edge of the visible track list to scroll vertically, even while the pointer stays still. Scrolling speeds up toward the edge and stops when the pointer returns to the middle or the drag ends. To move the clip onto a new track, keep dragging down until the **+ new track** drop area appears below the last track, then release over it.
+Drag a clip's header to move it along the timeline or onto another track. Drag toward the top or bottom edge of the visible track list to scroll vertically, even while the pointer then stays still. A header already near an edge does not start scrolling just from being grabbed: horizontal moves and small vertical pointer jitter leave the track list still, including with the bottom panel open. Scrolling speeds up toward the edge and stops when the pointer returns to the middle or the drag ends. To move the clip onto a new track, keep dragging down until the **+ new track** drop area appears below the last track, then release over it.
 
 ## Timeline output
 
