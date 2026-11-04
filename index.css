@@ -61,16 +61,16 @@ button {
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg-color: #525758;
-    --color: #f0f1f2;
-    --menu-bg: black;
+    --bg-color: #1c2024;
+    --color: #d1d4d9;
+    --menu-bg: #0f1112;
     --clickable-hover: rgba(255, 255, 255, 0.25);
     --clickable-active: rgba(255, 255, 255, 0.35);
     --clickable-inactive: rgba(0, 0, 0, 0.1);
-    --alt-background: #696e6f; /* The lightest grey that keeps --color text at 4.5:1 contrast. */
+    --alt-background: #353b3e; /* The lightest grey that keeps --color text at 4.5:1 contrast. */
     /* Here the raised surfaces are darker than the main ones, like the black menus. */
-    --raised-bg-color: #404445;
-    --raised-alt-background: #696e6f;
+    --raised-bg-color: #080909;
+    --raised-alt-background: #383b3b;
     --waveform-0: #c48383;
     --waveform-1: #b39d62;
     --waveform-2: #7ba78c;
@@ -162,6 +162,7 @@ body {
   border: none;
   background-color: var(--menu-bg);
   color: var(--color);
+  box-shadow: 0 0.5rem 1.5rem rgba(0, 0, 0, 0.22);
 }
 
 .main-menu-submenu {

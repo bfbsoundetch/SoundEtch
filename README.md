@@ -165,6 +165,8 @@ Open **Settings** from the application menu to configure spectrogram rendering a
 
 Static `index.html` presentation and timeline styling live in `index.css`, including the reusable SVG icon sprite. Visibility uses semantic attributes and state selectors; controllers retain runtime geometry and bind dynamic colors through CSS custom properties. The favicon's embedded SVG keeps its own styles because it is a separate document. The ruler's `--timeline-label-font-size` also drives its tick-spacing and keyboard-step calculations.
 
+The main menu has a soft drop shadow to separate it from the page beneath it in both color schemes.
+
 Waveform clip fills follow the system color scheme: light mode keeps the pastel palette, while dark mode uses muted coral, amber, sage, teal, periwinkle, and mauve with contrast against the black waveform trace. Both palettes use `--waveform-0` through `--waveform-5` in `index.css`.
 
 Surfaces are layered in both color schemes. The page, header, timeline, and track controls use the main `--bg-color` and `--alt-background`. Modal dialogs and the bottom panel re-declare those two tokens from `--raised-bg-color` and `--raised-alt-background`: the raised palette is lighter than the main one in light mode and darker in dark mode, matching the white and black menus. The bottom panel's tab bar reverses that contrast—dark with light text in light mode, light with dark text in dark mode—to separate it from the main area; its tabs, dividers, resize grip, and focus indicators share the contrasting foreground. Modal backdrops also dim the page. Outlined buttons fill with `--button-bg`, a 12% tint of the text color, so they stand apart from whichever surface holds them.
