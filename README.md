@@ -165,7 +165,7 @@ Waveform clip fills follow the system color scheme: light mode keeps the pastel 
 
 Surfaces are layered in both color schemes. The page, header, timeline, and track controls use the main `--bg-color` and `--alt-background`. Modal dialogs and the bottom panel re-declare those two tokens from `--raised-bg-color` and `--raised-alt-background`: the raised palette is lighter than the main one in light mode and darker in dark mode, matching the white and black menus. The bottom panel's tab bar reverses that contrast—dark with light text in light mode, light with dark text in dark mode—to separate it from the main area; its tabs, dividers, resize grip, and focus indicators share the contrasting foreground. Modal backdrops also dim the page. Outlined buttons fill with `--button-bg`, a 12% tint of the text color, so they stand apart from whichever surface holds them.
 
-The bottom panel has a 1px top border in the tab bar's contrasting foreground color.
+The bottom panel has a 4px top border in the tab bar's contrasting foreground color to distinguish it from the main timeline.
 
 The **Downloaded models** settings section reports the persistent browser-cache footprint of DeepFilterNet, Granite, and Silero VAD separately. **Unload** removes that model's cached files, including stale Granite or VAD revision caches, without interrupting a model runtime already in use. The browser downloads those files again when a later runtime needs them.
 
