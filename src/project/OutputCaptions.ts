@@ -14,8 +14,8 @@ export interface OutputCaptionSettings {
   position?: 'bottom' | 'middle' | 'top'
   color: string
   highlightColor: string
-  /** Missing values use the default dark text shadow. */
-  shadowEnabled?: boolean
+  /** Halo spread as a percentage of the standard size; 0 disables the shadow. */
+  shadowSize?: number
   shadowColor?: string
 }
 
@@ -35,7 +35,7 @@ export const DEFAULT_OUTPUT_CAPTIONS: Readonly<OutputCaptionSettings> = Object.f
   position: 'bottom',
   color: '#ffffff',
   highlightColor: '#ffd54f',
-  shadowEnabled: true,
+  shadowSize: 100,
   shadowColor: '#000000',
 })
 

@@ -30,7 +30,7 @@ test('caption source and styling survive persisted undo and redo without sharing
     position: 'top' as const,
     color: '#11ccff',
     highlightColor: '#ff2266',
-    shadowEnabled: false,
+    shadowSize: 150,
     shadowColor: '#44dd88',
   }
   const expected = { ...after }

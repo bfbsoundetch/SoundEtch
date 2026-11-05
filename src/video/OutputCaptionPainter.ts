@@ -1,4 +1,4 @@
-import type { OutputCaptionCue, OutputCaptionSettings } from '../project/OutputCaptions'
+import { DEFAULT_OUTPUT_CAPTIONS, type OutputCaptionCue, type OutputCaptionSettings } from '../project/OutputCaptions'
 
 type CaptionContext = CanvasRenderingContext2D | OffscreenCanvasRenderingContext2D
 
@@ -127,9 +127,10 @@ export function paintOutputCaption(
     context.globalCompositeOperation = 'source-over'
     context.shadowOffsetX = 0
     context.shadowOffsetY = 0
-    if (settings.shadowEnabled !== false) {
+    const shadowScale = (settings.shadowSize ?? DEFAULT_OUTPUT_CAPTIONS.shadowSize!) / 100
+    if (shadowScale > 0) {
       // Canvas blur is in device pixels, so scale it explicitly with the text.
-      const shadowSize = settings.fontSize * layout.scale
+      const shadowSize = settings.fontSize * layout.scale * shadowScale
       const shadowColor = settings.shadowColor ?? '#000000'
       context.fillStyle = shadowColor
       context.shadowColor = shadowColor

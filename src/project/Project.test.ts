@@ -5,6 +5,7 @@ import { Project } from './Project'
 import { Track } from './Track'
 import { ProjectManager } from './ProjectManager'
 import { getOutputCropPosition, getOutputCropScale } from './OutputScene'
+import { DEFAULT_OUTPUT_CAPTIONS } from './OutputCaptions'
 import { ParameterValueSequence, ParamValueTransition } from '../effects/ParameterValueSequence'
 
 function attachPlayback(track: Track) {
@@ -76,6 +77,38 @@ test('restoring older project records keeps the default output scene', async () 
 
   expect(restored.title).toBe('legacy project')
   expect(restored.outputScenes).toEqual([{ startSample: 0, layout: 'single', fit: 'contain', tracks: [null, null] }])
+})
+
+test('opening projects migrates shadow on/off choices without overwriting a saved size or style', async () => {
+  const original = await ProjectManager.getActiveProject()
+  try {
+    for (const [enabled, savedSize, expectedSize] of [
+      [false, undefined, 0],
+      [true, undefined, 100],
+      [false, 175, 175],
+      [true, 0, 0],
+    ] as const) {
+      const project = new Project('legacy caption shadow', 48_000)
+      const legacy = { ...DEFAULT_OUTPUT_CAPTIONS, shadowEnabled: enabled, position: 'top' as const, shadowColor: '#112233' }
+      delete legacy.shadowSize
+      if (savedSize !== undefined) legacy.shadowSize = savedSize
+      project.outputCaptions = legacy
+      await DatabasePersister.save(project)
+
+      const opened = await ProjectManager.openProject(project.id!)
+      expect(opened.outputCaptions.shadowSize).toBe(expectedSize)
+      expect(opened.outputCaptions.position).toBe('top')
+      expect(opened.outputCaptions.shadowColor).toBe('#112233')
+      expect(opened.outputCaptions).not.toHaveProperty('shadowEnabled')
+      await ProjectManager.saveProject(opened)
+      const record = (await DatabasePersister.getPersistedObjectGraph(project.id!)).find((entry) => entry.id === project.id)!
+      const restored = await DatabasePersister.fromPersistedObject(record) as Project
+      expect(restored.outputCaptions.shadowSize).toBe(expectedSize)
+      expect(restored.outputCaptions).not.toHaveProperty('shadowEnabled')
+    }
+  } finally {
+    await ProjectManager.openProject(original)
+  }
 })
 
 test('output effects survive a database reload, and older project records restore without any', async () => {

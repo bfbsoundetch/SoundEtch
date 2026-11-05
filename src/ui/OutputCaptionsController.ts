@@ -28,7 +28,8 @@ export class OutputCaptionsController {
   private readonly sizeLabel: HTMLSpanElement
   private readonly color = document.createElement('input')
   private readonly highlight = document.createElement('input')
-  private readonly shadowEnabled = document.createElement('input')
+  private readonly shadowSize = document.createElement('input')
+  private readonly shadowSizeLabel: HTMLSpanElement
   private readonly shadowColor = document.createElement('input')
   private readonly note = document.createElement('p')
   private readonly canvas = document.createElement('canvas')
@@ -44,6 +45,7 @@ export class OutputCaptionsController {
   private paintedSettings: Readonly<OutputCaptionSettings> | null = null
   private controlsEditable: boolean | null = null
   private shownSize = NaN
+  private shownShadowSize = NaN
   private readonly observedClips = new WeakSet<Clip>()
 
   constructor(stage: HTMLElement, private readonly canEdit: () => boolean) {
@@ -68,10 +70,13 @@ export class OutputCaptionsController {
     this.color.type = 'color'
     this.highlight.id = 'output-captions-highlight'
     this.highlight.type = 'color'
-    this.shadowEnabled.id = 'output-captions-shadow-enabled'
-    this.shadowEnabled.type = 'checkbox'
-    const shadowLabel = this.field('Text shadow', this.shadowEnabled)
-    shadowLabel.classList.add('output-panel-caption-toggle')
+    this.shadowSize.id = 'output-captions-shadow-size'
+    this.shadowSize.type = 'range'
+    this.shadowSize.min = '0'
+    this.shadowSize.max = '200'
+    this.shadowSize.step = '5'
+    const shadowSizeField = this.field('Shadow size', this.shadowSize)
+    this.shadowSizeLabel = shadowSizeField.firstElementChild as HTMLSpanElement
     this.shadowColor.id = 'output-captions-shadow-color'
     this.shadowColor.type = 'color'
     this.note.className = 'output-panel-note'
@@ -84,14 +89,14 @@ export class OutputCaptionsController {
       sizeField,
       this.field('Text color', this.color),
       this.field('Spoken word color', this.highlight),
-      shadowLabel,
+      shadowSizeField,
       this.field('Shadow color', this.shadowColor),
       this.note,
     )
-    for (const control of [this.enabled, this.source, this.position, this.font, this.size, this.color, this.highlight, this.shadowEnabled, this.shadowColor]) {
+    for (const control of [this.enabled, this.source, this.position, this.font, this.size, this.color, this.highlight, this.shadowSize, this.shadowColor]) {
       control.addEventListener('change', () => void this.commit())
     }
-    for (const control of [this.size, this.color, this.highlight, this.shadowColor]) {
+    for (const control of [this.size, this.color, this.highlight, this.shadowSize, this.shadowColor]) {
       control.addEventListener('input', () => {
         if (!this.canEdit() || this.saving) return
         this.draft = this.readSettings()
@@ -153,18 +158,25 @@ export class OutputCaptionsController {
     const settings = this.settings()
     const editable = this.project !== null && this.canEdit() && !this.saving
     const controlsEditable = editable && settings.enabled
+    const shadowSize = settings.shadowSize ?? DEFAULT_OUTPUT_CAPTIONS.shadowSize!
     if (this.enabled.disabled === editable) this.enabled.disabled = !editable
     if (controlsEditable !== this.controlsEditable) {
       this.controlsEditable = controlsEditable
-      for (const control of [this.source, this.position, this.font, this.size, this.color, this.highlight, this.shadowEnabled]) {
+      for (const control of [this.source, this.position, this.font, this.size, this.color, this.highlight, this.shadowSize]) {
         control.disabled = !controlsEditable
       }
     }
-    const shadowColorEditable = controlsEditable && settings.shadowEnabled !== false
+    const shadowColorEditable = controlsEditable && shadowSize > 0
     if (this.shadowColor.disabled === shadowColorEditable) this.shadowColor.disabled = !shadowColorEditable
     if (settings.fontSize !== this.shownSize) {
       this.shownSize = settings.fontSize
       this.sizeLabel.textContent = `Font size (${settings.fontSize} px)`
+    }
+    if (shadowSize !== this.shownShadowSize) {
+      this.shownShadowSize = shadowSize
+      const value = shadowSize === 0 ? 'Off' : `${shadowSize}%`
+      this.shadowSizeLabel.textContent = `Shadow size (${value})`
+      this.shadowSize.setAttribute('aria-valuetext', value)
     }
     if (settings.followLoudest && this.project && this.captionSource?.updateLevels(this.project)) {
       this.refreshSourceNote()
@@ -213,7 +225,7 @@ export class OutputCaptionsController {
       fontSize: this.size.valueAsNumber,
       color: this.color.value,
       highlightColor: this.highlight.value,
-      shadowEnabled: this.shadowEnabled.checked,
+      shadowSize: this.shadowSize.valueAsNumber,
       shadowColor: this.shadowColor.value,
     }
   }
@@ -228,7 +240,7 @@ export class OutputCaptionsController {
     this.size.value = String(settings.fontSize)
     this.color.value = settings.color
     this.highlight.value = settings.highlightColor
-    this.shadowEnabled.checked = settings.shadowEnabled !== false
+    this.shadowSize.value = String(settings.shadowSize ?? DEFAULT_OUTPUT_CAPTIONS.shadowSize!)
     this.shadowColor.value = settings.shadowColor ?? DEFAULT_OUTPUT_CAPTIONS.shadowColor!
     this.controlsEditable = null
   }

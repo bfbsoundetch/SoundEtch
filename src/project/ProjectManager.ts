@@ -3,6 +3,7 @@ import { DatabasePersister } from '../persistence/DatabasePersister'
 import { Clip } from './Clip'
 import { ClipView } from './ClipView'
 import { Project } from './Project'
+import { DEFAULT_OUTPUT_CAPTIONS } from './OutputCaptions'
 import { Track } from './Track'
 
 export class ProjectManager {
@@ -65,12 +66,23 @@ export class ProjectManager {
     return ProjectManager.activeProject
   }
 
+  private static migrateCaptionShadow(project: Project): void {
+    const settings = project.outputCaptions
+    if (!('shadowEnabled' in settings)) return
+    const { shadowEnabled, ...current } = settings
+    project.outputCaptions = {
+      ...current,
+      shadowSize: current.shadowSize ?? (shadowEnabled === false ? 0 : DEFAULT_OUTPUT_CAPTIONS.shadowSize!),
+    }
+  }
+
   private static async createOrLoadActiveProject() {
     const activeProjectId = await DatabasePersister.getGlobalProperty(ProjectManager.ACTIVE_PROJECT_PROPERTY_NAME)
     let result: Project | null
     if (activeProjectId != null) {
       result = await DatabasePersister.getObjectById<Project>(Number(activeProjectId))
       if (result) {
+        this.migrateCaptionShadow(result)
         await this.populateSummaries(result)
         await this.recoverInterruptedVideo(result)
       } else {
@@ -113,6 +125,7 @@ export class ProjectManager {
     if (!project) {
       throw new Error('Project not found')
     }
+    this.migrateCaptionShadow(project)
     ProjectManager.activeProject = Promise.resolve(project)
     await this.populateSummaries(project)
     await this.recoverInterruptedVideo(project)
