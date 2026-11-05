@@ -36,11 +36,9 @@ button {
   --clickable-active: rgba(0, 0, 0, 0.25);
   --clickable-inactive: rgba(255, 255, 255, 0.4);
   --alt-background: #d5dde1;
-  /* Modals and the bottom panel sit above the main surfaces; the raised rule below applies these. */
+  /* Dialogs and panel contents use the raised palette; panel chrome shares the project header's surface. */
   --raised-bg-color: #f8f9fa; /* https://www.color-hex.com/color/c0cbcd */
   --raised-alt-background: #e7eef1; /* https://www.color-hex.com/color/d8e4e9 */
-  --panel-header-bg: var(--color);
-  --panel-header-text: var(--raised-bg-color);
   /* A tint of the text color, so a button stands apart from whichever surface holds it. */
   --button-bg: color-mix(in srgb, var(--color) 12%, transparent);
   --waveform-0: hsla(0, 100%, 90%, 1);
@@ -90,7 +88,7 @@ button {
 
 /* Raised surfaces: their contents take the raised palette, so they stand out from the main surfaces beneath. */
 dialog.overlay,
-.bottom-panel {
+.bottom-panel-body {
   --bg-color: var(--raised-bg-color);
   --alt-background: var(--raised-alt-background);
 }
@@ -280,12 +278,12 @@ dialog.overlay[open] {
 #topdiv {
   width: 100%;
   height: 100%;
-  transition: height 0.1s ease;
   display: grid;
-  grid-template-rows: 4rem auto;
+  grid-template-rows: 4rem auto minmax(0, 1fr);
   grid-template-columns: 100%;
   grid-template-areas:
     'header'
+    'panel'
     'body';
   overscroll-behavior: none;
 }
@@ -293,6 +291,7 @@ dialog.overlay[open] {
 #timeline-body {
   width: 100%;
   height: 100%;
+  min-height: 0;
   display: grid;
   grid-area: body;
   grid-template-rows: auto 1fr;
@@ -801,6 +800,8 @@ body.tooltips-dismissed :is(.tooltipped span, .slider-value) {
   align-content: start;
   width: 100%;
   height: 100%;
+  min-height: 0;
+  overflow-y: auto;
   grid-area: body;
   justify-items: center;
   overscroll-behavior: none;
@@ -1064,6 +1065,10 @@ svg {
   stroke-linecap: round;
   stroke-linejoin: round;
   stroke-width: 45;
+}
+
+#chevron-down > polyline {
+  stroke-width: 16;
 }
 
 #arrow-block-right > path {
@@ -3213,28 +3218,19 @@ video {
 }
 
 .bottom-panel {
-  position: fixed;
-  left: 0;
-  right: 0;
-  bottom: 0;
+  position: relative;
+  grid-area: panel;
+  min-height: 0;
   box-sizing: border-box;
-  background: var(--bg-color);
+  background: var(--alt-background);
   color: var(--color);
-  border-top: 4px solid var(--panel-header-text);
-  box-shadow: 0 -0.5rem 1.5rem rgba(0, 0, 0, 0.2);
-  transition:
-    height 0.1s ease,
-    box-shadow 0.1s ease;
+  border-bottom: 1px solid color-mix(in srgb, var(--color) 35%, transparent);
+  transition: height 0.1s ease;
   z-index: 1001;
   display: grid;
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr) 2rem;
 }
 
-.bottom-panel.expanded {
-  box-shadow: none;
-}
-
-body:has(.bottom-panel.resizing, .bottom-panel.layout-resize) #topdiv,
 .bottom-panel.resizing,
 .bottom-panel.layout-resize {
   transition: none;
@@ -3246,20 +3242,15 @@ body:has(.bottom-panel.resizing, .bottom-panel.layout-resize) #topdiv,
 }
 
 .bottom-panel-header {
-  --color: var(--panel-header-text);
-  --clickable-hover: color-mix(in srgb, var(--color) 15%, transparent);
-  --clickable-active: color-mix(in srgb, var(--color) 25%, transparent);
   position: relative;
   display: flex;
   align-items: stretch;
   justify-content: space-between;
   gap: 1rem;
   height: 2.75rem;
-  background: var(--panel-header-bg);
+  background: var(--alt-background);
   color: var(--color);
-  border-bottom: 1px solid var(--color);
-  cursor: ns-resize;
-  touch-action: none;
+  border-bottom: 1px solid color-mix(in srgb, var(--color) 35%, transparent);
   user-select: none;
 }
 
@@ -3267,34 +3258,70 @@ body:has(.bottom-panel.resizing, .bottom-panel.layout-resize) #topdiv,
   border-bottom-color: transparent;
 }
 
-.bottom-panel-resize-handle {
-  position: absolute;
-  top: 0;
-  left: 50%;
-  width: 6rem;
-  height: 0.75rem;
-  transform: translateX(-50%);
+.bottom-panel-footer {
+  display: flex;
+  justify-content: center;
+  cursor: ns-resize;
+  touch-action: none;
 }
 
-.bottom-panel-resize-handle::after {
+.bottom-panel.collapsed .bottom-panel-footer {
+  --panel-fold-edge: polygon(
+    0 0,
+    calc(50% - 3rem) 0,
+    50% 0.5rem,
+    calc(50% + 3rem) 0,
+    100% 0,
+    100% 100%,
+    0 100%
+  );
+  position: relative;
+}
+
+.bottom-panel.collapsed .bottom-panel-footer::before,
+.bottom-panel.collapsed .bottom-panel-footer::after {
   content: '';
   position: absolute;
-  top: 0.25rem;
-  left: 25%;
-  width: 50%;
-  height: 3px;
-  border-radius: 3px;
-  background: var(--color);
-  opacity: 0.45;
+  inset: auto 0 0;
+  height: 0.625rem;
+  clip-path: var(--panel-fold-edge);
+  pointer-events: none;
 }
 
-.bottom-panel-resize-handle:hover::after,
-.bottom-panel-resize-handle:focus-visible::after {
-  opacity: 0.85;
+.bottom-panel.collapsed .bottom-panel-footer::before {
+  background: color-mix(in srgb, var(--color) 24%, var(--alt-background));
+}
+
+.bottom-panel.collapsed .bottom-panel-footer::after {
+  height: calc(0.625rem - 1px);
+  background: linear-gradient(
+    to bottom,
+    color-mix(in srgb, var(--color) 8%, var(--raised-bg-color)),
+    var(--raised-bg-color)
+  );
+}
+
+.bottom-panel-resize-handle {
+  display: grid;
+  z-index: 1;
+  place-items: center;
+  width: 6rem;
+  height: 2rem;
+  cursor: ns-resize;
+  touch-action: none;
+}
+
+.bottom-panel-resize-handle .bottom-panel-resize-icon {
+  width: 4rem;
+  height: 1rem;
+}
+
+.bottom-panel-resize-handle[aria-expanded='true'] .bottom-panel-resize-icon {
+  transform: rotate(180deg);
 }
 
 .bottom-panel-resize-handle:focus-visible {
-  outline: 1px solid var(--color);
+  outline: 2px solid var(--color);
   outline-offset: -2px;
 }
 
@@ -3308,7 +3335,7 @@ body:has(.bottom-panel.resizing, .bottom-panel.layout-resize) #topdiv,
   display: grid;
   place-items: center;
   padding: 0 1.25rem;
-  border-right: 1px solid var(--color);
+  border-right: 1px solid color-mix(in srgb, var(--color) 35%, transparent);
   font-size: 1.1rem;
   font-variant: small-caps;
   letter-spacing: 0.08rem;
@@ -3318,7 +3345,7 @@ body:has(.bottom-panel.resizing, .bottom-panel.layout-resize) #topdiv,
 
 .bottom-panel-tab[aria-selected='true'] {
   background: var(--color);
-  color: var(--panel-header-bg);
+  color: var(--alt-background);
   font-weight: bold;
 }
 
@@ -3334,6 +3361,7 @@ body:has(.bottom-panel.resizing, .bottom-panel.layout-resize) #topdiv,
 .bottom-panel-body {
   width: 100%;
   min-height: 0;
+  background: var(--bg-color);
   overflow: hidden;
 }
 
@@ -3381,7 +3409,6 @@ body:has(.bottom-panel.resizing, .bottom-panel.layout-resize) #topdiv,
 }
 
 .bottom-panel-back svg,
-.bottom-panel-minimize svg,
 .bottom-panel-size svg {
   width: 55%;
   height: 55%;
@@ -3396,7 +3423,8 @@ body:has(.bottom-panel.resizing, .bottom-panel.layout-resize) #topdiv,
   display: none;
 }
 
-.bottom-panel-minimize[aria-expanded='false'] .bottom-panel-minimize-icon {
+.bottom-panel-expand-icon,
+.bottom-panel-restore-icon {
   transform: rotate(180deg);
 }
 
@@ -3799,18 +3827,12 @@ body:has(.bottom-panel.resizing, .bottom-panel.layout-resize) #topdiv,
   opacity: 0.5;
 }
 
-.bottom-panel-header-buttons {
-  display: flex;
-  align-self: stretch;
-}
-
-.bottom-panel-minimize,
 .bottom-panel-size {
   display: grid;
   place-items: center;
   align-self: stretch;
   aspect-ratio: 1 / 1;
-  border-left: 1px solid var(--color);
+  border-left: 1px solid color-mix(in srgb, var(--color) 35%, transparent);
 }
 
 .effect-list-body {
@@ -4565,7 +4587,6 @@ body:has(.bottom-panel.resizing, .bottom-panel.layout-resize) #topdiv,
 }
 
 @media (prefers-reduced-motion: reduce) {
-  #topdiv,
   .bottom-panel,
   video,
   #vids,

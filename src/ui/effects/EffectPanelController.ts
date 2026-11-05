@@ -41,7 +41,7 @@ function withCause(context: string, error: unknown): Error {
   return new Error(`${context}: ${cause}`)
 }
 
-/** The bottom panel tab that shows `host`'s effect chain. */
+/** The top panel tab that shows `host`'s effect chain. */
 function panelTab(host: EffectHost): BottomPanelTabId {
   return host instanceof OutputBus ? 'output' : 'tracks'
 }
@@ -128,7 +128,7 @@ export class EffectPanelController {
     }
   }
 
-  /** Opens the bottom panel on `host`'s effect chain: a track's Effects view, or the output's Audio view. */
+  /** Opens the top panel on `host`'s effect chain: a track's Effects view, or the output's Audio view. */
   async showEffectsList(host: EffectHost) {
     this.closeViewInOtherTab(host)
     const viewVersion = ++this.viewVersion

@@ -18,8 +18,6 @@ type PanelSize = 'collapsed' | 'half' | 'full'
 type OpenPanelSize = Exclude<PanelSize, 'collapsed'>
 
 const PANEL_SIZES: readonly PanelSize[] = ['collapsed', 'half', 'full']
-const PANEL_SIZE_VALUES: Record<PanelSize, string> = { collapsed: '0', half: '50', full: '100' }
-const PANEL_SIZE_TEXT: Record<PanelSize, string> = { collapsed: 'Minimized', half: 'Half height', full: 'Full height' }
 const TAB_IDS: readonly BottomPanelTabId[] = ['inputs', 'tracks', 'output']
 const TAB_LABELS: Record<BottomPanelTabId, string> = { inputs: 'Inputs', tracks: 'Tracks', output: 'Output' }
 // Smaller drags keep the current size.
@@ -135,8 +133,8 @@ class BottomPanelTab {
 }
 
 /**
- * The tabbed panel docked below the timeline. It is always present and starts minimized to its tab bar;
- * dragging its bar or using its buttons switches between minimized, half and full height.
+ * The tabbed panel docked above the timeline. It is always present and starts minimized to its tab bar;
+ * dragging downward or using its buttons switches between minimized, half and full height.
  */
 export class BottomPanelController {
   private static instance: BottomPanelController | null = null
@@ -149,10 +147,11 @@ export class BottomPanelController {
   private readonly header = document.createElement('div')
   private readonly tabList = document.createElement('div')
   private readonly body = document.createElement('div')
-  private readonly resizeHandle = document.createElement('div')
+  private readonly resizeHandle = document.createElement('button')
+  private readonly footer = document.createElement('div')
   private readonly sizeButton = document.createElement('button')
-  private readonly minimizeButton = document.createElement('button')
   private readonly topElement = document.getElementById('topdiv')!
+  private readonly timelineElement = document.getElementById('timeline-body')!
   private readonly applicationHeader = document.querySelector<HTMLElement>('.header-container')!
   private readonly tabs = Object.fromEntries(TAB_IDS.map((id) => [id, new BottomPanelTab(id)])) as Record<
     BottomPanelTabId,
@@ -164,34 +163,42 @@ export class BottomPanelController {
   private bodyShowing = false
   private cancelResize: (() => void) | null = null
   private refreshResize: (() => void) | null = null
+  private suppressHandleClick = false
 
   private constructor() {
     this.root.id = 'bottom-panel'
     this.root.className = 'bottom-panel collapsed'
     this.root.setAttribute('role', 'region')
-    this.root.setAttribute('aria-label', 'Bottom panel')
+    this.root.setAttribute('aria-label', 'Top panel')
 
     this.header.className = 'bottom-panel-header'
 
-    this.resizeHandle.className = 'bottom-panel-resize-handle'
-    this.resizeHandle.tabIndex = 0
-    this.resizeHandle.title = 'Drag to resize the panel'
-    this.resizeHandle.setAttribute('role', 'separator')
-    this.resizeHandle.setAttribute('aria-label', 'Resize bottom panel')
-    this.resizeHandle.setAttribute('aria-orientation', 'horizontal')
-    this.resizeHandle.setAttribute('aria-controls', 'bottom-panel')
-    this.resizeHandle.setAttribute('aria-valuemin', '0')
-    this.resizeHandle.setAttribute('aria-valuemax', '100')
+    this.resizeHandle.type = 'button'
+    this.resizeHandle.className = 'clickable bottom-panel-resize-handle'
+    this.resizeHandle.setAttribute('aria-controls', 'bottom-panel-body')
+    this.resizeHandle.setAttribute(
+      'aria-description',
+      'Drag to resize. Arrow Down expands one step; Arrow Up shrinks. Home minimizes; End expands to full height.',
+    )
+    const chevron = createSvgIcon('chevron-down', { className: 'bottom-panel-resize-icon' })
+    chevron.setAttribute('viewBox', '0 0 500 125')
+    this.resizeHandle.appendChild(chevron)
+    this.resizeHandle.addEventListener('click', (event) => {
+      // Pointer drags must not also activate the button; keyboard and assistive clicks still work.
+      const suppress = this.suppressHandleClick && event.detail !== 0
+      this.suppressHandleClick = false
+      if (!suppress) this.setSize(this.size === 'collapsed' ? 'half' : 'collapsed')
+    })
     this.resizeHandle.addEventListener('keydown', (event) => {
       if (event.altKey || event.ctrlKey || event.metaKey) {
         return
       }
       const index = PANEL_SIZES.indexOf(this.size)
       switch (event.key) {
-        case 'ArrowUp':
+        case 'ArrowDown':
           this.setSize(PANEL_SIZES[Math.min(index + 1, PANEL_SIZES.length - 1)])
           break
-        case 'ArrowDown':
+        case 'ArrowUp':
           this.setSize(PANEL_SIZES[Math.max(index - 1, 0)])
           break
         case 'Home':
@@ -206,7 +213,8 @@ export class BottomPanelController {
       event.preventDefault()
       event.stopPropagation()
     })
-    this.header.addEventListener('pointerdown', (event) => this.startResize(event))
+    this.footer.addEventListener('pointerdown', (event) => this.startResize(event))
+    this.resizeHandle.addEventListener('pointerdown', (event) => this.startResize(event))
 
     this.tabList.className = 'bottom-panel-tabs'
     this.tabList.setAttribute('role', 'tablist')
@@ -255,24 +263,16 @@ export class BottomPanelController {
     )
     this.sizeButton.addEventListener('click', () => this.setSize(this.size === 'full' ? 'half' : 'full'))
 
-    this.minimizeButton.type = 'button'
-    this.minimizeButton.className = 'clickable bottom-panel-minimize'
-    this.minimizeButton.appendChild(createSvgIcon('chevron-down', { className: 'bottom-panel-minimize-icon' }))
-    this.minimizeButton.addEventListener('click', () =>
-      this.setSize(this.size === 'collapsed' ? this.openSize : 'collapsed'),
-    )
+    this.header.append(this.tabList, this.sizeButton)
 
-    // Adjacent buttons share one divider, so the header's flex gap must not separate them.
-    const headerButtons = document.createElement('div')
-    headerButtons.className = 'bottom-panel-header-buttons'
-    headerButtons.append(this.sizeButton, this.minimizeButton)
+    this.footer.className = 'bottom-panel-footer'
+    this.footer.appendChild(this.resizeHandle)
 
-    this.header.append(this.resizeHandle, this.tabList, headerButtons)
-
+    this.body.id = 'bottom-panel-body'
     this.body.className = 'bottom-panel-body'
     this.body.inert = true
-    this.root.append(this.header, this.body)
-    document.body.appendChild(this.root)
+    this.root.append(this.header, this.body, this.footer)
+    this.topElement.insertBefore(this.root, this.applicationHeader.nextSibling)
     this.selectTab(this.activeTab)
     this.resizePanel(undefined, true)
 
@@ -311,10 +311,10 @@ export class BottomPanelController {
     if (!timelineAnchor) return
     const scrollToAnchor = () => timelineAnchor.scrollIntoView({ block: 'nearest', inline: 'nearest' })
     scrollToAnchor()
-    const animations = this.topElement.getAnimations()
+    const animations = this.root.getAnimations()
     if (animations.length === 0) return
     const resizeObserver = new ResizeObserver(scrollToAnchor)
-    resizeObserver.observe(this.topElement)
+    resizeObserver.observe(this.timelineElement)
     void Promise.allSettled(animations.map((animation) => animation.finished)).then(() => {
       resizeObserver.disconnect()
       scrollToAnchor()
@@ -379,13 +379,14 @@ export class BottomPanelController {
 
   private heights(): Record<PanelSize, number> {
     const viewportHeight = window.innerHeight
-    const collapsed = this.header.offsetHeight + this.root.clientTop
+    const collapsed =
+      this.header.offsetHeight + this.footer.offsetHeight + this.root.offsetHeight - this.root.clientHeight
     const full = Math.max(collapsed, viewportHeight - this.applicationHeader.getBoundingClientRect().bottom)
     return { collapsed, half: Math.min(full, Math.max(collapsed, viewportHeight / 2)), full }
   }
 
   /** The size a drag released at `height` selects: the nearest one, but at least one step in the drag's direction. */
-  private snapSize(height: number, upward: boolean): PanelSize {
+  private snapSize(height: number, expanding: boolean): PanelSize {
     const heights = this.heights()
     let nearest = 0
     for (let i = 1; i < PANEL_SIZES.length; ++i) {
@@ -393,37 +394,45 @@ export class BottomPanelController {
     }
     const current = PANEL_SIZES.indexOf(this.size)
     return PANEL_SIZES[
-      upward
+      expanding
         ? Math.max(nearest, Math.min(current + 1, PANEL_SIZES.length - 1))
         : Math.min(nearest, Math.max(current - 1, 0))
     ]
   }
 
   private startResize(event: PointerEvent): void {
-    if (event.button !== 0 || !event.isPrimary || (event.target instanceof Element && event.target.closest('button'))) {
+    if (
+      event.button !== 0 ||
+      !event.isPrimary ||
+      (event.currentTarget !== this.resizeHandle && event.target instanceof Element && event.target.closest('button'))
+    ) {
       return
     }
     this.cancelResize?.()
     event.preventDefault()
     event.stopPropagation()
     this.resizeHandle.focus({ preventScroll: true })
-    const header = this.header
+    const captureElement = event.currentTarget as HTMLElement
+    let handleClick = captureElement === this.resizeHandle
+    this.suppressHandleClick = true
     const pointerId = event.pointerId
+    const startX = event.clientX
     const startY = event.clientY
     const startHeight = this.root.getBoundingClientRect().height
-    const grabOffset = startY - (window.innerHeight - startHeight)
+    const grabOffset = this.root.getBoundingClientRect().bottom - startY
     let currentY = startY
     let releaseSize = this.size
-    const requestedHeight = () => window.innerHeight - currentY + grabOffset
+    const requestedHeight = () => currentY - this.applicationHeader.getBoundingClientRect().bottom + grabOffset
     const refreshResize = () => this.resizePanel(requestedHeight())
-    header.setPointerCapture(pointerId)
+    captureElement.setPointerCapture(pointerId)
     this.root.classList.add('resizing')
     // Freeze a running snap animation before following the pointer.
     this.resizePanel(startHeight)
     const resize = (moveEvent: PointerEvent) => {
       if (moveEvent.pointerId !== pointerId) return
       currentY = moveEvent.clientY
-      const distance = startY - currentY
+      const distance = currentY - startY
+      if (Math.abs(moveEvent.clientX - startX) >= 4 || Math.abs(distance) >= 4) handleClick = false
       // Keep the drag's intent independent of layout and release coordinates.
       releaseSize = Math.abs(distance) >= SNAP_DISTANCE ? this.snapSize(requestedHeight(), distance > 0) : this.size
       refreshResize()
@@ -438,12 +447,13 @@ export class BottomPanelController {
       window.removeEventListener('pointerup', finishResize, true)
       window.removeEventListener('pointercancel', finishResize, true)
       window.removeEventListener('blur', stopResize)
-      if (header.hasPointerCapture(pointerId)) header.releasePointerCapture(pointerId)
+      if (captureElement.hasPointerCapture(pointerId)) captureElement.releasePointerCapture(pointerId)
       this.resizePanel()
     }
     const finishResize = (endEvent: PointerEvent) => {
       if (endEvent.pointerId !== pointerId) return
       if (endEvent.type === 'pointerup') {
+        this.suppressHandleClick = !handleClick
         this.size = releaseSize
         if (releaseSize !== 'collapsed') this.openSize = releaseSize
       }
@@ -451,7 +461,7 @@ export class BottomPanelController {
     }
     this.cancelResize = stopResize
     this.refreshResize = refreshResize
-    // Capture loss on the moving header must not discard the eventual release.
+    // Capture loss must not discard the eventual release.
     window.addEventListener('pointermove', resize, true)
     window.addEventListener('pointerup', finishResize, true)
     window.addEventListener('pointercancel', finishResize, true)
@@ -461,7 +471,6 @@ export class BottomPanelController {
   private resizePanel(requestedHeight?: number, immediate = false): void {
     // Layout changes must not animate through or over the application header.
     if (immediate) this.root.classList.add('layout-resize')
-    const viewportHeight = window.innerHeight
     const heights = this.heights()
     // Intermediate heights are only a drag preview, never retained panel state.
     const height =
@@ -469,19 +478,15 @@ export class BottomPanelController {
         ? heights[this.size]
         : Math.max(heights.collapsed, Math.min(heights.full, requestedHeight))
     this.root.style.height = `${height}px`
-    this.topElement.style.height = `${viewportHeight - height}px`
-    this.root.classList.toggle('expanded', height === heights.full)
     this.setBodyShowing(height > heights.collapsed + 0.5)
-    this.resizeHandle.setAttribute('aria-valuenow', PANEL_SIZE_VALUES[this.size])
-    this.resizeHandle.setAttribute('aria-valuetext', PANEL_SIZE_TEXT[this.size])
     const sizeLabel = this.size === 'full' ? 'Restore half height' : 'Expand to full height'
     this.sizeButton.setAttribute('aria-label', sizeLabel)
     this.sizeButton.title = sizeLabel
     this.sizeButton.classList.toggle('expanded', this.size === 'full')
-    const minimizeLabel = this.size === 'collapsed' ? 'Open panel' : 'Minimize panel'
-    this.minimizeButton.setAttribute('aria-label', minimizeLabel)
-    this.minimizeButton.title = minimizeLabel
-    this.minimizeButton.setAttribute('aria-expanded', `${this.size !== 'collapsed'}`)
+    const handleLabel = this.size === 'collapsed' ? 'Open panel to half height' : 'Minimize panel'
+    this.resizeHandle.setAttribute('aria-label', handleLabel)
+    this.resizeHandle.title = `${handleLabel}. Drag to resize.`
+    this.resizeHandle.setAttribute('aria-expanded', `${this.size !== 'collapsed'}`)
     if (immediate) {
       this.root.getBoundingClientRect()
       this.root.classList.remove('layout-resize')

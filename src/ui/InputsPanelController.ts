@@ -17,7 +17,7 @@ type LocalInput = {
   readonly noAudioText: string
 }
 
-/** The bottom panel's Inputs tab: the level and live picture of this machine's microphone, camera and screen capture. */
+/** The top panel's Inputs tab: the level and live picture of this machine's microphone, camera and screen capture. */
 export class InputsPanelController {
   private readonly shell = BottomPanelController.getInstance()
   private readonly content = document.createElement('section')

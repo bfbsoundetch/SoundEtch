@@ -422,7 +422,7 @@ export class OutputPanelController {
     })
   }
 
-  /** Selects Output on `section` and opens the bottom panel without requiring a track selection. */
+  /** Selects Output on `section` and opens the top panel without requiring a track selection. */
   show(section: OutputSection, timelineAnchor?: HTMLElement): void {
     this.setSection(section)
     this.openRoot()

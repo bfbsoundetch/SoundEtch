@@ -20,7 +20,7 @@ function hasVideo(track: Track): boolean {
 }
 
 /**
- * The bottom panel's Tracks tab: a track chooser and vertical Effects, Video and Transcript tabs for that track.
+ * The top panel's Tracks tab: a track chooser and vertical Effects, Video and Transcript tabs for that track.
  * The effect catalog, effect editors and automation open over it in the same tab and return to it.
  */
 export class TrackPanelController {
