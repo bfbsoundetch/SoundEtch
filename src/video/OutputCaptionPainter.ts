@@ -6,8 +6,6 @@ interface CaptionLayout {
   cue: OutputCaptionCue
   fontFamily: string
   fontSize: number
-  borderWidth: number
-  letterSpacing: string
   width: number
   height: number
   font: string
@@ -26,14 +24,10 @@ function createLayout(
   settings: Readonly<OutputCaptionSettings>,
   width: number,
   height: number,
-  borderWidth: number,
 ): CaptionLayout {
   const viewportScale = Math.min(width / 1920, height / 1080)
   const font = `700 ${settings.fontSize}px ${settings.fontFamily}`
   context.font = font
-  // Reserve the outline's two half-widths between glyphs, retaining the browser's kerning.
-  const letterSpacing = `${borderWidth}px`
-  context.letterSpacing = letterSpacing
   const space = context.measureText(' ').width
   const widths: number[] = []
   const prefix = [0]
@@ -81,8 +75,6 @@ function createLayout(
     cue,
     fontFamily: settings.fontFamily,
     fontSize: settings.fontSize,
-    borderWidth,
-    letterSpacing,
     width,
     height,
     font,
@@ -105,28 +97,26 @@ export function paintOutputCaption(
   height: number,
 ): void {
   if (!settings.enabled || !cue.words.length || width <= 0 || height <= 0 || settings.fontSize <= 0) return
-  const borderWidth = settings.borderEnabled === false ? 0 : Math.max(3, settings.fontSize * 0.1)
   context.save()
   try {
     context.textAlign = 'left'
     context.textBaseline = 'alphabetic'
     context.direction = 'ltr'
     context.fontKerning = 'normal'
+    context.letterSpacing = '0px'
     let layout = layouts.get(context)
     if (
       !layout ||
       layout.cue !== cue ||
       layout.fontFamily !== settings.fontFamily ||
       layout.fontSize !== settings.fontSize ||
-      layout.borderWidth !== borderWidth ||
       layout.width !== width ||
       layout.height !== height
     ) {
-      layout = createLayout(context, cue, settings, width, height, borderWidth)
+      layout = createLayout(context, cue, settings, width, height)
       layouts.set(context, layout)
     }
     context.font = layout.font
-    context.letterSpacing = layout.letterSpacing
     const bottom = settings.position === 'top'
       ? layout.edgeInset + layout.textHeight
       : settings.position === 'middle'
@@ -135,16 +125,23 @@ export function paintOutputCaption(
     context.translate(x + width / 2, y + bottom)
     context.scale(layout.scale, layout.scale)
     context.globalCompositeOperation = 'source-over'
-    context.shadowColor = 'transparent'
-    context.shadowBlur = 0
     context.shadowOffsetX = 0
     context.shadowOffsetY = 0
-    if (borderWidth > 0) {
-      context.lineJoin = 'round'
-      context.lineWidth = borderWidth
-      context.strokeStyle = settings.borderColor ?? 'rgba(0, 0, 0, 0.95)'
-      for (const word of layout.words) context.strokeText(word.text, word.x, word.y)
+    if (settings.shadowEnabled !== false) {
+      // Canvas blur is in device pixels, so scale it explicitly with the text.
+      const shadowSize = settings.fontSize * layout.scale
+      const shadowColor = settings.shadowColor ?? '#000000'
+      context.fillStyle = shadowColor
+      context.shadowColor = shadowColor
+      // An extra-wide glow surrounds the broad halo and two dense inner passes.
+      for (let pass = 0; pass < 4; ++pass) {
+        context.shadowBlur = shadowSize * (pass === 0 ? 0.7 : pass === 1 ? 0.35 : 0.12)
+        for (const word of layout.words) context.fillText(word.text, word.x, word.y)
+      }
     }
+    // Paint every halo before the crisp fills so neighboring shadows cannot muddy them.
+    context.shadowColor = 'transparent'
+    context.shadowBlur = 0
     for (let index = 0; index < layout.words.length; ++index) {
       const word = layout.words[index]
       context.fillStyle = index === activeWord ? settings.highlightColor : settings.color

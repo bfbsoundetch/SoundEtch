@@ -14,9 +14,9 @@ export interface OutputCaptionSettings {
   position?: 'bottom' | 'middle' | 'top'
   color: string
   highlightColor: string
-  /** Missing values retain the dark border used by older projects. */
-  borderEnabled?: boolean
-  borderColor?: string
+  /** Missing values use the default dark text shadow. */
+  shadowEnabled?: boolean
+  shadowColor?: string
 }
 
 export const OUTPUT_CAPTION_FONTS = [
@@ -35,8 +35,8 @@ export const DEFAULT_OUTPUT_CAPTIONS: Readonly<OutputCaptionSettings> = Object.f
   position: 'bottom',
   color: '#ffffff',
   highlightColor: '#ffd54f',
-  borderEnabled: true,
-  borderColor: '#000000',
+  shadowEnabled: true,
+  shadowColor: '#000000',
 })
 
 export interface OutputCaptionWord {
