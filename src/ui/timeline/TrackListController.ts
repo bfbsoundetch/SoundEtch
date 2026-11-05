@@ -300,7 +300,9 @@ export class TrackListController {
       this.rootFontSize = parseFloat(getComputedStyle(document.documentElement).fontSize)
       this.draw()
     }
-    new ResizeObserver(this.resizeCallback).observe(document.getElementById('topdiv')!)
+    new ResizeObserver(([entry]) => {
+      if (entry.contentRect.width > 0 && entry.contentRect.height > 0) void this.resizeCallback()
+    }).observe(document.getElementById('timeline-body')!)
 
     AudioControl.addAudioControlListener((state) => {
       if (this.automationMode && state != AudioState.STOPPED && state != AudioState.MONITORING) {

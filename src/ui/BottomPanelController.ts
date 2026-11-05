@@ -263,10 +263,10 @@ export class BottomPanelController {
     )
     this.sizeButton.addEventListener('click', () => this.setSize(this.size === 'full' ? 'half' : 'full'))
 
-    this.header.append(this.tabList, this.sizeButton)
+    this.header.appendChild(this.tabList)
 
     this.footer.className = 'bottom-panel-footer'
-    this.footer.appendChild(this.resizeHandle)
+    this.footer.append(this.resizeHandle, this.sizeButton)
 
     this.body.id = 'bottom-panel-body'
     this.body.className = 'bottom-panel-body'

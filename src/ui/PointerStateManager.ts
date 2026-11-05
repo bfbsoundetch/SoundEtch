@@ -28,6 +28,7 @@ export class PointerStateManager extends TrackListItemController {
 
   private readonly timelineAreaElement = document.getElementById('timeline-area')!
   private readonly trackScrollElement = document.getElementById('input-track-lists')!
+  private readonly outputLaneElement = document.getElementById('timeline-output')!
 
   constructor(trackListController: TrackListController) {
     super(trackListController)
@@ -436,7 +437,7 @@ export class PointerStateManager extends TrackListItemController {
     if (!point) return 0
     const bounds = this.trackScrollElement.getBoundingClientRect()
     const top = Math.max(0, bounds.top)
-    const bottom = Math.min(window.innerHeight, bounds.bottom)
+    const bottom = Math.min(window.innerHeight, bounds.bottom, this.outputLaneElement.getBoundingClientRect().top)
     if (bottom <= top || point.x < bounds.left || point.x > bounds.right) return 0
     const edge = Math.min(48, (bottom - top) / 2)
     // A clip header can already be inside an edge zone when the drag starts.

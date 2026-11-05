@@ -289,18 +289,24 @@ dialog.overlay[open] {
 }
 
 #timeline-body {
+  --timeline-overhang-space: 0px;
+  position: relative;
   width: 100%;
   height: 100%;
   min-height: 0;
   display: grid;
   grid-area: body;
-  grid-template-rows: auto 1fr;
+  grid-template-rows: auto minmax(0, 1fr);
   grid-template-columns: 100%;
   grid-template-areas:
     'timeline'
     'lists';
   overscroll-behavior: none;
   overflow-y: scroll;
+}
+
+.bottom-panel.collapsed ~ #timeline-body {
+  --timeline-overhang-space: 1rem;
 }
 
 #timeline-body.media-file-drag-over,
@@ -1686,11 +1692,11 @@ video {
 }
 
 #position-marker {
-  z-index: 2;
+  z-index: 6;
   position: absolute;
   width: 100%;
   right: 0;
-  top: 4rem;
+  top: var(--timeline-overhang-space);
   clip-path: inset(0 0 0 14rem);
   pointer-events: none;
   user-select: none;
@@ -1733,7 +1739,7 @@ video {
   display: grid;
   grid-template-rows: subgrid;
   grid-area: info;
-  z-index: 3;
+  z-index: 7;
 }
 
 #audio-input-buttons {
@@ -1746,6 +1752,7 @@ video {
 
 #timeline {
   height: 4rem;
+  margin-top: var(--timeline-overhang-space);
   width: 100%;
   overflow-x: hidden;
   overflow-y: hidden;
@@ -1818,6 +1825,7 @@ video {
   z-index: 4;
   width: 14rem;
   box-sizing: border-box;
+  padding-top: var(--timeline-overhang-space);
   display: flex;
   align-items: center;
   justify-content: center;
@@ -1845,21 +1853,36 @@ video {
 }
 
 #input-track-lists {
+  --output-lane-height: 3.5rem;
   grid-area: lists;
   overflow-y: scroll;
+  min-height: 0;
+  scroll-padding-bottom: var(--output-lane-height);
   display: grid;
   grid-template-areas:
     'info timeline'
     'info timeline'
     'info timeline';
   grid-template-columns: 14rem calc(100% - 14rem);
-  grid-template-rows: auto auto auto;
+  grid-template-rows: auto 1fr auto;
   align-content: start;
 }
 
+/* Keep the footer's space available to keyboard focus and scrollIntoView. */
+#input-track-lists:has(.timeline-output-row.is-automating) {
+  --output-lane-height: 12rem;
+}
+
+#timeline-output-info,
+#timeline-output {
+  position: sticky;
+  bottom: 0;
+  z-index: 5;
+}
+
 .timeline-output-row {
-  min-height: 5rem;
-  margin: 1rem 0 0;
+  min-height: var(--output-lane-height);
+  margin: 0;
   box-sizing: border-box;
   border-block: 2px solid var(--color);
   background-color: color-mix(in srgb, var(--alt-background) 40%, var(--bg-color));
@@ -1867,11 +1890,12 @@ video {
 
 #timeline-output-info {
   display: grid;
-  align-content: center;
-  gap: 0.75rem;
-  padding: 1rem;
-  background-color: var(--bg-color);
-  color: var(--color);
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: center;
+  gap: 0.5rem;
+  padding: 0.25rem 0.5rem;
+  background-color: var(--color);
+  color: var(--bg-color);
   user-select: none;
 }
 
@@ -1885,13 +1909,9 @@ video {
   grid-area: auto;
 }
 
-/* Room for the automation heading in the header and for the curve in the lane. */
-.timeline-output-row.is-automating {
-  min-height: 12rem;
-}
-
 #timeline-output-info.is-automating {
   align-content: stretch;
+  grid-template-columns: minmax(0, 1fr);
   padding: 0;
   background-color: var(--alt-background);
   color: var(--color);
@@ -1899,10 +1919,21 @@ video {
 
 .timeline-output-lane {
   min-width: 0;
-  position: relative;
   overflow: hidden;
   touch-action: none;
   user-select: none;
+}
+
+.timeline-output-lane:not(.is-automating)
+  > :is(.output-scene-block, .output-scene-boundary, .output-scene-transition) {
+  top: 0.25rem;
+  bottom: 0.25rem;
+}
+
+.timeline-output-lane:not(.is-automating) > .output-scene-block {
+  padding: 0.25rem 0.5rem;
+  font-size: 0.875rem;
+  line-height: 1rem;
 }
 
 .output-scene-block {
@@ -2072,6 +2103,8 @@ video {
 
 .tracklist-item {
   width: 100%;
+  /* Keep row-local handles and overlays below the pinned Output row. */
+  isolation: isolate;
   border-top: solid;
   flex: 1;
   box-sizing: border-box;
@@ -3226,7 +3259,8 @@ video {
   color: var(--color);
   border-bottom: 1px solid color-mix(in srgb, var(--color) 35%, transparent);
   transition: height 0.1s ease;
-  z-index: 1001;
+  /* Above the timeline, below header tooltips and transient overlays. */
+  z-index: 8;
   display: grid;
   grid-template-rows: auto minmax(0, 1fr) 2rem;
 }
@@ -3254,27 +3288,15 @@ video {
   user-select: none;
 }
 
-.bottom-panel.collapsed .bottom-panel-header {
-  border-bottom-color: transparent;
-}
-
 .bottom-panel-footer {
-  display: flex;
-  justify-content: center;
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto minmax(0, 1fr);
+  background: var(--alt-background);
   cursor: ns-resize;
   touch-action: none;
 }
 
 .bottom-panel.collapsed .bottom-panel-footer {
-  --panel-fold-edge: polygon(
-    0 0,
-    calc(50% - 3rem) 0,
-    50% 0.5rem,
-    calc(50% + 3rem) 0,
-    100% 0,
-    100% 100%,
-    0 100%
-  );
   position: relative;
 }
 
@@ -3282,28 +3304,36 @@ video {
 .bottom-panel.collapsed .bottom-panel-footer::after {
   content: '';
   position: absolute;
-  inset: auto 0 0;
-  height: 0.625rem;
-  clip-path: var(--panel-fold-edge);
+  top: 100%;
+  left: 50%;
+  width: 6rem;
+  height: 1rem;
+  transform: translateX(-50%);
+  clip-path: polygon(0 0, 100% 0, 50% 100%);
   pointer-events: none;
 }
 
 .bottom-panel.collapsed .bottom-panel-footer::before {
-  background: color-mix(in srgb, var(--color) 24%, var(--alt-background));
+  background: color-mix(in srgb, var(--color) 35%, var(--alt-background));
 }
 
 .bottom-panel.collapsed .bottom-panel-footer::after {
-  height: calc(0.625rem - 1px);
-  background: linear-gradient(
-    to bottom,
-    color-mix(in srgb, var(--color) 8%, var(--raised-bg-color)),
-    var(--raised-bg-color)
-  );
+  top: calc(100% - 1px);
+  background: var(--alt-background);
+}
+
+.bottom-panel.collapsed .bottom-panel-resize-handle {
+  transform: translateY(1rem);
+}
+
+.bottom-panel.collapsed .bottom-panel-resize-handle::after {
+  clip-path: polygon(0 0, 100% 0, 100% 50%, 50% 100%, 0 50%);
 }
 
 .bottom-panel-resize-handle {
   display: grid;
   z-index: 1;
+  grid-column: 2;
   place-items: center;
   width: 6rem;
   height: 2rem;
@@ -3829,9 +3859,15 @@ video {
 
 .bottom-panel-size {
   display: grid;
+  grid-column: 3;
+  justify-self: end;
+  z-index: 1;
+  box-sizing: border-box;
+  width: 2rem;
   place-items: center;
   align-self: stretch;
-  aspect-ratio: 1 / 1;
+  cursor: pointer;
+  background: var(--alt-background);
   border-left: 1px solid color-mix(in srgb, var(--color) 35%, transparent);
 }
 
