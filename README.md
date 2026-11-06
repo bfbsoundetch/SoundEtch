@@ -89,6 +89,10 @@ Frames are placed by the recording's audio sample clock, so they follow the clip
 
 Footage is written as a fragmented MP4, one fragment per key-frame interval, and each fragment is flushed to browser storage as soon as it is muxed. If the tab closes or crashes mid-recording, the next load of the project trims the file back to its last complete fragment and keeps that footage in the clip, so up to about 2 seconds before the close are lost; a linked clip's audio still runs to the close. A video-only clip with no complete fragment is removed with its track if that leaves the track empty. A recording finished normally also keeps the fragment index at the end of the file.
 
+If browser storage fills during recording, the entire recording stops and a persistent error notification explains that space must be freed before recording again. Enabled inputs remain available for monitoring. Saved audio and complete video fragments are kept; the unwritten end is lost. Missing waveform-summary data is regenerated from the saved audio on reload. If storage also prevents saving recovered video's metadata, its recovery marker stays set so the next project load can recover the file after space is freed.
+
+To exercise this in Chrome, open DevTools → **Application** → **Storage**, enable **Simulate custom storage quota**, and set a quota just above current usage. Record until the next write exceeds it, then check that Record/Play return, the error stays visible until dismissed, and the saved clip still plays after reload. Remove the quota override (or free space) and check that a new recording works.
+
 ## Video export
 
 Choose **Video - MP4 Output Scenes** in Publish Settings to export the composed Output video with the rendered audio mix. **Landscape - YouTube 1920x1080** matches the 16:9 preview at 60 fps. **Portrait - TikTok 1080x1920** centers the same composition with black bars above and below it, rather than changing its framing.

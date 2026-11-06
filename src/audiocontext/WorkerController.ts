@@ -5,6 +5,7 @@ import { AudioControl } from './AudioControl'
 
 export class WorkerController {
   private audioWorkletNodes = new Array<AudioWorkletNode>()
+  private onError: ((error: Error) => void) | null = null
   readonly worker: Worker
   private readonly logger = new Logger('WorkerController')
 
@@ -40,22 +41,22 @@ export class WorkerController {
           }
           break
         case 'error':
-          {
-            this.logger.errorMessage('Worker reported an audio processing error')
-            NotificationsController.showErrorMessage('Audio processing failed.')
-            const audioContext = this.audioWorkletNodes[0]?.context
-            if (audioContext !== undefined && 'close' in audioContext) {
-              await (audioContext as AudioContext).close()
-            } else if (audioContext !== undefined && 'suspend' in audioContext) {
-              await (audioContext as AudioContext).suspend()
-            }
-          }
+          this.handleError(
+            new DOMException(
+              event.data.error?.message ?? 'Audio processing failed.',
+              event.data.error?.name ?? 'Error',
+            ),
+          )
           break
       }
     })
   }
 
-  setAudioWorkletNodes(audioWorkletNodes: Array<AudioWorkletNode>) {
+  setAudioWorkletNodes(
+    audioWorkletNodes: Array<AudioWorkletNode>,
+    onError: ((error: Error) => void) | null = null,
+  ) {
+    this.onError = onError
     this.audioWorkletNodes = audioWorkletNodes
     let finishedNodes = 0
     const context = audioWorkletNodes[0]!.context as AudioContext
@@ -67,9 +68,8 @@ export class WorkerController {
           }
         }
       }
-      node.addEventListener('processorerror', (e) => {
-        NotificationsController.showErrorMessage('Audio processing failed.')
-        context.close?.() ?? context.suspend()
+      node.addEventListener('processorerror', () => {
+        this.handleError(new Error('Audio processing failed.'))
       })
     })
     context.addEventListener('statechange', () => {
@@ -86,6 +86,21 @@ export class WorkerController {
           break
       }
     })
+  }
+
+  private handleError(error: Error) {
+    this.logger.error(error)
+    if (this.onError) {
+      this.onError(error)
+      return
+    }
+    NotificationsController.showErrorMessage('Audio processing failed.')
+    const audioContext = this.audioWorkletNodes[0]?.context
+    if (audioContext && 'close' in audioContext) {
+      void (audioContext as AudioContext).close()
+    } else if (audioContext && 'suspend' in audioContext) {
+      void (audioContext as AudioContext).suspend()
+    }
   }
 
   finish() {

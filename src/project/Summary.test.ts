@@ -1,4 +1,6 @@
 import { Summary } from './Summary'
+import type { FileSystemSyncAccessHandle } from '../filesystem/FileSystemSyncAccessHandle'
+import { MemoryBackedFileSystemSyncAccessHandle } from '../filesystem/MemoryBackedFileSystemSyncAccessHandle'
 
 const sampleDataLength = 1024
 globalThis.postMessage = () => {}
@@ -176,3 +178,155 @@ test('a pending summary level is unknown rather than a fabricated silent level',
   )
   expect(summary.getMeanSquaredPeak(0, 256)).toBeCloseTo(0.25, 4)
 })
+
+test('finishing an empty recording closes the summary without writing a nonexistent bucket', () => {
+  const summary = new Summary(1)
+  const handle = summaryHandle()
+  summary.setSyncFileHandle(handle)
+
+  summary.finishSummarizing()
+
+  expect(handle.write).not.toHaveBeenCalled()
+  expect(handle.close).toHaveBeenCalledOnce()
+})
+
+test('finishing an exact bucket does not append an unwritten extra bucket', async () => {
+  const summary = new Summary(1)
+  const handle = new MemoryBackedFileSystemSyncAccessHandle('summary')
+  summary.setSyncFileHandle(handle)
+  summary.summarizeInterleavedData(new Float32Array(256).fill(0.5), 256)
+
+  summary.finishSummarizing()
+
+  expect((await handle.getFile()).size).toBe(4)
+})
+
+test('final summary quota failure closes the handle and is not masked by a close failure', () => {
+  const summary = new Summary(1)
+  const handle = summaryHandle()
+  const quota = new DOMException('Summary storage is full', 'QuotaExceededError')
+  summary.setSyncFileHandle(handle)
+  summary.summarizeInterleavedData(new Float32Array([0.5]), 1)
+  handle.write.mockImplementation(() => {
+    throw quota
+  })
+  handle.close.mockImplementation(() => {
+    throw new Error('Close failed')
+  })
+
+  expect(() => summary.finishSummarizing()).toThrow(quota)
+  expect(handle.close).toHaveBeenCalledOnce()
+  expect(() => summary.finishSummarizing()).not.toThrow()
+  expect(handle.close).toHaveBeenCalledOnce()
+})
+
+test('a summary write failure still represents all saved input frames in memory', () => {
+  const summary = new Summary(1)
+  const handle = summaryHandle()
+  const quota = new DOMException('Summary storage is full', 'QuotaExceededError')
+  summary.setSyncFileHandle(handle)
+  handle.write.mockImplementation(() => {
+    throw quota
+  })
+  const data = new Float32Array(600).fill(-0.5)
+
+  expect(() => summary.summarizeInterleavedData(data, data.length)).toThrow(quota)
+
+  expect(summary.length).toBe(600)
+  expect(summary.getSummaryOfRange(512, 600, 256)[0]).toEqual([
+    expect.closeTo(-0.5, 4),
+    expect.closeTo(-0.5, 4),
+  ])
+  expect(handle.write).toHaveBeenCalledOnce()
+  expect(() => summary.finishSummarizing()).not.toThrow()
+  expect(handle.write).toHaveBeenCalledOnce()
+  expect(handle.close).toHaveBeenCalledOnce()
+})
+
+test('summary short writes preserve both complete and partial waveform buckets', async () => {
+  const summary = new Summary(1)
+  const handle = new MemoryBackedFileSystemSyncAccessHandle('summary')
+  const access: FileSystemSyncAccessHandle = handle
+  const write = access.write.bind(access)
+  vi.spyOn(access, 'write').mockImplementation((buffer, options) => {
+    const bytes = ArrayBuffer.isView(buffer)
+      ? new Uint8Array(buffer.buffer, buffer.byteOffset, buffer.byteLength)
+      : new Uint8Array(buffer)
+    return write(bytes.subarray(0, 1), options)
+  })
+  summary.setSyncFileHandle(handle)
+  summary.summarizeInterleavedData(new Float32Array(257).fill(0.5), 257)
+
+  summary.finishSummarizing()
+
+  expect(new Int16Array(await (await handle.getFile()).arrayBuffer())).toEqual(
+    new Int16Array([16384, 16384, 16384, 16384]),
+  )
+})
+
+test('an empty summary is regenerated from saved stereo PCM without advertising an incomplete frame', async () => {
+  const data = new Float32Array([0.25, -0.5, 0.75, -1, 0.125])
+  const summary = new Summary(2)
+
+  await summary.populateFromFile(new File([], 'summary'), new File([data], 'audio'), 2)
+
+  expect(summary.length).toBe(2)
+  expect(summary.getSummaryOfRange(0, 2, 256)).toEqual([
+    [expect.closeTo(0.75, 4), expect.closeTo(0.25, 4)],
+    [expect.closeTo(-0.5, 4), expect.closeTo(-1, 4)],
+  ])
+})
+
+test('a partial summary bucket is rebuilt only from the missing saved audio tail', async () => {
+  const data = new Float32Array(600).fill(-0.75)
+  data.fill(0.25, 0, 256)
+  const persisted = new Int16Array([8192, 8192])
+  const mainFile = new File([data], 'audio')
+  const readTail = vi.spyOn(mainFile, 'slice')
+  const summary = new Summary(1)
+
+  await summary.populateFromFile(
+    new File([persisted, new Uint8Array([255, 255, 255])], 'summary'),
+    mainFile,
+    1,
+  )
+
+  expect(summary.length).toBe(600)
+  expect(readTail).toHaveBeenCalledExactlyOnceWith(256 * 4, 600 * 4)
+  expect(summary.getSummaryOfRange(0, 600, 256)[0]).toEqual([
+    expect.closeTo(0.25, 4),
+    expect.closeTo(0.25, 4),
+    expect.closeTo(-0.75, 4),
+    expect.closeTo(-0.75, 4),
+    expect.closeTo(-0.75, 4),
+    expect.closeTo(-0.75, 4),
+  ])
+})
+
+test('missing summary recovery reads saved audio in bounded chunks', async () => {
+  const frameCount = 8192 + 257
+  const data = new Float32Array(frameCount).fill(0.5)
+  const mainFile = new File([data], 'audio')
+  const reads = vi.spyOn(mainFile, 'slice')
+  const summary = new Summary(1)
+
+  await summary.populateFromFile(new File([], 'summary'), mainFile, 1)
+
+  expect(reads.mock.calls).toEqual([
+    [0, 8192 * 4],
+    [8192 * 4, frameCount * 4],
+  ])
+  expect(summary.length).toBe(frameCount)
+  expect(summary.getMeanSquaredPeak(8192, frameCount)).toBeCloseTo(0.25, 4)
+})
+
+function summaryHandle() {
+  return {
+    write: vi.fn((buffer: BufferSource, _options?: { at: number }) => buffer.byteLength),
+    flush: vi.fn(),
+    close: vi.fn(),
+    getSize: vi.fn(() => 0),
+    read: vi.fn(() => 0),
+    truncate: vi.fn(),
+  } satisfies FileSystemSyncAccessHandle
+}

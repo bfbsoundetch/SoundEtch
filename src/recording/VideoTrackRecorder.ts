@@ -67,15 +67,16 @@ export class VideoTrackRecorder {
   private pump: Pump | null = null
   /** Serializes frame additions across track replacements and black frames. */
   private queue: Promise<void> = Promise.resolve()
-  private writeError: unknown = null
-  private failed = false
+  private failure: Error | null = null
   private finished = false
+  private finishPromise: Promise<VideoSegment | null> | null = null
+  private closePromise: Promise<void> | null = null
 
   constructor(private readonly options: VideoTrackRecorderOptions) {}
 
   /** Records `track` from now on, or black while `null` (the source is gone). */
   attach(track: MediaStreamTrack | null): void {
-    if (this.finished || this.failed || this.pump?.track === track) return
+    if (this.finished || this.failure || this.pump?.track === track) return
     const previous = this.pump
     this.pump = null
     previous?.stop()
@@ -91,22 +92,37 @@ export class VideoTrackRecorder {
   }
 
   /** Finalizes the file; returns its placement within the clip, or null when nothing was recorded. */
-  async finish(): Promise<VideoSegment | null> {
-    if (this.finished) return null
+  finish(): Promise<VideoSegment | null> {
+    if (this.finishPromise) return this.finishPromise
     this.finished = true
-    this.pump?.stop()
-    this.pump = null
+    this.stopPump()
+    return (this.finishPromise = this.finishRecording())
+  }
+
+  private async finishRecording(): Promise<VideoSegment | null> {
     await this.queue
-    if (this.failed || !this.output) return null
-    try {
-      if (this.writeError) throw this.writeError
-      await this.output.finalize()
-      return await readRecordedVideoSegment(this.options.directory, this.options.filename, this.options.sampleRate)
-    } catch (error) {
-      this.options.onError(toError(error))
-      await this.discard()
-      return null
+    if (!this.failure && this.output) {
+      try {
+        await this.output.finalize()
+        if (this.failure) throw this.failure
+        return await readRecordedVideoSegment(this.options.directory, this.options.filename, this.options.sampleRate)
+      } catch (error) {
+        this.fail(error)
+      }
     }
+    if (!this.failure) return null
+    await this.closePromise
+    if (this.failure.name == 'QuotaExceededError') {
+      // The failed muxer must no longer be able to write into the prefix we are about to recover.
+      const playable = await VideoFileWriter.trimInterruptedFile(this.options.directory, this.options.filename)
+      if (playable > 0) {
+        return readRecordedVideoSegment(this.options.directory, this.options.filename, this.options.sampleRate)
+      }
+      await FileSystemUtils.deleteFile(this.options.directory, this.options.filename)
+    } else if (this.writer) {
+      await FileSystemUtils.deleteFile(this.options.directory, this.options.filename)
+    }
+    return null
   }
 
   private enqueue(task: () => Promise<void>): Promise<void> {
@@ -173,13 +189,12 @@ export class VideoTrackRecorder {
   private handlePumpEnd(pump: Pump) {
     if (this.pump !== pump) return
     this.pump = null
-    if (!this.finished && !this.failed) void this.enqueue(() => this.addBlackFrame())
+    if (!this.finished && !this.failure) void this.enqueue(() => this.addBlackFrame())
   }
 
   private async addFrame(frame: VideoFrame): Promise<void> {
     try {
-      if (this.finished || this.failed) return
-      if (this.writeError) throw this.writeError
+      if (this.finished || this.failure) return
       const { seconds, running } = this.options.timeline()
       if (!running) return
       const mapped = this.clock.map(frame.timestamp / 1e6, seconds)
@@ -189,14 +204,14 @@ export class VideoTrackRecorder {
       if (!this.source) await this.open(frame)
       await this.addSample(new VideoSample(frame, { timestamp, duration: this.frameDuration }))
     } catch (error) {
-      await this.fail(error)
+      this.fail(error)
     } finally {
       frame.close()
     }
   }
 
   private async addBlackFrame(): Promise<void> {
-    if (this.finished || this.failed || !this.source || !this.size) return
+    if (this.finished || this.failure || !this.source || !this.size) return
     const timestamp = Math.max(this.options.timeline().seconds, this.lastTimestamp + this.frameDuration)
     const canvas = document.createElement('canvas')
     canvas.width = this.size.width
@@ -207,7 +222,7 @@ export class VideoTrackRecorder {
     try {
       await this.addSample(new VideoSample(canvas, { timestamp, duration: this.frameDuration }))
     } catch (error) {
-      await this.fail(error)
+      this.fail(error)
     }
   }
 
@@ -240,8 +255,8 @@ export class VideoTrackRecorder {
             try {
               await writer.write(data, position)
             } catch (error) {
-              // Surfaced with the next frame; the muxer would only report it when finalizing.
-              this.writeError ??= error
+              // StreamTarget otherwise defers write failures until the next frame or finalization.
+              this.fail(error)
               throw error
             }
           },
@@ -249,6 +264,7 @@ export class VideoTrackRecorder {
         }),
       ),
     })
+    this.output = output
     const unchanged =
       frame.codedWidth == size.width &&
       frame.codedHeight == size.height &&
@@ -267,35 +283,41 @@ export class VideoTrackRecorder {
     }
     const source = new VideoSampleSource(config)
     output.addVideoTrack(source)
-    await output.start()
-    this.output = output
     this.source = source
     this.size = size
+    await output.start()
+    if (this.failure) throw this.failure
   }
 
-  private async fail(error: unknown) {
-    if (this.failed || this.finished) return
-    this.failed = true
+  private fail(error: unknown) {
+    if (this.failure) return
+    this.failure = toError(error)
+    this.stopPump()
+    // Never await cleanup from a frame or stream write: cancellation may itself wait for that write to settle.
+    this.closePromise = this.closeOutput()
+    this.options.onError(this.failure)
+  }
+
+  private stopPump() {
     this.pump?.stop()
     this.pump = null
-    this.options.onError(toError(error))
-    await this.discard()
   }
 
-  private async discard() {
-    try {
-      await this.output?.cancel()
-    } catch {
-      // The file is deleted below either way.
-    }
+  private async closeOutput() {
+    const output = this.output
     this.output = null
     this.source = null
     try {
+      // Closing first blocks every later muxer write and releases the worker's exclusive file handle.
       await this.writer?.close()
     } catch {
-      // The file is deleted below either way.
+      // VideoFileWriter always terminates the worker, including when flushing the full disk fails.
     }
-    if (this.writer) await FileSystemUtils.deleteFile(this.options.directory, this.options.filename)
+    try {
+      await output?.cancel()
+    } catch {
+      // A failed/finalizing output may reject cancellation; it can no longer write to the closed worker.
+    }
   }
 }
 

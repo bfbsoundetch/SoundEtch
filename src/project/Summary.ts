@@ -7,6 +7,7 @@ export class Summary {
   private samplesRepresented = new Uint32Array(new SharedArrayBuffer(Uint32Array.BYTES_PER_ELEMENT))
   private readonly id: string
   private syncFileHandle: FileSystemSyncAccessHandle | null = null
+  private writeFailed = false
   private readonly tmp = new Map<number, number>()
 
   getWorkerMessageListener() {
@@ -101,10 +102,10 @@ export class Summary {
   }
 
   summarizeInterleavedData(data: Float32Array, length: number) {
-    if (data.length % this.channelCount != 0) {
-      throw new Error(`Input array length ${data.length} is not a multiple of ${this.channelCount} channel count`)
+    if (length % this.channelCount != 0) {
+      throw new Error(`Input array length ${length} is not a multiple of ${this.channelCount} channel count`)
     }
-    this.summarizeDataInternal(data.slice(0, length), length / this.channelCount)
+    this.summarizeDataInternal(data.subarray(0, length), length / this.channelCount)
   }
 
   summarizeSeparateChannelData(data: Float32Array[], length: number) {
@@ -136,8 +137,16 @@ export class Summary {
     let chunkIndex = this.getChunkIndex(samplesRepresented)
     let chunkPosition = this.getChunkPosition(samplesRepresented)
     let channel = 0
-    if (samplesRepresented == 0) {
+    let failed = false
+    let failure: unknown
+    if (length > 0 && !this.summaryValues[chunkIndex]) {
       this.addNewChunk()
+    }
+    if (length > 0 && samplesRepresented % Summary.SAMPLES_PER_SUMMARY === 0) {
+      for (let c = 0; c < this.channelCount; ++c) {
+        this.summaryValues[chunkIndex][chunkPosition + c * 2] = -(2 ** 15)
+        this.summaryValues[chunkIndex][chunkPosition + c * 2 + 1] = 2 ** 15 - 1
+      }
     }
     for (const nextValue of numberIterable) {
       const int16Value =
@@ -160,7 +169,15 @@ export class Summary {
         ++samplesRepresented
       }
       if (samplesRepresented % Summary.SAMPLES_PER_SUMMARY == 0 && samplesRepresented > 0 && channel == 0) {
-        this.writeValueToDisk(chunkPosition, chunkIndex)
+        if (!failed && !this.writeFailed) {
+          try {
+            this.writeValueToDisk(chunkPosition, chunkIndex)
+          } catch (error) {
+            this.writeFailed = true
+            failed = true
+            failure = error
+          }
+        }
         chunkPosition += 2 * this.channelCount
         if (chunkPosition >= this.chunkSize) {
           this.addNewChunk()
@@ -173,16 +190,32 @@ export class Summary {
         }
       }
     }
-    this.syncFileHandle?.flush()
     this.samplesRepresented[0] = samplesRepresented
+    try {
+      this.syncFileHandle?.flush()
+    } catch (error) {
+      this.writeFailed = true
+      if (!failed) {
+        failed = true
+        failure = error
+      }
+    }
+    if (failed) throw failure
   }
 
   private writeValueToDisk(chunkPosition: number, chunkIndex: number) {
     if (!this.syncFileHandle) {
       return
     }
-    const result = this.summaryValues[chunkIndex].slice(chunkPosition, chunkPosition + 2 * this.channelCount)
-    this.syncFileHandle.write(result.buffer)
+    const values = this.summaryValues[chunkIndex].subarray(chunkPosition, chunkPosition + 2 * this.channelCount)
+    const bytes = new Uint8Array(values.buffer, values.byteOffset, values.byteLength)
+    const position = (chunkIndex * this.chunkSize + chunkPosition) * Int16Array.BYTES_PER_ELEMENT
+    let written = 0
+    while (written < bytes.byteLength) {
+      const byteCount = this.syncFileHandle.write(bytes.subarray(written), { at: position + written })
+      if (byteCount <= 0) throw new Error('Summary file write made no progress')
+      written += byteCount
+    }
   }
 
   private addNewChunk() {
@@ -203,18 +236,60 @@ export class Summary {
 
   async populateFromFile(summaryFile: File, mainFile: File, channelCount: number) {
     const arrayBuffer = await summaryFile.arrayBuffer()
-    this.summaryValues = [new Int16Array(arrayBuffer)]
-    this.chunkSize = this.summaryValues[0].length
-    this.samplesRepresented[0] = mainFile.size / 4 / channelCount
     this.channelCount = channelCount
+    const frameBytes = Float32Array.BYTES_PER_ELEMENT * channelCount
+    const frameCount = Math.floor(mainFile.size / frameBytes)
+    const valuesPerBucket = 2 * channelCount
+    const requiredValues = Math.ceil(frameCount / Summary.SAMPLES_PER_SUMMARY) * valuesPerBucket
+    const savedBuckets = Math.floor(arrayBuffer.byteLength / (Int16Array.BYTES_PER_ELEMENT * valuesPerBucket))
+    const savedValues = new Int16Array(arrayBuffer, 0, Math.min(savedBuckets * valuesPerBucket, requiredValues))
+    if (savedValues.length === requiredValues) {
+      this.summaryValues = [savedValues]
+      this.chunkSize = Math.max(savedValues.length, valuesPerBucket)
+      this.samplesRepresented[0] = frameCount
+      return
+    }
+
+    // A quota failure may preserve more PCM than summary data. Recover only the missing tail in memory.
+    this.chunkSize = Math.max(32 * 1024 * channelCount, savedValues.length)
+    const values = new Int16Array(new SharedArrayBuffer(this.chunkSize * Int16Array.BYTES_PER_ELEMENT))
+    values.set(savedValues)
+    this.summaryValues = [values]
+    this.samplesRepresented[0] = savedBuckets * Summary.SAMPLES_PER_SUMMARY
+    for (let frame = this.samplesRepresented[0]; frame < frameCount; frame += 8192) {
+      const end = Math.min(frame + 8192, frameCount)
+      const data = new Float32Array(await mainFile.slice(frame * frameBytes, end * frameBytes).arrayBuffer())
+      this.summarizeInterleavedData(data, data.length)
+    }
   }
 
   finishSummarizing() {
-    this.writeValueToDisk(
-      this.getChunkPosition(this.samplesRepresented[0]),
-      this.getChunkIndex(this.samplesRepresented[0]),
-    )
-    this.syncFileHandle?.close()
+    const handle = this.syncFileHandle
+    let failed = false
+    let failure: unknown
+    try {
+      if (!this.writeFailed && this.samplesRepresented[0] % Summary.SAMPLES_PER_SUMMARY !== 0) {
+        this.writeValueToDisk(
+          this.getChunkPosition(this.samplesRepresented[0]),
+          this.getChunkIndex(this.samplesRepresented[0]),
+        )
+      }
+      handle?.flush()
+    } catch (error) {
+      failed = true
+      failure = error
+    } finally {
+      this.syncFileHandle = null
+      try {
+        handle?.close()
+      } catch (error) {
+        if (!failed) {
+          failed = true
+          failure = error
+        }
+      }
+    }
+    if (failed) throw failure
   }
 
   get length(): number {

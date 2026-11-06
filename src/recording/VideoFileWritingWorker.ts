@@ -24,7 +24,7 @@ self.onmessage = (event: MessageEvent<VideoFileWritingRequest>) => {
     } catch (error) {
       postMessage({
         type: 'error',
-        name: error instanceof DOMException ? error.name : 'Error',
+        name: error instanceof Error ? error.name : 'Error',
         message: error instanceof Error ? error.message : String(error),
       } satisfies VideoFileWritingResponse)
     }
@@ -38,7 +38,9 @@ async function handle(request: VideoFileWritingRequest): Promise<number> {
       file.truncate(0)
       return 0
     case 'write':
-      file!.write(request.data, { at: request.position })
+      if (file!.write(request.data, { at: request.position }) != request.data.byteLength) {
+        throw new DOMException('The video file could not be written in full', 'QuotaExceededError')
+      }
       file!.flush()
       return file!.getSize()
     case 'close':

@@ -8,6 +8,7 @@ import { ProjectManager } from '../project/ProjectManager'
 import { WorkerController } from '../audiocontext/WorkerController'
 import { JobType } from '../audiocontext/ControllableWorkerJob'
 import { AudioControl, AudioState } from '../audiocontext/AudioControl'
+import type { EnhancedAudioContext } from '../audiocontext/EnhancedAudioContext'
 import { cloneWithGetters } from '../global/ObjectUtils'
 import { NotificationsController } from '../ui/NotificationsController'
 import { MediaImporter } from './MediaImporter'
@@ -34,13 +35,38 @@ export class Recorder {
   /** One new track per source; a person's or device's audio and video share one linked clip. */
   static async startRecording(audioInputs: Array<AudioInput>, videoInputs: Array<VideoInput>) {
     const audioContext = await AudioControl.createNewAudioContext(AudioState.RECORDING)
+    let failed = false
+    const onError = (error: Error) => {
+      if (failed) return
+      failed = true
+      if (audioContext.state != 'closed') void audioContext.close()
+      NotificationsController.showErrorMessage(
+        error.name == 'QuotaExceededError'
+          ? 'Recording stopped because browser storage is full. The saved portion has been kept; the end may be missing. Free space before recording again.'
+          : `Recording stopped: ${error.message}`,
+      )
+    }
+    try {
+      await Recorder.connectRecording(audioContext, audioInputs, videoInputs, onError)
+    } catch (error) {
+      onError(error instanceof Error ? error : new Error(String(error)))
+    }
+  }
+
+  private static async connectRecording(
+    audioContext: EnhancedAudioContext,
+    audioInputs: Array<AudioInput>,
+    videoInputs: Array<VideoInput>,
+    onError: (error: Error) => void,
+  ) {
     const project = await ProjectManager.getActiveProject()
     const workerController = Recorder.getWritingWorkerController()
     const unusedAddModuleResult = audioContext.audioWorklet.addModule('./assets/recordingAudioWorklet.js')
     const videoSession =
       videoInputs.length > 0
-        ? new VideoRecordingSession(audioContext, project, (tracks) => Recorder.showRecordedVideo(tracks))
+        ? new VideoRecordingSession(audioContext, project, (tracks) => Recorder.showRecordedVideo(tracks), onError)
         : null
+    videoSession?.start()
     const unpairedVideoInputs = new Map(videoInputs.map((videoInput) => [videoInput.id, videoInput]))
     const inputs = []
     const audioWorkletNodes = []
@@ -100,13 +126,11 @@ export class Recorder {
         audioContext.close()
         return
       }
-      videoSession.start()
       // No audio writer resumes the context once it is ready, and the video clock is its sample position.
       await audioContext.resume()
       return
     }
-    videoSession?.start()
-    workerController.setAudioWorkletNodes(audioWorkletNodes)
+    workerController.setAudioWorkletNodes(audioWorkletNodes, onError)
     workerController.start(JobType.RECORDER, inputs)
   }
 

@@ -215,7 +215,8 @@ export class DatabasePersister {
   static async save<T extends DatabasePersisted>(object: T): Promise<T> {
     const objectToPersist = DatabasePersister.toPersistedObject(object, true)
     const db = await this.dbPromise
-    const objectStore = db.transaction('objects', 'readwrite').objectStore('objects')
+    const transaction = db.transaction('objects', 'readwrite')
+    const objectStore = transaction.objectStore('objects')
     const now = Date.now()
     if (!objectToPersist.id) {
       objectToPersist.dateCreated = now
@@ -228,16 +229,13 @@ export class DatabasePersister {
       delete objectToPersist.id
     }
     const request = objectStore.put(objectToPersist)
-    return new Promise<any>((resolve, reject) => {
-      request.onsuccess = () => {
-        ;(object as any).id = request.result
-        DatabasePersister.objectCache.set(Number(request.result), object)
-        resolve(object)
-      }
-      request.onerror = () => {
-        reject('persistObject ' + request.error)
-      }
-    })
+    // A successful request can still be rolled back by a quota failure at transaction commit.
+    const [id] = await Promise.all([requestResult(request), transactionResult(transaction)])
+    // Persistence assigns the identity that is read-only to the rest of the application.
+    const identifiedObject = object as { id: number | undefined }
+    identifiedObject.id = Number(id)
+    DatabasePersister.objectCache.set(Number(id), object)
+    return object
   }
 
   static toPersistedObject(target: any, isSelf: boolean): any {

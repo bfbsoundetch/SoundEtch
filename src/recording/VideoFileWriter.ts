@@ -8,6 +8,7 @@ export class VideoFileWriter {
   private readonly pending = new Array<Pending>()
   private failure: Error | null = null
   private closed = false
+  private closePromise: Promise<void> | null = null
 
   private constructor(private readonly worker: Worker) {
     worker.addEventListener('message', (event: MessageEvent<VideoFileWritingResponse>) => {
@@ -31,7 +32,8 @@ export class VideoFileWriter {
     try {
       await writer.send({ type: 'open', directory, filename })
     } catch (error) {
-      writer.worker.terminate()
+      // Opening may have acquired the handle before truncating failed. Release it before recovery can open it.
+      await writer.close().catch(() => {})
       throw error
     }
     return writer
@@ -55,14 +57,16 @@ export class VideoFileWriter {
     await this.send({ type: 'write', data, position })
   }
 
-  async close(): Promise<void> {
-    if (this.closed) return
+  close(): Promise<void> {
+    if (this.closePromise) return this.closePromise
     this.closed = true
-    try {
-      await this.send({ type: 'close' })
-    } finally {
-      this.worker.terminate()
-    }
+    return (this.closePromise = (async () => {
+      try {
+        await this.send({ type: 'close' })
+      } finally {
+        this.worker.terminate()
+      }
+    })())
   }
 
   private send(request: VideoFileWritingRequest): Promise<number> {

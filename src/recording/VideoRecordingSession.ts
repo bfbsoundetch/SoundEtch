@@ -32,28 +32,38 @@ export async function settleRecordedVideo(
   clip: Clip,
   segment: VideoSegment | null,
 ): Promise<boolean> {
-  clip.videoRecordingInProgress = false
-  if (segment) {
-    clip.videoSegments = [segment]
-    clip.videoLength = segment.startSample + segment.length
-    await ProjectManager.saveClip(clip)
-    return true
+  const previous = {
+    inProgress: clip.videoRecordingInProgress,
+    segments: clip.videoSegments,
+    length: clip.videoLength,
   }
-  if (clip.audioPresent) {
-    clip.videoLength = 0
-    await ProjectManager.saveClip(clip)
-    return false
-  }
-  // A video-only source that never delivered a frame leaves nothing to keep.
-  const tracks = project.getTracks().filter((track) => track.clipViews.some((view) => view.clip === clip))
   try {
+    clip.videoRecordingInProgress = false
+    if (segment) {
+      clip.videoSegments = [segment]
+      clip.videoLength = segment.startSample + segment.length
+      await ProjectManager.saveClip(clip)
+      return true
+    }
+    if (clip.audioPresent) {
+      clip.videoLength = 0
+      await ProjectManager.saveClip(clip)
+      return false
+    }
+    // A video-only source that never delivered a frame leaves nothing to keep.
+    const tracks = project.getTracks().filter((track) => track.clipViews.some((view) => view.clip === clip))
     await ProjectManager.deleteClip(clip, project)
-  } finally {
     for (const track of tracks) {
       if (track.clipViews.length == 0) await ProjectManager.deleteTrack(track, project)
     }
+    return false
+  } catch (error) {
+    // Saving can also exhaust storage. Leave both the file and its recovery marker for the next load.
+    clip.videoRecordingInProgress = previous.inProgress
+    clip.videoSegments = previous.segments
+    clip.videoLength = previous.length
+    throw error
   }
-  return false
 }
 
 /**
@@ -64,17 +74,30 @@ export class VideoRecordingSession {
   private readonly entries = new Array<Entry>()
   private readonly originPosition: number
   private removeInputListener: (() => void) | null = null
+  private readonly pendingAdds = new Array<Promise<void>>()
+  private finished = false
 
   constructor(
     private readonly audioContext: EnhancedAudioContext,
     private readonly project: Project,
     private readonly onFinished: (tracksWithVideo: Array<Track>) => void,
+    private readonly onError: (error: Error) => void,
   ) {
     // The context has not run yet, so this is the position of the first recorded audio sample.
     this.originPosition = audioContext.getPosition()
   }
 
-  async add(input: VideoInput, clip: Clip, track: Track) {
+  add(input: VideoInput, clip: Clip, track: Track): Promise<void> {
+    if (this.finished) return Promise.resolve()
+    const pending = this.addEntry(input, clip, track).catch((error: unknown) => {
+      if (error instanceof Error && error.name == 'QuotaExceededError') this.onError(error)
+      throw error
+    })
+    this.pendingAdds.push(pending)
+    return pending
+  }
+
+  private async addEntry(input: VideoInput, clip: Clip, track: Track) {
     // Lets the next load recover the footage if the tab closes before the recording finishes.
     clip.videoRecordingInProgress = true
     await ProjectManager.saveClip(clip)
@@ -92,16 +115,18 @@ export class VideoRecordingSession {
         clip.videoLength = Math.max(clip.videoLength, Math.round(endSeconds * this.project.sampleRate))
       },
       onError: (error) => {
-        NotificationsController.showErrorMessage(`Video recording of ${input.name} stopped: ${error.message}`)
+        if (error.name == 'QuotaExceededError') this.onError(error)
+        else NotificationsController.showErrorMessage(`Video recording of ${input.name} stopped: ${error.message}`)
       },
     })
-    recorder.attach(input.track)
     this.entries.push({ input, clip, track, recorder })
+    if (!this.finished) recorder.attach(input.track)
   }
 
   start() {
     this.removeInputListener = VideoInputs.addListener(() => this.updateTracks())
     this.audioContext.addEventListener('statechange', this.handleStateChange)
+    this.handleStateChange()
   }
 
   private readonly handleStateChange = () => {
@@ -117,22 +142,30 @@ export class VideoRecordingSession {
   }
 
   private async finish() {
+    if (this.finished) return
+    this.finished = true
     this.audioContext.removeEventListener('statechange', this.handleStateChange)
     this.removeInputListener?.()
     this.removeInputListener = null
+    // The context may close while an input's in-progress marker is still being saved.
+    await Promise.allSettled(this.pendingAdds)
     const results = await Promise.all(
-      this.entries.map(async (entry) => ({ entry, segment: await entry.recorder.finish() })),
+      this.entries.map(async (entry) => {
+        try {
+          const segment = await entry.recorder.finish()
+          return (await settleRecordedVideo(this.project, entry.clip, segment)) ? entry.track : null
+        } catch (error) {
+          // Failed recovery must not settle as empty: the marker and flushed file are needed on reload.
+          if (error instanceof Error && error.name == 'QuotaExceededError') this.onError(error)
+          else {
+            NotificationsController.showErrorMessage(
+              `Could not save the video recording of ${entry.input.name}: ${error instanceof Error ? error.message : String(error)}`,
+            )
+          }
+          return null
+        }
+      }),
     )
-    const tracksWithVideo = new Array<Track>()
-    for (const { entry, segment } of results) {
-      try {
-        if (await settleRecordedVideo(this.project, entry.clip, segment)) tracksWithVideo.push(entry.track)
-      } catch (error) {
-        NotificationsController.showErrorMessage(
-          `Could not save the video recording of ${entry.input.name}: ${error instanceof Error ? error.message : String(error)}`,
-        )
-      }
-    }
-    this.onFinished(tracksWithVideo)
+    this.onFinished(results.filter((track): track is Track => track !== null))
   }
 }
