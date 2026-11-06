@@ -456,7 +456,7 @@ export class TrackListController {
     this.trackPanelController.showTranscript(track, entry)
   }
 
-  /** Opens the bottom panel's Tracks tab on `track`. */
+  /** Opens the top panel's Tracks tab on `track`. */
   async revealTrack(track: Track): Promise<void> {
     const request = ++this.trackPanelRequest
     const project = await ProjectManager.getActiveProject()

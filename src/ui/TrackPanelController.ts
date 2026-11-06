@@ -3,7 +3,7 @@ import type { Project } from '../project/Project'
 import type { Track } from '../project/Track'
 import { resolveVideoFrame } from '../video/VideoFrameResolver'
 import { VideoPreview } from '../video/VideoPreview'
-import { BottomPanelController } from './BottomPanelController'
+import { TopPanelController } from './TopPanelController'
 import { EffectPanelController } from './effects/EffectPanelController'
 import { NotificationsController } from './NotificationsController'
 import type { TrackListController } from './timeline/TrackListController'
@@ -25,7 +25,7 @@ function hasVideo(track: Track): boolean {
  */
 export class TrackPanelController {
   readonly transcript: TranscriptPanelController
-  private readonly shell = BottomPanelController.getInstance()
+  private readonly shell = TopPanelController.getInstance()
   private readonly content = document.createElement('section')
   private readonly nav = document.createElement('div')
   private readonly trackSelect = document.createElement('select')
@@ -127,11 +127,11 @@ export class TrackPanelController {
     this.status.className = 'video-preview-status'
     this.status.setAttribute('role', 'status')
     this.stage.append(this.canvas, this.status)
-    this.noVideoMessage.className = 'bottom-panel-message'
+    this.noVideoMessage.className = 'top-panel-message'
     this.noVideoMessage.textContent = 'This track has no video. Import a video file or record with the camera on.'
     this.sectionPanels.video.append(this.stage, this.noVideoMessage)
 
-    this.transcribePrompt.className = 'bottom-panel-message'
+    this.transcribePrompt.className = 'top-panel-message'
     const transcribeText = document.createElement('p')
     transcribeText.textContent = 'This track has no transcript yet.'
     const transcribeButton = document.createElement('button')
@@ -144,7 +144,7 @@ export class TrackPanelController {
     })
     this.transcribePrompt.append(transcribeText, transcribeButton)
 
-    this.emptyMessage.className = 'bottom-panel-message'
+    this.emptyMessage.className = 'top-panel-message'
     this.emptyMessage.textContent = 'No tracks yet. Record or add a clip to see its effects, video, and transcript.'
     this.content.appendChild(this.emptyMessage)
 

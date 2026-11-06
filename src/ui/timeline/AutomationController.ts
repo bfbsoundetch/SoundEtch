@@ -3,7 +3,7 @@ import { ParameterValueSequence, ParamValueTransition, type TransitionType } fro
 import type { EffectHost } from '../../project/EffectHost'
 import { OutputBus } from '../../project/OutputBus'
 import { cloneEffectData, SetEffectsCommand } from '../effects/SetEffectsCommand'
-import { BottomPanelController, type BottomPanelTabId } from '../BottomPanelController'
+import { TopPanelController, type TopPanelTabId } from '../TopPanelController'
 import { TrackListItemController } from './TrackListItemController'
 import { TrackListController } from './TrackListController'
 import { AudioControl } from '../../audiocontext/AudioControl'
@@ -33,9 +33,9 @@ export class AutomationController extends TrackListItemController {
   private readonly svgPathElement = document.createElementNS('http://www.w3.org/2000/svg', 'path')
   private readonly blockerElement = document.createElementNS('http://www.w3.org/2000/svg', 'rect')
   private readonly scaleForeignObject = document.createElementNS('http://www.w3.org/2000/svg', 'foreignObject')
-  private readonly bottomPanelController = BottomPanelController.getInstance()
+  private readonly topPanelController = TopPanelController.getInstance()
   /** The point editor opens in the tab that shows the host's effect chain. */
-  private readonly panelTab: BottomPanelTabId
+  private readonly panelTab: TopPanelTabId
   private readonly pointEditorControls = new Map<ParamValueTransition, PointEditorControls>()
   private pointEditorTableBody: HTMLTableSectionElement | null = null
   private pointEditorIsOpen = false
@@ -145,7 +145,7 @@ export class AutomationController extends TrackListItemController {
     this.pointEditorIsOpen = false
     this.pointEditorControls.clear()
     this.pointEditorTableBody = null
-    this.bottomPanelController.close(this)
+    this.topPanelController.close(this)
   }
 
   modifyPoint(point: ParamValueTransition, x: number, y: number) {
@@ -229,7 +229,7 @@ export class AutomationController extends TrackListItemController {
       return
     }
     this.pointEditorIsOpen = true
-    this.bottomPanelController.open({
+    this.topPanelController.open({
       tab: this.panelTab,
       owner: this,
       title: `${this.parameterMetadata.displayName} automation`,
@@ -242,7 +242,7 @@ export class AutomationController extends TrackListItemController {
         this.pointEditorTableBody = null
       },
     })
-    this.bottomPanelController.reveal(this.panelTab, this.svgElement)
+    this.topPanelController.reveal(this.panelTab, this.svgElement)
   }
 
   private createPointEditor() {
@@ -421,7 +421,7 @@ export class AutomationController extends TrackListItemController {
       return
     }
     const points = this.paramVals.transitionSequence
-    this.bottomPanelController.setSubtitle(this, `${this.host.name} · ${points.length} points`)
+    this.topPanelController.setSubtitle(this, `${this.host.name} · ${points.length} points`)
     if (points.length == 0) {
       if (this.pointEditorControls.size > 0 || this.pointEditorTableBody) {
         this.rebuildPointEditor()
@@ -449,10 +449,10 @@ export class AutomationController extends TrackListItemController {
   }
 
   private rebuildPointEditor() {
-    const panel = `#bottom-panel-${this.panelTab}`
+    const panel = `#top-panel-${this.panelTab}`
     const hadFocus =
       document.querySelector(`${panel} .automation-point-editor`)?.contains(document.activeElement) ?? false
-    this.bottomPanelController.setBody(this, this.createPointEditor())
+    this.topPanelController.setBody(this, this.createPointEditor())
     if (hadFocus) document.querySelector<HTMLElement>(`${panel} .automation-add-point-button`)?.focus()
   }
 

@@ -23,7 +23,7 @@ import type { Track } from '../project/Track'
 import { getOutputSceneLayers, OUTPUT_TRANSITION_LABELS, type OutputSceneLayer } from '../video/OutputTransition'
 import { resolveVideoFrame } from '../video/VideoFrameResolver'
 import { VideoPreview } from '../video/VideoPreview'
-import { BottomPanelController } from './BottomPanelController'
+import { TopPanelController } from './TopPanelController'
 import { EffectPanelController } from './effects/EffectPanelController'
 import { NotificationsController } from './NotificationsController'
 import { OutputCaptionsController } from './OutputCaptionsController'
@@ -108,7 +108,7 @@ const cancelledEdit = new Error('The output scene is no longer editable.')
 
 /** Edits the output effect chain, and the scene at the timeline marker with a preview of its composed video. */
 export class OutputPanelController {
-  private readonly shell = BottomPanelController.getInstance()
+  private readonly shell = TopPanelController.getInstance()
   private readonly content = document.createElement('section')
   private readonly nav = document.createElement('div')
   private readonly sectionTabs = {} as Record<OutputSection, HTMLButtonElement>
@@ -383,7 +383,7 @@ export class OutputPanelController {
     this.stage.setAttribute('aria-label', 'Composed output preview, 16 by 9')
     this.layers = [this.createLayer(), this.createLayer()]
     previewArea.appendChild(this.stage)
-    this.emptyMessage.className = 'bottom-panel-message'
+    this.emptyMessage.className = 'top-panel-message'
     this.emptyMessage.textContent = 'No project is open.'
     const video = document.createElement('div')
     video.className = 'output-panel-video'

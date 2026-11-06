@@ -9,7 +9,7 @@ import { TimeUtils } from '../../global/TimeUtils'
 import type { EffectHost } from '../../project/EffectHost'
 import { OutputBus } from '../../project/OutputBus'
 import { Track } from '../../project/Track'
-import { BottomPanelController, type BottomPanelTabId } from '../BottomPanelController'
+import { TopPanelController, type TopPanelTabId } from '../TopPanelController'
 import { NotificationsController } from '../NotificationsController'
 import { announce } from '../LiveAnnouncer'
 import type { OutputPanelController } from '../OutputPanelController'
@@ -42,7 +42,7 @@ function withCause(context: string, error: unknown): Error {
 }
 
 /** The top panel tab that shows `host`'s effect chain. */
-function panelTab(host: EffectHost): BottomPanelTabId {
+function panelTab(host: EffectHost): TopPanelTabId {
   return host instanceof OutputBus ? 'output' : 'tracks'
 }
 
@@ -59,10 +59,10 @@ export class EffectPanelController {
   }
 
   private readonly effectIndex = EffectIndex.getInstance()
-  private readonly bottomPanelController = BottomPanelController.getInstance()
+  private readonly topPanelController = TopPanelController.getInstance()
   private activeEffectView: EffectViewSession | null = null
   /** The tab holding this controller's view, which is in one tab at a time. */
-  private viewTab: BottomPanelTabId | null = null
+  private viewTab: TopPanelTabId | null = null
   private viewVersion = 0
   private chainChangePending = false
   private effectViewRebindRequested = false
@@ -633,7 +633,7 @@ export class EffectPanelController {
         if (neighbour) {
           neighbour.querySelector<HTMLElement>('.effect-chain-open')?.focus()
         } else {
-          document.querySelector<HTMLElement>(`#bottom-panel-${panelTab(host)} .effect-chain-add`)?.focus()
+          document.querySelector<HTMLElement>(`#top-panel-${panelTab(host)} .effect-chain-add`)?.focus()
         }
         announce(`Removed ${name}`)
       }
@@ -672,7 +672,7 @@ export class EffectPanelController {
 
   private chainItem(host: EffectHost, instanceId: string) {
     return document.querySelector<HTMLElement>(
-      `#bottom-panel-${panelTab(host)} [data-instance-id="${CSS.escape(instanceId)}"]`,
+      `#top-panel-${panelTab(host)} [data-instance-id="${CSS.escape(instanceId)}"]`,
     )
   }
 
@@ -689,7 +689,7 @@ export class EffectPanelController {
     if (parameters.length == 0) {
       return
     }
-    this.bottomPanelController.close(this)
+    this.topPanelController.close(this)
     this.trackListController.enterAutomationMode(host, effectData.instanceId, parameters)
   }
 
@@ -722,7 +722,7 @@ export class EffectPanelController {
 
   private openSubview(title: string, subtitle: string, body: HTMLElement, host: EffectHost) {
     this.viewTab = panelTab(host)
-    this.bottomPanelController.open({
+    this.topPanelController.open({
       tab: this.viewTab,
       owner: this,
       title,
@@ -736,7 +736,7 @@ export class EffectPanelController {
   /** Gives a view left in the other tab back to that tab's own view; its session would be gone. */
   private closeViewInOtherTab(host: EffectHost) {
     if (this.viewTab !== null && this.viewTab != panelTab(host)) {
-      this.bottomPanelController.close(this)
+      this.topPanelController.close(this)
     }
   }
 

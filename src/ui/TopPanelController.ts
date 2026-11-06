@@ -1,9 +1,9 @@
 import { createArrowIcon, createSvgIcon } from './SvgIcon'
 
-export type BottomPanelTabId = 'inputs' | 'tracks' | 'output'
+export type TopPanelTabId = 'inputs' | 'tracks' | 'output'
 
-export type BottomPanelOptions = {
-  tab: BottomPanelTabId
+export type TopPanelOptions = {
+  tab: TopPanelTabId
   owner: object
   /** A view without a title or back action has no heading row. */
   title?: string
@@ -18,13 +18,13 @@ type PanelSize = 'collapsed' | 'half' | 'full'
 type OpenPanelSize = Exclude<PanelSize, 'collapsed'>
 
 const PANEL_SIZES: readonly PanelSize[] = ['collapsed', 'half', 'full']
-const TAB_IDS: readonly BottomPanelTabId[] = ['inputs', 'tracks', 'output']
-const TAB_LABELS: Record<BottomPanelTabId, string> = { inputs: 'Inputs', tracks: 'Tracks', output: 'Output' }
+const TAB_IDS: readonly TopPanelTabId[] = ['inputs', 'tracks', 'output']
+const TAB_LABELS: Record<TopPanelTabId, string> = { inputs: 'Inputs', tracks: 'Tracks', output: 'Output' }
 // Smaller drags keep the current size.
 const SNAP_DISTANCE = 24
 
 /** One tab's header button and panel, holding the view of whichever owner put one there last. */
-class BottomPanelTab {
+class TopPanelTab {
   readonly button = document.createElement('button')
   readonly panel = document.createElement('section')
   readonly visibilityListeners = new Array<(visible: boolean) => void>()
@@ -39,26 +39,26 @@ class BottomPanelTab {
   private onBack: (() => Promise<void> | void) | null = null
   private onClose: (() => Promise<void> | void) | null = null
 
-  constructor(readonly id: BottomPanelTabId) {
-    const panelId = `bottom-panel-${id}`
+  constructor(readonly id: TopPanelTabId) {
+    const panelId = `top-panel-${id}`
     this.button.type = 'button'
     this.button.id = `${panelId}-tab`
-    this.button.className = 'clickable bottom-panel-tab'
+    this.button.className = 'clickable top-panel-tab'
     this.button.textContent = TAB_LABELS[id]
     this.button.setAttribute('role', 'tab')
     this.button.setAttribute('aria-controls', panelId)
 
     this.panel.id = panelId
-    this.panel.className = 'bottom-panel-tab-panel'
+    this.panel.className = 'top-panel-tab-panel'
     this.panel.tabIndex = -1
     this.panel.setAttribute('role', 'tabpanel')
     this.panel.setAttribute('aria-labelledby', this.button.id)
 
-    this.backButton.className = 'clickable bottom-panel-back'
+    this.backButton.className = 'clickable top-panel-back'
     this.backButton.type = 'button'
     this.backButton.title = 'Back'
     this.backButton.setAttribute('aria-label', 'Back')
-    this.backButton.appendChild(createArrowIcon('line', { className: 'bottom-panel-back-icon' }))
+    this.backButton.appendChild(createArrowIcon('line', { className: 'top-panel-back-icon' }))
     this.backButton.addEventListener('click', () => {
       const onBack = this.onBack
       if (!onBack || this.backButton.disabled) {
@@ -67,31 +67,31 @@ class BottomPanelTab {
       this.backButton.disabled = true
       try {
         void Promise.resolve(onBack())
-          .catch((error) => console.error('Bottom panel back action failed', error))
+          .catch((error) => console.error('Top panel back action failed', error))
           .finally(() => {
             this.backButton.disabled = false
           })
       } catch (error) {
         this.backButton.disabled = false
-        console.error('Bottom panel back action failed', error)
+        console.error('Top panel back action failed', error)
       }
     })
 
     this.titleElement.id = `${panelId}-title`
     this.titleElement.tabIndex = -1
-    this.subtitleElement.className = 'bottom-panel-subtitle'
+    this.subtitleElement.className = 'top-panel-subtitle'
     const headingText = document.createElement('div')
-    headingText.className = 'bottom-panel-heading-text'
+    headingText.className = 'top-panel-heading-text'
     headingText.append(this.titleElement, this.subtitleElement)
-    this.heading.className = 'bottom-panel-view-heading'
+    this.heading.className = 'top-panel-view-heading'
     this.heading.hidden = true
     this.heading.append(this.backButton, headingText)
 
-    this.body.className = 'bottom-panel-view-body'
+    this.body.className = 'top-panel-view-body'
     this.panel.append(this.heading, this.body)
   }
 
-  show(options: BottomPanelOptions): void {
+  show(options: TopPanelOptions): void {
     this.owner = options.owner
     this.onBack = options.onBack ?? null
     this.onClose = options.onClose ?? null
@@ -121,9 +121,9 @@ class BottomPanelTab {
     this.heading.hidden = true
     this.body.replaceChildren()
     try {
-      void Promise.resolve(onClose?.()).catch((error) => console.error('Bottom panel close action failed', error))
+      void Promise.resolve(onClose?.()).catch((error) => console.error('Top panel close action failed', error))
     } catch (error) {
-      console.error('Bottom panel close action failed', error)
+      console.error('Top panel close action failed', error)
     }
   }
 
@@ -136,11 +136,11 @@ class BottomPanelTab {
  * The tabbed panel docked above the timeline. It is always present and starts minimized to its tab bar;
  * dragging downward or using its buttons switches between minimized, half and full height.
  */
-export class BottomPanelController {
-  private static instance: BottomPanelController | null = null
+export class TopPanelController {
+  private static instance: TopPanelController | null = null
 
   static getInstance() {
-    return this.instance ?? (this.instance = new BottomPanelController())
+    return this.instance ?? (this.instance = new TopPanelController())
   }
 
   private readonly root = document.createElement('div')
@@ -153,11 +153,11 @@ export class BottomPanelController {
   private readonly topElement = document.getElementById('topdiv')!
   private readonly timelineElement = document.getElementById('timeline-body')!
   private readonly applicationHeader = document.querySelector<HTMLElement>('.header-container')!
-  private readonly tabs = Object.fromEntries(TAB_IDS.map((id) => [id, new BottomPanelTab(id)])) as Record<
-    BottomPanelTabId,
-    BottomPanelTab
+  private readonly tabs = Object.fromEntries(TAB_IDS.map((id) => [id, new TopPanelTab(id)])) as Record<
+    TopPanelTabId,
+    TopPanelTab
   >
-  private activeTab: BottomPanelTabId = 'tracks'
+  private activeTab: TopPanelTabId = 'tracks'
   private size: PanelSize = 'collapsed'
   private openSize: OpenPanelSize = 'half'
   private bodyShowing = false
@@ -166,21 +166,21 @@ export class BottomPanelController {
   private suppressHandleClick = false
 
   private constructor() {
-    this.root.id = 'bottom-panel'
-    this.root.className = 'bottom-panel collapsed'
+    this.root.id = 'top-panel'
+    this.root.className = 'top-panel collapsed'
     this.root.setAttribute('role', 'region')
     this.root.setAttribute('aria-label', 'Top panel')
 
-    this.header.className = 'bottom-panel-header'
+    this.header.className = 'top-panel-header'
 
     this.resizeHandle.type = 'button'
-    this.resizeHandle.className = 'clickable bottom-panel-resize-handle'
-    this.resizeHandle.setAttribute('aria-controls', 'bottom-panel-body')
+    this.resizeHandle.className = 'clickable top-panel-resize-handle'
+    this.resizeHandle.setAttribute('aria-controls', 'top-panel-body')
     this.resizeHandle.setAttribute(
       'aria-description',
       'Drag to resize. Arrow Down expands one step; Arrow Up shrinks. Home minimizes; End expands to full height.',
     )
-    const chevron = createSvgIcon('chevron-down', { className: 'bottom-panel-resize-icon' })
+    const chevron = createSvgIcon('chevron-down', { className: 'top-panel-resize-icon' })
     chevron.setAttribute('viewBox', '0 0 500 125')
     this.resizeHandle.appendChild(chevron)
     this.resizeHandle.addEventListener('click', (event) => {
@@ -216,7 +216,7 @@ export class BottomPanelController {
     this.footer.addEventListener('pointerdown', (event) => this.startResize(event))
     this.resizeHandle.addEventListener('pointerdown', (event) => this.startResize(event))
 
-    this.tabList.className = 'bottom-panel-tabs'
+    this.tabList.className = 'top-panel-tabs'
     this.tabList.setAttribute('role', 'tablist')
     this.tabList.setAttribute('aria-label', 'Panel views')
     for (const tab of Object.values(this.tabs)) {
@@ -256,20 +256,20 @@ export class BottomPanelController {
     })
 
     this.sizeButton.type = 'button'
-    this.sizeButton.className = 'clickable bottom-panel-size'
+    this.sizeButton.className = 'clickable top-panel-size'
     this.sizeButton.append(
-      createSvgIcon('panel-expand', { className: 'bottom-panel-expand-icon' }),
-      createSvgIcon('panel-restore', { className: 'bottom-panel-restore-icon' }),
+      createSvgIcon('panel-expand', { className: 'top-panel-expand-icon' }),
+      createSvgIcon('panel-restore', { className: 'top-panel-restore-icon' }),
     )
     this.sizeButton.addEventListener('click', () => this.setSize(this.size === 'full' ? 'half' : 'full'))
 
     this.header.appendChild(this.tabList)
 
-    this.footer.className = 'bottom-panel-footer'
+    this.footer.className = 'top-panel-footer'
     this.footer.append(this.resizeHandle, this.sizeButton)
 
-    this.body.id = 'bottom-panel-body'
-    this.body.className = 'bottom-panel-body'
+    this.body.id = 'top-panel-body'
+    this.body.className = 'top-panel-body'
     this.body.inert = true
     this.root.append(this.header, this.body, this.footer)
     this.topElement.insertBefore(this.root, this.applicationHeader.nextSibling)
@@ -288,7 +288,7 @@ export class BottomPanelController {
   }
 
   /** Puts a view in its tab, replacing another owner's view there; the selected tab and panel size stay. */
-  open(options: BottomPanelOptions): void {
+  open(options: TopPanelOptions): void {
     const tab = this.tabs[options.tab]
     const focusWasInside = tab.panel.contains(document.activeElement)
     if (tab.owner !== null && tab.owner !== options.owner) {
@@ -299,7 +299,7 @@ export class BottomPanelController {
   }
 
   /** Reveals a tab; an optional timeline anchor stays visible instead of reopening at full height. */
-  reveal(id: BottomPanelTabId, timelineAnchor?: Element): void {
+  reveal(id: TopPanelTabId, timelineAnchor?: Element): void {
     const focusWasOutside = !this.root.contains(document.activeElement)
     this.selectTab(id)
     if (this.size === 'collapsed') {
@@ -334,7 +334,7 @@ export class BottomPanelController {
   }
 
   /** `restore` puts the tab's base view back whenever another view in that tab closes. */
-  setRootView(id: BottomPanelTabId, restore: () => void): void {
+  setRootView(id: TopPanelTabId, restore: () => void): void {
     this.tabs[id].restoreRoot = restore
   }
 
@@ -347,19 +347,19 @@ export class BottomPanelController {
   }
 
   /** Whether the tab is selected and the panel is showing more than its tab bar. */
-  isVisible(id: BottomPanelTabId): boolean {
+  isVisible(id: TopPanelTabId): boolean {
     return this.tabs[id].visible
   }
 
-  addVisibilityListener(id: BottomPanelTabId, listener: (visible: boolean) => void): void {
+  addVisibilityListener(id: TopPanelTabId, listener: (visible: boolean) => void): void {
     this.tabs[id].visibilityListeners.push(listener)
   }
 
-  private tabOf(owner: object): BottomPanelTab | undefined {
+  private tabOf(owner: object): TopPanelTab | undefined {
     return Object.values(this.tabs).find((tab) => tab.owner === owner)
   }
 
-  private selectTab(id: BottomPanelTabId): void {
+  private selectTab(id: TopPanelTabId): void {
     this.activeTab = id
     for (const tab of Object.values(this.tabs)) {
       const selected = tab.id === id

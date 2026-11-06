@@ -2,7 +2,7 @@ import { AudioInputs } from '../audioinputs/AudioInputs'
 import type { MediaStreamInput } from '../audioinputs/MediaStreamInput'
 import { LocalMediaStreams } from '../mediastreams/LocalMediaStreams'
 import { VideoInputs } from '../videoinputs/VideoInputs'
-import { BottomPanelController } from './BottomPanelController'
+import { TopPanelController } from './TopPanelController'
 import { PeakMeterController } from './PeakMeterController'
 import { createSvgIcon } from './SvgIcon'
 
@@ -19,7 +19,7 @@ type LocalInput = {
 
 /** The top panel's Inputs tab: the level and live picture of this machine's microphone, camera and screen capture. */
 export class InputsPanelController {
-  private readonly shell = BottomPanelController.getInstance()
+  private readonly shell = TopPanelController.getInstance()
   private readonly content = document.createElement('section')
   private readonly list = document.createElement('div')
   private readonly emptyMessage = document.createElement('p')
@@ -30,7 +30,7 @@ export class InputsPanelController {
   constructor() {
     this.content.className = 'inputs-panel-content'
     this.list.className = 'inputs-panel-list'
-    this.emptyMessage.className = 'bottom-panel-message'
+    this.emptyMessage.className = 'top-panel-message'
     this.emptyMessage.textContent =
       'No inputs are on. Enable the microphone, camera, or screen capture with the buttons at the top.'
     this.content.append(this.list, this.emptyMessage)

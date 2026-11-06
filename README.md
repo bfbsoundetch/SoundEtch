@@ -201,6 +201,8 @@ Enabling the camera with the project header's **Enable Camera** button opens **I
 
 Drag the panel's bottom edge, including the centered chevron, to resize it: down expands, up shrinks. The top tab bar is not draggable. Release snaps to minimized, half height, or full height: the one nearest the release, but at least one step in the drag's direction once the drag covers 24px. Smaller drags keep the current size and do not also click the chevron. The panel follows the pointer, then eases into its chosen size over 100ms on release while the timeline boundary moves with it; no intermediate height is retained. Reduced-motion preferences disable the animation. Viewport/header changes update the bounds without cancelling an active drag, and tracking continues outside the drag surface or after pointer-capture loss until release. A cancelled gesture or window focus loss restores the previously chosen size. The chevron is a native button with a 96×32px target, visible keyboard focus, an accessible action label, expanded/collapsed state, and resize instructions. Enter or Space activates it; Down expands one step, Up shrinks one step, Home minimizes, and End selects full height.
 
+The panel shell lives in `src/ui/TopPanelController.ts`; its DOM IDs and CSS classes use the `top-panel` prefix.
+
 ## Effects
 
 A track's **Effects** button opens the top panel's **Tracks** tab on that track's **Effects** view, whose chain runs from left to right. Each effect's controls are stacked below its name: **Bypass**, **Automate**, **Move left**, **Move right**, and **Remove**. **Bypass** is a toggle; a bypassed effect is labeled _Bypassed_, keeps its settings and automation, and stays in the chain. Bypassing is undoable and saved with the project.
