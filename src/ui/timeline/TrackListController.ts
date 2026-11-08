@@ -44,6 +44,7 @@ import {
 import type { TranscriptionReplacement } from '../../transcription/TranscriptionSelection'
 import type { ProcessingModalController } from '../ProcessingModalController'
 import { TrackPanelController } from '../TrackPanelController'
+import { TopPanelController } from '../TopPanelController'
 import { getTrackTranscriptEntries } from '../transcript/TrackTranscript'
 import type { TrackTranscriptEntry } from '../transcript/TrackTranscript'
 import { OutputTimelineController } from './OutputTimelineController'
@@ -1018,18 +1019,14 @@ export class TrackListController {
 
   private async showWelcomeOnEmptyProject() {
     const project = await ProjectManager.getActiveProject()
-    if (
+    const showWelcome =
       project.getTracks().length == 0 &&
       project.getClips().length == 0 &&
       AudioControl.getState() == AudioState.STOPPED
-    ) {
-      document.getElementById('timeline-body')!.hidden = true
-      document.getElementById('welcome')!.hidden = false
-    } else {
-      document.getElementById('timeline-body')!.hidden = false
-      document.getElementById('welcome')!.hidden = true
-      this.resizeCallback()
-    }
+    document.getElementById('timeline-body')!.hidden = showWelcome
+    document.getElementById('welcome')!.hidden = !showWelcome
+    TopPanelController.getInstance().setHidden(showWelcome)
+    if (!showWelcome) this.resizeCallback()
   }
 
   canEdit() {

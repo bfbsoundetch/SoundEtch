@@ -133,8 +133,8 @@ class TopPanelTab {
 }
 
 /**
- * The tabbed panel docked above the timeline. It is always present and starts minimized to its tab bar;
- * dragging downward or using its buttons switches between minimized, half and full height.
+ * The tabbed panel docked above the timeline, hidden while the welcome screen is showing.
+ * It starts minimized; dragging downward or using its buttons switches between minimized, half and full height.
  */
 export class TopPanelController {
   private static instance: TopPanelController | null = null
@@ -144,12 +144,11 @@ export class TopPanelController {
   }
 
   private readonly root = document.createElement('div')
-  private readonly header = document.createElement('div')
   private readonly tabList = document.createElement('div')
   private readonly body = document.createElement('div')
-  private readonly resizeHandle = document.createElement('button')
+  private readonly decreaseButton = document.createElement('button')
   private readonly footer = document.createElement('div')
-  private readonly sizeButton = document.createElement('button')
+  private readonly increaseButton = document.createElement('button')
   private readonly topElement = document.getElementById('topdiv')!
   private readonly timelineElement = document.getElementById('timeline-body')!
   private readonly applicationHeader = document.querySelector<HTMLElement>('.header-container')!
@@ -168,53 +167,62 @@ export class TopPanelController {
   private constructor() {
     this.root.id = 'top-panel'
     this.root.className = 'top-panel collapsed'
+    this.root.hidden = true
     this.root.setAttribute('role', 'region')
     this.root.setAttribute('aria-label', 'Top panel')
 
-    this.header.className = 'top-panel-header'
-
-    this.resizeHandle.type = 'button'
-    this.resizeHandle.className = 'clickable top-panel-resize-handle'
-    this.resizeHandle.setAttribute('aria-controls', 'top-panel-body')
-    this.resizeHandle.setAttribute(
-      'aria-description',
-      'Drag to resize. Arrow Down expands one step; Arrow Up shrinks. Home minimizes; End expands to full height.',
-    )
-    const chevron = createSvgIcon('chevron-down', { className: 'top-panel-resize-icon' })
-    chevron.setAttribute('viewBox', '0 0 500 125')
-    this.resizeHandle.appendChild(chevron)
-    this.resizeHandle.addEventListener('click', (event) => {
-      // Pointer drags must not also activate the button; keyboard and assistive clicks still work.
-      const suppress = this.suppressHandleClick && event.detail !== 0
-      this.suppressHandleClick = false
-      if (!suppress) this.setSize(this.size === 'collapsed' ? 'half' : 'collapsed')
-    })
-    this.resizeHandle.addEventListener('keydown', (event) => {
-      if (event.altKey || event.ctrlKey || event.metaKey) {
-        return
-      }
-      const index = PANEL_SIZES.indexOf(this.size)
-      switch (event.key) {
-        case 'ArrowDown':
-          this.setSize(PANEL_SIZES[Math.min(index + 1, PANEL_SIZES.length - 1)])
-          break
-        case 'ArrowUp':
-          this.setSize(PANEL_SIZES[Math.max(index - 1, 0)])
-          break
-        case 'Home':
-          this.setSize('collapsed')
-          break
-        case 'End':
-          this.setSize('full')
-          break
-        default:
+    for (const button of [this.decreaseButton, this.increaseButton]) {
+      button.type = 'button'
+      button.className = 'clickable top-panel-size-button'
+      button.setAttribute('aria-controls', 'top-panel-body')
+      const label = button === this.decreaseButton ? 'Decrease panel height' : 'Increase panel height'
+      button.setAttribute('aria-label', label)
+      button.title = `${label}. Drag to resize.`
+      button.setAttribute(
+        'aria-description',
+        'Drag to resize. Arrow Down expands one step; Arrow Up shrinks. Home minimizes; End expands to full height.',
+      )
+      const chevron = createSvgIcon('chevron-down', { className: 'top-panel-size-icon' })
+      chevron.setAttribute('viewBox', '0 0 500 125')
+      button.appendChild(chevron)
+      button.addEventListener('click', (event) => {
+        // Pointer drags must not also activate the button; keyboard and assistive clicks still work.
+        const suppress = this.suppressHandleClick && event.detail !== 0
+        this.suppressHandleClick = false
+        if (suppress) return
+        const index = PANEL_SIZES.indexOf(this.size)
+        const step = button === this.decreaseButton ? -1 : 1
+        this.setSize(PANEL_SIZES[Math.max(0, Math.min(PANEL_SIZES.length - 1, index + step))])
+      })
+      button.addEventListener('keydown', (event) => {
+        if (event.altKey || event.ctrlKey || event.metaKey) {
           return
-      }
-      event.preventDefault()
-      event.stopPropagation()
-    })
+        }
+        const index = PANEL_SIZES.indexOf(this.size)
+        switch (event.key) {
+          case 'ArrowDown':
+            this.setSize(PANEL_SIZES[Math.min(index + 1, PANEL_SIZES.length - 1)])
+            break
+          case 'ArrowUp':
+            this.setSize(PANEL_SIZES[Math.max(index - 1, 0)])
+            break
+          case 'Home':
+            this.setSize('collapsed')
+            break
+          case 'End':
+            this.setSize('full')
+            break
+          default:
+            return
+        }
+        event.preventDefault()
+        event.stopPropagation()
+      })
+      button.addEventListener('pointerdown', (event) => this.startResize(event))
+    }
+    this.decreaseButton.classList.add('top-panel-decrease')
+    this.increaseButton.classList.add('top-panel-increase')
     this.footer.addEventListener('pointerdown', (event) => this.startResize(event))
-    this.resizeHandle.addEventListener('pointerdown', (event) => this.startResize(event))
 
     this.tabList.className = 'top-panel-tabs'
     this.tabList.setAttribute('role', 'tablist')
@@ -255,23 +263,16 @@ export class TopPanelController {
       event.stopPropagation()
     })
 
-    this.sizeButton.type = 'button'
-    this.sizeButton.className = 'clickable top-panel-size'
-    this.sizeButton.append(
-      createSvgIcon('panel-expand', { className: 'top-panel-expand-icon' }),
-      createSvgIcon('panel-restore', { className: 'top-panel-restore-icon' }),
-    )
-    this.sizeButton.addEventListener('click', () => this.setSize(this.size === 'full' ? 'half' : 'full'))
-
-    this.header.appendChild(this.tabList)
-
     this.footer.className = 'top-panel-footer'
-    this.footer.append(this.resizeHandle, this.sizeButton)
+    const sizeControls = document.createElement('div')
+    sizeControls.className = 'top-panel-size-controls'
+    sizeControls.append(this.decreaseButton, this.increaseButton)
+    this.footer.append(this.tabList, sizeControls)
 
     this.body.id = 'top-panel-body'
     this.body.className = 'top-panel-body'
     this.body.inert = true
-    this.root.append(this.header, this.body, this.footer)
+    this.root.append(this.body, this.footer)
     this.topElement.insertBefore(this.root, this.applicationHeader.nextSibling)
     this.selectTab(this.activeTab)
     this.resizePanel(undefined, true)
@@ -285,6 +286,15 @@ export class TopPanelController {
     }
     window.addEventListener('resize', updateLayout)
     new ResizeObserver(updateLayout).observe(this.applicationHeader)
+  }
+
+  /** Hides the editor panel without changing its selected tab or size. */
+  setHidden(hidden: boolean): void {
+    if (this.root.hidden === hidden) return
+    this.cancelResize?.()
+    this.root.hidden = hidden
+    if (!hidden) this.resizePanel(undefined, true)
+    this.updateVisibility()
   }
 
   /** Puts a view in its tab, replacing another owner's view there; the selected tab and panel size stay. */
@@ -346,7 +356,7 @@ export class TopPanelController {
     this.tabOf(owner)?.setBody(body)
   }
 
-  /** Whether the tab is selected and the panel is showing more than its tab bar. */
+  /** Whether the tab is selected and the panel's content area is open. */
   isVisible(id: TopPanelTabId): boolean {
     return this.tabs[id].visible
   }
@@ -379,8 +389,7 @@ export class TopPanelController {
 
   private heights(): Record<PanelSize, number> {
     const viewportHeight = window.innerHeight
-    const collapsed =
-      this.header.offsetHeight + this.footer.offsetHeight + this.root.offsetHeight - this.root.clientHeight
+    const collapsed = this.footer.offsetHeight + this.root.offsetHeight - this.root.clientHeight
     const full = Math.max(collapsed, viewportHeight - this.applicationHeader.getBoundingClientRect().bottom)
     return { collapsed, half: Math.min(full, Math.max(collapsed, viewportHeight / 2)), full }
   }
@@ -401,19 +410,25 @@ export class TopPanelController {
   }
 
   private startResize(event: PointerEvent): void {
+    const isHandle = event.currentTarget === this.decreaseButton || event.currentTarget === this.increaseButton
     if (
       event.button !== 0 ||
       !event.isPrimary ||
-      (event.currentTarget !== this.resizeHandle && event.target instanceof Element && event.target.closest('button'))
+      (isHandle && (event.currentTarget as HTMLButtonElement).disabled) ||
+      (!isHandle && event.target instanceof Element && event.target.closest('button'))
     ) {
       return
     }
     this.cancelResize?.()
     event.preventDefault()
     event.stopPropagation()
-    this.resizeHandle.focus({ preventScroll: true })
+    const focusButton =
+      event.currentTarget === this.increaseButton || this.decreaseButton.disabled
+        ? this.increaseButton
+        : this.decreaseButton
+    focusButton.focus({ preventScroll: true })
     const captureElement = event.currentTarget as HTMLElement
-    let handleClick = captureElement === this.resizeHandle
+    let handleClick = isHandle
     this.suppressHandleClick = true
     const pointerId = event.pointerId
     const startX = event.clientX
@@ -469,6 +484,7 @@ export class TopPanelController {
   }
 
   private resizePanel(requestedHeight?: number, immediate = false): void {
+    if (this.root.hidden) return
     // Layout changes must not animate through or over the application header.
     if (immediate) this.root.classList.add('layout-resize')
     const heights = this.heights()
@@ -479,14 +495,14 @@ export class TopPanelController {
         : Math.max(heights.collapsed, Math.min(heights.full, requestedHeight))
     this.root.style.height = `${height}px`
     this.setBodyShowing(height > heights.collapsed + 0.5)
-    const sizeLabel = this.size === 'full' ? 'Restore half height' : 'Expand to full height'
-    this.sizeButton.setAttribute('aria-label', sizeLabel)
-    this.sizeButton.title = sizeLabel
-    this.sizeButton.classList.toggle('expanded', this.size === 'full')
-    const handleLabel = this.size === 'collapsed' ? 'Open panel to half height' : 'Minimize panel'
-    this.resizeHandle.setAttribute('aria-label', handleLabel)
-    this.resizeHandle.title = `${handleLabel}. Drag to resize.`
-    this.resizeHandle.setAttribute('aria-expanded', `${this.size !== 'collapsed'}`)
+    const focusedControl = document.activeElement
+    this.decreaseButton.disabled = this.size === 'collapsed'
+    this.increaseButton.disabled = this.size === 'full'
+    if (this.decreaseButton.disabled && focusedControl === this.decreaseButton) {
+      this.increaseButton.focus({ preventScroll: true })
+    } else if (this.increaseButton.disabled && focusedControl === this.increaseButton) {
+      this.decreaseButton.focus({ preventScroll: true })
+    }
     if (immediate) {
       this.root.getBoundingClientRect()
       this.root.classList.remove('layout-resize')
@@ -507,7 +523,7 @@ export class TopPanelController {
 
   private updateVisibility(): void {
     for (const tab of Object.values(this.tabs)) {
-      const visible = this.bodyShowing && tab.id === this.activeTab
+      const visible = !this.root.hidden && this.bodyShowing && tab.id === this.activeTab
       if (visible === tab.visible) continue
       tab.visible = visible
       for (const listener of tab.visibilityListeners) listener(visible)
