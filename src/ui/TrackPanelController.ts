@@ -161,6 +161,7 @@ export class TrackPanelController {
       this.geometryChanged = true
     })
     this.shell.setRootView('tracks', () => this.openRoot())
+    this.shell.addActivationListener('tracks', () => this.selectCenteredTrack())
     this.shell.addVisibilityListener('tracks', () => this.update())
     this.setSection(this.section)
     this.openRoot()
@@ -209,6 +210,30 @@ export class TrackPanelController {
     // Views over the tab show another project's or a deleted track's data, so they must not stay up.
     if (switched || removed) this.openRoot()
     else this.update()
+  }
+
+  private selectCenteredTrack(): void {
+    if (!this.rootShown) return
+    const viewport = document.getElementById('input-track-lists')!
+    if (viewport.clientHeight === 0) return
+    const center = viewport.getBoundingClientRect().top + viewport.clientHeight / 2
+    let closestTrack = this.selectedTrack
+    let closestDistance = Infinity
+    for (const waveform of this.trackListController.waveforms) {
+      const bounds = waveform.div.getBoundingClientRect()
+      if (bounds.height === 0) continue
+      const distance = Math.max(bounds.top - center, center - bounds.bottom, 0)
+      if (distance < closestDistance) {
+        closestTrack = waveform.track
+        closestDistance = distance
+      }
+      if (bounds.top <= center && center < bounds.bottom) {
+        closestTrack = waveform.track
+        break
+      }
+    }
+    this.selectedTrack = closestTrack
+    this.update()
   }
 
   private openRoot(): void {

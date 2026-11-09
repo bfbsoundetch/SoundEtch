@@ -28,6 +28,7 @@ class TopPanelTab {
   readonly button = document.createElement('button')
   readonly panel = document.createElement('section')
   readonly visibilityListeners = new Array<(visible: boolean) => void>()
+  readonly activationListeners = new Array<() => void>()
   owner: object | null = null
   restoreRoot: (() => void) | null = null
   visible = false
@@ -229,7 +230,7 @@ export class TopPanelController {
     this.tabList.setAttribute('aria-label', 'Panel views')
     for (const tab of Object.values(this.tabs)) {
       tab.button.addEventListener('click', () => {
-        this.selectTab(tab.id)
+        this.activateTab(tab.id)
         if (this.size === 'collapsed') this.setSize(this.openSize)
       })
       this.tabList.appendChild(tab.button)
@@ -257,7 +258,7 @@ export class TopPanelController {
         default:
           return
       }
-      this.selectTab(TAB_IDS[next])
+      this.activateTab(TAB_IDS[next])
       this.tabs[TAB_IDS[next]].button.focus()
       event.preventDefault()
       event.stopPropagation()
@@ -365,8 +366,20 @@ export class TopPanelController {
     this.tabs[id].visibilityListeners.push(listener)
   }
 
+  /** Runs before a toolbar interaction reveals the tab or resizes the timeline. */
+  addActivationListener(id: TopPanelTabId, listener: () => void): void {
+    this.tabs[id].activationListeners.push(listener)
+  }
+
   private tabOf(owner: object): TopPanelTab | undefined {
     return Object.values(this.tabs).find((tab) => tab.owner === owner)
+  }
+
+  private activateTab(id: TopPanelTabId): void {
+    if (!this.isVisible(id)) {
+      for (const listener of this.tabs[id].activationListeners) listener()
+    }
+    this.selectTab(id)
   }
 
   private selectTab(id: TopPanelTabId): void {
