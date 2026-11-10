@@ -370,11 +370,7 @@ export class OutputPanelController {
         'split output scene',
       )
     })
-    const note = document.createElement('p')
-    note.className = 'output-panel-note'
-    note.textContent =
-      'Automatic uses the first video track, then the second for the right side. Gaps stay black. A transition plays centered on the start of its scene. Video publishing renders these scenes with the project audio mix.'
-    this.controls.append(this.splitButton, note)
+    this.controls.append(this.splitButton)
 
     const previewArea = document.createElement('div')
     previewArea.className = 'output-panel-preview-area'
