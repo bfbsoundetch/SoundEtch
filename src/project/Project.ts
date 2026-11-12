@@ -16,6 +16,8 @@ export class Project extends DatabasePersisted {
   /** Applied in order to the mix of all tracks, for playback and export alike. */
   readonly outputEffects: EffectData[] = []
   outputCaptions: OutputCaptionSettings = { ...DEFAULT_OUTPUT_CAPTIONS }
+  /** Set while an import or restore writes this project's files; such projects are hidden and deleted once no import runs. */
+  importInProgress = false
 
   constructor(
     public title: string,

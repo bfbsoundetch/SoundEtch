@@ -93,7 +93,7 @@ export class MemoryBackedFileSystemSyncAccessHandle implements FileSystemSyncAcc
       const writeStart = start + written - chunkIndex * MemoryBackedFileSystemSyncAccessHandle.CHUNK_SIZE
       const writeBuffer = new Uint8Array(buffer).subarray(
         written,
-        MemoryBackedFileSystemSyncAccessHandle.CHUNK_SIZE - writeStart,
+        written + MemoryBackedFileSystemSyncAccessHandle.CHUNK_SIZE - writeStart,
       )
       new Uint8Array(this.buffers[chunkIndex]).set(writeBuffer, writeStart)
       written += writeBuffer.byteLength

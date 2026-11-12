@@ -9,6 +9,8 @@ import { Track } from './Track'
 export class ProjectManager {
   static readonly ACTIVE_PROJECT_PROPERTY_NAME = 'activeProject'
   static readonly DEFAULT_PROJECT_TITLE = 'My First Etching'
+  /** Imports hold it shared; deleting abandoned imports needs it exclusively. */
+  static readonly PROJECT_IMPORT_LOCK_NAME = 'soundetch-project-import'
 
   private static activeProject: Promise<Project> | null
   private static projectListeners = new Array<(_: Project) => any>()
@@ -97,9 +99,40 @@ export class ProjectManager {
   }
 
   static async getProjects(): Promise<Project[]> {
-    const projects = await DatabasePersister.getObjectsByRestorationName<Project>('Project')
+    const loaded = await DatabasePersister.getObjectsByRestorationName<Project>('Project')
+    const abandoned = loaded.filter((project) => project.importInProgress)
+    if (abandoned.length > 0) {
+      await ProjectManager.deleteAbandonedImports(abandoned)
+    }
+    const projects = loaded.filter((project) => !project.importInProgress)
     return projects.sort(
       (a, b) => (ProjectManager.getProjectModifiedDate(b) ?? 0) - (ProjectManager.getProjectModifiedDate(a) ?? 0),
+    )
+  }
+
+  /** Deletes projects left behind by an interrupted import, unless an import is still running in some tab. */
+  private static async deleteAbandonedImports(projects: readonly Project[]) {
+    const locks: LockManager | undefined = globalThis.navigator?.locks
+    if (!locks) {
+      return
+    }
+    await locks.request(
+      ProjectManager.PROJECT_IMPORT_LOCK_NAME,
+      { mode: 'exclusive', ifAvailable: true },
+      async (lock) => {
+        if (!lock) {
+          return
+        }
+        for (const project of projects) {
+          const objects = await DatabasePersister.getPersistedObjectGraph(project.id!)
+          // An import that finished between loading and locking has cleared its flag.
+          if (objects[0]?.importInProgress !== true) {
+            continue
+          }
+          await FileSystemUtils.deleteDirectory(project.directoryName)
+          await DatabasePersister.deleteObjectsByIds(objects.map((object) => object.id))
+        }
+      },
     )
   }
 

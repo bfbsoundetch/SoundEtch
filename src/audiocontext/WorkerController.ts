@@ -8,6 +8,8 @@ export class WorkerController {
   private onError: ((error: Error) => void) | null = null
   readonly worker: Worker
   private readonly logger = new Logger('WorkerController')
+  private nextJobId = 1
+  private readonly jobCompletions = new Map<number, () => void>()
 
   constructor(options?: WorkerOptions) {
     // https://v3.vitejs.dev/guide/features.html#import-with-constructors
@@ -27,6 +29,8 @@ export class WorkerController {
       )
       switch (event.data.type) {
         case 'finished':
+          this.jobCompletions.get(event.data.jobId)?.()
+          this.jobCompletions.delete(event.data.jobId)
           this.finish()
           break
         case 'ready':
@@ -113,15 +117,21 @@ export class WorkerController {
     this.audioWorkletNodes = []
   }
 
-  start(jobType: JobType, argument: any, transferables: Transferable[] = []) {
+  /** Resolves when the worker reports the job finished, after any error it reported. */
+  start(jobType: JobType, argument: any, transferables: Transferable[] = []): Promise<void> {
     this.logger.debug('Starting worker')
+    const jobId = this.nextJobId++
+    const { promise, resolve } = Promise.withResolvers<void>()
+    this.jobCompletions.set(jobId, resolve)
     this.worker.postMessage(
       {
         type: 'start',
+        jobId: jobId,
         jobType: jobType,
         argument: argument,
       },
       transferables,
     )
+    return promise
   }
 }

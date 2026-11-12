@@ -76,6 +76,9 @@ export class VideoRecordingSession {
   private removeInputListener: (() => void) | null = null
   private readonly pendingAdds = new Array<Promise<void>>()
   private finished = false
+  private readonly settlement = Promise.withResolvers<void>()
+  /** Resolves after the context closes and every clip's video is saved or its failure reported. */
+  readonly settled = this.settlement.promise
 
   constructor(
     private readonly audioContext: EnhancedAudioContext,
@@ -144,28 +147,32 @@ export class VideoRecordingSession {
   private async finish() {
     if (this.finished) return
     this.finished = true
-    this.audioContext.removeEventListener('statechange', this.handleStateChange)
-    this.removeInputListener?.()
-    this.removeInputListener = null
-    // The context may close while an input's in-progress marker is still being saved.
-    await Promise.allSettled(this.pendingAdds)
-    const results = await Promise.all(
-      this.entries.map(async (entry) => {
-        try {
-          const segment = await entry.recorder.finish()
-          return (await settleRecordedVideo(this.project, entry.clip, segment)) ? entry.track : null
-        } catch (error) {
-          // Failed recovery must not settle as empty: the marker and flushed file are needed on reload.
-          if (error instanceof Error && error.name == 'QuotaExceededError') this.onError(error)
-          else {
-            NotificationsController.showErrorMessage(
-              `Could not save the video recording of ${entry.input.name}: ${error instanceof Error ? error.message : String(error)}`,
-            )
+    try {
+      this.audioContext.removeEventListener('statechange', this.handleStateChange)
+      this.removeInputListener?.()
+      this.removeInputListener = null
+      // The context may close while an input's in-progress marker is still being saved.
+      await Promise.allSettled(this.pendingAdds)
+      const results = await Promise.all(
+        this.entries.map(async (entry) => {
+          try {
+            const segment = await entry.recorder.finish()
+            return (await settleRecordedVideo(this.project, entry.clip, segment)) ? entry.track : null
+          } catch (error) {
+            // Failed recovery must not settle as empty: the marker and flushed file are needed on reload.
+            if (error instanceof Error && error.name == 'QuotaExceededError') this.onError(error)
+            else {
+              NotificationsController.showErrorMessage(
+                `Could not save the video recording of ${entry.input.name}: ${error instanceof Error ? error.message : String(error)}`,
+              )
+            }
+            return null
           }
-          return null
-        }
-      }),
-    )
-    this.onFinished(results.filter((track): track is Track => track !== null))
+        }),
+      )
+      this.onFinished(results.filter((track): track is Track => track !== null))
+    } finally {
+      this.settlement.resolve()
+    }
   }
 }

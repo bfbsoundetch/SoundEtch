@@ -1,22 +1,35 @@
-import { FileSystemUtils } from '../filesystem/FileSystemUtils'
+import { FileSystemUtils, type DirectoryFile } from '../filesystem/FileSystemUtils'
 import { isObjectRecord } from '../global/TypeGuards'
 import { DatabasePersister, type ImportedObjectGraph, type PersistedObject } from '../persistence/DatabasePersister'
 import type { Project } from './Project'
-import { TarArchive, type TarEntry, type TarOutput, type TarSourceEntry } from './TarArchive'
+import { ProjectManager } from './ProjectManager'
+import { TarArchive, type TarOutput, type TarSourceEntry } from './TarArchive'
 
-interface ProjectArchiveManifest {
+export interface ProjectArchiveManifest {
   readonly format: 'soundetch-project'
   readonly version: 1
   readonly projectId: number
   readonly objects: readonly PersistedObject[]
 }
 
-const MANIFEST_ENTRY_NAME = 'soundetch-project.json'
-const OPFS_ENTRY_PREFIX = 'opfs/'
-const MAX_MANIFEST_SIZE = 16 * 1024 * 1024
+export interface ProjectArchiveMember {
+  /** Path inside the archive, e.g. `opfs/12_video_0`. */
+  readonly name: string
+  /** Writes the member's bytes in order. */
+  copyTo(write: (data: Uint8Array<ArrayBuffer>) => Promise<void>): Promise<void>
+}
+
+export interface ProjectArchiveSnapshot {
+  readonly manifest: Blob
+  readonly files: readonly DirectoryFile[]
+}
+
+export const PROJECT_ARCHIVE_MANIFEST_NAME = 'soundetch-project.json'
+export const PROJECT_ARCHIVE_FILE_PREFIX = 'opfs/'
+export const MAX_PROJECT_ARCHIVE_MANIFEST_SIZE = 16 * 1024 * 1024
 
 export class ProjectArchive {
-  static async exportProject(project: Project, output: TarOutput): Promise<void> {
+  static async snapshotProject(project: Project): Promise<ProjectArchiveSnapshot> {
     if (!project.id) {
       throw new Error('The current project has not been saved')
     }
@@ -31,43 +44,81 @@ export class ProjectArchive {
       projectId: project.id,
       objects,
     }
+    const manifestBlob = new Blob([JSON.stringify(manifest)], { type: 'application/json' })
+    if (manifestBlob.size > MAX_PROJECT_ARCHIVE_MANIFEST_SIZE) {
+      throw new Error("The project's metadata is larger than 16 MiB and cannot be archived")
+    }
+    return { manifest: manifestBlob, files }
+  }
+
+  static async exportProject(project: Project, output: TarOutput): Promise<void> {
+    const { manifest, files } = await ProjectArchive.snapshotProject(project)
     const entries = new Array<TarSourceEntry>(
-      {
-        name: MANIFEST_ENTRY_NAME,
-        data: new Blob([JSON.stringify(manifest)], { type: 'application/json' }),
-      },
-      ...files.map((file) => ({ name: `${OPFS_ENTRY_PREFIX}${file.path}`, data: file.data })),
+      { name: PROJECT_ARCHIVE_MANIFEST_NAME, data: manifest },
+      ...files.map((file) => ({ name: `${PROJECT_ARCHIVE_FILE_PREFIX}${file.path}`, data: file.data })),
     )
     await TarArchive.write(entries, output)
   }
 
   static async importProject(archive: Blob): Promise<number> {
     const entries = await TarArchive.read(archive)
-    const manifestEntry = entries.get(MANIFEST_ENTRY_NAME)
+    const manifestEntry = entries.get(PROJECT_ARCHIVE_MANIFEST_NAME)
     if (!manifestEntry) {
       throw new Error('The selected file is not a SoundEtch project archive')
     }
-    const manifest = await ProjectArchive.readManifest(manifestEntry)
+    const manifest = ProjectArchive.parseManifest(
+      await TarArchive.readEntry(manifestEntry, MAX_PROJECT_ARCHIVE_MANIFEST_SIZE),
+    )
+    const members = [...entries.values()]
+      .filter((entry) => entry.name != PROJECT_ARCHIVE_MANIFEST_NAME)
+      .map((entry): ProjectArchiveMember => ({
+        name: entry.name,
+        copyTo: (write) => TarArchive.pipeEntry(entry, write),
+      }))
+    return ProjectArchive.importMembers(manifest, members)
+  }
+
+  /**
+   * Imports the manifest's objects as a new project and writes `members` into its directory. The project stays
+   * hidden until every file is written; a failure removes everything imported so far.
+   */
+  static async importMembers(
+    manifest: ProjectArchiveManifest,
+    members: readonly ProjectArchiveMember[],
+  ): Promise<number> {
+    const locks: LockManager | undefined = globalThis.navigator?.locks
+    if (!locks) {
+      return ProjectArchive.importMembersHoldingLock(manifest, members)
+    }
+    // Shared: concurrent imports may run, but abandoned-import cleanup waits for all of them.
+    return locks.request(ProjectManager.PROJECT_IMPORT_LOCK_NAME, { mode: 'shared' }, () =>
+      ProjectArchive.importMembersHoldingLock(manifest, members),
+    )
+  }
+
+  private static async importMembersHoldingLock(
+    manifest: ProjectArchiveManifest,
+    members: readonly ProjectArchiveMember[],
+  ): Promise<number> {
     const rootObject = manifest.objects.find((object) => object.id == manifest.projectId)
     if (rootObject?.restorationName != 'Project') {
       throw new Error('The project archive does not contain its project record')
     }
 
-    const opfsEntries = new Array<TarEntry>()
-    for (const entry of entries.values()) {
-      if (entry.name == MANIFEST_ENTRY_NAME) {
-        continue
+    for (const member of members) {
+      if (!member.name.startsWith(PROJECT_ARCHIVE_FILE_PREFIX)) {
+        throw new Error(`Unexpected file in project archive: ${member.name}`)
       }
-      if (!entry.name.startsWith(OPFS_ENTRY_PREFIX)) {
-        throw new Error(`Unexpected file in project archive: ${entry.name}`)
-      }
-      opfsEntries.push(entry)
     }
 
+    // Hides the project from the project list until its files are complete.
+    const objects = manifest.objects.map((object) =>
+      object === rootObject ? { ...rootObject, importInProgress: true } : object,
+    )
     let importedGraph: ImportedObjectGraph | null = null
     let importedProjectId: number | null = null
     try {
-      importedGraph = await DatabasePersister.importPersistedObjectGraph(manifest.objects, manifest.projectId)
+      importedGraph = await DatabasePersister.importPersistedObjectGraph(objects, manifest.projectId)
       importedProjectId = importedGraph.idMap.get(manifest.projectId) ?? null
       if (!importedProjectId) {
         throw new Error('The imported project did not receive a database ID')
@@ -77,8 +128,8 @@ export class ProjectArchive {
         manifest.objects.filter((object) => object.restorationName == 'Clip').map((object) => object.id),
       )
       const destinationPaths = new Set<string>()
-      for (const entry of opfsEntries) {
-        const sourcePath = entry.name.slice(OPFS_ENTRY_PREFIX.length)
+      for (const member of members) {
+        const sourcePath = member.name.slice(PROJECT_ARCHIVE_FILE_PREFIX.length)
         const destinationPath = ProjectArchive.remapClipFilePath(sourcePath, clipIds, importedGraph.idMap)
         if (destinationPaths.has(destinationPath)) {
           throw new Error(`Project archive files map to the same destination: ${destinationPath}`)
@@ -87,13 +138,17 @@ export class ProjectArchive {
 
         const writer = await FileSystemUtils.createFileWriter(String(importedProjectId), destinationPath)
         try {
-          await TarArchive.pipeEntry(entry, (data) => writer.write(data))
+          await member.copyTo((data) => writer.write(data))
           await writer.close()
         } catch (error) {
           await writer.abort().catch(() => undefined)
           throw error
         }
       }
+
+      const imported = await DatabasePersister.getObjectById<Project>(importedProjectId)
+      imported!.importInProgress = false
+      await DatabasePersister.save(imported!)
       return importedProjectId
     } catch (error) {
       const cleanupFailures = new Array<unknown>()
@@ -118,8 +173,7 @@ export class ProjectArchive {
     }
   }
 
-  private static async readManifest(entry: TarEntry): Promise<ProjectArchiveManifest> {
-    const bytes = await TarArchive.readEntry(entry, MAX_MANIFEST_SIZE)
+  static parseManifest(bytes: Uint8Array): ProjectArchiveManifest {
     let parsed: unknown
     try {
       parsed = JSON.parse(new TextDecoder('utf-8', { fatal: true }).decode(bytes))
@@ -178,11 +232,16 @@ export class ProjectArchive {
     return pathSegments.join('/')
   }
 
-  static getSuggestedFileName(projectTitle: string): string {
+  /** The project title without characters that file systems reject. */
+  static getSafeFileTitle(projectTitle: string): string {
     const safeTitle = projectTitle
       .trim()
       .replace(/[<>:"/\\|?*\u0000-\u001f]/g, '-')
       .replace(/[. ]+$/g, '')
-    return `${safeTitle || 'soundetch-project'}.soundetch.tar`
+    return safeTitle || 'soundetch-project'
+  }
+
+  static getSuggestedFileName(projectTitle: string): string {
+    return `${ProjectArchive.getSafeFileTitle(projectTitle)}.soundetch.tar`
   }
 }

@@ -1,4 +1,5 @@
-import { AudioControl } from '../audiocontext/AudioControl'
+import { Recorder } from '../recording/Recorder'
+import { DropboxBackupController } from './DropboxBackupController'
 import { ProjectArchive } from '../project/ProjectArchive'
 import { ProjectManager } from '../project/ProjectManager'
 import { NotificationsController } from './NotificationsController'
@@ -15,6 +16,7 @@ export class ProjectTransferController {
     this.exportButton.onclick = () => void this.exportProject()
     this.importButton.onclick = () => this.importInput.click()
     this.importInput.onchange = () => void this.importProject()
+    new DropboxBackupController(this.dialog)
   }
 
   private async exportProject() {
@@ -31,7 +33,7 @@ export class ProjectTransferController {
       })
 
       this.setBusy(true)
-      await AudioControl.stop()
+      await Recorder.stopAndWaitForRecordings()
       this.status.innerText = `Exporting “${project.title}”…`
       await ProjectManager.saveProject(project)
       const writable = await fileHandle.createWritable()
@@ -71,7 +73,7 @@ export class ProjectTransferController {
 
     this.setBusy(true)
     try {
-      await AudioControl.stop()
+      await Recorder.stopAndWaitForRecordings()
       this.status.innerText = `Importing “${archive.name}”…`
       const projectId = await ProjectArchive.importProject(archive)
       editorHistory.clear()

@@ -23,6 +23,12 @@ type RecorderWindow = typeof window & {
 
 export class Recorder {
   private static writingWorkerController: WorkerController | null = null
+  /**
+   * The latest recording's audio job. The next recording starts after it because both share one worker, and a stale
+   * `finished` would end the new recording's worklets through `WorkerController.finish()`.
+   */
+  private static audioWriting: Promise<void> = Promise.resolve()
+  private static readonly unsettledRecordings = new Set<Promise<void>>()
 
   static async startRecordingActiveInputs() {
     const activeProject = await ProjectManager.getActiveProject()
@@ -34,6 +40,7 @@ export class Recorder {
 
   /** One new track per source; a person's or device's audio and video share one linked clip. */
   static async startRecording(audioInputs: Array<AudioInput>, videoInputs: Array<VideoInput>) {
+    await Recorder.audioWriting
     const audioContext = await AudioControl.createNewAudioContext(AudioState.RECORDING)
     let failed = false
     const onError = (error: Error) => {
@@ -46,11 +53,23 @@ export class Recorder {
           : `Recording stopped: ${error.message}`,
       )
     }
-    try {
-      await Recorder.connectRecording(audioContext, audioInputs, videoInputs, onError)
-    } catch (error) {
-      onError(error instanceof Error ? error : new Error(String(error)))
-    }
+    const writers = new Array<Promise<void>>()
+    const connected = Recorder.connectRecording(audioContext, audioInputs, videoInputs, onError, writers).catch(
+      (error) => onError(error instanceof Error ? error : new Error(String(error))),
+    )
+    const settled = connected.then(() => Promise.allSettled(writers)).then(() => undefined)
+    Recorder.unsettledRecordings.add(settled)
+    void settled.finally(() => Recorder.unsettledRecordings.delete(settled))
+    await connected
+  }
+
+  /**
+   * Stops playback, monitoring, or recording, then waits until every recording's audio is written and its video clips
+   * are saved. Failures were already reported by the recording's error handler.
+   */
+  static async stopAndWaitForRecordings(): Promise<void> {
+    await AudioControl.stop()
+    await Promise.all(Recorder.unsettledRecordings)
   }
 
   private static async connectRecording(
@@ -58,6 +77,7 @@ export class Recorder {
     audioInputs: Array<AudioInput>,
     videoInputs: Array<VideoInput>,
     onError: (error: Error) => void,
+    writers: Array<Promise<void>>,
   ) {
     const project = await ProjectManager.getActiveProject()
     const workerController = Recorder.getWritingWorkerController()
@@ -67,6 +87,7 @@ export class Recorder {
         ? new VideoRecordingSession(audioContext, project, (tracks) => Recorder.showRecordedVideo(tracks), onError)
         : null
     videoSession?.start()
+    if (videoSession) writers.push(videoSession.settled)
     const unpairedVideoInputs = new Map(videoInputs.map((videoInput) => [videoInput.id, videoInput]))
     const inputs = []
     const audioWorkletNodes = []
@@ -131,7 +152,11 @@ export class Recorder {
       return
     }
     workerController.setAudioWorkletNodes(audioWorkletNodes, onError)
-    workerController.start(JobType.RECORDER, inputs)
+    const audioWritten = workerController.start(JobType.RECORDER, inputs)
+    Recorder.audioWriting = audioWritten
+    writers.push(audioWritten)
+    // Stop pressed while connecting: the context closed before setAudioWorkletNodes listened for it.
+    if (audioContext.state == 'closed') workerController.worker.postMessage({ type: 'stop' })
   }
 
   private static showRecordedVideo(tracks: Array<Track>) {
@@ -141,13 +166,6 @@ export class Recorder {
       void trackListController.revealTrack(tracks[0]).catch((error) => {
         NotificationsController.showError(error instanceof Error ? error : new Error(String(error)))
       })
-    }
-  }
-
-  static stopRecording(stopMediaStreamTracks: boolean = true) {
-    AudioControl.stop()
-    if (stopMediaStreamTracks) {
-      AudioInputs.gatherActiveAudioInputs().forEach((audioSource) => audioSource.stop())
     }
   }
 

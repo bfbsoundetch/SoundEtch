@@ -1,9 +1,13 @@
 import { ControllableWorkerJobFactory } from './ControllableWorkerJob.ts'
 
+let stopRequested = false
+
 self.onmessage = async (e) => {
   console.debug('Worker got message ' + JSON.stringify(e.data))
   switch (e.data.type) {
     case 'start': {
+      const jobId = e.data.jobId
+      stopRequested = false
       let failed = false
       const reportError = (error) => {
         if (failed) return
@@ -18,12 +22,14 @@ self.onmessage = async (e) => {
       }
       try {
         self.controllable = await ControllableWorkerJobFactory.getControllableWorkerJob(e.data.jobType, e.data.argument)
+        // A stop that arrived while the job was being created found no controllable to stop.
+        if (stopRequested) self.controllable.stop()
         await self.controllable.start(reportError)
       } catch (error) {
         reportError(error)
       } finally {
         self.controllable = null
-        postMessage({ type: 'finished' })
+        postMessage({ type: 'finished', jobId })
       }
       break
     }
@@ -34,6 +40,7 @@ self.onmessage = async (e) => {
       self.controllable?.resume()
       break
     case 'stop':
+      stopRequested = true
       self.controllable?.stop()
       self.controllable = null
       break

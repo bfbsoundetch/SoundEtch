@@ -3,6 +3,7 @@ import { afterEach, expect, test } from 'vitest'
 import { FileSystemUtils } from '../filesystem/FileSystemUtils'
 import { MemoryBackedFileSystem } from '../filesystem/MemoryBackedFileSystem'
 import { GlobalSettings } from '../global/GlobalSettings'
+import { DatabasePersister } from '../persistence/DatabasePersister'
 import { Clip } from './Clip'
 import { ClipView } from './ClipView'
 import { getOutputCropPosition, getOutputCropScale } from './OutputScene'
@@ -191,4 +192,76 @@ test('missing video reads never create files or directories', async () => {
     name: 'NotFoundError',
   })
   expect(MemoryBackedFileSystem.getDirectoryFiles(directory)).toEqual([])
+})
+
+test('an import in progress is hidden and kept until its files are written', async () => {
+  const source = await ProjectManager.createProject('importing', 48_000)
+  directories.add(source.directoryName)
+  const { manifest } = await ProjectArchive.snapshotProject(source)
+  const listedBefore = (await ProjectManager.getProjects()).map((project) => project.id)
+  const copyStarted = Promise.withResolvers<void>()
+  const copyAllowed = Promise.withResolvers<void>()
+  const importing = ProjectArchive.importMembers(
+    ProjectArchive.parseManifest(new Uint8Array(await manifest.arrayBuffer())),
+    [
+      {
+        name: 'opfs/notes',
+        async copyTo(write) {
+          copyStarted.resolve()
+          await copyAllowed.promise
+          await write(new Uint8Array([1, 2, 3]))
+        },
+      },
+    ],
+  )
+
+  await copyStarted.promise
+  expect((await ProjectManager.getProjects()).map((project) => project.id)).toEqual(listedBefore)
+  copyAllowed.resolve()
+  const importedId = await importing
+  directories.add(String(importedId))
+
+  const imported = (await ProjectManager.getProjects()).find((project) => project.id == importedId)
+  expect(imported?.importInProgress).toBe(false)
+  const files = await FileSystemUtils.getDirectoryFiles(String(importedId))
+  expect(files.map((file) => file.path)).toEqual(['notes'])
+  expect(new Uint8Array(await files[0].data.arrayBuffer())).toEqual(new Uint8Array([1, 2, 3]))
+})
+
+test('listing projects deletes a project left behind by an interrupted import', async () => {
+  const source = await ProjectManager.createProject('crashed', 48_000)
+  directories.add(source.directoryName)
+  await ProjectManager.addNewClip(new Clip('clip', 1))
+  const objects = await DatabasePersister.getPersistedObjectGraph(source.id!)
+  const { idMap, importedIds } = await DatabasePersister.importPersistedObjectGraph(
+    objects.map((object) => (object.id == source.id ? { ...object, importInProgress: true } : object)),
+    source.id!,
+  )
+  const leftoverDirectory = String(idMap.get(source.id!))
+  directories.add(leftoverDirectory)
+  await writeFile(leftoverDirectory, 'leftover', new Uint8Array([9]))
+
+  const listed = (await ProjectManager.getProjects()).map((project) => project.id)
+
+  expect(listed).toContain(source.id)
+  expect(importedIds).toHaveLength(2)
+  for (const id of importedIds) {
+    expect(listed).not.toContain(id)
+    expect(await DatabasePersister.getObjectById(id)).toBeFalsy()
+  }
+  expect(await FileSystemUtils.getDirectoryFiles(leftoverDirectory)).toEqual([])
+})
+
+test('a project whose metadata exceeds 16 MiB cannot be archived', async () => {
+  const project = await ProjectManager.createProject('huge', 48_000)
+  directories.add(project.directoryName)
+  project.description = 'x'.repeat(16 * 1024 * 1024 + 1)
+  await ProjectManager.saveProject(project)
+  try {
+    await expect(ProjectArchive.snapshotProject(project)).rejects.toThrow(
+      "The project's metadata is larger than 16 MiB and cannot be archived",
+    )
+  } finally {
+    await DatabasePersister.deleteObjectsByIds([project.id!])
+  }
 })

@@ -886,6 +886,21 @@
             </button>
           </section>
         </div>
+        <section id="dropbox-backup" class="project-transfer-option" hidden>
+          <h2>Dropbox backup</h2>
+          <p id="dropbox-connection-status">Not connected.</p>
+          <div class="dropbox-backup-actions">
+            <button id="dropbox-connect-button" class="bordered clickable" type="button">Connect Dropbox</button>
+            <button id="dropbox-disconnect-button" class="bordered clickable" type="button" hidden>Disconnect</button>
+            <button id="dropbox-backup-button" class="bordered clickable" type="button">Back Up Current Project</button>
+            <button id="dropbox-resume-button" class="bordered clickable" type="button" hidden>Resume Backup</button>
+            <button id="dropbox-cancel-button" class="bordered clickable" type="button" hidden>Cancel Backup</button>
+            <button id="dropbox-list-button" class="bordered clickable" type="button">Show Backups</button>
+          </div>
+          <progress id="dropbox-backup-progress" max="1" value="0" hidden></progress>
+          <p id="dropbox-backup-status" role="status" aria-live="polite"></p>
+          <ul id="dropbox-backup-list" hidden></ul>
+        </section>
         <p id="project-transfer-status" role="status" aria-live="polite"></p>
       </div>
     </dialog>

@@ -1,4 +1,4 @@
-import { AudioControl } from '../audiocontext/AudioControl'
+import { Recorder } from '../recording/Recorder'
 import { Project } from '../project/Project'
 import { ProjectManager } from '../project/ProjectManager'
 import { humanizeBytes } from './DiskUsage'
@@ -193,7 +193,7 @@ export class ProjectModalController {
   private async openProject(project: Project, button: HTMLButtonElement) {
     try {
       button.disabled = true
-      await AudioControl.stop()
+      await Recorder.stopAndWaitForRecordings()
       editorHistory.clear()
       await ProjectManager.openProject(project)
       this.dialog.close()
@@ -208,7 +208,7 @@ export class ProjectModalController {
       this.newProjectButton.disabled = true
       const activeProject = await ProjectManager.getActiveProject()
       const title = this.getNewProjectTitle(await ProjectManager.getProjects())
-      await AudioControl.stop()
+      await Recorder.stopAndWaitForRecordings()
       editorHistory.clear()
       const project = await ProjectManager.createProject(title, activeProject.sampleRate)
       this.projectIdToEditAfterRefresh = project.id
@@ -234,7 +234,7 @@ export class ProjectModalController {
       const activeProject = await ProjectManager.getActiveProject()
       const isActive = project.id == activeProject.id
       if (isActive) {
-        await AudioControl.stop()
+        await Recorder.stopAndWaitForRecordings()
         editorHistory.clear()
       }
       await ProjectManager.deleteProject(project)
