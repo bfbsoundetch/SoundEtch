@@ -13,6 +13,7 @@ import { cloneWithGetters } from '../global/ObjectUtils'
 import { NotificationsController } from '../ui/NotificationsController'
 import { MediaImporter } from './MediaImporter'
 import { VideoRecordingSession } from './VideoRecordingSession'
+import { trackUnsettledRecording } from './UnsettledRecordings'
 import type { ProcessingModalController } from '../ui/ProcessingModalController'
 import type { TrackListController } from '../ui/timeline/TrackListController'
 
@@ -28,7 +29,6 @@ export class Recorder {
    * `finished` would end the new recording's worklets through `WorkerController.finish()`.
    */
   private static audioWriting: Promise<void> = Promise.resolve()
-  private static readonly unsettledRecordings = new Set<Promise<void>>()
 
   static async startRecordingActiveInputs() {
     const activeProject = await ProjectManager.getActiveProject()
@@ -58,18 +58,8 @@ export class Recorder {
       (error) => onError(error instanceof Error ? error : new Error(String(error))),
     )
     const settled = connected.then(() => Promise.allSettled(writers)).then(() => undefined)
-    Recorder.unsettledRecordings.add(settled)
-    void settled.finally(() => Recorder.unsettledRecordings.delete(settled))
+    trackUnsettledRecording(settled)
     await connected
-  }
-
-  /**
-   * Stops playback, monitoring, or recording, then waits until every recording's audio is written and its video clips
-   * are saved. Failures were already reported by the recording's error handler.
-   */
-  static async stopAndWaitForRecordings(): Promise<void> {
-    await AudioControl.stop()
-    await Promise.all(Recorder.unsettledRecordings)
   }
 
   private static async connectRecording(

@@ -1,5 +1,4 @@
-import { ALL_FORMATS, BlobSource, EncodedPacketSink, Input, VideoSampleSink } from 'mediabunny'
-import type { VideoSample } from 'mediabunny'
+import type { EncodedPacketSink, Input, VideoSample, VideoSampleSink } from 'mediabunny'
 import { FileSystemUtils } from '../filesystem/FileSystemUtils'
 import type { VideoFrameTarget } from './VideoFrameResolver'
 import { paintVideoFrame } from './VideoFramePainter'
@@ -193,7 +192,11 @@ export class VideoPreview {
     if (this.source?.key === key) return this.source
     this.releaseSource()
     const epoch = this.sourceEpoch
-    const file = await FileSystemUtils.getExistingFile(request.directory, request.target.filename)
+    // Mediabunny loads with the first video so that projects without video keep it out of the initial chunk.
+    const [file, { ALL_FORMATS, BlobSource, EncodedPacketSink, Input, VideoSampleSink }] = await Promise.all([
+      FileSystemUtils.getExistingFile(request.directory, request.target.filename),
+      import('mediabunny'),
+    ])
     if (epoch !== this.sourceEpoch) return null
     if (file.size === 0) throw new Error(`Video file ${request.target.filename} is empty`)
     const input = new Input({ source: new BlobSource(file), formats: ALL_FORMATS })

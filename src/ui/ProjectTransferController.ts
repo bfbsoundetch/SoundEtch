@@ -1,4 +1,4 @@
-import { Recorder } from '../recording/Recorder'
+import { stopAndWaitForRecordings } from '../recording/UnsettledRecordings'
 import { DropboxBackupController } from './DropboxBackupController'
 import { ProjectArchive } from '../project/ProjectArchive'
 import { ProjectManager } from '../project/ProjectManager'
@@ -33,7 +33,7 @@ export class ProjectTransferController {
       })
 
       this.setBusy(true)
-      await Recorder.stopAndWaitForRecordings()
+      await stopAndWaitForRecordings()
       this.status.innerText = `Exporting “${project.title}”…`
       await ProjectManager.saveProject(project)
       const writable = await fileHandle.createWritable()
@@ -73,7 +73,7 @@ export class ProjectTransferController {
 
     this.setBusy(true)
     try {
-      await Recorder.stopAndWaitForRecordings()
+      await stopAndWaitForRecordings()
       this.status.innerText = `Importing “${archive.name}”…`
       const projectId = await ProjectArchive.importProject(archive)
       editorHistory.clear()

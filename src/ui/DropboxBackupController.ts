@@ -8,7 +8,7 @@ import {
 } from '../backup/DropboxAuthorization'
 import { DropboxBackup, type BackupStatus, type DropboxBackupListing } from '../backup/DropboxBackup'
 import { ProjectManager } from '../project/ProjectManager'
-import { Recorder } from '../recording/Recorder'
+import { stopAndWaitForRecordings } from '../recording/UnsettledRecordings'
 import { humanizeBytes } from './DiskUsage'
 import { NotificationsController } from './NotificationsController'
 import { editorHistory } from './undo/EditorHistory'
@@ -117,7 +117,7 @@ export class DropboxBackupController {
     this.render()
     try {
       const project = await ProjectManager.getActiveProject()
-      await Recorder.stopAndWaitForRecordings()
+      await stopAndWaitForRecordings()
       await ProjectManager.saveProject(project)
       await DropboxBackup.start(project)
     } catch (error) {
@@ -175,7 +175,7 @@ export class DropboxBackupController {
     this.notice = `Restoring “${title}”: ${humanizeBytes(0)} of ${humanizeBytes(listing.totalBytes)}`
     this.render()
     try {
-      await Recorder.stopAndWaitForRecordings()
+      await stopAndWaitForRecordings()
       const projectId = await DropboxBackup.restore(listing, (written, total) => {
         this.notice = `Restoring “${title}”: ${humanizeBytes(written)} of ${humanizeBytes(total)}`
         this.status.textContent = this.notice

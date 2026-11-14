@@ -1,4 +1,4 @@
-import { ALL_FORMATS, BlobSource, CanvasSink, EncodedPacketSink, Input } from 'mediabunny'
+import type { CanvasSink, EncodedPacketSink, Input } from 'mediabunny'
 import { FileSystemUtils } from '../filesystem/FileSystemUtils'
 import type { VideoPlacement } from './VideoFrameResolver'
 import { getVideoThumbnailTiles, VIDEO_LANE_HEIGHT, VIDEO_THUMBNAIL_WIDTH } from './VideoThumbnailLayout'
@@ -47,7 +47,11 @@ class ThumbnailSource {
   }
 
   private async open(directory: string, filename: string, trackNumber: number): Promise<Decoders> {
-    const file = await FileSystemUtils.getExistingFile(directory, filename)
+    // Mediabunny loads with the first video so that projects without video keep it out of the initial chunk.
+    const [file, { ALL_FORMATS, BlobSource, CanvasSink, EncodedPacketSink, Input }] = await Promise.all([
+      FileSystemUtils.getExistingFile(directory, filename),
+      import('mediabunny'),
+    ])
     if (this.disposed) throw new DOMException('The thumbnail source was released.', 'AbortError')
     if (file.size === 0) throw new Error('The stored video file is empty')
     const input = new Input({ source: new BlobSource(file), formats: ALL_FORMATS })
