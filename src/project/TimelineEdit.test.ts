@@ -1,7 +1,7 @@
 import { expect, test } from 'vitest'
 import { Clip } from './Clip'
 import { ClipView } from './ClipView'
-import { findRemovedAudio, restoreRemovedAudio, rippleDelete } from './RippleEdit'
+import { findRemovedAudio, moveTimelineRange, restoreRemovedAudio, rippleDelete } from './TimelineEdit'
 import { Track } from './Track'
 
 const CROSSFADE = 10
@@ -83,4 +83,62 @@ test('the join crossfade shrinks to stay clear of a neighbouring crossfade', () 
     new ClipView(next.clip, 0, 153, 100),
   ])
   expect(findRemovedAudio(result)).toEqual([{ index: 1, seamSample: 103, sourceStartSample: 8, sourceEndSample: 950 }])
+})
+
+test('moving a range cuts it and pastes it elsewhere on its track, leaving silence behind', () => {
+  const clip = new Clip('take', 1, 1000)
+  const track = new Track('track', 1)
+  track.clipViews.push(new ClipView(clip, 0, 0, 1000))
+
+  const layouts = moveTimelineRange([track], [track], 200, 300, 900, 0)
+
+  expect(layouts).toEqual(
+    new Map([
+      [track, [new ClipView(clip, 0, 0, 200), new ClipView(clip, 300, 300, 700), new ClipView(clip, 200, 1100, 100)]],
+    ]),
+  )
+})
+
+test('moving a range a little crossfades it with the audio it lands on', () => {
+  const clip = new Clip('take', 1, 1000)
+  const track = new Track('track', 1)
+  track.clipViews.push(new ClipView(clip, 0, 0, 1000))
+
+  const result = moveTimelineRange([track], [track], 200, 300, 50, 0)!.get(track)!
+
+  expectPlayable(result)
+  expect(result).toEqual([
+    new ClipView(clip, 0, 0, 200),
+    new ClipView(clip, 200, 250, 100),
+    new ClipView(clip, 300, 300, 700),
+  ])
+})
+
+test('moving ranges down the track list lets a track take audio into the range it gave up', () => {
+  const tracks = [0, 1, 2].map((index) => new Track(`Track ${index}`, 1))
+  const clips = tracks.map((track) => new Clip(track.name, 1, 100))
+  tracks.forEach((track, index) => track.clipViews.push(new ClipView(clips[index], 0, 0, 100)))
+
+  const layouts = moveTimelineRange(tracks, tracks.slice(0, 2), 40, 60, 0, 1)!
+
+  expect(layouts.get(tracks[0])).toEqual([new ClipView(clips[0], 0, 0, 40), new ClipView(clips[0], 60, 60, 40)])
+  expect(layouts.get(tracks[1])).toEqual([
+    new ClipView(clips[1], 0, 0, 40),
+    new ClipView(clips[0], 40, 40, 20),
+    new ClipView(clips[1], 60, 60, 40),
+  ])
+  expect(layouts.get(tracks[2])).toEqual([new ClipView(clips[2], 0, 0, 100), new ClipView(clips[1], 40, 40, 20)])
+})
+
+test('a move is refused where it would play three clips at once or meet another channel count', () => {
+  const source = new Track('source', 1)
+  const crowded = new Track('crowded', 1)
+  const stereo = new Track('stereo', 2)
+  const clip = new Clip('take', 1, 100)
+  source.clipViews.push(new ClipView(clip, 0, 0, 100))
+  crowded.clipViews.push(new ClipView(clip, 0, 0, 60), new ClipView(clip, 0, 50, 50))
+
+  expect(moveTimelineRange([source, crowded], [source], 40, 70, 0, 1)).toBeNull()
+  expect(moveTimelineRange([source, stereo], [source], 0, 10, 0, 1)).toBeNull()
+  expect(moveTimelineRange([source], [source], 10, 20, -20, 0)).toBeNull()
 })

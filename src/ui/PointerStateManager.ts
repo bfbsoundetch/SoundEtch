@@ -18,6 +18,8 @@ export class PointerStateManager extends TrackListItemController {
   private clipDragScrollTime = 0
   private timelineRegionController: TimelineRegionController | null = null
   private selectingTranscript = false
+  /** A selection drag: where it started, and the track offset last pointed at. */
+  private selectionMove: { waveform: Waveform; x: number; y: number; moved: boolean; trackOffset: number } | null = null
   private pendingTranscript: {
     waveform: Waveform
     entry: TrackTranscriptEntry
@@ -62,6 +64,7 @@ export class PointerStateManager extends TrackListItemController {
       this.pendingTranscript = null
       this.finishSelectingTranscript()
       this.cancelMovingClipView()
+      if (this.state === State.MOVING_SELECTION) this.changeState(State.DEFAULT)
     })
     timelineAreaElement.addEventListener(
       'mousedown',
@@ -105,6 +108,8 @@ export class PointerStateManager extends TrackListItemController {
         this.clipDragPoint!.x = event.clientX
         this.clipDragPoint!.y = event.clientY
         this.updateMovingClipView()
+      } else if (this.state === State.MOVING_SELECTION) {
+        this.updateSelectionMove(event)
       }
     })
     const outputLaneFor = (target: EventTarget | null) =>
@@ -277,6 +282,15 @@ export class PointerStateManager extends TrackListItemController {
           }
           break
         }
+        case State.MOVING_SELECTION: {
+          const move = this.selectionMove!
+          this.changeState(State.DEFAULT)
+          const plan = move.moved
+            ? this.trackListController.planSelectionMove(this.selectionShift(move, mouseEvent), move.trackOffset)
+            : null
+          if (plan) await this.trackListController.moveSelection(plan)
+          break
+        }
         case State.RESIZING_CLIPVIEW: {
           const shift = mouseEvent.clientX - this.mouseDownPoint!.x
           await this.activeClipViewController!.finishClipViewResize(shift)
@@ -409,6 +423,44 @@ export class PointerStateManager extends TrackListItemController {
     this.clipDragPoint = { x: event.clientX, y: event.clientY }
     this.trackListController.showNewTrackDropRegion(controller.clipView.clip.getChannelCount())
     this.updateMovingClipView()
+  }
+
+  /** Starts dragging the selected audio from `waveform`: dropping it cuts it and pastes it where it lands. */
+  startMovingSelection(region: TimelineRegionController, waveform: Waveform, event: MouseEvent) {
+    if (
+      region !== this.trackListController.selectionController ||
+      this.state !== State.DEFAULT ||
+      !this.trackListController.canEdit() ||
+      !this.changeState(State.MOVING_SELECTION)
+    ) {
+      return
+    }
+    this.selectionMove = { waveform, x: event.clientX, y: event.clientY, moved: false, trackOffset: 0 }
+  }
+
+  private updateSelectionMove(event: MouseEvent) {
+    const move = this.selectionMove!
+    if (!move.moved && Math.abs(event.clientX - move.x) < 2 && Math.abs(event.clientY - move.y) < 2) return
+    move.moved = true
+    document.body.classList.add('moving-selection')
+    const waveforms = this.trackListController.waveforms
+    const div = document.elementFromPoint(event.clientX, event.clientY)?.closest('.waveform')
+    const pointed = waveforms.findIndex((waveform) => waveform.div === div)
+    // Off the tracks, the drop keeps the track it last pointed at.
+    if (pointed >= 0) move.trackOffset = pointed - waveforms.indexOf(move.waveform)
+    const plan = this.trackListController.planSelectionMove(this.selectionShift(move, event), move.trackOffset)
+    if (plan) {
+      this.trackListController.selectionController.showMovePreview(
+        plan.startSample,
+        plan.endSample,
+        plan.waveforms,
+        plan.layouts === null,
+      )
+    }
+  }
+
+  private selectionShift(move: { x: number }, event: MouseEvent): number {
+    return Math.round((event.clientX - move.x) * this.samplesPerUnit)
   }
 
   private drawMovingClipView() {
@@ -588,12 +640,18 @@ export class PointerStateManager extends TrackListItemController {
       case State.DEFAULT:
         break
       case State.MOVING_CLIPVIEW:
+      case State.MOVING_SELECTION:
       case State.RESIZING_CLIPVIEW:
       case State.AUTOMATING:
         if (newState != State.DEFAULT && newState != State.SELECTING && newState != State.READ_ONLY) {
           return false
         }
         break
+    }
+    if (this.state == State.MOVING_SELECTION) {
+      this.trackListController.selectionController.hideMovePreview()
+      document.body.classList.remove('moving-selection')
+      this.selectionMove = null
     }
     if (this.state == State.MOVING_CLIPVIEW && newState != State.MOVING_CLIPVIEW) {
       this.stopClipDragAutoscroll()
@@ -610,6 +668,7 @@ enum State {
   MARKING,
   SELECTING,
   MOVING_CLIPVIEW,
+  MOVING_SELECTION,
   RESIZING_CLIPVIEW,
   AUTOMATING,
   READ_ONLY,

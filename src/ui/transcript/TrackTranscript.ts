@@ -1,5 +1,5 @@
 import type { ClipView } from '../../project/ClipView'
-import { findRemovedAudio, findSeam, type RemovedAudio } from '../../project/RippleEdit'
+import { findRemovedAudio, findSeam, type RemovedAudio } from '../../project/TimelineEdit'
 import type { Track } from '../../project/Track'
 import type { TranscriptGapKind } from '../../project/Transcription'
 import { projectVisibleTranscribedRanges } from '../timeline/TranscriptionOverlay'

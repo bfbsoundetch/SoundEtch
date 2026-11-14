@@ -1,5 +1,5 @@
 import { ClipView } from './ClipView'
-import { removeTimelineRange } from './RippleEdit'
+import { canPlaceClipView, removeTimelineRange, sliceTimelineRange } from './TimelineEdit'
 import { DatabasePersisted } from '../persistence/DatabasePersisted'
 import { Restorable } from '../persistence/Restoration'
 import { Analyzable } from '../analyzers/Analyzable'
@@ -77,23 +77,7 @@ export class Track extends DatabasePersisted implements Analyzable {
   }
 
   canAddClipView(newClipView: ClipView): boolean {
-    if (newClipView.clip.getChannelCount() != this.channelCount) {
-      return false
-    }
-
-    let latestOverlapEnd = -Infinity
-    for (const clipView of this.clipViews) {
-      const overlapStart = Math.max(clipView.startPosition, newClipView.startPosition)
-      const overlapEnd = Math.min(clipView.getEndPosition(), newClipView.getEndPosition())
-      if (overlapStart >= overlapEnd) {
-        continue
-      }
-      if (overlapStart < latestOverlapEnd) {
-        return false
-      }
-      latestOverlapEnd = Math.max(latestOverlapEnd, overlapEnd)
-    }
-    return true
+    return newClipView.clip.getChannelCount() == this.channelCount && canPlaceClipView(this.clipViews, newClipView)
   }
 
   addClipView(newClipView: ClipView) {
@@ -144,21 +128,7 @@ export class Track extends DatabasePersisted implements Analyzable {
       throw new Error('Must have 0 <= start <= end')
     }
 
-    const slice = this.clipViews.flatMap((clipView) => {
-      const sliceStart = Math.max(start, clipView.startPosition)
-      const sliceEnd = Math.min(end, clipView.getEndPosition())
-      if (sliceStart >= sliceEnd) {
-        return []
-      }
-      return [
-        new ClipView(
-          clipView.clip,
-          clipView.offset + sliceStart - clipView.startPosition,
-          sliceStart,
-          sliceEnd - sliceStart,
-        ),
-      ]
-    })
+    const slice = sliceTimelineRange(this.clipViews, start, end)
     if (!del || slice.length == 0) {
       return slice
     }

@@ -7,6 +7,7 @@ import { KeyPressController } from '../KeyPressController'
 import { ContextMenuController, ContextMenuItem, ContextMenuSeparator } from '../ContextMenuController'
 import { PointerStateManager } from '../PointerStateManager'
 import { ClipView, cloneClipViewWithNewStartPosition } from '../../project/ClipView'
+import { moveTimelineRange } from '../../project/TimelineEdit'
 import { Clipboard } from '../Clipboard'
 import { TrackListTrack as TrackListInfo } from './TrackListTrack'
 import { InputListController } from './InputListController'
@@ -62,6 +63,17 @@ interface AutomationMode {
   effectInstanceId: string
   infoElement: HTMLElement
   originalInfoElements: Node[]
+}
+
+/** Where dragging the selection would put it, and what each changed track would then hold. */
+export interface SelectionMove {
+  readonly shift: number
+  readonly trackOffset: number
+  readonly startSample: number
+  readonly endSample: number
+  readonly waveforms: readonly Waveform[]
+  /** Null when the selected audio cannot land there. */
+  readonly layouts: Map<Track, ClipView[]> | null
 }
 
 interface TrackListWindow extends Window {
@@ -797,6 +809,59 @@ export class TrackListController {
       const n = undoCommands.length
       announce(`Pasted ${n} ${n == 1 ? 'clip' : 'clips'}`)
     }
+  }
+
+  /**
+   * Where dragging the selection `shift` samples along and `trackOffset` tracks down would put it,
+   * kept on the timeline and the track list, with the clips cutting and pasting it there would leave.
+   */
+  planSelectionMove(shift: number, trackOffset: number): SelectionMove | null {
+    const selection = this.selectedRegion
+    if (!selection) {
+      return null
+    }
+    const tracks = this.waveforms.map((waveform) => waveform.track)
+    const indices = selection.tracks.map((track) => tracks.indexOf(track))
+    const offset = Math.max(-Math.min(...indices), Math.min(trackOffset, tracks.length - 1 - Math.max(...indices)))
+    const clampedShift = Math.max(shift, -selection.startSample)
+    return {
+      shift: clampedShift,
+      trackOffset: offset,
+      startSample: selection.startSample + clampedShift,
+      endSample: selection.endSample + clampedShift,
+      waveforms: indices.map((index) => this.waveforms[index + offset]),
+      layouts: moveTimelineRange(
+        tracks,
+        selection.tracks,
+        selection.startSample,
+        selection.endSample,
+        clampedShift,
+        offset,
+      ),
+    }
+  }
+
+  /** Makes a planned selection move as one undoable edit and selects the audio where it landed. */
+  async moveSelection(move: SelectionMove) {
+    if (!this.canEdit() || (move.shift == 0 && move.trackOffset == 0)) {
+      return
+    }
+    if (!move.layouts) {
+      NotificationsController.showShortDurationMessage(
+        'Cannot move here: the clips would overlap existing clips or a track with another channel count.',
+      )
+      return
+    }
+    const commands = [...move.layouts].map(
+      ([track, clipViews]) => new SetTrackClipViewsCommand(track, track.clipViews.slice(), clipViews),
+    )
+    if (commands.length > 0) {
+      await this.history.execute(new BatchCommand(commands, 'move selection'))
+    }
+    this.selectionController.setSelection(move.startSample, move.endSample, new Set(move.waveforms))
+    announce(
+      `Moved selection to ${TimeUtils.toSpokenString((move.startSample * 1000) / this.sampleRate)} on ${move.waveforms[0].track.name}`,
+    )
   }
 
   private async freezeSelection() {

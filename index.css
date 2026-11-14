@@ -2389,6 +2389,8 @@ video {
 .waveform-channel-separator {
   stroke: currentColor;
   fill: none;
+  /* Decoration: a drag starting on an axis still grabs the selection beneath it. */
+  pointer-events: none;
 }
 
 .waveform-axes-path {
@@ -3010,6 +3012,24 @@ video {
   fill: #3b90e680;
   stroke: none;
   cursor: grab;
+}
+
+.waveform-selection-move-preview {
+  fill: #3b90e633;
+  stroke: #3b90e6;
+  stroke-width: 2;
+  stroke-dasharray: 6 4;
+  pointer-events: none;
+}
+
+.waveform-selection-move-preview.refused {
+  fill: color-mix(in srgb, var(--record-button-red) 20%, transparent);
+  stroke: var(--record-button-red);
+}
+
+body.moving-selection,
+body.moving-selection * {
+  cursor: grabbing !important;
 }
 
 .crossfade-overlay {

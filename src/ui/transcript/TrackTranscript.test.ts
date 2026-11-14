@@ -1,7 +1,7 @@
 import { expect, test } from 'vitest'
 import { Clip } from '../../project/Clip'
 import { ClipView } from '../../project/ClipView'
-import { rippleDelete } from '../../project/RippleEdit'
+import { rippleDelete } from '../../project/TimelineEdit'
 import { Track } from '../../project/Track'
 import { getTrackTranscriptEntries, getTranscriptEntriesInRange, splitTranscriptParagraphs } from './TrackTranscript'
 

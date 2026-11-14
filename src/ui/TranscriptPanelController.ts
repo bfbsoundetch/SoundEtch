@@ -2,7 +2,7 @@ import { AudioControl, AudioState } from '../audiocontext/AudioControl'
 import { TimeUtils } from '../global/TimeUtils'
 import type { SelectedRegion } from '../playback/Player'
 import type { ClipView } from '../project/ClipView'
-import { restoreRemovedAudio, rippleCrossfadeSamples, rippleDelete, type RemovedAudio } from '../project/RippleEdit'
+import { restoreRemovedAudio, rippleCrossfadeSamples, rippleDelete, type RemovedAudio } from '../project/TimelineEdit'
 import type { Track } from '../project/Track'
 import type { TranscribedRange } from '../project/Transcription'
 import {

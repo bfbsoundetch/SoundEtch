@@ -1,4 +1,8 @@
 import { ClipView, cloneClipViewWithNewStartPosition } from './ClipView'
+import type { Track } from './Track'
+
+/** A track as a timeline edit sees it. */
+type TrackLayout = Pick<Track, 'clipViews' | 'getChannelCount'>
 
 /** Length of the crossfade a ripple edit puts over each join it makes. */
 export const RIPPLE_CROSSFADE_MS = 30
@@ -46,6 +50,42 @@ export function findRemovedAudio(clipViews: readonly ClipView[]): RemovedAudio[]
   return removed
 }
 
+/** Copies of the parts of `clipViews` inside timeline samples [start, end), where they play. */
+export function sliceTimelineRange(clipViews: readonly ClipView[], start: number, end: number): ClipView[] {
+  return clipViews.flatMap((clipView) => {
+    const sliceStart = Math.max(start, clipView.startPosition)
+    const sliceEnd = Math.min(end, clipView.getEndPosition())
+    if (sliceStart >= sliceEnd) {
+      return []
+    }
+    return [
+      new ClipView(
+        clipView.clip,
+        clipView.offset + sliceStart - clipView.startPosition,
+        sliceStart,
+        sliceEnd - sliceStart,
+      ),
+    ]
+  })
+}
+
+/** Whether `newClipView` can join `clipViews`, sorted by start, without any instant playing three clips. */
+export function canPlaceClipView(clipViews: readonly ClipView[], newClipView: ClipView): boolean {
+  let latestOverlapEnd = -Infinity
+  for (const clipView of clipViews) {
+    const overlapStart = Math.max(clipView.startPosition, newClipView.startPosition)
+    const overlapEnd = Math.min(clipView.getEndPosition(), newClipView.getEndPosition())
+    if (overlapStart >= overlapEnd) {
+      continue
+    }
+    if (overlapStart < latestOverlapEnd) {
+      return false
+    }
+    latestOverlapEnd = Math.max(latestOverlapEnd, overlapEnd)
+  }
+  return true
+}
+
 /**
  * What remains of `clipViews` once timeline samples [start, end) are cut out, without moving anything,
  * sorted by start. Where several placements cross an edge, only the one reaching furthest beyond it
@@ -89,6 +129,57 @@ export function removeTimelineRange(clipViews: readonly ClipView[], start: numbe
       return fragments
     })
     .sort((a, b) => a.startPosition - b.startPosition)
+}
+
+/**
+ * The clip views each changed track ends up with when timeline samples [start, end) of `selected`
+ * move `shift` samples along and `trackOffset` places through `tracks`, as cutting and pasting them
+ * would: the source range is left empty, and moved audio may crossfade with one clip it lands on.
+ * Null when moved audio would start before the timeline, land off the track list or on a track with
+ * another channel count, or make three clips play at once.
+ */
+export function moveTimelineRange<T extends TrackLayout>(
+  tracks: readonly T[],
+  selected: readonly T[],
+  start: number,
+  end: number,
+  shift: number,
+  trackOffset: number,
+): Map<T, ClipView[]> | null {
+  const layouts = new Map<T, ClipView[]>()
+  if (shift === 0 && trackOffset === 0) {
+    return layouts
+  }
+  if (start + shift < 0) {
+    return null
+  }
+  const moves = new Array<{ target: T | undefined; pieces: ClipView[] }>()
+  for (const track of selected) {
+    const pieces = sliceTimelineRange(track.clipViews, start, end)
+    if (pieces.length === 0) continue
+    // Every source is cut before anything is pasted, so audio can land in a range just vacated.
+    layouts.set(track, removeTimelineRange(track.clipViews, start, end))
+    const index = tracks.indexOf(track)
+    moves.push({
+      target: index < 0 ? undefined : tracks[index + trackOffset],
+      pieces: pieces.map((piece) => cloneClipViewWithNewStartPosition(piece, shift)),
+    })
+  }
+  for (const { target, pieces } of moves) {
+    if (!target) {
+      return null
+    }
+    const clipViews = layouts.get(target) ?? target.clipViews.slice()
+    for (const piece of pieces) {
+      if (piece.clip.getChannelCount() !== target.getChannelCount() || !canPlaceClipView(clipViews, piece)) {
+        return null
+      }
+      const index = clipViews.findIndex((clipView) => clipView.startPosition > piece.startPosition)
+      clipViews.splice(index < 0 ? clipViews.length : index, 0, piece)
+    }
+    layouts.set(target, clipViews)
+  }
+  return layouts
 }
 
 /**

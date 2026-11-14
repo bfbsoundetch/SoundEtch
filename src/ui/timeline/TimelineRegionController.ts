@@ -17,6 +17,8 @@ export class TimelineRegionController extends TrackListItemController {
   >()
 
   private draggedFirstWaveform: Waveform | null = null
+  /** Outlines where a dragged selection would land, one per target waveform. */
+  private readonly movePreviewElements = new Map<Waveform, SVGRectElement>()
 
   constructor(
     private readonly singleWaveform: boolean,
@@ -188,6 +190,37 @@ export class TimelineRegionController extends TrackListItemController {
     return this.waveformElements.has(waveform)
   }
 
+  /** Outlines samples [startSample, endSample) on `waveforms`, marked `refused` where the audio cannot land. */
+  showMovePreview(startSample: number, endSample: number, waveforms: readonly Waveform[], refused: boolean) {
+    for (const [waveform, rect] of this.movePreviewElements) {
+      if (!waveforms.includes(waveform)) {
+        rect.remove()
+        this.movePreviewElements.delete(waveform)
+      }
+    }
+    const lowX = this.getXValueForSample(startSample)
+    const highX = this.getXValueForSample(endSample)
+    for (const waveform of waveforms) {
+      let rect = this.movePreviewElements.get(waveform)
+      if (!rect) {
+        rect = document.createElementNS('http://www.w3.org/2000/svg', 'rect')
+        rect.classList.add('waveform-selection-move-preview')
+        rect.setAttribute('y', '0')
+        waveform.topGroupElement.appendChild(rect)
+        this.movePreviewElements.set(waveform, rect)
+      }
+      rect.setAttribute('x', `${lowX}`)
+      rect.setAttribute('width', `${Math.max(0, highX - lowX)}`)
+      rect.setAttribute('height', `${waveform.fullHeight}`)
+      rect.classList.toggle('refused', refused)
+    }
+  }
+
+  hideMovePreview() {
+    this.movePreviewElements.forEach((rect) => rect.remove())
+    this.movePreviewElements.clear()
+  }
+
   private setUpElementsForWaveform(waveform: Waveform) {
     if (this.waveformElements.has(waveform)) {
       return
@@ -204,6 +237,9 @@ export class TimelineRegionController extends TrackListItemController {
     rect.classList = 'waveform-selection'
     rect.addEventListener('mousedown', (event) => {
       event.stopPropagation()
+      if (event.button == 0 && event.buttons == 1 && !event.altKey && !event.ctrlKey && !event.metaKey) {
+        this.trackListController.pointerStateManager.startMovingSelection(this, waveform, event)
+      }
     })
     rect.addEventListener('contextmenu', (event) => {
       this.contextMenuListener(event)
