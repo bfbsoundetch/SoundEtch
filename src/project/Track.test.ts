@@ -120,6 +120,24 @@ test('slice_endsInsideCrossfade_discardsShortRightRemnant', async () => {
   expect(track.clipViews).toEqual([new ClipView(clip, 0, 0, 2), new ClipView(clip, 1, 5, 5)])
 })
 
+test('slice_crossfadeAtEitherEdge_keepsClipViewsOutsideTheSlice', async () => {
+  const track = new Track('test', 2)
+  const clip = new Clip('test', 2, 6)
+  track.addClipView(new ClipView(clip, 0, 0, 2))
+  track.addClipView(new ClipView(clip, 0, 4, 6))
+  track.addClipView(new ClipView(clip, 0, 8, 6))
+  track.addClipView(new ClipView(clip, 0, 12, 6))
+  track.addClipView(new ClipView(clip, 0, 20, 2))
+
+  track.slice(9, 13, true)
+  expect(track.clipViews).toEqual([
+    new ClipView(clip, 0, 0, 2),
+    new ClipView(clip, 0, 4, 5),
+    new ClipView(clip, 1, 13, 5),
+    new ClipView(clip, 0, 20, 2),
+  ])
+})
+
 test('slice_multipleClipViews_removesSlice', async () => {
   const track = new Track('test', 2)
 

@@ -1,4 +1,5 @@
 import type { ClipView } from '../../project/ClipView'
+import { findRemovedAudio, findSeam, type RemovedAudio } from '../../project/RippleEdit'
 import type { Track } from '../../project/Track'
 import type { TranscriptGapKind } from '../../project/Transcription'
 import { projectVisibleTranscribedRanges } from '../timeline/TranscriptionOverlay'
@@ -10,26 +11,51 @@ export interface TrackTranscriptEntry {
   readonly text: string
   readonly startSample: number
   readonly endSample: number
+  /** The VAD-region onset in clip source samples. */
   readonly speechStartSample?: number
   readonly kind?: TranscriptGapKind
+  /**
+   * Set on transcript of audio a ripple edit took out after `clipView`. It plays nowhere, so
+   * `startSample` and `endSample` are both the seam it was taken out at.
+   */
+  readonly removed?: RemovedTranscript
 }
 
-export function getTrackTranscriptEntries(track: Pick<Track, 'clipViews'>): TrackTranscriptEntry[] {
+export interface RemovedTranscript {
+  readonly audio: RemovedAudio
+  /** The part of the removed clip source this entry covers. */
+  readonly sourceStartSample: number
+  readonly sourceEndSample: number
+}
+
+/**
+ * The transcript each placement plays, in timeline order. Across a crossfade each side stops at the
+ * seam. `includeRemoved` adds the transcript of audio ripple edits took out, at its seam.
+ */
+export function getTrackTranscriptEntries(
+  track: Pick<Track, 'clipViews'>,
+  includeRemoved = false,
+): TrackTranscriptEntry[] {
   const entries: TrackTranscriptEntry[] = []
-  track.clipViews.forEach((clipView, placementIndex) => {
+  const clipViews = track.clipViews
+  clipViews.forEach((clipView, placementIndex) => {
     if (clipView.length <= 0) return
+    const previous = clipViews[placementIndex - 1]
+    const next = clipViews[placementIndex + 1]
+    const windowStart = previous ? (findSeam(previous, clipView) ?? clipView.startPosition) : clipView.startPosition
     const placementEnd = clipView.getEndPosition()
+    const windowEnd = next ? (findSeam(clipView, next) ?? placementEnd) : placementEnd
     const ranges = projectVisibleTranscribedRanges(
       clipView.clip.transcription,
       clipView.offset,
       clipView.offset + clipView.length,
       clipView.startPosition,
-      clipView.startPosition,
-      placementEnd,
+      windowStart,
+      windowEnd,
     )
     ranges.forEach((range, rangeIndex) => {
-      const startSample = Math.max(clipView.startPosition, range.startSample)
-      const endSample = Math.min(placementEnd, range.endSample)
+      const startSample = Math.max(windowStart, range.startSample)
+      const endSample = Math.min(windowEnd, range.endSample)
       if ((range.kind === undefined && range.text.trim().length === 0) || startSample >= endSample) return
       entries.push({
         clipView,
@@ -38,11 +64,48 @@ export function getTrackTranscriptEntries(track: Pick<Track, 'clipViews'>): Trac
         text: range.text,
         startSample,
         endSample,
-        speechStartSample: range.speechStartSample,
+        speechStartSample:
+          range.speechStartSample === undefined
+            ? undefined
+            : range.speechStartSample - clipView.startPosition + clipView.offset,
         kind: range.kind,
       })
     })
   })
+
+  if (includeRemoved) {
+    for (const audio of findRemovedAudio(clipViews)) {
+      const clipView = clipViews[audio.index]
+      // An identity projection selects the source ranges the removed audio intersects.
+      const ranges = projectVisibleTranscribedRanges(
+        clipView.clip.transcription,
+        audio.sourceStartSample,
+        audio.sourceEndSample,
+        audio.sourceStartSample,
+        audio.sourceStartSample,
+        audio.sourceEndSample,
+      )
+      ranges.forEach((range, rangeIndex) => {
+        if (range.kind === undefined && range.text.trim().length === 0) return
+        entries.push({
+          clipView,
+          placementIndex: audio.index,
+          rangeIndex,
+          text: range.text,
+          startSample: audio.seamSample,
+          endSample: audio.seamSample,
+          speechStartSample: range.speechStartSample,
+          kind: range.kind,
+          removed: {
+            audio,
+            sourceStartSample: Math.max(audio.sourceStartSample, range.startSample),
+            sourceEndSample: Math.min(audio.sourceEndSample, range.endSample),
+          },
+        })
+      })
+    }
+  }
+
   return entries.sort(
     (a, b) =>
       a.startSample - b.startSample ||
@@ -69,13 +132,27 @@ export function splitTranscriptParagraphs(entries: readonly TrackTranscriptEntry
     if (
       !region ||
       entry.speechStartSample !== region.speechStartSample ||
-      (entry.speechStartSample !== undefined && entry.clipView.clip !== region.clipView.clip)
+      (entry.speechStartSample !== undefined && !playsOn(region, entry))
     )
       paragraphs.push([entry])
     else paragraph.push(entry)
     region = entry
   }
   return paragraphs
+}
+
+/**
+ * Whether `entry` plays on from `previous` in the same clip source: within one placement, across a
+ * split, or across a seam where a ripple edit skipped ahead.
+ */
+function playsOn(previous: TrackTranscriptEntry, entry: TrackTranscriptEntry): boolean {
+  const before = previous.clipView
+  const after = entry.clipView
+  if (before.clip !== after.clip) return false
+  if (previous.placementIndex === entry.placementIndex) return true
+  if (before.startPosition - before.offset === after.startPosition - after.offset) return true
+  const seam = findSeam(before, after)
+  return seam !== null && before.offset + seam - before.startPosition <= after.offset + seam - after.startPosition
 }
 
 export function getTranscriptEntriesInRange(

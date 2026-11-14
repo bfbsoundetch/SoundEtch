@@ -1,6 +1,8 @@
 import { AudioControl, AudioState } from '../audiocontext/AudioControl'
+import { TimeUtils } from '../global/TimeUtils'
 import type { SelectedRegion } from '../playback/Player'
 import type { ClipView } from '../project/ClipView'
+import { restoreRemovedAudio, rippleCrossfadeSamples, rippleDelete, type RemovedAudio } from '../project/RippleEdit'
 import type { Track } from '../project/Track'
 import type { TranscribedRange } from '../project/Transcription'
 import {
@@ -10,6 +12,7 @@ import {
 } from '../transcription/TranscriptionSelection'
 import { TranscriptEditDialogController } from './TranscriptEditDialogController'
 import { announce } from './LiveAnnouncer'
+import { NotificationsController } from './NotificationsController'
 import type { TrackListController } from './timeline/TrackListController'
 import { formatTranscriptGap, formatTranscriptParagraph } from './transcript/TranscriptFormatting'
 import {
@@ -19,7 +22,7 @@ import {
   type TrackTranscriptEntry,
 } from './transcript/TrackTranscript'
 import { getTranscriptTextEdits } from './transcript/TranscriptTextEdit'
-import { BatchCommand, SetClipTranscriptionCommand } from './undo/UndoableActions'
+import { BatchCommand, SetClipTranscriptionCommand, SetTrackClipViewsCommand } from './undo/UndoableActions'
 
 type Binding = { entry: TrackTranscriptEntry; element: HTMLSpanElement }
 type Snapshot = {
@@ -48,22 +51,28 @@ export class TranscriptPanelController {
   private firstPlayingElement: HTMLSpanElement | null = null
   private keyboardAnchor: number | null = null
   private readonly selectionMenu = document.createElement('div')
+  private readonly editButton = document.createElement('button')
+  private readonly audioButton = document.createElement('button')
   private editDialog: TranscriptEditDialogController | null = null
   private applyingEdit = false
+  private editingAudio = false
 
   constructor(private readonly trackListController: TrackListController) {
     this.selectionMenu.className = 'transcript-selection-menu'
     this.selectionMenu.hidden = true
     this.selectionMenu.setAttribute('role', 'toolbar')
     this.selectionMenu.setAttribute('aria-label', 'Transcript selection actions')
-    const editButton = document.createElement('button')
-    editButton.type = 'button'
-    editButton.className = 'clickable'
-    editButton.textContent = 'Edit text'
-    editButton.setAttribute('aria-keyshortcuts', 'F2')
-    editButton.addEventListener('mousedown', (event) => event.preventDefault())
-    editButton.addEventListener('click', () => this.openEditDialog())
-    this.selectionMenu.append(editButton)
+    this.editButton.textContent = 'Edit text'
+    this.editButton.setAttribute('aria-keyshortcuts', 'F2')
+    this.editButton.addEventListener('click', () => this.openEditDialog())
+    this.audioButton.setAttribute('aria-keyshortcuts', 'Backspace Delete')
+    this.audioButton.addEventListener('click', () => void this.deleteOrRestoreAudio())
+    for (const button of [this.editButton, this.audioButton]) {
+      button.type = 'button'
+      button.className = 'clickable'
+      button.addEventListener('mousedown', (event) => event.preventDefault())
+    }
+    this.selectionMenu.append(this.editButton, this.audioButton)
     document.body.append(this.selectionMenu)
   }
 
@@ -91,6 +100,7 @@ export class TranscriptPanelController {
   selectEntry(entry: TrackTranscriptEntry): void {
     const binding = this.bindings.find(
       (b) =>
+        !b.entry.removed &&
         b.entry.clipView === entry.clipView &&
         b.entry.placementIndex === entry.placementIndex &&
         b.entry.rangeIndex === entry.rangeIndex,
@@ -135,25 +145,37 @@ export class TranscriptPanelController {
     this.content.setAttribute('aria-label', `Transcript for ${track.name}`)
     const bindings: Binding[] = []
     const sampleRate = this.trackListController.sampleRate
-    const paragraphs = splitTranscriptParagraphs(getTrackTranscriptEntries(track)).map((entries) => {
+    const paragraphs = splitTranscriptParagraphs(getTrackTranscriptEntries(track, true)).map((entries) => {
       const paragraph = document.createElement('p')
+      // Formatting reads what plays; removed words keep their raw text.
       const words = formatTranscriptParagraph(
-        entries.filter((entry) => entry.kind === undefined),
+        entries.filter((entry) => entry.kind === undefined && !entry.removed),
         sampleRate,
       )
       let wordIndex = 0
+      // Each run of removed atoms, with the spaces between them, is one <del>.
+      let removedRun: HTMLModElement | null = null
       entries.forEach((entry, i) => {
-        if (i > 0) paragraph.append(' ')
+        if (!entry.removed) removedRun = null
+        if (i > 0) (removedRun ?? paragraph).append(' ')
+        if (entry.removed && !removedRun) removedRun = paragraph.appendChild(document.createElement('del'))
         const element = document.createElement('span')
-        paragraph.append(element)
+        ;(removedRun ?? paragraph).append(element)
         if (entry.kind === undefined) {
-          const word = words[wordIndex++]
           element.className = 'transcript-word'
-          element.textContent = word.text
-          if (word.punctuation) paragraph.append(word.punctuation)
+          if (entry.removed) {
+            element.textContent = entry.text
+          } else {
+            const word = words[wordIndex++]
+            element.textContent = word.text
+            if (word.punctuation) paragraph.append(word.punctuation)
+          }
         } else {
           element.className = `transcript-gap transcript-${entry.kind}`
-          element.textContent = formatTranscriptGap(entry.kind, entry.endSample - entry.startSample, sampleRate)
+          const duration = entry.removed
+            ? entry.removed.sourceEndSample - entry.removed.sourceStartSample
+            : entry.endSample - entry.startSample
+          element.textContent = formatTranscriptGap(entry.kind, duration, sampleRate)
         }
         bindings.push({ entry, element })
       })
@@ -496,6 +518,11 @@ export class TranscriptPanelController {
       this.openEditDialog()
       return
     }
+    if ((event.key === 'Backspace' || event.key === 'Delete') && !event.altKey && !event.ctrlKey && !event.metaKey) {
+      event.preventDefault()
+      void this.deleteOrRestoreAudio()
+      return
+    }
     const bindings = this.bindings
     if (event.altKey || event.ctrlKey || event.metaKey || bindings.length === 0) return
     const current = bindings.findIndex((b) => b.element === document.activeElement)
@@ -550,8 +577,10 @@ export class TranscriptPanelController {
     return state === AudioState.STOPPED || state === AudioState.MONITORING || state === AudioState.MONITORING_PAUSED
   }
 
-  private publish(words: Binding[]): void {
+  private publish(atoms: Binding[]): void {
     if (!this.canWriteSelection() || !this.activeTrack) return
+    // Removed atoms play nowhere, so only the others select timeline audio.
+    const words = atoms.filter(({ entry }) => !entry.removed)
     this.publishing = true
     try {
       if (words.length === 0) {
@@ -582,6 +611,7 @@ export class TranscriptPanelController {
       this.publishing = false
     }
   }
+
   private updateSelectionMenu(): void {
     const selection = document.getSelection()
     this.selectionMenu.hidden = true
@@ -595,7 +625,11 @@ export class TranscriptPanelController {
     )
       return
     const range = selection.getRangeAt(0)
-    if (this.wordsInRange(range).length === 0) return
+    const atoms = this.wordsInRange(range)
+    if (atoms.length === 0) return
+    const playing = atoms.some(({ entry }) => !entry.removed)
+    this.editButton.hidden = !playing
+    this.audioButton.textContent = playing ? 'Delete audio' : 'Restore audio'
     const bounds = range.getBoundingClientRect()
     const contentBounds = this.content.getBoundingClientRect()
     if (bounds.bottom < contentBounds.top || bounds.top > contentBounds.bottom) return
@@ -616,11 +650,7 @@ export class TranscriptPanelController {
   private openEditDialog(): void {
     if (!this.trackListController.canEdit() || !this.activeTrack) return
     const selection = document.getSelection()
-    const words = this.ownsSelection(selection) ? this.wordsInRange(selection.getRangeAt(0)) : []
-    if (words.length === 0) {
-      const focused = this.bindings.find((binding) => binding.element === document.activeElement)
-      if (focused) words.push(focused)
-    }
+    const words = this.selectedAtoms().filter(({ entry }) => !entry.removed)
     const range = this.ownsSelection(selection) ? selection.getRangeAt(0) : null
     const backwards =
       !!range &&
@@ -716,6 +746,143 @@ export class TranscriptPanelController {
         else this.clearOwnedNativeSelection()
       },
     )
+  }
+
+  /** The atoms under the panel's native selection, or else the keyboard-focused atom. */
+  private selectedAtoms(): Binding[] {
+    const selection = document.getSelection()
+    const atoms = this.ownsSelection(selection) ? this.wordsInRange(selection.getRangeAt(0)) : []
+    if (atoms.length > 0) return atoms
+    const focused = this.bindings.find((binding) => binding.element === document.activeElement)
+    return focused ? [focused] : []
+  }
+
+  /**
+   * Ripple-deletes the audio from the first to the last selected atom that plays. A selection of
+   * removed atoms alone plays their audio again instead.
+   */
+  private async deleteOrRestoreAudio(): Promise<void> {
+    const track = this.activeTrack
+    if (!track || this.editingAudio || !this.trackListController.canEdit()) return
+    // Rebuilds stale atoms, dropping their selection, so edits only ever see current placements.
+    this.refreshData()
+    const atoms = this.selectedAtoms()
+    if (atoms.length === 0) return
+    const keyboardFocused = this.bindings.some((binding) => binding.element === document.activeElement)
+    const playing = atoms.filter(({ entry }) => !entry.removed)
+    this.editingAudio = true
+    this.selectionMenu.hidden = true
+    this.content!.focus({ preventScroll: true })
+    try {
+      if (playing.length > 0) await this.deleteAudio(track, playing, keyboardFocused)
+      else await this.restoreAudio(track, atoms, keyboardFocused)
+    } catch (error) {
+      NotificationsController.showError(error instanceof Error ? error : new Error(String(error)))
+    } finally {
+      this.editingAudio = false
+    }
+  }
+
+  private async deleteAudio(track: Track, atoms: Binding[], focus: boolean): Promise<void> {
+    let start = Infinity
+    let end = -Infinity
+    for (const { entry } of atoms) {
+      start = Math.min(start, entry.startSample)
+      end = Math.max(end, entry.endSample)
+    }
+    const sources = atoms.map(({ entry: { clipView, startSample, endSample } }) => ({
+      clip: clipView.clip,
+      startSample: clipView.offset + startSample - clipView.startPosition,
+      endSample: clipView.offset + endSample - clipView.startPosition,
+    }))
+    const sampleRate = this.trackListController.sampleRate
+    const oldClipViews = track.clipViews.slice()
+    const newClipViews = rippleDelete(oldClipViews, start, end, rippleCrossfadeSamples(sampleRate))
+    this.trackListController.clearSelection()
+    AudioControl.startPosition = start
+    await this.trackListController.history.execute(
+      new BatchCommand([new SetTrackClipViewsCommand(track, oldClipViews, newClipViews)], 'delete audio'),
+    )
+    announce(`Deleted ${TimeUtils.toSpokenString(((end - start) * 1000) / sampleRate)} of audio`)
+    if (this.activeTrack !== track) return
+    // Selecting what was just taken out lets Backspace put it straight back.
+    this.selectAtoms(
+      this.bindings.filter(({ entry: { clipView, startSample, removed } }) => {
+        return (
+          !!removed &&
+          startSample === start &&
+          sources.some(
+            (source) =>
+              source.clip === clipView.clip &&
+              removed.sourceStartSample < source.endSample &&
+              removed.sourceEndSample > source.startSample,
+          )
+        )
+      }),
+      focus,
+    )
+    this.reveal(start)
+  }
+
+  private async restoreAudio(track: Track, atoms: Binding[], focus: boolean): Promise<void> {
+    // One span per seam, from the first to the last selected atom removed there.
+    const spans = new Map<RemovedAudio, { sourceStartSample: number; sourceEndSample: number }>()
+    for (const { entry } of atoms) {
+      const removed = entry.removed
+      if (!removed) continue
+      const span = spans.get(removed.audio)
+      if (span) {
+        span.sourceStartSample = Math.min(span.sourceStartSample, removed.sourceStartSample)
+        span.sourceEndSample = Math.max(span.sourceEndSample, removed.sourceEndSample)
+      } else {
+        spans.set(removed.audio, {
+          sourceStartSample: removed.sourceStartSample,
+          sourceEndSample: removed.sourceEndSample,
+        })
+      }
+    }
+    const ordered = [...spans].sort(([a], [b]) => a.index - b.index)
+    const sampleRate = this.trackListController.sampleRate
+    const crossfade = rippleCrossfadeSamples(sampleRate)
+    const oldClipViews = track.clipViews.slice()
+    // Later seams first, so each earlier seam keeps its placement indices.
+    const newClipViews = ordered.reduceRight(
+      (clipViews, [audio, span]) =>
+        restoreRemovedAudio(clipViews, audio, span.sourceStartSample, span.sourceEndSample, crossfade),
+      oldClipViews,
+    )
+    // Each restore pushes the later seams back by what it put back.
+    let pushed = 0
+    const restored = ordered.map(([audio, span]) => {
+      const startSample = audio.seamSample + pushed
+      pushed += span.sourceEndSample - span.sourceStartSample
+      return { startSample, endSample: audio.seamSample + pushed }
+    })
+    this.trackListController.clearSelection()
+    await this.trackListController.history.execute(
+      new BatchCommand([new SetTrackClipViewsCommand(track, oldClipViews, newClipViews)], 'restore audio'),
+    )
+    announce(`Restored ${TimeUtils.toSpokenString((pushed * 1000) / sampleRate)} of audio`)
+    if (this.activeTrack !== track) return
+    const words = this.bindings.filter(
+      ({ entry }) =>
+        !entry.removed &&
+        restored.some((range) => entry.startSample < range.endSample && entry.endSample > range.startSample),
+    )
+    this.selectAtoms(words, focus)
+    this.publish(words)
+  }
+
+  /** Selects `atoms` natively, from the first to the last, leaving the timeline selection alone. */
+  private selectAtoms(atoms: Binding[], focus: boolean): void {
+    this.keyboardAnchor = null
+    if (atoms.length === 0) return
+    if (focus) {
+      atoms[0].element.tabIndex = -1
+      atoms[0].element.focus({ preventScroll: true })
+    }
+    this.selectNativeRange(atoms[0], atoms[atoms.length - 1])
+    atoms[0].element.scrollIntoView({ block: 'nearest', inline: 'nearest' })
   }
 
   private reveal(sample: number): void {

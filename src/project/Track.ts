@@ -1,4 +1,5 @@
 import { ClipView } from './ClipView'
+import { removeTimelineRange } from './RippleEdit'
 import { DatabasePersisted } from '../persistence/DatabasePersisted'
 import { Restorable } from '../persistence/Restoration'
 import { Analyzable } from '../analyzers/Analyzable'
@@ -162,46 +163,7 @@ export class Track extends DatabasePersisted implements Analyzable {
       return slice
     }
 
-    const clipsCrossingStart = this.clipViews.filter(
-      (clipView) => clipView.startPosition < start && clipView.getEndPosition() > start,
-    )
-    const clipsCrossingEnd = this.clipViews.filter(
-      (clipView) => clipView.startPosition < end && clipView.getEndPosition() > end,
-    )
-    const keepLeft = clipsCrossingStart.reduce<ClipView | null>((longest, clipView) => {
-      return longest == null || clipView.startPosition < longest.startPosition ? clipView : longest
-    }, null)
-    const keepRight = clipsCrossingEnd.reduce<ClipView | null>((longest, clipView) => {
-      return longest == null || clipView.getEndPosition() > longest.getEndPosition() ? clipView : longest
-    }, null)
-
-    const remainingClipViews = this.clipViews.flatMap((clipView) => {
-      const fragments = new Array<ClipView>()
-      if (clipView.startPosition < start && (clipsCrossingStart.length < 2 || clipView == keepLeft)) {
-        fragments.push(
-          new ClipView(
-            clipView.clip,
-            clipView.offset,
-            clipView.startPosition,
-            Math.min(start, clipView.getEndPosition()) - clipView.startPosition,
-          ),
-        )
-      }
-      if (clipView.getEndPosition() > end && (clipsCrossingEnd.length < 2 || clipView == keepRight)) {
-        const fragmentStart = Math.max(end, clipView.startPosition)
-        fragments.push(
-          new ClipView(
-            clipView.clip,
-            clipView.offset + fragmentStart - clipView.startPosition,
-            fragmentStart,
-            clipView.getEndPosition() - fragmentStart,
-          ),
-        )
-      }
-      return fragments
-    })
-    remainingClipViews.sort((a, b) => a.startPosition - b.startPosition)
-    this.clipViews.splice(0, this.clipViews.length, ...remainingClipViews)
+    this.clipViews.splice(0, this.clipViews.length, ...removeTimelineRange(this.clipViews, start, end))
     return slice
   }
 

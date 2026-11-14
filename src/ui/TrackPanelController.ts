@@ -302,7 +302,8 @@ export class TrackPanelController {
   /** The transcript stays live, following selection and playback, only while it can be seen. */
   private updateTranscript(track: Track | null): void {
     const panel = this.sectionPanels.transcript
-    if (track && getTrackTranscriptEntries(track).length > 0) {
+    // Removed words count: restoring them happens in this view.
+    if (track && getTrackTranscriptEntries(track, true).length > 0) {
       const content = this.transcript.activate(track)
       if (panel.firstElementChild !== content) panel.replaceChildren(content)
       return

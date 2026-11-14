@@ -1,6 +1,7 @@
 import { expect, test } from 'vitest'
 import { Clip } from '../../project/Clip'
 import { ClipView } from '../../project/ClipView'
+import { rippleDelete } from '../../project/RippleEdit'
 import { Track } from '../../project/Track'
 import { getTrackTranscriptEntries, getTranscriptEntriesInRange, splitTranscriptParagraphs } from './TrackTranscript'
 
@@ -101,4 +102,33 @@ test('silence trails the paragraph it follows while untranscribed speech keeps i
     paragraph.map((entry) => entry.kind ?? entry.text),
   )
   expect(paragraphs).toEqual([['silence'], ['first', 'silence', 'same', 'silence'], ['untranscribed'], ['next']])
+})
+
+test('ripple-deleted words sit at their seam inside their paragraph, and play nowhere in the crossfade', () => {
+  const clip = new Clip('source', 1, 1_000)
+  clip.transcription = [
+    { text: 'one', startSample: 100, endSample: 300, speechStartSample: 100 },
+    { text: 'um', startSample: 300, endSample: 400, speechStartSample: 100 },
+    { text: 'two', startSample: 400, endSample: 600, speechStartSample: 100 },
+    { text: '', startSample: 600, endSample: 1_000, kind: 'silence' },
+  ]
+  const track = new Track('track', 1)
+  track.clipViews.push(...rippleDelete([new ClipView(clip, 0, 0, 1_000)], 300, 400, 10))
+
+  expect(getTrackTranscriptEntries(track).map((e) => [e.kind ?? e.text, e.startSample, e.endSample])).toEqual([
+    ['one', 100, 300],
+    ['two', 300, 500],
+    ['silence', 500, 900],
+  ])
+  const paragraphs = splitTranscriptParagraphs(getTrackTranscriptEntries(track, true)).map((paragraph) =>
+    paragraph.map((e) => [e.kind ?? e.text, e.startSample, e.removed?.sourceStartSample ?? null]),
+  )
+  expect(paragraphs).toEqual([
+    [
+      ['one', 100, null],
+      ['um', 300, 300],
+      ['two', 300, null],
+      ['silence', 500, null],
+    ],
+  ])
 })
