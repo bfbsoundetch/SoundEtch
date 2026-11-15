@@ -3,10 +3,16 @@ import { TimeUtils } from '../../global/TimeUtils'
 import type { Project } from '../../project/Project'
 import { ProjectManager } from '../../project/ProjectManager'
 import { OutputBus } from '../../project/OutputBus'
-import { getOutputSceneIndex, getOutputTransition, moveOutputSceneBoundary } from '../../project/OutputScene'
+import {
+  getOutputSceneIndex,
+  getOutputTransition,
+  moveOutputSceneBoundary,
+  splitOutputScene,
+} from '../../project/OutputScene'
 import type { OutputScene } from '../../project/OutputScene'
 import { EffectPanelController } from '../effects/EffectPanelController'
 import { NotificationsController } from '../NotificationsController'
+import { ContextMenuController, ContextMenuItem } from '../ContextMenuController'
 import { SetOutputScenesCommand } from '../undo/SetOutputScenesCommand'
 import type { OutputPanelController } from '../OutputPanelController'
 import type { TrackListController } from './TrackListController'
@@ -48,6 +54,8 @@ export class OutputTimelineController {
   private automating = false
   private readonly blocks: HTMLElement[] = []
   private readonly boundaries: HTMLElement[] = []
+  /** Right-click menu for the scene under the pointer; splits at the clicked point. */
+  private readonly sceneContextMenu: ContextMenuController
   /** One per boundary: where its transition plays, if any. */
   private readonly transitionBands: HTMLElement[] = []
   private drag: BoundaryDrag | null = null
@@ -84,7 +92,22 @@ export class OutputTimelineController {
       this.lane.focus({ preventScroll: true })
       this.showPanel()
     })
+    this.sceneContextMenu = new ContextMenuController(
+      'output-scene-contextmenu',
+      'Output scene actions',
+      this.timeline.pointerStateManager,
+      new ContextMenuItem('Split scene here', (_, sample) => this.splitSceneAt(sample)),
+    )
     this.lane.addEventListener('keydown', (event) => this.handleKeyDown(event))
+    this.lane.addEventListener('contextmenu', (event) => {
+      event.preventDefault()
+      if (this.automating) return
+      const project = this.project
+      if (!project || !this.timeline.canEdit() || this.isEditing) return
+      const sample = Math.round(this.sampleAt(event.clientX))
+      if (!splitOutputScene(project.outputScenes, sample, project.getLength())) return
+      this.sceneContextMenu.draw(event.clientX, event.clientY, { trackIndex: -1, sample })
+    })
     this.lane.addEventListener('pointermove', (event) => {
       if (event.pointerId !== this.drag?.pointerId) return
       event.stopPropagation()
@@ -357,7 +380,7 @@ export class OutputTimelineController {
     this.draw()
     if (this.drag !== drag) return
     this.clearBoundaryDrag()
-    void this.commitBoundaryEdit(drag.project, drag.before, drag.preview)
+    void this.commitSceneEdit(drag.project, drag.before, drag.preview)
   }
 
   private clearBoundaryDrag(): void {
@@ -368,7 +391,7 @@ export class OutputTimelineController {
     if (this.lane.hasPointerCapture(drag.pointerId)) this.lane.releasePointerCapture(drag.pointerId)
   }
 
-  private async commitBoundaryEdit(
+  private async commitSceneEdit(
     project: Project,
     before: readonly OutputScene[],
     after: readonly OutputScene[],
@@ -380,7 +403,12 @@ export class OutputTimelineController {
     const length = project.getLength()
     this.pendingEdit = { project, before, after }
     this.draw()
-    const description = after.length < before.length ? 'remove output scene' : 'move output scene boundary'
+    const description =
+      after.length > before.length
+        ? 'split output scene'
+        : after.length < before.length
+          ? 'remove output scene'
+          : 'move output scene boundary'
     let command: SetOutputScenesCommand | null = null
     try {
       const action = {
@@ -445,7 +473,15 @@ export class OutputTimelineController {
     event.stopPropagation()
     if (!this.timeline.canEdit()) return
     const after = moveOutputSceneBoundary(scenes, index, next, project.getLength())
-    if (after) void this.commitBoundaryEdit(project, scenes, after)
+    if (after) void this.commitSceneEdit(project, scenes, after)
+  }
+
+  private splitSceneAt(sample: number): void {
+    const project = this.project
+    if (!project) return
+    const before = project.outputScenes
+    const after = splitOutputScene(before, sample, project.getLength())
+    if (after) void this.commitSceneEdit(project, before, after)
   }
 
   private currentSample(): number {
