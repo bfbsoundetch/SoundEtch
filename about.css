@@ -53,22 +53,16 @@ p {
 }
 
 :root {
-  --bg-color: #f8f9fa; /* https://www.color-hex.com/color/c0cbcd */
+  --bg-color: #e9ecee;
   --color: #46494a;
   --link-color: #1769aa;
-  --clickable-hover: rgba(0, 0, 0, 0.15);
-  --clickable-active: rgba(0, 0, 0, 0.25);
-  --clickable-inactive: rgba(255, 255, 255, 0.4);
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg-color: #404445;
-    --color: #d2d4d5;
+    --bg-color: #1c2024;
+    --color: #d1d4d9;
     --link-color: #85c1e9;
-    --clickable-hover: rgba(255, 255, 255, 0.25);
-    --clickable-active: rgba(255, 255, 255, 0.35);
-    --clickable-inactive: rgba(0, 0, 0, 0.1);
   }
 }
 
