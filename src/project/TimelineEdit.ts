@@ -182,12 +182,39 @@ export function moveTimelineRange<T extends TrackLayout>(
       if (piece.clip.getChannelCount() !== target.getChannelCount() || !canPlaceClipView(clipViews, piece)) {
         return null
       }
-      const index = clipViews.findIndex((clipView) => clipView.startPosition > piece.startPosition)
-      clipViews.splice(index < 0 ? clipViews.length : index, 0, piece)
+      insertByStart(clipViews, piece)
     }
     layouts.set(target, clipViews)
   }
   return layouts
+}
+
+/**
+ * `clipViews` with every placement starting at or after `from` moved `shift` samples along, as a ripple
+ * cut on other tracks pulls this track's later audio back without cutting it. Null when a placement
+ * plays across `from`, so it could only stay in sync by being cut, or when moved audio would start
+ * before the timeline or not fit beside the audio that stays (see `canPlaceClipView`).
+ */
+export function shiftTimelineAfter(clipViews: readonly ClipView[], from: number, shift: number): ClipView[] | null {
+  if (clipViews.some((clipView) => crosses(clipView, from))) {
+    return null
+  }
+  const result = clipViews.filter((clipView) => clipView.startPosition < from)
+  for (const clipView of clipViews) {
+    if (clipView.startPosition < from) continue
+    const moved = cloneClipViewWithNewStartPosition(clipView, shift)
+    if (moved.startPosition < 0 || !canPlaceClipView(result, moved)) {
+      return null
+    }
+    insertByStart(result, moved)
+  }
+  return result
+}
+
+/** Inserts `clipView` into `clipViews`, keeping them sorted by start. */
+export function insertByStart(clipViews: ClipView[], clipView: ClipView): void {
+  const index = clipViews.findIndex((placed) => placed.startPosition > clipView.startPosition)
+  clipViews.splice(index < 0 ? clipViews.length : index, 0, clipView)
 }
 
 /**
@@ -260,6 +287,30 @@ export function restoreRemovedAudio(
     result = crossfadeJoin(result, join, crossfade)
   }
   return result
+}
+
+/**
+ * `clipViews` with `length` samples put back at the ripple seam `at`: the audio a ripple edit removed
+ * there, from `offset` samples into it, or silence where it removed none, by pushing everything from
+ * `at` on later. Null when too little audio was removed there, or audio plays across `at` without
+ * having had any removed there.
+ */
+export function reopenRippleGap(
+  clipViews: readonly ClipView[],
+  at: number,
+  offset: number,
+  length: number,
+  crossfade: number,
+): ClipView[] | null {
+  const removed = findRemovedAudio(clipViews).find((audio) => audio.seamSample === at)
+  if (!removed) {
+    return shiftTimelineAfter(clipViews, at, length)
+  }
+  const start = removed.sourceStartSample + offset
+  if (offset < 0 || start + length > removed.sourceEndSample) {
+    return null
+  }
+  return restoreRemovedAudio(clipViews, removed, start, start + length, crossfade)
 }
 
 /**

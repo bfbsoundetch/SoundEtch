@@ -7,7 +7,14 @@ import { KeyPressController } from '../KeyPressController'
 import { ContextMenuController, ContextMenuItem, ContextMenuSeparator } from '../ContextMenuController'
 import { PointerStateManager } from '../PointerStateManager'
 import { ClipView, cloneClipViewWithNewStartPosition } from '../../project/ClipView'
-import { moveTimelineRange, rippleCrossfadeSamples, rippleDelete } from '../../project/TimelineEdit'
+import {
+  moveTimelineRange,
+  removeTimelineRange,
+  reopenRippleGap,
+  rippleCrossfadeSamples,
+  rippleDelete,
+  shiftTimelineAfter,
+} from '../../project/TimelineEdit'
 import { editingSettings } from '../EditingSettings'
 import { Clipboard } from '../Clipboard'
 import { TrackListTrack as TrackListInfo } from './TrackListTrack'
@@ -759,40 +766,114 @@ export class TrackListController {
   }
 
   async sliceSelection(del: boolean) {
-    const newClipboard: typeof Clipboard.copiedClipViews = []
-    const undoCommands: SetTrackClipViewsCommand[] = []
     const selection = this.selectionController.selectedRegion
     if (!selection) {
       return
     }
     const { startSample, endSample } = selection
-    // A ripple cut pulls the rest of each selected track back to close the gap.
+    // A ripple cut pulls the rest of each cut track back to close the gap.
     const ripple = del && editingSettings.current.rippleCut
-    selection.tracks.forEach((track) => {
-      const oldClipViews = track.clipViews.slice()
-      newClipboard.push(track.slice(startSample, endSample, del && !ripple))
-      if (ripple) {
-        const crossfade = rippleCrossfadeSamples(this.sampleRate)
-        track.clipViews.splice(0, track.clipViews.length, ...rippleDelete(oldClipViews, startSample, endSample, crossfade))
-      }
-      if (del && !this.clipViewArraysEqual(oldClipViews, track.clipViews)) {
-        undoCommands.push(new SetTrackClipViewsCommand(track, oldClipViews, track.clipViews.slice()))
-      }
-    })
-    Clipboard.copiedClipViews = newClipboard
+    const layouts = del ? this.planCut(selection.tracks, startSample, endSample, ripple) : new Map()
+    if (!layouts) {
+      return
+    }
+    // Only the selected tracks' audio goes to the clipboard, whatever happens to the other tracks.
+    Clipboard.copiedClipViews = selection.tracks.map((track) => track.slice(startSample, endSample, false))
     Clipboard.copyStartPosition = startSample
-    announce(
-      `${del ? 'Cut' : 'Copied'} ${TimeUtils.toSpokenString(((endSample - startSample) * 1000) / this.sampleRate)}${ripple ? ' and closed the gap' : ''}`,
-    )
     if (ripple) {
       // The selected range now holds what followed it, so the cursor marks the cut instead.
       this.clearSelection()
       AudioControl.startPosition = startSample
     }
-    if (del && undoCommands.length > 0) {
-      await this.history.recordApplied(new BatchCommand(undoCommands, del ? 'cut' : 'copy'))
-    }
+    await this.executeLayouts(layouts, 'cut')
+    const otherTracksChanged = [...layouts.keys()].filter((track) => !selection.tracks.includes(track)).length
+    const others = `${otherTracksChanged} other ${otherTracksChanged == 1 ? 'track' : 'tracks'}`
+    announce(
+      `${del ? 'Cut' : 'Copied'} ${TimeUtils.toSpokenString(((endSample - startSample) * 1000) / this.sampleRate)}` +
+        (ripple ? ' and closed the gap' : '') +
+        (otherTracksChanged == 0
+          ? ''
+          : editingSettings.current.otherTracks == 'cut'
+            ? `, also cutting ${others}`
+            : `, shifting ${others}`),
+    )
     this.draw()
+  }
+
+  /**
+   * The clip views of every track that changes when timeline samples [start, end) are cut from
+   * `cutTracks`, closing the gap when `closeGap`: other tracks stay, are cut the same way, or, when the
+   * gap closes, only have their later audio pulled back, as the editing settings say. Null, after
+   * telling the user, when a track that should only shift has audio across the end of the cut or in the way.
+   */
+  planCut(cutTracks: readonly Track[], start: number, end: number, closeGap: boolean): Map<Track, ClipView[]> | null {
+    const otherTracks = editingSettings.current.otherTracks
+    const crossfade = rippleCrossfadeSamples(this.sampleRate)
+    const layouts = new Map<Track, ClipView[]>()
+    for (const { track } of this.waveforms) {
+      const action = cutTracks.includes(track) ? 'cut' : otherTracks
+      let clipViews: ClipView[] | null = track.clipViews
+      if (action == 'cut') {
+        clipViews = closeGap
+          ? rippleDelete(track.clipViews, start, end, crossfade)
+          : removeTimelineRange(track.clipViews, start, end)
+      } else if (action == 'shift' && closeGap) {
+        clipViews = shiftTimelineAfter(track.clipViews, end, start - end)
+        if (!clipViews) {
+          NotificationsController.showShortDurationMessage(
+            `Cannot cut here: ${track.name} has audio across the end of the cut or in the way, so it can only stay in sync if it is cut too.`,
+          )
+          return null
+        }
+      }
+      if (!this.clipViewArraysEqual(track.clipViews, clipViews)) {
+        layouts.set(track, clipViews)
+      }
+    }
+    return layouts
+  }
+
+  /**
+   * Adds to `layouts` what putting `length` samples back at the ripple seam `at` on `track` does to the
+   * other tracks, as the editing settings say: tracks cut too take back their own audio removed there,
+   * from `offset` samples into it, or reopen the gap where they removed none, and tracks that only
+   * shift push their audio from `at` on later. False, after telling the user, when one cannot stay in sync.
+   */
+  planGapReopen(track: Track, at: number, offset: number, length: number, layouts: Map<Track, ClipView[]>): boolean {
+    const otherTracks = editingSettings.current.otherTracks
+    if (otherTracks == 'stay') {
+      return true
+    }
+    const crossfade = rippleCrossfadeSamples(this.sampleRate)
+    for (const { track: other } of this.waveforms) {
+      if (other === track) continue
+      const current = layouts.get(other) ?? other.clipViews
+      const clipViews =
+        otherTracks == 'cut'
+          ? reopenRippleGap(current, at, offset, length, crossfade)
+          : shiftTimelineAfter(current, at, length)
+      if (!clipViews) {
+        NotificationsController.showShortDurationMessage(
+          `Cannot restore here: ${other.name} has audio across this point that it cannot take back in sync. Undo can still restore it.`,
+        )
+        return false
+      }
+      if (!this.clipViewArraysEqual(other.clipViews, clipViews)) {
+        layouts.set(other, clipViews)
+      }
+    }
+    return true
+  }
+
+  /** Gives each track in `layouts` its new clip views, as one undoable edit. */
+  async executeLayouts(layouts: ReadonlyMap<Track, ClipView[]>, description: string): Promise<void> {
+    if (layouts.size == 0) {
+      return
+    }
+    const commands = [...layouts].map(
+      ([track, clipViews]) => new SetTrackClipViewsCommand(track, track.clipViews.slice(), clipViews),
+    )
+    await this.history.execute(new BatchCommand(commands, description))
   }
 
   async paste(trackIndex: number, startingSample: number) {
@@ -867,12 +948,7 @@ export class TrackListController {
       )
       return
     }
-    const commands = [...move.layouts].map(
-      ([track, clipViews]) => new SetTrackClipViewsCommand(track, track.clipViews.slice(), clipViews),
-    )
-    if (commands.length > 0) {
-      await this.history.execute(new BatchCommand(commands, 'move selection'))
-    }
+    await this.executeLayouts(move.layouts, 'move selection')
     this.selectionController.setSelection(move.startSample, move.endSample, new Set(move.waveforms))
     announce(
       `Moved selection to ${TimeUtils.toSpokenString((move.startSample * 1000) / this.sampleRate)} on ${move.waveforms[0].track.name}`,

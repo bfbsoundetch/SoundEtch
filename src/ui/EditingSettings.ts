@@ -1,18 +1,34 @@
+/** What a timeline cut does to tracks outside the selection. */
+export type OtherTracksOnCut = 'stay' | 'cut' | 'shift'
+
+export const OTHER_TRACKS_ON_CUT: readonly OtherTracksOnCut[] = ['stay', 'cut', 'shift']
+
 export interface EditingSettings {
-  /** Whether a timeline cut pulls the rest of each selected track back to close the gap. */
+  /** Whether a timeline cut pulls the rest of each cut track back to close the gap. */
   readonly rippleCut: boolean
+  /**
+   * Tracks outside the selection stay as they are, are cut the same way, or, when the cut closes its
+   * gap, only have their later audio pulled back with it.
+   */
+  readonly otherTracks: OtherTracksOnCut
 }
 
 export const EDITING_SETTINGS_STORAGE_KEY = 'soundetch.editing-settings'
 
-export const DEFAULT_EDITING_SETTINGS: EditingSettings = Object.freeze({ rippleCut: false })
+export const DEFAULT_EDITING_SETTINGS: EditingSettings = Object.freeze({ rippleCut: false, otherTracks: 'stay' })
+
+/** Valid settings from anything stored; shifting other tracks needs a cut that closes its gap. */
+export function normalizeEditingSettings(value: unknown): EditingSettings {
+  const candidate = value !== null && typeof value === 'object' ? (value as Record<string, unknown>) : {}
+  const rippleCut = candidate.rippleCut === true
+  const otherTracks = OTHER_TRACKS_ON_CUT.find((option) => option === candidate.otherTracks) ?? 'stay'
+  return Object.freeze({ rippleCut, otherTracks: otherTracks === 'shift' && !rippleCut ? 'stay' : otherTracks })
+}
 
 function loadStoredSettings(): EditingSettings {
   try {
     const stored = window.localStorage.getItem(EDITING_SETTINGS_STORAGE_KEY)
-    return stored === null
-      ? DEFAULT_EDITING_SETTINGS
-      : Object.freeze({ rippleCut: JSON.parse(stored)?.rippleCut === true })
+    return stored === null ? DEFAULT_EDITING_SETTINGS : normalizeEditingSettings(JSON.parse(stored))
   } catch {
     return DEFAULT_EDITING_SETTINGS
   }
@@ -27,7 +43,7 @@ class EditingSettingsStore {
   }
 
   set(settings: EditingSettings): void {
-    this.settings = Object.freeze({ rippleCut: settings.rippleCut })
+    this.settings = normalizeEditingSettings(settings)
     try {
       window.localStorage.setItem(EDITING_SETTINGS_STORAGE_KEY, JSON.stringify(this.settings))
     } catch {

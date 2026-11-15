@@ -1,7 +1,14 @@
 import { expect, test } from 'vitest'
 import { Clip } from './Clip'
 import { ClipView } from './ClipView'
-import { findRemovedAudio, moveTimelineRange, restoreRemovedAudio, rippleDelete } from './TimelineEdit'
+import {
+  findRemovedAudio,
+  moveTimelineRange,
+  reopenRippleGap,
+  restoreRemovedAudio,
+  rippleDelete,
+  shiftTimelineAfter,
+} from './TimelineEdit'
 import { Track } from './Track'
 
 const CROSSFADE = 10
@@ -156,4 +163,35 @@ test('a move is refused where the audio would play entirely within a clip or aro
   expect(moveTimelineRange([source, target], [source], 50, 450, 0, 1)).toBeNull()
   expect(moveTimelineRange([source], [source], 200, 300, -150, 0)).toBeNull()
   expect(moveTimelineRange([source, target], [source], 300, 500, 0, 1)).not.toBeNull()
+})
+
+test('shifting a track without cutting it moves only the audio after the cut, where it fits', () => {
+  const clip = new Clip('take', 1, 1000)
+  const before = new ClipView(clip, 0, 0, 100)
+  const after = new ClipView(clip, 200, 500, 100)
+
+  expect(shiftTimelineAfter([before, after], 300, -200)).toEqual([before, new ClipView(clip, 200, 300, 100)])
+  // Audio across the cut's end could only stay in sync by being cut.
+  expect(shiftTimelineAfter([new ClipView(clip, 0, 0, 400)], 300, -200)).toBeNull()
+  // Pulled back, the later audio would play entirely within audio that stays.
+  expect(shiftTimelineAfter([new ClipView(clip, 0, 0, 290), new ClipView(clip, 0, 300, 50)], 300, -200)).toBeNull()
+})
+
+test('reopening a ripple gap puts back the audio each track removed there, or silence where it removed none', () => {
+  const take = new Clip('take', 1, 1000)
+  const original = [new ClipView(take, 0, 0, 1000)]
+  const cut = rippleDelete(original, 300, 400, CROSSFADE)
+
+  expect(reopenRippleGap(cut, 300, 0, 100, CROSSFADE)).toEqual(original)
+  expect(reopenRippleGap(cut, 300, 20, 60, CROSSFADE)).toEqual(
+    restoreRemovedAudio(cut, findRemovedAudio(cut)[0], 320, 380, CROSSFADE),
+  )
+  // More than this track removed at the seam.
+  expect(reopenRippleGap(cut, 300, 50, 100, CROSSFADE)).toBeNull()
+
+  const later = new Clip('later', 1, 100)
+  const gap = [new ClipView(take, 0, 0, 300), new ClipView(later, 0, 300, 100)]
+  expect(reopenRippleGap(gap, 300, 0, 100, CROSSFADE)).toEqual([gap[0], new ClipView(later, 0, 400, 100)])
+  // Audio playing straight across the seam removed nothing there, so it cannot take any back in sync.
+  expect(reopenRippleGap(original, 300, 0, 100, CROSSFADE)).toBeNull()
 })

@@ -716,8 +716,21 @@
                 <option value="ripple">Shifts the rest of the track left</option>
               </select>
               <p id="editing-cut-mode-description">
-                Applies to cutting a timeline selection with Cut, Ctrl/⌘+X, or Delete. Shifting closes the gap on each
-                selected track with a 30 ms crossfade; other tracks stay where they are.
+                Applies to cutting a timeline selection with Cut, Ctrl/⌘+X, or Delete. Shifting closes the gap with a 30
+                ms crossfade.
+              </p>
+
+              <label for="editing-other-tracks">Other tracks</label>
+              <select id="editing-other-tracks" aria-describedby="editing-other-tracks-description">
+                <option value="stay">Stay as they are</option>
+                <option value="cut">Are cut too</option>
+                <option value="shift">Only shift with the cut</option>
+              </select>
+              <p id="editing-other-tracks-description">
+                What a cut, or deleting or restoring audio in a transcript, does to other tracks. Cutting them too keeps
+                them in sync, for example a conversation recorded on separate tracks. Shifting, available when cuts
+                shift the rest of the track, moves only audio that starts after the cut; audio across its end stops the
+                cut. Only the selected tracks go to the clipboard.
               </p>
             </div>
           </div>

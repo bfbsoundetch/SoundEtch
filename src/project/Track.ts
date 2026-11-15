@@ -1,5 +1,5 @@
 import { ClipView } from './ClipView'
-import { canPlaceClipView, removeTimelineRange, sliceTimelineRange } from './TimelineEdit'
+import { canPlaceClipView, insertByStart, removeTimelineRange, sliceTimelineRange } from './TimelineEdit'
 import { DatabasePersisted } from '../persistence/DatabasePersisted'
 import { Restorable } from '../persistence/Restoration'
 import { Analyzable } from '../analyzers/Analyzable'
@@ -99,8 +99,7 @@ export class Track extends DatabasePersisted implements Analyzable {
 
   /** Inserts `newClipView` in start order without checking it, as undo does to restore an earlier layout. */
   insertClipView(newClipView: ClipView) {
-    const index = this.clipViews.findIndex((clipView) => clipView.startPosition > newClipView.startPosition)
-    this.clipViews.splice(index < 0 ? this.clipViews.length : index, 0, newClipView)
+    insertByStart(this.clipViews, newClipView)
   }
 
   split(clipViewIndex: number, position: number) {

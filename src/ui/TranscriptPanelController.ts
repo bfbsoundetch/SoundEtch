@@ -2,7 +2,7 @@ import { AudioControl, AudioState } from '../audiocontext/AudioControl'
 import { TimeUtils } from '../global/TimeUtils'
 import type { SelectedRegion } from '../playback/Player'
 import type { ClipView } from '../project/ClipView'
-import { restoreRemovedAudio, rippleCrossfadeSamples, rippleDelete, type RemovedAudio } from '../project/TimelineEdit'
+import { restoreRemovedAudio, rippleCrossfadeSamples, type RemovedAudio } from '../project/TimelineEdit'
 import type { Track } from '../project/Track'
 import type { TranscribedRange } from '../project/Transcription'
 import {
@@ -22,7 +22,7 @@ import {
   type TrackTranscriptEntry,
 } from './transcript/TrackTranscript'
 import { getTranscriptTextEdits } from './transcript/TranscriptTextEdit'
-import { BatchCommand, SetClipTranscriptionCommand, SetTrackClipViewsCommand } from './undo/UndoableActions'
+import { BatchCommand, SetClipTranscriptionCommand } from './undo/UndoableActions'
 
 type Binding = { entry: TrackTranscriptEntry; element: HTMLSpanElement }
 type Snapshot = {
@@ -796,14 +796,17 @@ export class TranscriptPanelController {
       endSample: clipView.offset + endSample - clipView.startPosition,
     }))
     const sampleRate = this.trackListController.sampleRate
-    const oldClipViews = track.clipViews.slice()
-    const newClipViews = rippleDelete(oldClipViews, start, end, rippleCrossfadeSamples(sampleRate))
+    // Other tracks follow the editing settings, so a conversation on separate tracks can stay in sync.
+    const layouts = this.trackListController.planCut([track], start, end, true)
+    if (!layouts) return
     this.trackListController.clearSelection()
     AudioControl.startPosition = start
-    await this.trackListController.history.execute(
-      new BatchCommand([new SetTrackClipViewsCommand(track, oldClipViews, newClipViews)], 'delete audio'),
+    await this.trackListController.executeLayouts(layouts, 'delete audio')
+    const others = [...layouts.keys()].filter((changed) => changed !== track).length
+    announce(
+      `Deleted ${TimeUtils.toSpokenString(((end - start) * 1000) / sampleRate)} of audio` +
+        (others == 0 ? '' : `, also on ${others} other ${others == 1 ? 'track' : 'tracks'}`),
     )
-    announce(`Deleted ${TimeUtils.toSpokenString(((end - start) * 1000) / sampleRate)} of audio`)
     if (this.activeTrack !== track) return
     // Selecting what was just taken out lets Backspace put it straight back.
     this.selectAtoms(
@@ -844,13 +847,17 @@ export class TranscriptPanelController {
     const ordered = [...spans].sort(([a], [b]) => a.index - b.index)
     const sampleRate = this.trackListController.sampleRate
     const crossfade = rippleCrossfadeSamples(sampleRate)
-    const oldClipViews = track.clipViews.slice()
-    // Later seams first, so each earlier seam keeps its placement indices.
-    const newClipViews = ordered.reduceRight(
-      (clipViews, [audio, span]) =>
-        restoreRemovedAudio(clipViews, audio, span.sourceStartSample, span.sourceEndSample, crossfade),
-      oldClipViews,
-    )
+    const layouts = new Map<Track, ClipView[]>()
+    let clipViews = track.clipViews
+    // Later seams first, so each earlier seam keeps its position and placement indices.
+    for (let index = ordered.length - 1; index >= 0; --index) {
+      const [audio, span] = ordered[index]
+      const length = span.sourceEndSample - span.sourceStartSample
+      clipViews = restoreRemovedAudio(clipViews, audio, span.sourceStartSample, span.sourceEndSample, crossfade)
+      const offset = span.sourceStartSample - audio.sourceStartSample
+      if (!this.trackListController.planGapReopen(track, audio.seamSample, offset, length, layouts)) return
+    }
+    layouts.set(track, clipViews)
     // Each restore pushes the later seams back by what it put back.
     let pushed = 0
     const restored = ordered.map(([audio, span]) => {
@@ -859,10 +866,12 @@ export class TranscriptPanelController {
       return { startSample, endSample: audio.seamSample + pushed }
     })
     this.trackListController.clearSelection()
-    await this.trackListController.history.execute(
-      new BatchCommand([new SetTrackClipViewsCommand(track, oldClipViews, newClipViews)], 'restore audio'),
+    await this.trackListController.executeLayouts(layouts, 'restore audio')
+    const others = layouts.size - 1
+    announce(
+      `Restored ${TimeUtils.toSpokenString((pushed * 1000) / sampleRate)} of audio` +
+        (others == 0 ? '' : `, also on ${others} other ${others == 1 ? 'track' : 'tracks'}`),
     )
-    announce(`Restored ${TimeUtils.toSpokenString((pushed * 1000) / sampleRate)} of audio`)
     if (this.activeTrack !== track) return
     const words = this.bindings.filter(
       ({ entry }) =>
