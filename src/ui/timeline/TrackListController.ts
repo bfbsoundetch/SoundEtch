@@ -7,7 +7,8 @@ import { KeyPressController } from '../KeyPressController'
 import { ContextMenuController, ContextMenuItem, ContextMenuSeparator } from '../ContextMenuController'
 import { PointerStateManager } from '../PointerStateManager'
 import { ClipView, cloneClipViewWithNewStartPosition } from '../../project/ClipView'
-import { moveTimelineRange } from '../../project/TimelineEdit'
+import { moveTimelineRange, rippleCrossfadeSamples, rippleDelete } from '../../project/TimelineEdit'
+import { editingSettings } from '../EditingSettings'
 import { Clipboard } from '../Clipboard'
 import { TrackListTrack as TrackListInfo } from './TrackListTrack'
 import { InputListController } from './InputListController'
@@ -764,18 +765,30 @@ export class TrackListController {
     if (!selection) {
       return
     }
-    selection?.tracks.forEach((track) => {
+    const { startSample, endSample } = selection
+    // A ripple cut pulls the rest of each selected track back to close the gap.
+    const ripple = del && editingSettings.current.rippleCut
+    selection.tracks.forEach((track) => {
       const oldClipViews = track.clipViews.slice()
-      newClipboard.push(track.slice(selection.startSample, selection.endSample, del))
+      newClipboard.push(track.slice(startSample, endSample, del && !ripple))
+      if (ripple) {
+        const crossfade = rippleCrossfadeSamples(this.sampleRate)
+        track.clipViews.splice(0, track.clipViews.length, ...rippleDelete(oldClipViews, startSample, endSample, crossfade))
+      }
       if (del && !this.clipViewArraysEqual(oldClipViews, track.clipViews)) {
         undoCommands.push(new SetTrackClipViewsCommand(track, oldClipViews, track.clipViews.slice()))
       }
     })
     Clipboard.copiedClipViews = newClipboard
-    Clipboard.copyStartPosition = selection.startSample
+    Clipboard.copyStartPosition = startSample
     announce(
-      `${del ? 'Cut' : 'Copied'} ${TimeUtils.toSpokenString(((selection.endSample - selection.startSample) * 1000) / this.sampleRate)}`,
+      `${del ? 'Cut' : 'Copied'} ${TimeUtils.toSpokenString(((endSample - startSample) * 1000) / this.sampleRate)}${ripple ? ' and closed the gap' : ''}`,
     )
+    if (ripple) {
+      // The selected range now holds what followed it, so the cursor marks the cut instead.
+      this.clearSelection()
+      AudioControl.startPosition = startSample
+    }
     if (del && undoCommands.length > 0) {
       await this.history.recordApplied(new BatchCommand(undoCommands, del ? 'cut' : 'copy'))
     }

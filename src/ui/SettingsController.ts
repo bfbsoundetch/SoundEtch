@@ -1,5 +1,6 @@
 import { MODEL_CACHE_INFO, getModelCacheUsage, unloadModelCache, type ModelCacheId } from '../ModelCache'
 import { humanizeBytes } from './DiskUsage'
+import { DEFAULT_EDITING_SETTINGS, editingSettings, type EditingSettings } from './EditingSettings'
 import { NotificationsController } from './NotificationsController'
 
 import {
@@ -26,6 +27,7 @@ export class SettingsController {
   private readonly colormapSelect = document.getElementById('spectrogram-colormap') as HTMLSelectElement
   private readonly minDbInput = document.getElementById('spectrogram-min-db') as HTMLInputElement
   private readonly minDbOutput = document.getElementById('spectrogram-min-db-value') as HTMLOutputElement
+  private readonly cutModeSelect = document.getElementById('editing-cut-mode') as HTMLSelectElement
   private readonly resetButton = document.getElementById('settings-reset-button') as HTMLButtonElement
   private readonly firstSectionSummary = this.dialog.querySelector('.settings-section-summary') as HTMLElement
   private readonly modelCacheControls = Object.fromEntries(
@@ -52,7 +54,8 @@ export class SettingsController {
     this.minDbInput.addEventListener('input', () => this.updateMinDbOutput())
     this.resetButton.addEventListener('click', () => {
       spectrogramSettings.reset()
-      this.setFormValues(DEFAULT_SPECTROGRAM_SETTINGS)
+      editingSettings.reset()
+      this.setFormValues(DEFAULT_SPECTROGRAM_SETTINGS, DEFAULT_EDITING_SETTINGS)
       this.dialog.close()
     })
     for (const { id, label } of MODEL_CACHE_INFO) {
@@ -63,7 +66,7 @@ export class SettingsController {
   }
 
   private open(): void {
-    this.setFormValues(spectrogramSettings.current)
+    this.setFormValues(spectrogramSettings.current, editingSettings.current)
     if (this.menuDropdown.matches(':popover-open')) this.menuDropdown.hidePopover()
     this.dialog.showModal()
     this.firstSectionSummary.focus()
@@ -80,11 +83,13 @@ export class SettingsController {
       minDb: Number(this.minDbInput.value),
     })
     spectrogramSettings.set(settings)
-    this.setFormValues(settings)
+    editingSettings.set({ rippleCut: this.cutModeSelect.value === 'ripple' })
+    this.setFormValues(settings, editingSettings.current)
     this.dialog.close()
   }
 
-  private setFormValues(settings: SpectrogramSettings): void {
+  private setFormValues(settings: SpectrogramSettings, editing: EditingSettings): void {
+    this.cutModeSelect.value = editing.rippleCut ? 'ripple' : 'leave'
     this.fftSizeSelect.value = String(settings.fftSize)
     this.hopSizeSelect.value = String(settings.hopSize)
     this.frequencyBandsSelect.value = String(settings.frequencyBands)

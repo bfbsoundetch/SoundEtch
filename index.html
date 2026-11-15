@@ -704,6 +704,25 @@
           <h1 id="settings-modal-title">Settings</h1>
         </header>
         <details class="settings-section">
+          <summary class="settings-section-summary">Editing</summary>
+          <div class="settings-section-content">
+            <p class="settings-section-description">
+              Editing settings are saved in this browser and apply to every project.
+            </p>
+            <div class="settings-grid">
+              <label for="editing-cut-mode">Cut</label>
+              <select id="editing-cut-mode" aria-describedby="editing-cut-mode-description">
+                <option value="leave">Leaves a gap</option>
+                <option value="ripple">Shifts the rest of the track left</option>
+              </select>
+              <p id="editing-cut-mode-description">
+                Applies to cutting a timeline selection with Cut, Ctrl/⌘+X, or Delete. Shifting closes the gap on each
+                selected track with a 30 ms crossfade; other tracks stay where they are.
+              </p>
+            </div>
+          </div>
+        </details>
+        <details class="settings-section">
           <summary class="settings-section-summary">Spectrogram</summary>
           <div class="settings-section-content">
             <p class="settings-section-description">
