@@ -1,28 +1,20 @@
 :root {
   color-scheme: light dark;
-  --bg-color: #f8f9fa;
+  --bg-color: #e9ecee;
   --color: #46494a;
-  --link-color: #1769aa;
   --clickable-hover: rgba(0, 0, 0, 0.15);
   --clickable-active: rgba(0, 0, 0, 0.25);
-  --clickable-inactive: rgba(255, 255, 255, 0.4);
-  font-family:
-    system-ui,
-    -apple-system,
-    BlinkMacSystemFont,
-    'Segoe UI',
-    sans-serif;
+  --button-bg: color-mix(in srgb, var(--color) 12%, transparent);
+  font-family: Georgia, Palantino, serif;
   line-height: 1.5;
 }
 
 @media (prefers-color-scheme: dark) {
   :root {
-    --bg-color: #404445;
-    --color: #d2d4d5;
-    --link-color: #85c1e9;
+    --bg-color: #1c2024;
+    --color: #d1d4d9;
     --clickable-hover: rgba(255, 255, 255, 0.25);
     --clickable-active: rgba(255, 255, 255, 0.35);
-    --clickable-inactive: rgba(0, 0, 0, 0.1);
   }
 }
 
@@ -109,12 +101,12 @@ textarea {
   resize: vertical;
   border: 1px solid currentColor;
   border-radius: 0.25rem;
-  background: var(--clickable-inactive);
+  background: var(--bg-color);
   color: var(--color);
 }
 
 #logs-preview {
-  font-family: ui-monospace, SFMono-Regular, Consolas, monospace;
+  font-family: 'Courier New', Courier, monospace;
   font-size: 0.875rem;
   white-space: pre-wrap;
   overflow-wrap: anywhere;
@@ -132,7 +124,7 @@ input[type='file']::file-selector-button {
   padding: 0.55rem 0.9rem;
   border: 1px solid currentColor;
   border-radius: 0.3rem;
-  background: var(--clickable-inactive);
+  background: var(--button-bg);
   color: var(--color);
   font-weight: 650;
   cursor: pointer;
@@ -171,12 +163,12 @@ input[type='checkbox'] {
   width: 1.25rem;
   height: 1.25rem;
   margin: 0;
-  accent-color: var(--link-color);
+  accent-color: var(--color);
 }
 
 :focus-visible {
-  outline: 3px solid var(--link-color);
-  outline-offset: 3px;
+  outline: 2px solid var(--color);
+  outline-offset: 2px;
 }
 
 .error {
