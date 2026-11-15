@@ -798,7 +798,9 @@ export class TrackListController {
       for (const clipView of clipViews) {
         const newClipView = cloneClipViewWithNewStartPosition(clipView, startPositionDelta)
         if (!track.canAddClipView(newClipView)) {
-          NotificationsController.showShortDurationMessage('Cannot paste here: the clips would overlap existing clips.')
+          NotificationsController.showShortDurationMessage(
+            'Cannot paste here: pasted audio can only partly overlap one clip, on a track with the same channel count.',
+          )
           return
         }
         undoCommands.push(new AddClipViewCommand(newClipView, track))
@@ -848,7 +850,7 @@ export class TrackListController {
     }
     if (!move.layouts) {
       NotificationsController.showShortDurationMessage(
-        'Cannot move here: the clips would overlap existing clips or a track with another channel count.',
+        'Cannot move here: moved audio can only partly overlap one clip, on a track with the same channel count.',
       )
       return
     }

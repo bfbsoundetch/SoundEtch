@@ -80,7 +80,7 @@ export class RemoveClipViewCommand implements Undoable {
   }
 
   async undo() {
-    this.track.addClipView(this.clipView)
+    this.track.insertClipView(this.clipView)
   }
 
   async save() {
@@ -105,7 +105,7 @@ export class ReplaceClipViewCommand implements Undoable {
   }
 
   async undo() {
-    this.replace(this.newClipView, this.oldClipView)
+    restoreClipView(this.track, this.track, this.newClipView, this.oldClipView)
   }
 
   async save() {
@@ -137,7 +137,7 @@ export class MoveClipViewBetweenTracksCommand implements Undoable {
   }
 
   async undo() {
-    moveClipView(this.newTrack, this.oldTrack, this.newClipView, this.oldClipView)
+    restoreClipView(this.newTrack, this.oldTrack, this.newClipView, this.oldClipView)
   }
 
   async save() {
@@ -169,7 +169,7 @@ export class MoveClipViewToNewTrackCommand implements Undoable {
 
   async undo() {
     this.project.deleteTrack(this.newTrack)
-    moveClipView(this.newTrack, this.oldTrack, this.newClipView, this.oldClipView)
+    restoreClipView(this.newTrack, this.oldTrack, this.newClipView, this.oldClipView)
     this.newTrackIsActive = false
   }
 
@@ -299,9 +299,15 @@ function moveClipView(fromTrack: Track, toTrack: Track, fromClipView: ClipView, 
   try {
     toTrack.addClipView(toClipView)
   } catch (error) {
-    fromTrack.addClipView(fromClipView)
+    fromTrack.insertClipView(fromClipView)
     throw error
   }
+}
+
+/** Puts `toClipView` back on `toTrack` in place of `fromClipView` unchecked: undo restores a layout the track already had. */
+function restoreClipView(fromTrack: Track, toTrack: Track, fromClipView: ClipView, toClipView: ClipView) {
+  removeClipViewByReference(fromTrack, fromClipView)
+  toTrack.insertClipView(toClipView)
 }
 
 function removeClipViewByReference(track: Track, clipView: ClipView) {

@@ -115,7 +115,8 @@ test('untranscribed, trimmed-away and video-only words cannot steal captions', (
   // Even sharing a track with actual audio cannot make video-only words eligible.
   const extraVideo = audioClip('video on alpha', [word('wrong!')], [[0, 4096, 1]])
   extraVideo.audioPresent = false
-  project.getTracks()[0].addClipView(new ClipView(extraVideo, 0, 0, 4096))
+  // Pushed directly: edits may not stack clips like this, but captions must cope with any layout.
+  project.getTracks()[0].clipViews.push(new ClipView(extraVideo, 0, 0, 4096))
   expect(text(new OutputCaptionSource(project, LOUD), 1024)).toBe('Alpha!')
 })
 
@@ -153,10 +154,13 @@ test('overlapping placed clips contribute energy and a long placement resumes af
   const track = new Track('layered', 1)
   const long = audioClip('long', [word('long!')], [[0, 4096, 0.4]])
   const short = audioClip('short', [word('short!', 0, 512)], [[0, 512, 0.4]], 512)
-  track.addClipView(new ClipView(long, 0, 0, 4096))
-  track.addClipView(new ClipView(short, 0, 512, 512))
-  track.addClipView(new ClipView(short, 0, 1536, 512))
-  track.addClipView(new ClipView(short, 0, 2560, 512))
+  // Pushed directly: splitting inside a crossfade can still leave nested clips like these.
+  track.clipViews.push(
+    new ClipView(long, 0, 0, 4096),
+    new ClipView(short, 0, 512, 512),
+    new ClipView(short, 0, 1536, 512),
+    new ClipView(short, 0, 2560, 512),
+  )
   project.addTrack(track)
   addSpeaker(project, 'steady', [word('steady!')], [[0, 4096, 0.5]])
   const source = new OutputCaptionSource(project, LOUD)
@@ -244,8 +248,7 @@ test('an active word in an earlier overlapping fragment outranks another trackâ€
   const track = new Track('layered', 1)
   const outer = audioClip('outer', [word('outer!')], [[0, 4096, 0.2]])
   const inner = audioClip('inner', [word('inner', 0, 256), word('later!', 1024, 1280)], [[0, 1280, 0.2]], 1280)
-  track.addClipView(new ClipView(outer, 0, 0, 4096))
-  track.addClipView(new ClipView(inner, 0, 512, 1280))
+  track.clipViews.push(new ClipView(outer, 0, 0, 4096), new ClipView(inner, 0, 512, 1280))
   project.addTrack(track)
   addSpeaker(project, 'loud pause', [word('louder', 0, 512), word('again!', 1536, 2048)], [[0, 4096, 0.8]])
   const source = new OutputCaptionSource(project, LOUD)

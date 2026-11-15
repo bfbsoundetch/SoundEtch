@@ -43,7 +43,22 @@ test('addClipView_overlapsTwoClipsAtOnce_throwsError', async () => {
   const thirdClipView = new ClipView(clip, 0, 1, 3)
 
   expect(track.canAddClipView(thirdClipView)).toBe(false)
-  expect(() => track.addClipView(thirdClipView)).toThrow('New clip would overlap two existing clips!')
+  expect(() => track.addClipView(thirdClipView)).toThrow()
+})
+
+test('canAddClipView_entirelyWithinOrAroundAnother_refused', async () => {
+  const clip = new Clip('test', 2, 10)
+  const track = new Track('test', 2)
+  track.addClipView(new ClipView(clip, 0, 2, 6))
+  track.addClipView(new ClipView(clip, 0, 9, 1))
+
+  expect(track.canAddClipView(new ClipView(clip, 0, 3, 2))).toBe(false)
+  expect(track.canAddClipView(new ClipView(clip, 0, 2, 6))).toBe(false)
+  expect(track.canAddClipView(new ClipView(clip, 0, 2, 3))).toBe(false)
+  expect(track.canAddClipView(new ClipView(clip, 0, 0, 9))).toBe(false)
+  expect(track.canAddClipView(new ClipView(clip, 0, 6, 3))).toBe(true)
+  // Dragging the short clip into the long one.
+  expect(track.canReplaceClipView(1, new ClipView(clip, 0, 4, 1))).toBe(false)
 })
 
 test('addClipView_overlapsTwoClipsAtDifferentPositions_succeeds', async () => {

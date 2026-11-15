@@ -69,7 +69,11 @@ export function sliceTimelineRange(clipViews: readonly ClipView[], start: number
   })
 }
 
-/** Whether `newClipView` can join `clipViews`, sorted by start, without any instant playing three clips. */
+/**
+ * Whether `newClipView` can join `clipViews`, sorted by start: it may partly overlap clips, for a
+ * crossfade, but no instant may play three clips, and neither it nor a clip it overlaps may play
+ * entirely within the other, which playback would crossfade into and then cut off at its end.
+ */
 export function canPlaceClipView(clipViews: readonly ClipView[], newClipView: ClipView): boolean {
   let latestOverlapEnd = -Infinity
   for (const clipView of clipViews) {
@@ -78,7 +82,11 @@ export function canPlaceClipView(clipViews: readonly ClipView[], newClipView: Cl
     if (overlapStart >= overlapEnd) {
       continue
     }
-    if (overlapStart < latestOverlapEnd) {
+    if (
+      overlapStart < latestOverlapEnd ||
+      overlapEnd - overlapStart === newClipView.length ||
+      overlapEnd - overlapStart === clipView.length
+    ) {
       return false
     }
     latestOverlapEnd = Math.max(latestOverlapEnd, overlapEnd)
@@ -134,9 +142,9 @@ export function removeTimelineRange(clipViews: readonly ClipView[], start: numbe
 /**
  * The clip views each changed track ends up with when timeline samples [start, end) of `selected`
  * move `shift` samples along and `trackOffset` places through `tracks`, as cutting and pasting them
- * would: the source range is left empty, and moved audio may crossfade with one clip it lands on.
+ * would: the source range is left empty, and moved audio may crossfade with a clip it partly overlaps.
  * Null when moved audio would start before the timeline, land off the track list or on a track with
- * another channel count, or make three clips play at once.
+ * another channel count, make three clips play at once, or play entirely within or around a clip.
  */
 export function moveTimelineRange<T extends TrackLayout>(
   tracks: readonly T[],

@@ -350,7 +350,7 @@ export class Waveform extends TrackListItemController {
       return
     }
     if (!this.track.canReplaceClipView(index, replacement)) {
-      NotificationsController.showShortDurationMessage('That would overlap another clip on this track.')
+      NotificationsController.showShortDurationMessage('Clips can only partly overlap one other clip on this track.')
       return
     }
     await this.trackListController.history.execute(

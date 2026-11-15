@@ -117,7 +117,8 @@ test('moving a range a little crossfades it with the audio it lands on', () => {
 test('moving ranges down the track list lets a track take audio into the range it gave up', () => {
   const tracks = [0, 1, 2].map((index) => new Track(`Track ${index}`, 1))
   const clips = tracks.map((track) => new Clip(track.name, 1, 100))
-  tracks.forEach((track, index) => track.clipViews.push(new ClipView(clips[index], 0, 0, 100)))
+  // The third track's clip starts inside the moved range, so the audio partly overlaps it.
+  tracks.forEach((track, index) => track.clipViews.push(new ClipView(clips[index], 0, index == 2 ? 50 : 0, 100)))
 
   const layouts = moveTimelineRange(tracks, tracks.slice(0, 2), 40, 60, 0, 1)!
 
@@ -127,7 +128,7 @@ test('moving ranges down the track list lets a track take audio into the range i
     new ClipView(clips[0], 40, 40, 20),
     new ClipView(clips[1], 60, 60, 40),
   ])
-  expect(layouts.get(tracks[2])).toEqual([new ClipView(clips[2], 0, 0, 100), new ClipView(clips[1], 40, 40, 20)])
+  expect(layouts.get(tracks[2])).toEqual([new ClipView(clips[1], 40, 40, 20), new ClipView(clips[2], 0, 50, 100)])
 })
 
 test('a move is refused where it would play three clips at once or meet another channel count', () => {
@@ -141,4 +142,18 @@ test('a move is refused where it would play three clips at once or meet another 
   expect(moveTimelineRange([source, crowded], [source], 40, 70, 0, 1)).toBeNull()
   expect(moveTimelineRange([source, stereo], [source], 0, 10, 0, 1)).toBeNull()
   expect(moveTimelineRange([source], [source], 10, 20, -20, 0)).toBeNull()
+})
+
+test('a move is refused where the audio would play entirely within a clip or around one', () => {
+  const clip = new Clip('take', 1, 1000)
+  const source = new Track('source', 1)
+  const target = new Track('target', 1)
+  source.clipViews.push(new ClipView(clip, 0, 0, 1000))
+  target.clipViews.push(new ClipView(clip, 0, 100, 300))
+
+  expect(moveTimelineRange([source, target], [source], 150, 250, 0, 1)).toBeNull()
+  expect(moveTimelineRange([source, target], [source], 100, 400, 0, 1)).toBeNull()
+  expect(moveTimelineRange([source, target], [source], 50, 450, 0, 1)).toBeNull()
+  expect(moveTimelineRange([source], [source], 200, 300, -150, 0)).toBeNull()
+  expect(moveTimelineRange([source, target], [source], 300, 500, 0, 1)).not.toBeNull()
 })

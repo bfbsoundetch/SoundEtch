@@ -92,16 +92,15 @@ export class Track extends DatabasePersisted implements Analyzable {
       )
     }
     if (!this.canAddClipView(newClipView)) {
-      throw Error('New clip would overlap two existing clips!')
+      throw Error('New clip would overlap two clips at once, or play entirely within or around one!')
     }
-    for (let i = 0; i < this.clipViews.length; ++i) {
-      const clipView = this.clipViews[i]
-      if (clipView.startPosition > newClipView.startPosition) {
-        this.clipViews.splice(i, 0, newClipView)
-        return
-      }
-    }
-    this.clipViews.push(newClipView)
+    this.insertClipView(newClipView)
+  }
+
+  /** Inserts `newClipView` in start order without checking it, as undo does to restore an earlier layout. */
+  insertClipView(newClipView: ClipView) {
+    const index = this.clipViews.findIndex((clipView) => clipView.startPosition > newClipView.startPosition)
+    this.clipViews.splice(index < 0 ? this.clipViews.length : index, 0, newClipView)
   }
 
   split(clipViewIndex: number, position: number) {
