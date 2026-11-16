@@ -753,34 +753,32 @@ export class Waveform extends TrackListItemController {
   drawClipViewOver(clipViewController: ClipViewController) {
     this.resetAfterDrawnOver(clipViewController.clipView)
 
+    // Only the clips on either side of the drawn-over one can crossfade with it.
+    const clipViews = this.track.clipViews.filter((clipView) => clipView != clipViewController.clipView)
+    const nextIndex = clipViews.findIndex((clipView) => clipView.startPosition >= clipViewController.startPosition)
+    const previousClipView = clipViews[(nextIndex < 0 ? clipViews.length : nextIndex) - 1]
+    const nextClipView = nextIndex < 0 ? undefined : clipViews[nextIndex]
+    const viewportStart = this.getSampleForXValue(0)
+    const viewportEnd = this.getSampleForXValue(this.width)
     let startOverlap = 0,
       endOverlap = 0
-    for (const clipView of this.track.clipViews) {
-      if (clipView == clipViewController.clipView) {
-        continue
+    // A clip enveloping or enveloped by its neighbor is invalid and shows no crossfade with it.
+    if (previousClipView && previousClipView.getEndPosition() < clipViewController.endPosition) {
+      startOverlap = Math.max(0, previousClipView.getEndPosition() - clipViewController.startPosition)
+      const controller = this.clipViewControllerMap.get(previousClipView)
+      if (controller) {
+        controller.endCrossFadeDuration = startOverlap
+        controller.draw(viewportStart, viewportEnd)
+        this.dragInProgressClipViews.add(controller)
       }
-      const startsBefore = clipView.startPosition < clipViewController.startPosition
-      const endsBefore = clipView.getEndPosition() < clipViewController.endPosition
-      if (startsBefore) {
-        if (!endsBefore) {
-          // one envelopes the other - invalid
-        } else {
-          startOverlap = Math.max(0, clipView.getEndPosition() - clipViewController.startPosition)
-          const controller = this.clipViewControllerMap.get(clipView)!
-          controller.endCrossFadeDuration = startOverlap
-          controller.draw(this.getSampleForXValue(0), this.getSampleForXValue(this.width))
-          this.dragInProgressClipViews.add(controller)
-        }
-      } else {
-        if (endsBefore) {
-          // one envelopes the other - invalid
-        } else {
-          endOverlap = Math.max(0, clipViewController.endPosition - clipView.startPosition)
-          const controller = this.clipViewControllerMap.get(clipView)!
-          controller.startCrossFadeDuration = endOverlap
-          controller.draw(this.getSampleForXValue(0), this.getSampleForXValue(this.width))
-          this.dragInProgressClipViews.add(controller)
-        }
+    }
+    if (nextClipView && nextClipView.getEndPosition() >= clipViewController.endPosition) {
+      endOverlap = Math.max(0, clipViewController.endPosition - nextClipView.startPosition)
+      const controller = this.clipViewControllerMap.get(nextClipView)
+      if (controller) {
+        controller.startCrossFadeDuration = endOverlap
+        controller.draw(viewportStart, viewportEnd)
+        this.dragInProgressClipViews.add(controller)
       }
     }
     clipViewController.startCrossFadeDuration = startOverlap
@@ -788,7 +786,7 @@ export class Waveform extends TrackListItemController {
     if (this != clipViewController.waveform) {
       clipViewController.switchParent(this)
     } else {
-      clipViewController.draw(this.getSampleForXValue(0), this.getSampleForXValue(this.width))
+      clipViewController.draw(viewportStart, viewportEnd)
     }
   }
 
@@ -860,15 +858,9 @@ export class ClipViewController extends TrackListItemController {
 
   private readonly infoButton = document.createElement('button')
   private pathElementTranslation = 0
-  private fullClipPreview = false
   private readonly transcriptionOverlay: TranscriptionOverlayController
-  private resizeInfo: {
-    side: 'left' | 'right'
-    oldStartX: number
-    oldWidth: number
-    fullClipStartX: number
-    fullClipEndX: number
-  } | null = null
+  /** A handle drag in progress: `shift` is the samples it moves that side's edge by, later positive. */
+  private resizeInfo: { side: 'left' | 'right'; shift: number } | null = null
 
   constructor(
     readonly trackListController: TrackListController,
@@ -1000,6 +992,7 @@ export class ClipViewController extends TrackListItemController {
     this.startCrossFadePathElement.classList = 'waveform-path waveform-crossfade-path'
     this.endCrossFadePathElement.classList = 'waveform-path waveform-crossfade-path'
     this.fullClipGrayFilter.classList.add('clip-view-trim-overlay')
+    this.fullClipGrayFilter.setAttribute('y', `${Waveform.HEADER_HEIGHT}`)
 
     this.headerElement.addEventListener('mousedown', (event) => {
       if (event.button == 0 && event.buttons == 1) {
@@ -1040,11 +1033,26 @@ export class ClipViewController extends TrackListItemController {
   }
 
   get startPosition() {
-    return this.clipView.startPosition + this.draggedShift
+    return this.clipView.startPosition + this.draggedShift + this.edgeShift('left')
   }
 
   get endPosition() {
-    return this.clipView.getEndPosition() + this.draggedShift
+    return this.clipView.getEndPosition() + this.draggedShift + this.edgeShift('right')
+  }
+
+  /** Samples the resize in progress moves the `side` edge by. */
+  private edgeShift(side: 'left' | 'right') {
+    return this.resizeInfo?.side === side ? this.resizeInfo.shift : 0
+  }
+
+  /** Where the clip's source audio starts on the timeline; trimming either side leaves it in place. */
+  private get clipStartPosition() {
+    return this.clipView.startPosition + this.draggedShift - this.clipView.offset
+  }
+
+  /** A resize previews the whole clip, graying the audio trimmed off the dragged side. */
+  private get fullClipPreview() {
+    return this.resizeInfo != null
   }
 
   updateSpectrogramFallbackFill(): void {
@@ -1064,7 +1072,7 @@ export class ClipViewController extends TrackListItemController {
       return {
         clip: this.clipView.clip,
         offset: 0,
-        startPosition: this.startPosition - this.clipView.offset,
+        startPosition: this.clipStartPosition,
         length: this.clipView.clip.length,
       }
     }
@@ -1080,7 +1088,7 @@ export class ClipViewController extends TrackListItemController {
     if (this.fullClipPreview) {
       return {
         clip: this.clipView.clip,
-        timelineStart: this.clipView.startPosition - this.clipView.offset,
+        timelineStart: this.clipStartPosition,
         sourceStart: 0,
         length: this.clipView.clip.length,
         startFadeLength: 0,
@@ -1138,6 +1146,20 @@ export class ClipViewController extends TrackListItemController {
     )
     this.spectrogramFallbackElement.x.baseVal.value = fallbackStartX
     this.spectrogramFallbackElement.width.baseVal.value = Math.max(0, fallbackEndX - fallbackStartX)
+    // A resize grays the audio its dragged side trims off.
+    const resizedSide = this.resizeInfo?.side
+    const trimmedStartX = Math.max(
+      this.getXValueForSample(resizedSide === 'left' ? this.clipStartPosition : this.endPosition),
+      -10000,
+    )
+    const trimmedEndX = Math.min(
+      this.getXValueForSample(
+        resizedSide === 'left' ? this.startPosition : this.clipStartPosition + this.clipView.clip.length,
+      ),
+      10000,
+    )
+    this.fullClipGrayFilter.x.baseVal.value = trimmedStartX
+    this.fullClipGrayFilter.width.baseVal.value = resizedSide ? Math.max(0, trimmedEndX - trimmedStartX) : 0
     // for some reason this breaks down when zooming in too much, so limit to +/-10000
     const xStart = Math.max(this.getXValueForSample(this.startPosition + this.startCrossFadeDuration), -10000)
     const startCrossFadeLength = this.startCrossFadeDuration / this.samplesPerUnit
@@ -1183,7 +1205,7 @@ export class ClipViewController extends TrackListItemController {
     const sourceEndSample = this.fullClipPreview
       ? this.clipView.clip.length
       : this.clipView.offset + this.clipView.length
-    const timelineStartSample = this.fullClipPreview ? this.startPosition - this.clipView.offset : this.startPosition
+    const timelineStartSample = this.fullClipPreview ? this.clipStartPosition : this.startPosition
     this.transcriptionOverlay.draw(
       sourceStartSample,
       sourceEndSample,
@@ -1207,7 +1229,7 @@ export class ClipViewController extends TrackListItemController {
     }
   }
 
-  async drawWaveform(startSample: number, endSample: number, fullClip = false) {
+  async drawWaveform(startSample: number, endSample: number) {
     if (!this.clipView.clip.audioPresent) {
       this.svgPathElement.setAttribute('d', '')
       this.startCrossFadePathElement.setAttribute('d', '')
@@ -1215,18 +1237,19 @@ export class ClipViewController extends TrackListItemController {
       return
     }
     let realStart, realEnd: number
+    const offset = this.clipView.offset + this.edgeShift('left')
     const clipViewStart = this.getXValueForSample(this.startPosition)
     const startSampleX = this.getXValueForSample(startSample)
     const crossFadeStartLastX = this.getXValueForSample(this.startCrossFadeDuration + this.startPosition)
     const crossFadeEndFirstX = this.getXValueForSample(this.endPosition - this.endCrossFadeDuration)
 
-    realStart = Math.max(0, startSample - this.startPosition) + this.clipView.offset
-    realEnd = Math.min(endSample - this.startPosition, this.clipView.length) + this.clipView.offset
+    realStart = Math.max(0, startSample - this.startPosition) + offset
+    realEnd = Math.min(endSample, this.endPosition) - this.startPosition + offset
 
     this.pathElementTranslation = Math.max(startSampleX, clipViewStart)
 
-    if (fullClip) {
-      let extendedShift = clipViewStart <= 0 ? 0 : Math.min(this.startPosition - startSample, this.clipView.offset)
+    if (this.fullClipPreview) {
+      let extendedShift = clipViewStart <= 0 ? 0 : Math.min(this.startPosition - startSample, offset)
       extendedShift = Math.floor(extendedShift / this.samplesPerUnit) * this.samplesPerUnit
       this.pathElementTranslation -= extendedShift / this.samplesPerUnit
       realStart -= extendedShift
@@ -1297,7 +1320,6 @@ export class ClipViewController extends TrackListItemController {
   }
 
   reset() {
-    this.fullClipPreview = false
     this.waveform.clipViewGroupElement.appendChild(this.clipElementsGroup)
     this.waveform.aboveClipViewGroupElement.appendChild(this.handleElementsGroup)
 
@@ -1310,8 +1332,6 @@ export class ClipViewController extends TrackListItemController {
     this.svgPathElement.setAttribute('transform', '')
     this.startCrossFadePathElement.setAttribute('transform', '')
     this.endCrossFadePathElement.setAttribute('transform', '')
-    this.leftHandle.setAttribute('transform', '')
-    this.rightHandle.setAttribute('transform', '')
 
     this.draw(this.getSampleForXValue(0), this.getSampleForXValue(this.waveform.width))
   }
@@ -1339,74 +1359,24 @@ export class ClipViewController extends TrackListItemController {
   }
 
   updateClipViewResize(shift: number) {
-    switch (this.resizeInfo?.side) {
-      case 'left':
-        const maxLeftShift = this.clipView.offset / this.samplesPerUnit
-        const minLeftShift = this.clipView.length / this.samplesPerUnit
-        shift = Math.max(Math.min(shift, minLeftShift + 1), -maxLeftShift)
-        this.leftHandle.setAttribute('transform', `translate(${shift},0)`)
-
-        this.fullClipGrayFilter.width.baseVal.value = maxLeftShift + shift
-        this.headerElement.x.baseVal.value = this.resizeInfo.oldStartX + shift
-        this.headerElement.width.baseVal.value = this.resizeInfo.oldWidth - shift
-        this.rectElement.x.baseVal.value = this.resizeInfo.oldStartX + shift
-        this.rectElement.width.baseVal.value = this.resizeInfo.oldWidth - shift
-        this.videoHitElement.x.baseVal.value = this.resizeInfo.oldStartX + shift
-        this.videoHitElement.width.baseVal.value = Math.max(0, this.resizeInfo.oldWidth - shift)
-
-        this.layoutHeader(this.resizeInfo.oldStartX + shift, this.resizeInfo.oldWidth - shift)
-        break
-      case 'right':
-        const maxRightShift =
-          (this.clipView.clip.length - this.clipView.length - this.clipView.offset) / this.samplesPerUnit
-        const minRightShift = -this.clipView.length / this.samplesPerUnit
-        shift = Math.min(Math.max(shift, minRightShift - 1), maxRightShift)
-        this.rightHandle.setAttribute('transform', `translate(${shift},0)`)
-
-        this.fullClipGrayFilter.width.baseVal.value = maxRightShift - shift
-        this.fullClipGrayFilter.x.baseVal.value = this.resizeInfo.oldStartX + this.resizeInfo.oldWidth + shift
-        this.headerElement.width.baseVal.value = this.resizeInfo.oldWidth + shift
-        this.rectElement.width.baseVal.value = this.resizeInfo.oldWidth + shift
-        this.videoHitElement.width.baseVal.value = Math.max(0, this.resizeInfo.oldWidth + shift)
-        this.layoutHeader(this.resizeInfo.oldStartX, this.resizeInfo.oldWidth + shift)
-        break
-    }
+    if (!this.resizeInfo) return
+    const edgeShift = this.handleShiftSamples(this.resizeInfo.side, shift)
+    if (edgeShift === this.resizeInfo.shift) return
+    this.resizeInfo.shift = edgeShift
+    // Drawing the trimmed clip over its track also redraws the crossfades with the neighbors it overlaps.
+    this.waveform.drawClipViewOver(this)
   }
 
   async finishClipViewResize(shift: number) {
+    const { side } = this.resizeInfo!
+    const edgeShift = this.handleShiftSamples(side, shift)
+    const { clip, offset, startPosition, length } = this.clipView
+    const newClipView =
+      side === 'left'
+        ? new ClipView(clip, offset + edgeShift, startPosition + edgeShift, length - edgeShift)
+        : new ClipView(clip, offset, startPosition, length + edgeShift)
+    this.leftHandle.dataset.active = 'false'
     this.rightHandle.dataset.active = 'false'
-    let newClipView: ClipView
-    switch (this.resizeInfo!.side) {
-      case 'left': {
-        const maxLeftShift = this.clipView.offset / this.samplesPerUnit
-        const minLeftShift = this.clipView.length / this.samplesPerUnit
-        shift = Math.max(Math.min(shift, minLeftShift + 1), -maxLeftShift)
-        const shiftSamples = Math.round(shift * this.samplesPerUnit)
-        newClipView = new ClipView(
-          this.clipView.clip,
-          this.clipView.offset + shiftSamples,
-          this.clipView.startPosition + shiftSamples,
-          this.clipView.length - shiftSamples,
-        )
-        break
-      }
-      case 'right': {
-        const maxRightShift =
-          (this.clipView.clip.length - this.clipView.length - this.clipView.offset) / this.samplesPerUnit
-        const minRightShift = -this.clipView.length / this.samplesPerUnit
-        shift = Math.min(Math.max(shift, minRightShift - 1), maxRightShift)
-        const shiftSamples = Math.round(shift * this.samplesPerUnit)
-        newClipView = new ClipView(
-          this.clipView.clip,
-          this.clipView.offset,
-          this.clipView.startPosition,
-          this.clipView.length + shiftSamples,
-        )
-        break
-      }
-    }
-    this.fullClipGrayFilter.width.baseVal.value = 0
-    this.fullClipPreview = false
     this.resizeInfo = null
     this.waveform.requestSpectrogramDraw()
     this.waveform.requestVideoDraw()
@@ -1415,7 +1385,8 @@ export class ClipViewController extends TrackListItemController {
       clipViewsEqual(this.clipView, newClipView) ||
       !this.waveform.track.canReplaceClipView(clipViewIndex, newClipView)
     ) {
-      this.reset()
+      // Also restores the crossfades the preview changed on the neighbors.
+      this.waveform.drawAudioData()
       return
     }
     await this.trackListController.history.execute(
@@ -1423,66 +1394,28 @@ export class ClipViewController extends TrackListItemController {
     )
   }
 
-  private readonly leftHandleMouseDownListener = (event: MouseEvent) => {
-    this.fullClipPreview = true
-    const clipView = this.clipView
-    const maxLeftShift = this.clipView.offset / this.samplesPerUnit
-    const fullClipStartX = this.getXValueForSample(this.clipView.startPosition - this.clipView.offset)
-    this.resizeInfo = {
-      side: 'left',
-      oldStartX: this.headerElement.x.baseVal.value,
-      oldWidth: this.headerElement.width.baseVal.value,
-      fullClipStartX: fullClipStartX,
-      fullClipEndX: fullClipStartX + this.clipView.clip.length / this.samplesPerUnit,
-    }
+  /** Samples dragging the `side` handle `shift` pixels moves its edge by, keeping the clip within its audio. */
+  private handleShiftSamples(side: 'left' | 'right', shift: number) {
+    const { clip, offset, length } = this.clipView
+    const clamped =
+      side === 'left'
+        ? Math.max(Math.min(shift, length / this.samplesPerUnit + 1), -offset / this.samplesPerUnit)
+        : Math.min(
+            Math.max(shift, -length / this.samplesPerUnit - 1),
+            (clip.length - length - offset) / this.samplesPerUnit,
+          )
+    return Math.round(clamped * this.samplesPerUnit)
+  }
 
-    this.fullClipGrayFilter.x.baseVal.value = this.getXValueForSample(clipView.startPosition - clipView.offset)
-    this.fullClipGrayFilter.width.baseVal.value = maxLeftShift
-    this.fullClipGrayFilter.y.baseVal.value = Waveform.HEADER_HEIGHT
-    this.fullClipGrayFilter.height.baseVal.value = this.waveformHeight + this.waveform.videoLaneHeight
-
-    this.drawTranscriptionOverlay(this.getSampleForXValue(0), this.getSampleForXValue(this.waveform.width))
-    if (this.waveform.displayMode === 'waveform') {
-      void this.drawWaveform(this.translation * this.samplesPerUnit, this.getSampleForXValue(this.waveform.width), true)
-    } else {
-      this.drawBoundingBox(this.translation * this.samplesPerUnit, this.getSampleForXValue(this.waveform.width))
-      this.waveform.requestSpectrogramDraw()
-    }
-    this.waveform.requestVideoDraw()
-
-    this.leftHandle.dataset.active = 'true'
+  private startClipViewResize(side: 'left' | 'right', event: MouseEvent) {
+    this.resizeInfo = { side, shift: 0 }
+    const handle = side === 'left' ? this.leftHandle : this.rightHandle
+    handle.dataset.active = 'true'
+    void this.draw(this.getSampleForXValue(0), this.getSampleForXValue(this.waveform.width))
     this.trackListController.pointerStateManager.startResizingClipView(this, event)
   }
 
-  private readonly rightHandleMouseDownListener = (event: MouseEvent) => {
-    this.fullClipPreview = true
-    const clipView = this.clipView
-    const maxRightShift = (clipView.clip.length - clipView.length - clipView.offset) / this.samplesPerUnit
-    const filterStartX = this.getXValueForSample(clipView.getEndPosition())
-    const fullClipStartX = this.getXValueForSample(this.clipView.startPosition - this.clipView.offset)
-    this.resizeInfo = {
-      side: 'right',
-      oldStartX: this.headerElement.x.baseVal.value,
-      oldWidth: this.headerElement.width.baseVal.value,
-      fullClipStartX: fullClipStartX,
-      fullClipEndX: fullClipStartX + this.clipView.clip.length / this.samplesPerUnit,
-    }
-    this.drawTranscriptionOverlay(this.getSampleForXValue(0), this.getSampleForXValue(this.waveform.width))
+  private readonly leftHandleMouseDownListener = (event: MouseEvent) => this.startClipViewResize('left', event)
 
-    if (this.waveform.displayMode === 'waveform') {
-      void this.drawWaveform(this.translation * this.samplesPerUnit, this.getSampleForXValue(this.waveform.width), true)
-    } else {
-      this.drawBoundingBox(this.translation * this.samplesPerUnit, this.getSampleForXValue(this.waveform.width))
-      this.waveform.requestSpectrogramDraw()
-    }
-    this.waveform.requestVideoDraw()
-
-    this.fullClipGrayFilter.x.baseVal.value = filterStartX
-    this.fullClipGrayFilter.width.baseVal.value = maxRightShift
-    this.fullClipGrayFilter.y.baseVal.value = Waveform.HEADER_HEIGHT
-    this.fullClipGrayFilter.height.baseVal.value = this.waveformHeight + this.waveform.videoLaneHeight
-
-    this.rightHandle.dataset.active = 'true'
-    this.trackListController.pointerStateManager.startResizingClipView(this, event)
-  }
+  private readonly rightHandleMouseDownListener = (event: MouseEvent) => this.startClipViewResize('right', event)
 }
