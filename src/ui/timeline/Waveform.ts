@@ -15,7 +15,6 @@ import {
   SetTrackClipViewsCommand,
   clipViewsEqual,
 } from '../undo/UndoableActions'
-import { TimelineRegionController } from './TimelineRegionController'
 import { createSvgIcon } from '../SvgIcon'
 import type { TrackDisplayMode } from './TrackDisplayMode'
 import {
@@ -66,7 +65,7 @@ export class Waveform extends TrackListItemController {
   private videoDrawFrame = 0
   private mediaOverlayVisible = true
 
-  private readonly dragInProgressClipViews = new Array<ClipViewController>()
+  private readonly dragInProgressClipViews = new Set<ClipViewController>()
   private readonly transientClipViewControllers = new Set<ClipViewController>()
   private readonly spectrogramCanvas = document.createElement('canvas')
   private readonly spectrogramScaleGroupElement = document.createElementNS('http://www.w3.org/2000/svg', 'g')
@@ -647,6 +646,7 @@ export class Waveform extends TrackListItemController {
       this.clipViewControllerMap.delete(controller.clipView)
     }
     this.transientClipViewControllers.delete(controller)
+    this.dragInProgressClipViews.delete(controller)
   }
 
   adoptClipViewController(controller: ClipViewController) {
@@ -676,8 +676,7 @@ export class Waveform extends TrackListItemController {
   ) {
     for (const [clipView, clipViewController] of this.clipViewControllerMap) {
       if (!this.track.clipViews.includes(clipView)) {
-        clipViewController.remove()
-        this.clipViewControllerMap.delete(clipView)
+        this.removeClipViewController(clipViewController)
       }
     }
 
@@ -770,7 +769,7 @@ export class Waveform extends TrackListItemController {
           const controller = this.clipViewControllerMap.get(clipView)!
           controller.endCrossFadeDuration = startOverlap
           controller.draw(this.getSampleForXValue(0), this.getSampleForXValue(this.width))
-          this.dragInProgressClipViews.push(controller)
+          this.dragInProgressClipViews.add(controller)
         }
       } else {
         if (endsBefore) {
@@ -780,7 +779,7 @@ export class Waveform extends TrackListItemController {
           const controller = this.clipViewControllerMap.get(clipView)!
           controller.startCrossFadeDuration = endOverlap
           controller.draw(this.getSampleForXValue(0), this.getSampleForXValue(this.width))
-          this.dragInProgressClipViews.push(controller)
+          this.dragInProgressClipViews.add(controller)
         }
       }
     }
@@ -824,7 +823,7 @@ export class Waveform extends TrackListItemController {
         : 0
       clipViewController.reset()
     })
-    this.dragInProgressClipViews.splice(0)
+    this.dragInProgressClipViews.clear()
   }
 }
 
