@@ -95,9 +95,7 @@ export class LocalMediaStreams {
       LocalMediaStreams.updateScreenListeners(true, track)
     })
     if (mediaStream.getAudioTracks().length == 0) {
-      NotificationsController.showLongDurationMessage(
-        'No screen audio detected.',
-      )
+      NotificationsController.showLongDurationMessage('No screen audio detected.')
     }
     return mediaStream
   }

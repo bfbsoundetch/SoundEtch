@@ -21,7 +21,10 @@ export class AudioFileWritingJob implements ControllableWorkerJob {
     try {
       for (const input of argument) {
         // The DOM types omit the worker-only sync access API.
-        const fileHandle = (await FileSystemUtils.getFileHandle(input.dirname, input.clip.filename)) as FileSystemFileHandle & {
+        const fileHandle = (await FileSystemUtils.getFileHandle(
+          input.dirname,
+          input.clip.filename,
+        )) as FileSystemFileHandle & {
           createSyncAccessHandle(): Promise<FileSystemSyncAccessHandle>
         }
         const summaryFileHandle = (await FileSystemUtils.getFileHandle(

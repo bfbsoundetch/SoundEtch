@@ -1,10 +1,4 @@
-import {
-  BufferTarget,
-  EncodedPacket,
-  EncodedVideoPacketSource,
-  Mp4OutputFormat,
-  Output,
-} from 'mediabunny'
+import { BufferTarget, EncodedPacket, EncodedVideoPacketSource, Mp4OutputFormat, Output } from 'mediabunny'
 import { beforeEach, expect, test, vi } from 'vitest'
 import { VideoTrackRecorder } from './VideoTrackRecorder'
 
@@ -122,10 +116,13 @@ test('failed writer flush and muxer cancellation cannot prevent prefix recovery'
   expect(storage.delete).not.toHaveBeenCalled()
 })
 
-test.each(['trim', 'read'] as const)('a %s recovery failure leaves the recording file untouched for reload', async (step) => {
-  const { recorder, state } = createRecorder()
-  storage[step].mockRejectedValue(new Error('Recovery unavailable'))
-  state.fail(quota())
-  await expect(recorder.finish()).rejects.toThrow('Recovery unavailable')
-  expect(storage.delete).not.toHaveBeenCalled()
-})
+test.each(['trim', 'read'] as const)(
+  'a %s recovery failure leaves the recording file untouched for reload',
+  async (step) => {
+    const { recorder, state } = createRecorder()
+    storage[step].mockRejectedValue(new Error('Recovery unavailable'))
+    state.fail(quota())
+    await expect(recorder.finish()).rejects.toThrow('Recovery unavailable')
+    expect(storage.delete).not.toHaveBeenCalled()
+  },
+)

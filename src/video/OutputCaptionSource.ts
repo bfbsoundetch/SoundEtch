@@ -2,7 +2,12 @@ import type { OutputCaptionCue, OutputCaptionSettings } from '../project/OutputC
 import type { Project } from '../project/Project'
 import type { Summary } from '../project/Summary'
 import type { Track } from '../project/Track'
-import { buildOutputCaptionCues, findOutputCaptionCue, findOutputCaptionWord, resolveOutputCaptionTrack } from './OutputCaptionCues'
+import {
+  buildOutputCaptionCues,
+  findOutputCaptionCue,
+  findOutputCaptionWord,
+  resolveOutputCaptionTrack,
+} from './OutputCaptionCues'
 
 interface PlacedSummary {
   readonly startSample: number
@@ -84,7 +89,15 @@ export class OutputCaptionSource {
         // Prepare any overlapping-interval lookup now, never during frame rendering.
         findOutputCaptionCue(activeWords, previousEnd)
       }
-      speakers.push({ track, audible: project.isTrackAudible(track), cues, lanes, gainSquared: gain * gain, activeWords, wordParents })
+      speakers.push({
+        track,
+        audible: project.isTrackAudible(track),
+        cues,
+        lanes,
+        gainSquared: gain * gain,
+        activeWords,
+        wordParents,
+      })
     }
     this.speakers = speakers
   }
@@ -134,7 +147,9 @@ export class OutputCaptionSource {
         }
       }
       if (selectedHasWord && !hasWord) continue
-      const level = (getLaneEnergy(speaker.lanes[0], start, end) + getLaneEnergy(speaker.lanes[1], start, end)) * speaker.gainSquared
+      const level =
+        (getLaneEnergy(speaker.lanes[0], start, end) + getLaneEnergy(speaker.lanes[1], start, end)) *
+        speaker.gainSquared
       // All candidates share the same 100 ms denominator, so compare energy
       // directly. Strict comparisons preserve project order on equal levels.
       if (level > 0 && ((hasWord && !selectedHasWord) || level > selectedLevel)) {
@@ -162,10 +177,9 @@ function getLaneEnergy(lane: readonly PlacedSummary[], start: number, end: numbe
     if (placement.startSample >= end) break
     const overlapStart = Math.max(start, placement.startSample)
     const overlapEnd = Math.min(end, placement.endSample)
-    energy += placement.summary.getMeanSquaredPeak(
-      overlapStart + placement.sourceShift,
-      overlapEnd + placement.sourceShift,
-    ) * (overlapEnd - overlapStart)
+    energy +=
+      placement.summary.getMeanSquaredPeak(overlapStart + placement.sourceShift, overlapEnd + placement.sourceShift) *
+      (overlapEnd - overlapStart)
   }
   return energy
 }

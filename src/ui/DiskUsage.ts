@@ -6,9 +6,7 @@ export async function getClipDiskUsage(project: Project, clip: Clip): Promise<nu
   const filenames = clip.audioPresent ? [clip.filename, `${clip.filename}_summary`] : []
   filenames.push(...clip.videoSegments.map((segment) => `${clip.filename}_video_${segment.index}`))
   const files = await Promise.all(
-    filenames.map(async (filename) =>
-      (await FileSystemUtils.getFileHandle(project.directoryName, filename)).getFile(),
-    ),
+    filenames.map(async (filename) => (await FileSystemUtils.getFileHandle(project.directoryName, filename)).getFile()),
   )
   return files.reduce((total, file) => total + file.size, 0)
 }

@@ -1950,8 +1950,7 @@ video {
   user-select: none;
 }
 
-.timeline-output-lane:not(.is-automating)
-  > :is(.output-scene-block, .output-scene-boundary, .output-scene-transition) {
+.timeline-output-lane:not(.is-automating) > :is(.output-scene-block, .output-scene-boundary, .output-scene-transition) {
   top: 0.25rem;
   bottom: 0.25rem;
 }

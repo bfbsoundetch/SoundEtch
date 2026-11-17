@@ -83,7 +83,10 @@ export class AudioFileWriter {
       this.writeSamples(silence, overrunSamples)
     }
     const availableSamples = Math.min(this.writeBuffer.length, this.ringBuffer.availableRead())
-    const poppedLength = this.ringBuffer.pop(this.writeBuffer, availableSamples - (availableSamples % this.channelCount))
+    const poppedLength = this.ringBuffer.pop(
+      this.writeBuffer,
+      availableSamples - (availableSamples % this.channelCount),
+    )
     if (poppedLength > 0) {
       if (this.position % 48000 < 128) {
         this.logger.log('Writer heartbeat at frame ' + this.position / Float32Array.BYTES_PER_ELEMENT)

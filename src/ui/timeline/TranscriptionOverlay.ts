@@ -214,7 +214,10 @@ export class TranscriptionOverlayController extends TrackListItemController {
     this.overlayElement.setAttribute('height', `${Math.max(0, laneHeight)}`)
     this.handlesElement.setAttribute('transform', `translate(${overlayX} ${laneTop})`)
 
-    const visibleSourceStart = Math.max(sourceStartSample, sourceStartSample + viewportStartSample - timelineStartSample)
+    const visibleSourceStart = Math.max(
+      sourceStartSample,
+      sourceStartSample + viewportStartSample - timelineStartSample,
+    )
     const visibleSourceEnd = Math.min(sourceEndSample, sourceStartSample + viewportEndSample - timelineStartSample)
     let labelCount = 0
     let placeholderPath = ''
@@ -495,7 +498,9 @@ export class TranscriptionOverlayController extends TrackListItemController {
     if (!text || width <= style.padding) return false
     let wordWidth = style.wordWidths.get(text)
     if (wordWidth === undefined) {
-      const context = (TranscriptionOverlayController.measureContext ??= document.createElement('canvas').getContext('2d')!)
+      const context = (TranscriptionOverlayController.measureContext ??= document
+        .createElement('canvas')
+        .getContext('2d')!)
       context.font = style.font
       const words = text.trim().replace(/\s+/g, ' ')
       const textWidth = context.measureText(words).width

@@ -66,23 +66,26 @@ test('quota write failure retains the saved prefix and closes both handles despi
   expect(recording.closeSummary).toHaveBeenCalledOnce()
 })
 
-test.each(['audio', 'summary'] as const)('quota %s flush failure retains written audio and closes both handles', async (file) => {
-  const samples = new Float32Array([0.25, -0.5])
-  const recording = createRecording(samples)
-  const quota = new DOMException('Flush exceeded quota', 'QuotaExceededError')
-  vi.spyOn(file === 'audio' ? recording.audio : recording.summaryFile, 'flush').mockImplementation(() => {
-    throw quota
-  })
-  const onError = vi.fn()
+test.each(['audio', 'summary'] as const)(
+  'quota %s flush failure retains written audio and closes both handles',
+  async (file) => {
+    const samples = new Float32Array([0.25, -0.5])
+    const recording = createRecording(samples)
+    const quota = new DOMException('Flush exceeded quota', 'QuotaExceededError')
+    vi.spyOn(file === 'audio' ? recording.audio : recording.summaryFile, 'flush').mockImplementation(() => {
+      throw quota
+    })
+    const onError = vi.fn()
 
-  await expect(recording.writer.runFileWritingLoop(onError)).rejects.toBe(quota)
+    await expect(recording.writer.runFileWritingLoop(onError)).rejects.toBe(quota)
 
-  expect(await recordedSamples(recording.audio)).toEqual(samples)
-  expect(recording.summary.length).toBe(2)
-  expect(onError).toHaveBeenCalledExactlyOnceWith(quota)
-  expect(recording.closeAudio).toHaveBeenCalledOnce()
-  expect(recording.closeSummary).toHaveBeenCalledOnce()
-})
+    expect(await recordedSamples(recording.audio)).toEqual(samples)
+    expect(recording.summary.length).toBe(2)
+    expect(onError).toHaveBeenCalledExactlyOnceWith(quota)
+    expect(recording.closeAudio).toHaveBeenCalledOnce()
+    expect(recording.closeSummary).toHaveBeenCalledOnce()
+  },
+)
 
 test('quota while writing a full summary bucket preserves PCM and regenerates the missing saved summary', async () => {
   const samples = new Float32Array(600).fill(-0.5)
@@ -125,10 +128,7 @@ test('quota during final summary write releases both handles and keeps saved aud
   const restored = new Summary(1)
   await restored.populateFromFile(await recording.summaryFile.getFile(), await recording.audio.getFile(), 1)
   expect(restored.length).toBe(2)
-  expect(restored.getSummaryOfRange(0, 2, 256)[0]).toEqual([
-    expect.closeTo(0.25, 4),
-    expect.closeTo(-0.5, 4),
-  ])
+  expect(restored.getSummaryOfRange(0, 2, 256)[0]).toEqual([expect.closeTo(0.25, 4), expect.closeTo(-0.5, 4)])
 })
 
 test('short byte writes preserve all audio samples and their summary length', async () => {

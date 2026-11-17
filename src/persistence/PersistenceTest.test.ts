@@ -43,13 +43,15 @@ test('myTest', async () => {
 
 test('a transaction aborted after its save request succeeds is not exposed as a saved object', async () => {
   const put = IDBObjectStore.prototype.put
-  const abortingPut = vi.spyOn(IDBObjectStore.prototype, 'put').mockImplementation(
-    function (this: IDBObjectStore, value, key) {
-      const request = put.call(this, value, key)
-      request.addEventListener('success', () => this.transaction.abort(), { once: true })
-      return request
-    },
-  )
+  const abortingPut = vi.spyOn(IDBObjectStore.prototype, 'put').mockImplementation(function (
+    this: IDBObjectStore,
+    value,
+    key,
+  ) {
+    const request = put.call(this, value, key)
+    request.addEventListener('success', () => this.transaction.abort(), { once: true })
+    return request
+  })
   const object = new SimplePersisted('aborted recording metadata')
   try {
     await expect(DatabasePersister.save(object)).rejects.toThrow()

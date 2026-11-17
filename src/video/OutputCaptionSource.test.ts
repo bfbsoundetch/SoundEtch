@@ -23,7 +23,13 @@ function audioClip(name: string, words: TranscribedRange[], regions: readonly Au
   return clip
 }
 
-function addSpeaker(project: Project, name: string, words: TranscribedRange[], regions: readonly AudioRegion[], length = 4096) {
+function addSpeaker(
+  project: Project,
+  name: string,
+  words: TranscribedRange[],
+  regions: readonly AudioRegion[],
+  length = 4096,
+) {
   const clip = audioClip(name, words, regions, length)
   const track = new Track(name, 1)
   track.addClipView(new ClipView(clip, 0, 0, length))
@@ -36,12 +42,25 @@ function word(text: string, startSample = 0, endSample = 4096): TranscribedRange
 }
 
 function text(source: OutputCaptionSource, sample: number) {
-  return source.getCue(sample)?.words.map((entry) => entry.text).join(' ') ?? null
+  return (
+    source
+      .getCue(sample)
+      ?.words.map((entry) => entry.text)
+      .join(' ') ?? null
+  )
 }
 
 test('separate speakers alternate at turns and the louder simultaneous speaker wins', () => {
   const project = new Project('speakers', RATE)
-  addSpeaker(project, 'alpha', [word('alpha!', 0, 1536), word('again!', 3072, 4096)], [[0, 1536, 0.4], [3072, 4096, 0.4]])
+  addSpeaker(
+    project,
+    'alpha',
+    [word('alpha!', 0, 1536), word('again!', 3072, 4096)],
+    [
+      [0, 1536, 0.4],
+      [3072, 4096, 0.4],
+    ],
+  )
   addSpeaker(project, 'beta', [word('beta!', 1024, 3072)], [[1024, 3072, 0.5]])
   const source = new OutputCaptionSource(project, LOUD)
   expect(source.hasCues).toBe(true)
@@ -56,7 +75,15 @@ test('separate speakers alternate at turns and the louder simultaneous speaker w
 
 test('the centered short-term window follows local audio rather than whole-clip loudness', () => {
   const project = new Project('local level', RATE)
-  addSpeaker(project, 'alpha', [word('alpha!')], [[0, 2048, 0.8], [2048, 4096, 0.2]])
+  addSpeaker(
+    project,
+    'alpha',
+    [word('alpha!')],
+    [
+      [0, 2048, 0.8],
+      [2048, 4096, 0.2],
+    ],
+  )
   addSpeaker(project, 'beta', [word('beta!')], [[0, 4096, 0.5]])
   const source = new OutputCaptionSource(project, LOUD)
   expect(text(source, 1792)).toBe('Alpha!')
@@ -122,7 +149,15 @@ test('untranscribed, trimmed-away and video-only words cannot steal captions', (
 
 test('offsets, trims, repeated placements and overlapping placement windows use source PCM', () => {
   const project = new Project('placements', RATE)
-  const clip = audioClip('source', [word('low!', 0, 1024), word('high!', 1024, 2048)], [[0, 1024, 0.2], [1024, 2048, 0.8]], 2048)
+  const clip = audioClip(
+    'source',
+    [word('low!', 0, 1024), word('high!', 1024, 2048)],
+    [
+      [0, 1024, 0.2],
+      [1024, 2048, 0.8],
+    ],
+    2048,
+  )
   const track = new Track('placed', 1)
   track.addClipView(new ClipView(clip, 1024, 512, 512))
   track.addClipView(new ClipView(clip, 0, 2048, 1024))
@@ -225,7 +260,11 @@ test('automatic and manual sources retain fixed-track behavior without audio-lev
   expect(text(legacy, 256)).toBe('Alpha!')
   expect(automatic.getCue(1024)).toBeNull()
   project.setTrackMuted(beta.track, true)
-  const manual = new OutputCaptionSource(project, { ...DEFAULT_OUTPUT_CAPTIONS, followLoudest: false, track: beta.track })
+  const manual = new OutputCaptionSource(project, {
+    ...DEFAULT_OUTPUT_CAPTIONS,
+    followLoudest: false,
+    track: beta.track,
+  })
   expect(text(manual, 1024)).toBe('Beta!')
   alpha.clip.transcription = [word('changed!')]
   alpha.track.clipViews.length = 0

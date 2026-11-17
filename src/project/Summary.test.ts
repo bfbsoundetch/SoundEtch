@@ -157,11 +157,7 @@ test('speaker level estimates use negative peaks and return zero outside represe
 test('speaker levels read restored summaries and their partial final bucket', async () => {
   const summary = new Summary(1)
   const values = new Int16Array([8192, -8192, 16384, -16384, 32767, -32768])
-  await summary.populateFromFile(
-    new File([values], 'summary'),
-    new File([new Float32Array(600)], 'audio'),
-    1,
-  )
+  await summary.populateFromFile(new File([values], 'summary'), new File([new Float32Array(600)], 'audio'), 1)
 
   expect(summary.getMeanSquaredPeak(512, 768)).toBe(1)
   expect(summary.getMeanSquaredPeak(128, 600)).toBeCloseTo((0.0625 * 128 + 0.25 * 256 + 88) / 472, 4)
@@ -233,10 +229,7 @@ test('a summary write failure still represents all saved input frames in memory'
   expect(() => summary.summarizeInterleavedData(data, data.length)).toThrow(quota)
 
   expect(summary.length).toBe(600)
-  expect(summary.getSummaryOfRange(512, 600, 256)[0]).toEqual([
-    expect.closeTo(-0.5, 4),
-    expect.closeTo(-0.5, 4),
-  ])
+  expect(summary.getSummaryOfRange(512, 600, 256)[0]).toEqual([expect.closeTo(-0.5, 4), expect.closeTo(-0.5, 4)])
   expect(handle.write).toHaveBeenCalledOnce()
   expect(() => summary.finishSummarizing()).not.toThrow()
   expect(handle.write).toHaveBeenCalledOnce()
@@ -285,11 +278,7 @@ test('a partial summary bucket is rebuilt only from the missing saved audio tail
   const readTail = vi.spyOn(mainFile, 'slice')
   const summary = new Summary(1)
 
-  await summary.populateFromFile(
-    new File([persisted, new Uint8Array([255, 255, 255])], 'summary'),
-    mainFile,
-    1,
-  )
+  await summary.populateFromFile(new File([persisted, new Uint8Array([255, 255, 255])], 'summary'), mainFile, 1)
 
   expect(summary.length).toBe(600)
   expect(readTail).toHaveBeenCalledExactlyOnceWith(256 * 4, 600 * 4)

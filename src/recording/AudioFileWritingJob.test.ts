@@ -26,7 +26,10 @@ beforeAll(async () => {
 beforeEach(() => {
   messages = []
   scope.controllable = null
-  vi.stubGlobal('postMessage', vi.fn((message: WorkerMessage) => messages.push(message)))
+  vi.stubGlobal(
+    'postMessage',
+    vi.fn((message: WorkerMessage) => messages.push(message)),
+  )
   vi.mocked(ControllableWorkerJobFactory.getControllableWorkerJob).mockImplementation((_jobType, argument) =>
     AudioFileWritingJob.create(argument),
   )
@@ -40,33 +43,36 @@ afterAll(() => {
   vi.unstubAllGlobals()
 })
 
-test.each([0, 1])('setup failure on input %i closes every acquired handle and always emits error then finished', async (failedInput) => {
-  const inputs = [recordingInput('first'), recordingInput('second')]
-  const handles = createHandles(inputs)
-  const quota = new DOMException('Cannot acquire summary storage', 'QuotaExceededError')
-  const failingSummary = handles.get(`${inputs[failedInput].clip.filename}_summary`)!
-  vi.spyOn(failingSummary, 'createSyncAccessHandle').mockRejectedValue(quota)
-  const firstAudio = handles.get(inputs[0].clip.filename)!
-  vi.mocked(firstAudio.close).mockImplementation(() => {
-    MemoryBackedFileSystemSyncAccessHandle.prototype.close.call(firstAudio)
-    throw new Error('A secondary cleanup failure')
-  })
-  useHandles(handles)
+test.each([0, 1])(
+  'setup failure on input %i closes every acquired handle and always emits error then finished',
+  async (failedInput) => {
+    const inputs = [recordingInput('first'), recordingInput('second')]
+    const handles = createHandles(inputs)
+    const quota = new DOMException('Cannot acquire summary storage', 'QuotaExceededError')
+    const failingSummary = handles.get(`${inputs[failedInput].clip.filename}_summary`)!
+    vi.spyOn(failingSummary, 'createSyncAccessHandle').mockRejectedValue(quota)
+    const firstAudio = handles.get(inputs[0].clip.filename)!
+    vi.mocked(firstAudio.close).mockImplementation(() => {
+      MemoryBackedFileSystemSyncAccessHandle.prototype.close.call(firstAudio)
+      throw new Error('A secondary cleanup failure')
+    })
+    useHandles(handles)
 
-  await startWorker(inputs)
+    await startWorker(inputs)
 
-  expect(messages).toEqual([
-    { type: 'error', error: { name: 'QuotaExceededError', message: quota.message } },
-    { type: 'finished' },
-  ])
-  expect(Object.getPrototypeOf(messages[0].error)).toBe(Object.prototype)
-  for (let i = 0; i <= failedInput; ++i) {
-    expect(handles.get(inputs[i].clip.filename)!.close).toHaveBeenCalledOnce()
-    expect(handles.get(`${inputs[i].clip.filename}_summary`)!.close).toHaveBeenCalledTimes(i < failedInput ? 1 : 0)
-  }
-  for (const handle of handles.values()) expect(handle.write).not.toHaveBeenCalled()
-  expect(scope.controllable).toBeNull()
-})
+    expect(messages).toEqual([
+      { type: 'error', error: { name: 'QuotaExceededError', message: quota.message } },
+      { type: 'finished' },
+    ])
+    expect(Object.getPrototypeOf(messages[0].error)).toBe(Object.prototype)
+    for (let i = 0; i <= failedInput; ++i) {
+      expect(handles.get(inputs[i].clip.filename)!.close).toHaveBeenCalledOnce()
+      expect(handles.get(`${inputs[i].clip.filename}_summary`)!.close).toHaveBeenCalledTimes(i < failedInput ? 1 : 0)
+    }
+    for (const handle of handles.values()) expect(handle.write).not.toHaveBeenCalled()
+    expect(scope.controllable).toBeNull()
+  },
+)
 
 test('one input quota failure immediately reports once and stops every other writer before consuming queued audio', async () => {
   const inputs = [recordingInput('first'), recordingInput('second')]
@@ -86,7 +92,9 @@ test('one input quota failure immediately reports once and stops every other wri
       errorBeforeCleanup.push([...handles.values()].every((handle) => vi.mocked(handle.close).mock.calls.length === 0))
     }
     if (message.type === 'finished') {
-      finishedAfterCleanup.push([...handles.values()].every((handle) => vi.mocked(handle.close).mock.calls.length === 1))
+      finishedAfterCleanup.push(
+        [...handles.values()].every((handle) => vi.mocked(handle.close).mock.calls.length === 1),
+      )
     }
   })
 

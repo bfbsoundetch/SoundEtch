@@ -48,7 +48,10 @@ export class OutputCaptionsController {
   private shownShadowSize = NaN
   private readonly observedClips = new WeakSet<Clip>()
 
-  constructor(stage: HTMLElement, private readonly canEdit: () => boolean) {
+  constructor(
+    stage: HTMLElement,
+    private readonly canEdit: () => boolean,
+  ) {
     this.controls.className = 'output-panel-caption-controls'
     this.enabled.id = 'output-captions-enabled'
     this.enabled.type = 'checkbox'
@@ -93,7 +96,17 @@ export class OutputCaptionsController {
       this.field('Shadow color', this.shadowColor),
       this.note,
     )
-    for (const control of [this.enabled, this.source, this.position, this.font, this.size, this.color, this.highlight, this.shadowSize, this.shadowColor]) {
+    for (const control of [
+      this.enabled,
+      this.source,
+      this.position,
+      this.font,
+      this.size,
+      this.color,
+      this.highlight,
+      this.shadowSize,
+      this.shadowColor,
+    ]) {
       control.addEventListener('change', () => void this.commit())
     }
     for (const control of [this.size, this.color, this.highlight, this.shadowSize, this.shadowColor]) {
@@ -137,9 +150,9 @@ export class OutputCaptionsController {
       })
     }
     const tracks = project.getTracks()
-    const changed = tracks.length !== this.tracks.length || tracks.some((track, index) =>
-      track !== this.tracks[index] || this.source.options[index + 2]?.text !== track.name,
-    )
+    const changed =
+      tracks.length !== this.tracks.length ||
+      tracks.some((track, index) => track !== this.tracks[index] || this.source.options[index + 2]?.text !== track.name)
     if (changed || this.source.options.length === 0) {
       this.tracks = [...tracks]
       this.source.replaceChildren(
@@ -162,7 +175,15 @@ export class OutputCaptionsController {
     if (this.enabled.disabled === editable) this.enabled.disabled = !editable
     if (controlsEditable !== this.controlsEditable) {
       this.controlsEditable = controlsEditable
-      for (const control of [this.source, this.position, this.font, this.size, this.color, this.highlight, this.shadowSize]) {
+      for (const control of [
+        this.source,
+        this.position,
+        this.font,
+        this.size,
+        this.color,
+        this.highlight,
+        this.shadowSize,
+      ]) {
         control.disabled = !controlsEditable
       }
     }
@@ -181,7 +202,7 @@ export class OutputCaptionsController {
     if (settings.followLoudest && this.project && this.captionSource?.updateLevels(this.project)) {
       this.refreshSourceNote()
     }
-    const cue = settings.enabled ? this.captionSource?.getCue(sample) ?? null : null
+    const cue = settings.enabled ? (this.captionSource?.getCue(sample) ?? null) : null
     if (!cue) {
       if (!this.canvas.hidden) this.canvas.hidden = true
       this.paintedCue = null
@@ -193,7 +214,10 @@ export class OutputCaptionsController {
       paintOutputCaption(this.context, cue, word, settings, 0, 0, this.canvas.width, this.canvas.height)
       this.canvas.dataset.position = settings.position ?? 'bottom'
       const text = cue.words.map((word) => word.text).join(' ')
-      this.canvas.setAttribute('aria-label', `Captions: ${text}${word < 0 ? '' : ` — spoken word: ${cue.words[word].text}`}`)
+      this.canvas.setAttribute(
+        'aria-label',
+        `Captions: ${text}${word < 0 ? '' : ` — spoken word: ${cue.words[word].text}`}`,
+      )
       this.paintedCue = cue
       this.paintedWord = word
       this.paintedSettings = settings
@@ -286,13 +310,17 @@ export class OutputCaptionsController {
     try {
       const action = {
         perform: async () => {
-          if (await ProjectManager.getActiveProject() !== project || !this.canEdit()) throw cancelledEdit
+          if ((await ProjectManager.getActiveProject()) !== project || !this.canEdit()) throw cancelledEdit
           if (requested.track && !project.getTracks().includes(requested.track)) throw cancelledEdit
           command ??= new SetOutputCaptionsCommand(project, project.outputCaptions, requested)
           await command.perform()
         },
-        undo: async () => { await command!.undo() },
-        save: async () => { await command!.save() },
+        undo: async () => {
+          await command!.undo()
+        },
+        save: async () => {
+          await command!.save()
+        },
         toString: () => 'change output captions',
       }
       await editorHistory.execute(action)

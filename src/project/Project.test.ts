@@ -89,7 +89,12 @@ test('opening projects migrates shadow on/off choices without overwriting a save
       [true, 0, 0],
     ] as const) {
       const project = new Project('legacy caption shadow', 48_000)
-      const legacy = { ...DEFAULT_OUTPUT_CAPTIONS, shadowEnabled: enabled, position: 'top' as const, shadowColor: '#112233' }
+      const legacy = {
+        ...DEFAULT_OUTPUT_CAPTIONS,
+        shadowEnabled: enabled,
+        position: 'top' as const,
+        shadowColor: '#112233',
+      }
       delete legacy.shadowSize
       if (savedSize !== undefined) legacy.shadowSize = savedSize
       project.outputCaptions = legacy
@@ -101,8 +106,10 @@ test('opening projects migrates shadow on/off choices without overwriting a save
       expect(opened.outputCaptions.shadowColor).toBe('#112233')
       expect(opened.outputCaptions).not.toHaveProperty('shadowEnabled')
       await ProjectManager.saveProject(opened)
-      const record = (await DatabasePersister.getPersistedObjectGraph(project.id!)).find((entry) => entry.id === project.id)!
-      const restored = await DatabasePersister.fromPersistedObject(record) as Project
+      const record = (await DatabasePersister.getPersistedObjectGraph(project.id!)).find(
+        (entry) => entry.id === project.id,
+      )!
+      const restored = (await DatabasePersister.fromPersistedObject(record)) as Project
       expect(restored.outputCaptions.shadowSize).toBe(expectedSize)
       expect(restored.outputCaptions).not.toHaveProperty('shadowEnabled')
     }

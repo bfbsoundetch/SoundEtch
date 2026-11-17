@@ -1176,9 +1176,7 @@ export class TrackListController {
   private async showWelcomeOnEmptyProject() {
     const project = await ProjectManager.getActiveProject()
     const showWelcome =
-      project.getTracks().length == 0 &&
-      project.getClips().length == 0 &&
-      AudioControl.getState() == AudioState.STOPPED
+      project.getTracks().length == 0 && project.getClips().length == 0 && AudioControl.getState() == AudioState.STOPPED
     document.getElementById('timeline-body')!.hidden = showWelcome
     document.getElementById('welcome')!.hidden = !showWelcome
     TopPanelController.getInstance().setHidden(showWelcome)

@@ -56,10 +56,7 @@ export class WorkerController {
     })
   }
 
-  setAudioWorkletNodes(
-    audioWorkletNodes: Array<AudioWorkletNode>,
-    onError: ((error: Error) => void) | null = null,
-  ) {
+  setAudioWorkletNodes(audioWorkletNodes: Array<AudioWorkletNode>, onError: ((error: Error) => void) | null = null) {
     this.onError = onError
     this.audioWorkletNodes = audioWorkletNodes
     let finishedNodes = 0

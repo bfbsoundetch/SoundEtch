@@ -34,7 +34,8 @@ export function buildOutputCaptionCues(track: Pick<Track, 'clipViews'>, sampleRa
         (fragment.length >= MAX_WORDS ||
           characters + 1 + word.text.length > MAX_CHARACTERS ||
           word.startSample - endSample > sampleRate * MAX_PAUSE_SECONDS)
-      ) flush()
+      )
+        flush()
       characters += (fragment.length > 0 ? 1 : 0) + word.text.length
       fragment.push(word)
       endSample = Math.max(endSample, word.endSample)
@@ -58,11 +59,15 @@ export function buildOutputCaptionCues(track: Pick<Track, 'clipViews'>, sampleRa
         // A text edit can replace one timed atom with several words. It has no finer
         // alignment, so share its played interval equally without extending it.
         const duration = entry.endSample - entry.startSample
-        tokens.forEach((text, index) => words.push(Object.freeze({
-          text,
-          startSample: entry.startSample + duration * index / tokens.length,
-          endSample: entry.startSample + duration * (index + 1) / tokens.length,
-        })))
+        tokens.forEach((text, index) =>
+          words.push(
+            Object.freeze({
+              text,
+              startSample: entry.startSample + (duration * index) / tokens.length,
+              endSample: entry.startSample + (duration * (index + 1)) / tokens.length,
+            }),
+          ),
+        )
       }
     }
     addFragments(words)
@@ -87,9 +92,12 @@ export function findOutputCaptionWord(cue: OutputCaptionCue, sample: number): nu
 export function resolveOutputCaptionTrack(project: Project, settings: Readonly<OutputCaptionSettings>): Track | null {
   for (const track of project.getTracks()) {
     if (settings.track === null ? !project.isTrackAudible(track) : settings.track !== track) continue
-    if (getTrackTranscriptEntries(track).some((entry) =>
-      entry.kind === undefined && entry.endSample > Math.max(0, entry.startSample),
-    )) return track
+    if (
+      getTrackTranscriptEntries(track).some(
+        (entry) => entry.kind === undefined && entry.endSample > Math.max(0, entry.startSample),
+      )
+    )
+      return track
   }
   return null
 }
@@ -121,7 +129,9 @@ function prepareLookup(intervals: readonly TimedInterval[]): IntervalLookup {
   if (overlaps) {
     while (leafCount < intervals.length) leafCount *= 2
     ends = new Float64Array(leafCount * 2).fill(-Infinity)
-    intervals.forEach((interval, index) => { ends![leafCount + index] = interval.endSample })
+    intervals.forEach((interval, index) => {
+      ends![leafCount + index] = interval.endSample
+    })
     for (let index = leafCount - 1; index > 0; index--) ends[index] = Math.max(ends[index * 2], ends[index * 2 + 1])
   }
   const lookup = { ends, leafCount }

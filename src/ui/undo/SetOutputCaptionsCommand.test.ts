@@ -10,7 +10,7 @@ import { SetOutputCaptionsCommand } from './SetOutputCaptionsCommand'
 async function restoreProject(project: Project): Promise<Project> {
   const graph = await DatabasePersister.getPersistedObjectGraph(project.id!)
   const record = graph.find((candidate) => candidate.id === project.id)!
-  return await DatabasePersister.fromPersistedObject(JSON.parse(JSON.stringify(record)) as PersistedObject) as Project
+  return (await DatabasePersister.fromPersistedObject(JSON.parse(JSON.stringify(record)) as PersistedObject)) as Project
 }
 
 test('caption source and styling survive persisted undo and redo without sharing mutable snapshots', async () => {
@@ -86,7 +86,13 @@ test('deleting an explicit caption source disables captions instead of switching
   const other = new Track('other speaker', 1)
   project.addTrack(source)
   project.addTrack(other)
-  project.outputCaptions = { ...DEFAULT_OUTPUT_CAPTIONS, enabled: true, followLoudest: false, track: source, fontSize: 96 }
+  project.outputCaptions = {
+    ...DEFAULT_OUTPUT_CAPTIONS,
+    enabled: true,
+    followLoudest: false,
+    track: source,
+    fontSize: 96,
+  }
   project.deleteTrack(other)
   expect(project.outputCaptions.enabled).toBe(true)
   expect(project.outputCaptions.track).toBe(source)
@@ -99,7 +105,7 @@ test('deleting an explicit caption source disables captions instead of switching
 test('older projects load with captions off rather than adding text to existing exports', async () => {
   const record = DatabasePersister.toPersistedObject(new Project('legacy', 48_000), true)
   delete record.outputCaptions
-  const restored = await DatabasePersister.fromPersistedObject(record) as Project
+  const restored = (await DatabasePersister.fromPersistedObject(record)) as Project
   expect(restored.outputCaptions.enabled).toBe(false)
   expect(restored.outputCaptions.track).toBeNull()
 })

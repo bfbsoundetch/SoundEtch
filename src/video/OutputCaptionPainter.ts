@@ -58,7 +58,7 @@ function createLayout(
   const lines = split === cue.words.length ? [cue.words.length] : [split, cue.words.length]
   const lineHeight = Math.max(settings.fontSize, ascent + descent) * 1.25
   const textHeight = ascent + descent + (lines.length - 1) * lineHeight
-  const shrink = Math.min(1, availableWidth / Math.max(1, widest), (height / viewportScale * 0.3) / textHeight)
+  const shrink = Math.min(1, availableWidth / Math.max(1, widest), ((height / viewportScale) * 0.3) / textHeight)
   const scale = viewportScale * shrink
   const words: CaptionLayout['words'] = []
   let start = 0
@@ -117,11 +117,12 @@ export function paintOutputCaption(
       layouts.set(context, layout)
     }
     context.font = layout.font
-    const bottom = settings.position === 'top'
-      ? layout.edgeInset + layout.textHeight
-      : settings.position === 'middle'
-        ? (height + layout.textHeight) / 2
-        : height - layout.edgeInset
+    const bottom =
+      settings.position === 'top'
+        ? layout.edgeInset + layout.textHeight
+        : settings.position === 'middle'
+          ? (height + layout.textHeight) / 2
+          : height - layout.edgeInset
     context.translate(x + width / 2, y + bottom)
     context.scale(layout.scale, layout.scale)
     context.globalCompositeOperation = 'source-over'

@@ -277,7 +277,13 @@ export class AutomationController extends TrackListItemController {
     table.className = 'automation-point-table'
     const head = document.createElement('thead')
     const headingRow = document.createElement('tr')
-    for (const heading of ['Point', 'Time (seconds)', this.parameterMetadata.displayName, 'Transition to point', 'Actions']) {
+    for (const heading of [
+      'Point',
+      'Time (seconds)',
+      this.parameterMetadata.displayName,
+      'Transition to point',
+      'Actions',
+    ]) {
       const cell = document.createElement('th')
       cell.scope = 'col'
       cell.textContent = heading
