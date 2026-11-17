@@ -10,6 +10,7 @@
 #include <wasm_simd128.h>
 
 FLAC__StreamEncoder* encoder;
+FLAC__StreamMetadata* comments;
 FLAC__int32** inputBufferPointerInternal;
 float** inputBufferFloatView;
 int channelCount;
@@ -29,9 +30,9 @@ extern FLAC__StreamEncoderTellStatus tell(const FLAC__StreamEncoder *encoder,
                                             void *client_data);
 
 EMSCRIPTEN_KEEPALIVE
-void create_encoder(int bitsPerSample, int sampleRate,
-                                    int chanCnt, int compressionLevel,
-                                    char **metadata) {
+int create_encoder(int bitsPerSample, int sampleRate,
+                   int chanCnt, int compressionLevel,
+                   const char *metadata) {
   #ifdef __wasm_simd128__
     const float floatToIntArray[] = {
       (1 << (bitsPerSample - 1)) - 1,
@@ -57,7 +58,7 @@ void create_encoder(int bitsPerSample, int sampleRate,
   encoder = FLAC__stream_encoder_new();
   if (encoder == NULL) {
     fprintf(stderr, "Error allocating encoder\n");
-    return;
+    return -1;
   }
 
   ok &= FLAC__stream_encoder_set_verify(encoder, true);
@@ -65,15 +66,46 @@ void create_encoder(int bitsPerSample, int sampleRate,
   ok &= FLAC__stream_encoder_set_channels(encoder, channelCount);
   ok &= FLAC__stream_encoder_set_bits_per_sample(encoder, bitsPerSample);
   ok &= FLAC__stream_encoder_set_sample_rate(encoder, sampleRate);
-  ok &= FLAC__stream_encoder_set_metadata(encoder, NULL, 0);
+  if (metadata && *metadata) {
+    comments = FLAC__metadata_object_new(FLAC__METADATA_TYPE_VORBIS_COMMENT);
+    if (!comments) {
+      goto fail;
+    }
+    for (const char *entry = metadata; *entry; entry += strlen(entry) + 1) {
+      FLAC__StreamMetadata_VorbisComment_Entry comment = {
+        .length = strlen(entry),
+        .entry = (FLAC__byte *)entry,
+      };
+      if (!FLAC__metadata_object_vorbiscomment_append_comment(comments, comment, true)) {
+        goto fail;
+      }
+    }
+    ok &= FLAC__stream_encoder_set_metadata(encoder, &comments, 1);
+  } else {
+    ok &= FLAC__stream_encoder_set_metadata(encoder, NULL, 0);
+  }
 
   if (!ok) {
     fprintf(stderr, "Error setting up encoder %d\n", ok);
-    return;
+    goto fail;
   }
 
   FLAC__StreamEncoderInitStatus initStatus = FLAC__stream_encoder_init_stream(
       encoder, writeEncodedChunk, seek, tell, NULL, NULL);
+  if (initStatus != FLAC__STREAM_ENCODER_INIT_STATUS_OK) {
+    fprintf(stderr, "Error initializing encoder: %d\n", initStatus);
+    goto fail;
+  }
+  return 0;
+
+fail:
+  FLAC__stream_encoder_delete(encoder);
+  encoder = NULL;
+  if (comments) {
+    FLAC__metadata_object_delete(comments);
+    comments = NULL;
+  }
+  return -1;
 }
 
 EMSCRIPTEN_KEEPALIVE
@@ -121,5 +153,16 @@ FLAC__int32* get_input_buffer_pointer(int channels, int size) {
 
 EMSCRIPTEN_KEEPALIVE
 char finish_encoding() {
-  return FLAC__stream_encoder_finish(encoder);
+  FLAC__bool ok = FLAC__stream_encoder_finish(encoder);
+  FLAC__stream_encoder_delete(encoder);
+  encoder = NULL;
+  if (comments) {
+    FLAC__metadata_object_delete(comments);
+    comments = NULL;
+  }
+  free(inputBufferPointerInternal[0]);
+  free(inputBufferPointerInternal);
+  inputBufferPointerInternal = NULL;
+  inputBufferFloatView = NULL;
+  return ok;
 }

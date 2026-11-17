@@ -1,4 +1,5 @@
 import { Mp3EncoderInfo } from './EncoderType'
+import { serializeId3Tags } from './Id3Metadata'
 import createModule, { MainModule } from './wasm/mp3/mp3_encoder'
 
 export class Mp3FileWriter {
@@ -15,6 +16,7 @@ export class Mp3FileWriter {
     private readonly fileWritable: FileSystemWritableFileStream,
     private readonly module: MainModule,
     mp3EncoderInfo: Mp3EncoderInfo,
+    private readonly audioStartOffset: number,
   ) {
     module._init_lame(
       mp3EncoderInfo.channelCount,
@@ -35,7 +37,9 @@ export class Mp3FileWriter {
 
   static async create(fileWritable: FileSystemWritableFileStream, mp3EncoderInfo: Mp3EncoderInfo) {
     const module = await createModule()
-    return new Mp3FileWriter(fileWritable, module, mp3EncoderInfo)
+    const metadata = serializeId3Tags(mp3EncoderInfo.tags)
+    if (metadata) await fileWritable.write(metadata)
+    return new Mp3FileWriter(fileWritable, module, mp3EncoderInfo, metadata?.length ?? 0)
   }
 
   getInputBuffer(): Float32Array {
@@ -56,7 +60,7 @@ export class Mp3FileWriter {
     )
 
     const tagSize = this.module._get_lame_tag()
-    this.fileWritable.seek(0)
+    await this.fileWritable.seek(this.audioStartOffset)
     await this.fileWritable.write(
       this.module.HEAPU8.subarray(this.outputBufferPointer, this.outputBufferPointer + tagSize) as any,
     )

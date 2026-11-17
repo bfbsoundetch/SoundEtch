@@ -27,9 +27,6 @@ export class FlacFileWriter {
     private readonly privateTmpFile: FileSystemFileHandle,
     private readonly privateTmpFileSync: FileSystemSyncAccessHandle,
   ) {
-    const inputBufferPointer = module._get_input_buffer_pointer(flacEncoderInfo.channelCount, this.inputBufferSize)
-    const start = inputBufferPointer / Float32Array.BYTES_PER_ELEMENT
-    this.inputBuffer = module.HEAPF32.subarray(start, start + flacEncoderInfo.channelCount * this.inputBufferSize)
     let fileWritePosition = 0
     ;(globalThis as any).flacEncoderWriteCallback = function (bufferPointer: number, length: BigInt, samples: number) {
       privateTmpFileSync.write(module.HEAPU8.slice(bufferPointer, bufferPointer + Number(length)), {
@@ -47,13 +44,31 @@ export class FlacFileWriter {
       module.HEAPU32[valuePointer / Uint32Array.BYTES_PER_ELEMENT] = fileWritePosition
       return 0 // FLAC__STREAM_ENCODER_TELL_STATUS_OK
     }
-    module._create_encoder(
-      flacEncoderInfo.bitDepth,
-      flacEncoderInfo.sampleRate,
-      flacEncoderInfo.channelCount,
-      flacEncoderInfo.compressionLevel,
-      0,
-    )
+    const entries = Object.entries(flacEncoderInfo.tags ?? {}).filter(([, value]) => value !== '')
+    const metadata = entries.length
+      ? new TextEncoder().encode(entries.map(([key, value]) => `${key}=${value}\0`).join('') + '\0')
+      : undefined
+    const metadataPointer = metadata ? module._malloc(metadata.length) : 0
+    if (metadata && !metadataPointer) {
+      throw new Error('Unable to allocate FLAC metadata')
+    }
+    try {
+      if (metadata) module.HEAPU8.set(metadata, metadataPointer)
+      const result = module._create_encoder(
+        flacEncoderInfo.bitDepth,
+        flacEncoderInfo.sampleRate,
+        flacEncoderInfo.channelCount,
+        flacEncoderInfo.compressionLevel,
+        metadataPointer,
+      )
+      if (result !== 0) throw new Error('Unable to initialize FLAC encoder: ' + result)
+    } finally {
+      if (metadataPointer) module._free(metadataPointer)
+    }
+    // Allocate the PCM view after native initialization and temporary metadata allocations.
+    const inputBufferPointer = module._get_input_buffer_pointer(flacEncoderInfo.channelCount, this.inputBufferSize)
+    const start = inputBufferPointer / Float32Array.BYTES_PER_ELEMENT
+    this.inputBuffer = module.HEAPF32.subarray(start, start + flacEncoderInfo.channelCount * this.inputBufferSize)
   }
 
   readonly inputSampleFormat = 'planar'
@@ -70,7 +85,9 @@ export class FlacFileWriter {
   }
 
   async finish() {
-    this.module._finish_encoding()
+    if (!this.module._finish_encoding()) {
+      throw new Error('Unable to finish FLAC encoding')
+    }
     this.privateTmpFileSync.flush()
     this.privateTmpFileSync.close()
     await (await this.privateTmpFile.getFile()).stream().pipeTo(this.fileWritable)

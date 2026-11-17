@@ -46,15 +46,30 @@ export class OpusFileWriter {
       return 0
     }
 
-    module._create_encoder(
-      opusEncoderInfo.sampleRate,
-      opusEncoderInfo.channelCount,
-      opusEncoderInfo.bitrate,
-      opusEncoderInfo.bitrateMode,
-      opusEncoderInfo.complexity,
-      opusEncoderInfo.bandwidth,
-      opusEncoderInfo.application,
-    )
+    const entries = Object.entries(opusEncoderInfo.tags ?? {}).filter(([, value]) => value !== '')
+    const metadata = entries.length
+      ? new TextEncoder().encode(entries.map(([key, value]) => `${key}=${value}\0`).join('') + '\0')
+      : undefined
+    const metadataPointer = metadata ? module._malloc(metadata.length) : 0
+    if (metadata && !metadataPointer) {
+      throw new Error('Unable to allocate Opus metadata')
+    }
+    try {
+      if (metadata) module.HEAPU8.set(metadata, metadataPointer)
+      const result = module._create_encoder(
+        opusEncoderInfo.sampleRate,
+        opusEncoderInfo.channelCount,
+        opusEncoderInfo.bitrate,
+        opusEncoderInfo.bitrateMode,
+        opusEncoderInfo.complexity,
+        opusEncoderInfo.bandwidth,
+        opusEncoderInfo.application,
+        metadataPointer,
+      )
+      if (result !== 0) throw new Error('Unable to initialize Opus encoder: ' + result)
+    } finally {
+      if (metadataPointer) module._free(metadataPointer)
+    }
 
     const inputBufferPointer = module._get_input_buffer_pointer(opusEncoderInfo.channelCount, this.inputBufferSize)
     const start = inputBufferPointer / Float32Array.BYTES_PER_ELEMENT
@@ -68,11 +83,13 @@ export class OpusFileWriter {
   }
 
   async writeChunk(length: number) {
-    this.module._encode_frame(length)
+    const result = this.module._encode_frame(length)
+    if (result !== 0) throw new Error('Opus library returned error: ' + result)
   }
 
   async finish() {
-    this.module._finalize_encoding()
+    const result = this.module._finalize_encoding()
+    if (result !== 0) throw new Error('Unable to finish Opus encoding: ' + result)
     this.privateTmpFileSync.flush()
     this.privateTmpFileSync.close()
     await (await this.privateTmpFile.getFile()).stream().pipeTo(this.fileWritable)

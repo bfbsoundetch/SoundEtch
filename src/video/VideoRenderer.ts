@@ -14,6 +14,7 @@ import {
 } from 'mediabunny'
 import { registerAacEncoder } from '@mediabunny/aac-encoder'
 import { ProjectManager } from '../project/ProjectManager'
+import type { MediaTags } from '../encoders/EncoderType'
 import type { Project } from '../project/Project'
 import { Track } from '../project/Track'
 import type { SelectedRegion } from '../playback/Player'
@@ -72,6 +73,7 @@ export class VideoRenderer {
     presetName: VideoExportPresetName,
     selectedRegion: SelectedRegion | null,
     loudnessTargetLufs: number | null,
+    tags: MediaTags,
   ) {
     const preset = VIDEO_EXPORT_PRESETS[presetName]
     const project = await ProjectManager.getActiveProject()
@@ -123,7 +125,7 @@ export class VideoRenderer {
         project.outputEffects,
       )
       const writeVideo = (createSource: () => AudioSourceWorker) =>
-        VideoRenderer.writeVideo(file, preset, project, argument, videoCodec, audioDelay, createSource, signal)
+        VideoRenderer.writeVideo(file, preset, project, argument, videoCodec, audioDelay, createSource, signal, tags)
       if (loudnessTargetLufs === null) {
         await writeVideo(() => Renderer.createRenderingSource(argument))
       } else {
@@ -155,6 +157,7 @@ export class VideoRenderer {
     audioDelay: number,
     createSource: () => AudioSourceWorker,
     signal: AbortSignal,
+    tags: MediaTags,
   ): Promise<void> {
     let output: Output | null = null
     let writable: FileSystemWritableFileStream | null = null
@@ -184,6 +187,7 @@ export class VideoRenderer {
       output = new Output({
         format: new Mp4OutputFormat({
           fastStart: false,
+          metadataFormat: 'mdta',
           onMoov: (data, position) => {
             movieMetadata.data = data
             movieMetadata.position = position
@@ -200,7 +204,7 @@ export class VideoRenderer {
         name: 'Output scenes',
       })
       output.addAudioTrack(audioSource, { name: 'Project audio' })
-      output.setMetadataTags({ title: project.title })
+      output.setMetadataTags({ raw: tags })
 
       await output.start()
       VideoRenderer.setProcessingProgress(0.05)

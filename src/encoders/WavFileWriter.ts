@@ -1,23 +1,26 @@
-import { WavEncoderInfo, WavSampleFormat } from './EncoderType'
+import { MediaTags, WavEncoderInfo, WavSampleFormat } from './EncoderType'
+import { serializeId3Tags } from './Id3Metadata'
 
 export class WavFileWriter {
   static readonly INPUT_BUFFER_SIZE = 1024 * 1024
 
   private readonly inputBuffer = new Float32Array(WavFileWriter.INPUT_BUFFER_SIZE)
   private readonly channelCount
+  private readonly padData: boolean
 
   constructor(
     private readonly fileWritable: FileSystemWritableFileStream,
     private readonly wavEncoderInfo: WavEncoderInfo,
   ) {
-    this.fileWritable.write(
-      WavFileWriter.getWavHeader(
-        wavEncoderInfo.sampleFormat,
-        wavEncoderInfo.sampleRate,
-        wavEncoderInfo.sampleCount,
-        wavEncoderInfo.channelCount,
-      ),
+    const header = WavFileWriter.getWavHeader(
+      wavEncoderInfo.sampleFormat,
+      wavEncoderInfo.sampleRate,
+      wavEncoderInfo.sampleCount,
+      wavEncoderInfo.channelCount,
+      wavEncoderInfo.tags,
     )
+    this.padData = (header.getUint32(header.byteLength - 4, true) & 1) !== 0
+    this.fileWritable.write(header)
     this.channelCount = wavEncoderInfo.channelCount
   }
 
@@ -63,10 +66,17 @@ export class WavFileWriter {
   }
 
   async finish() {
+    if (this.padData) await this.fileWritable.write(new Uint8Array(1))
     await this.fileWritable.close()
   }
 
-  static getWavHeader(sampleFormat: WavSampleFormat, sampleRate: number, sampleCount: number, channelCount: number) {
+  static getWavHeader(
+    sampleFormat: WavSampleFormat,
+    sampleRate: number,
+    sampleCount: number,
+    channelCount: number,
+    tags?: MediaTags,
+  ) {
     let bytesPerSample: number
     switch (sampleFormat) {
       case 'float32':
@@ -83,14 +93,17 @@ export class WavFileWriter {
         break
     }
     const byteRate = sampleRate * channelCount * bytesPerSample
+    const dataSize = sampleCount * channelCount * bytesPerSample
+    const metadata = serializeId3Tags(tags)
+    const metadataSize = metadata ? 8 + metadata.length + (metadata.length & 1) : 0
 
     // WAV header
-    const header = new ArrayBuffer(44)
+    const header = new ArrayBuffer(44 + metadataSize)
     const view = new DataView(header)
 
     // RIFF chunk
     view.setUint32(0, 0x52494646, false) // 'RIFF'
-    view.setUint32(4, 36 + sampleCount * channelCount * bytesPerSample, true) // File size - 8
+    view.setUint32(4, 36 + metadataSize + dataSize + (dataSize & 1), true) // File size - 8
     view.setUint32(8, 0x57415645, false) // 'WAVE'
 
     // Format chunk
@@ -103,9 +116,16 @@ export class WavFileWriter {
     view.setUint16(32, channelCount * bytesPerSample, true) // BlockAlign
     view.setUint16(34, bytesPerSample * 8, true) // BitsPerSample
 
-    // Data chunk
-    view.setUint32(36, 0x64617461, false) // 'data'
-    view.setUint32(40, sampleCount * channelCount * bytesPerSample, true) // Data size
+    // ID3 is a separate, word-aligned RIFF chunk, before the streamed audio data.
+    if (metadata) {
+      view.setUint32(36, 0x69643320, false) // 'id3 '
+      view.setUint32(40, metadata.length, true)
+      new Uint8Array(header, 44, metadata.length).set(metadata)
+    }
+
+    // Data chunk (its size excludes the final alignment byte).
+    view.setUint32(36 + metadataSize, 0x64617461, false) // 'data'
+    view.setUint32(40 + metadataSize, dataSize, true)
 
     return view
   }

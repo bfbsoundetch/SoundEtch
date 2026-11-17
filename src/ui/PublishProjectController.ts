@@ -3,6 +3,7 @@ import {
   FlacEncoderInfo,
   Mp3CbrValue,
   Mp3EncoderInfo,
+  type MediaTags,
   Mp3OutputSampleRate,
   OpusApplication,
   OpusBandwidth,
@@ -32,6 +33,9 @@ export class PublishProjectController {
   private readonly channelCountInputs: HTMLInputElement[]
   private readonly mp3ModeInputs: HTMLInputElement[]
   private readonly videoPresetInputs: HTMLInputElement[]
+  private readonly tagRows = document.getElementById('publish-tag-rows') as HTMLElement
+  private readonly tagsSection = document.getElementById('publish-tags-section') as HTMLDetailsElement
+  private tagsProjectId: number | undefined
   private readonly appWindow = window as unknown as PublishProjectWindow
 
   constructor() {
@@ -58,6 +62,7 @@ export class PublishProjectController {
     })
 
     this.initializeSliderOutputs()
+    this.initializeTagInputs()
 
     this.handleFormatSwitch(this.formatSelect.value as Format)
     this.handleMp3ModeSwitch(this.getSelectedMp3Mode())
@@ -66,6 +71,14 @@ export class PublishProjectController {
       this.channelCountInputs.forEach((input) => {
         input.checked = input.value === channelCount
       })
+      if (this.tagsProjectId !== project.id) {
+        this.tagsProjectId = project.id
+        this.tagRows.querySelectorAll('[data-custom-tag]').forEach((row) => row.remove())
+        this.tagRows.querySelectorAll<HTMLInputElement>('[data-tag-key]').forEach((input) => {
+          input.value = input.dataset.tagKey === 'title' ? project.title : ''
+          input.setCustomValidity('')
+        })
+      }
     })
   }
 
@@ -119,13 +132,65 @@ export class PublishProjectController {
     })
   }
 
+  private initializeTagInputs() {
+    this.tagRows.addEventListener('input', (event) => {
+      if (event.target instanceof HTMLInputElement) event.target.setCustomValidity('')
+    })
+    document.getElementById('publish-add-tag')!.addEventListener('click', () => {
+      const template = document.getElementById('publish-custom-tag-template') as HTMLTemplateElement
+      const row = template.content.firstElementChild!.cloneNode(true) as HTMLElement
+      row.querySelector('button')!.addEventListener('click', () => {
+        const nextRow = row.nextElementSibling ?? row.previousElementSibling
+        row.remove()
+        ;(nextRow?.querySelector('input') ?? document.getElementById('publish-add-tag'))?.focus()
+      })
+      this.tagRows.append(row)
+      row.querySelector('input')!.focus()
+    })
+  }
+
+  private getTags(): MediaTags | null {
+    const tags: MediaTags = Object.create(null)
+    const keys = new Set<string>()
+    this.tagRows.querySelectorAll<HTMLInputElement>('input').forEach((input) => input.setCustomValidity(''))
+    for (const row of Array.from(this.tagRows.children)) {
+      const valueInput = row.querySelector<HTMLInputElement>('[data-tag-key], .publish-tag-value')!
+      if (!valueInput.value.trim()) continue
+      const keyInput = row.querySelector<HTMLInputElement>('.publish-tag-key')
+      const key = keyInput ? keyInput.value.trim() : valueInput.dataset.tagKey!
+      const normalizedKey = key.toLowerCase()
+      let invalidInput = keyInput ?? valueInput
+      let error = ''
+      if (!/^[\x20-\x3c\x3e-\x7d]+$/.test(key)) {
+        error = 'Use a tag name with letters, numbers, spaces or ASCII punctuation other than = or ~.'
+      } else if (keys.has(normalizedKey)) {
+        error = 'Each tag name must be unique (ignoring letter case).'
+      } else if (valueInput.value.includes('\0')) {
+        invalidInput = valueInput
+        error = 'Tag values cannot contain a null character.'
+      }
+      if (error) {
+        this.tagsSection.open = true
+        invalidInput.setCustomValidity(error)
+        invalidInput.reportValidity()
+        return null
+      }
+      keys.add(normalizedKey)
+      tags[['title', 'artist', 'album'].includes(normalizedKey) ? normalizedKey : key] = valueInput.value
+    }
+    return tags
+  }
+
   async publishProject() {
+    const tags = this.getTags()
+    if (!tags) return
     if (this.formatSelect.value === Format.VIDEO) {
-      await this.publishVideoProject()
+      await this.publishVideoProject(tags)
       return
     }
 
     const encoderInfo = this.createEncoderInfo()
+    encoderInfo.tags = tags
     ;(document.getElementById('publish-project-modal') as HTMLDialogElement).close()
     const selectedRegion = this.appWindow.trackListController.selectedRegion
     this.appWindow.processingModalController?.show('Publishing project...', () => Renderer.cancelRender())
@@ -138,7 +203,7 @@ export class PublishProjectController {
     }
   }
 
-  private async publishVideoProject() {
+  private async publishVideoProject(tags: MediaTags) {
     const presetName = this.getSelectedVideoPreset()
     ;(document.getElementById('publish-project-modal') as HTMLDialogElement).close()
     const selectedRegion = this.appWindow.trackListController.selectedRegion
@@ -147,7 +212,7 @@ export class PublishProjectController {
       VideoRenderer.cancelExport(),
     )
     try {
-      await VideoRenderer.exportProject(presetName, selectedRegion, this.getLoudnessTargetLufs())
+      await VideoRenderer.exportProject(presetName, selectedRegion, this.getLoudnessTargetLufs(), tags)
     } catch (e) {
       if (!(e instanceof DOMException && e.name === 'AbortError')) NotificationsController.showError(e as Error)
     } finally {

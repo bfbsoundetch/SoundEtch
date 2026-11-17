@@ -4,10 +4,20 @@ declare namespace RuntimeExports {
   let HEAPF32: Float32Array
 }
 interface WasmModule {
-  _create_encoder(_0: number, _1: number, _2: number, _3: number, _4: number, _5: number, _6: number): void
+  _create_encoder(
+    _0: number,
+    _1: number,
+    _2: number,
+    _3: number,
+    _4: number,
+    _5: number,
+    _6: number,
+    _7: number,
+  ): number
   _get_input_buffer_pointer(_0: number, _1: number): number
   _encode_frame(_0: number): number
   _finalize_encoding(): number
+  _free(_0: number): void
   _malloc(_0: number): number
 }
 

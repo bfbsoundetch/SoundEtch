@@ -1230,6 +1230,33 @@
           </div>
         </details>
 
+        <details id="publish-tags-section" class="export-tags-section">
+          <summary>Tags</summary>
+          <p class="info-text">Embed metadata in the published file. Empty values are omitted.</p>
+          <div id="publish-tag-rows">
+            <div class="publish-tag-row">
+              <label for="publish-tag-title">Title</label>
+              <input id="publish-tag-title" type="text" data-tag-key="title" />
+            </div>
+            <div class="publish-tag-row">
+              <label for="publish-tag-artist">Artist</label>
+              <input id="publish-tag-artist" type="text" data-tag-key="artist" />
+            </div>
+            <div class="publish-tag-row">
+              <label for="publish-tag-album">Album</label>
+              <input id="publish-tag-album" type="text" data-tag-key="album" />
+            </div>
+          </div>
+          <button id="publish-add-tag" type="button" class="bordered clickable">Add tag</button>
+          <template id="publish-custom-tag-template">
+            <div class="publish-tag-row" data-custom-tag>
+              <input type="text" class="publish-tag-key" aria-label="Custom tag name" placeholder="Tag name" />
+              <input type="text" class="publish-tag-value" aria-label="Custom tag value" placeholder="Value" />
+              <button type="button" class="bordered clickable" aria-label="Remove custom tag">Remove</button>
+            </div>
+          </template>
+        </details>
+
         <button
           class="bordered clickable publish-project-button"
           onclick="window.publishProjectController.publishProject()"

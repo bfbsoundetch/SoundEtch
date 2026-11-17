@@ -109,6 +109,14 @@ MP4 uses H.264 when available, with the existing MP4-compatible video codec fall
 
 Export streams encoded data to the chosen file and bounds queued audio while video frames are rendered. Progress advances after each encoded picture and reaches 100% only after finalization and file commit. Canceling or encountering an error releases the decoders and audio worker and aborts the file transaction, preserving any existing output file.
 
+## Publish tags
+
+In Publish Settings, expand **Tags** below **Advanced** to edit **Title**, **Artist**, and **Album**, or choose **Add tag** for custom key/value pairs. Tags are collapsed by default and available for WAV, FLAC, MP3, Opus, and MP4. Title starts with the project name; empty values are omitted. Edits survive format changes and reopening the dialog, but reset when switching projects or reloading the page.
+
+Values support Unicode. Tag names must be unique ignoring case and use printable ASCII other than `=` or `~`, matching the Vorbis comment restrictions shared by FLAC and Opus. WAV and MP3 use ID3v2.4 text frames (custom fields use TXXX); FLAC and Opus use Vorbis comments; MP4 uses keyed `mdta` metadata. Players may display only the common fields even when custom tags are embedded.
+
+With `ffmpeg` and `ffprobe` installed, run `yarn vitest run src/encoders/MetadataFileWriters.test.ts src/encoders/NativeAudioTags.test.ts` for independent metadata/audio round-trip regressions. These integration tests skip when either system tool is unavailable.
+
 ## Export loudness
 
 **Loudness** in Publish Settings sets the integrated loudness (ITU-R BS.1770-4 / EBU R128) of WAV, FLAC, MP3, Opus and MP4 exports: Off (the mix level, default), −14 LUFS (music streaming), −16 LUFS (podcasts) or −23 LUFS (broadcast). The mix, including the Output effect chain, renders once into a temporary file in browser storage while its gated loudness is measured ("Measuring loudness..."), then streams back with gain `target − measured` through a 4×-oversampled true-peak lookahead limiter with a −1 dBTP ceiling. Mono exports are measured as one channel. Project audio, track gain and Freeze are unchanged.

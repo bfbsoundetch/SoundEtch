@@ -6,6 +6,8 @@ import { WavFileWriter } from './WavFileWriter'
 
 export type EncoderInfo = WavEncoderInfo | OpusEncoderInfo | Mp3EncoderInfo | FlacEncoderInfo
 
+export type MediaTags = Record<string, string>
+
 export type WavSampleFormat = 'float32' | 'int24' | 'int16' | 'int8'
 
 export type WavEncoderInfo = {
@@ -14,6 +16,7 @@ export type WavEncoderInfo = {
   channelCount: number
   sampleFormat: WavSampleFormat
   sampleCount: number
+  tags?: MediaTags
 }
 
 // Constants defined in
@@ -50,6 +53,7 @@ export type OpusEncoderInfo = {
   bandwidth: OpusBandwidth
   application: OpusApplication
   frameSize: 2.5 | 5 | 10 | 20 | 40 | 60
+  tags?: MediaTags
 }
 
 export type Mp3CbrValue = 8 | 16 | 24 | 32 | 40 | 48 | 64 | 80 | 96 | 112 | 128 | 160 | 192 | 224 | 256 | 320
@@ -62,6 +66,7 @@ export type Mp3EncoderInfo = {
   channelCount: number
   bitrate: number | undefined
   vbrQuality: number | undefined
+  tags?: MediaTags
 }
 
 export type FlacEncoderInfo = {
@@ -70,6 +75,7 @@ export type FlacEncoderInfo = {
   channelCount: number
   bitDepth: 8 | 16 | 24
   compressionLevel: 0 | 1 | 2 | 3 | 4 | 5 | 6 | 7 | 8
+  tags?: MediaTags
 }
 
 export async function encoderInforWritableStreamFactory(
