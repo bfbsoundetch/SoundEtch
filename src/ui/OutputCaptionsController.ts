@@ -279,8 +279,8 @@ export class OutputCaptionsController {
   private refreshSourceNote(): void {
     const settings = this.settings()
     const status = this.captionSource?.hasCues
-      ? 'Short fragments follow the timeline in preview and MP4 export. Font size uses the 1920×1080 composition.'
-      : 'No played transcript found. Transcribe a track in Tracks → Transcript, then choose it here. Automatic uses the first audible track with a transcript.'
+      ? ''
+      : 'No played transcript found. Transcribe a track in Tracks → Transcript.'
     this.note.textContent = settings.followLoudest
       ? `${status} Loudest speaking track switches between speaking captioned tracks, respecting mute, solo, and gain, using approximately 100 ms waveform levels before effects.`
       : status
