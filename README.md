@@ -123,19 +123,57 @@ With `ffmpeg` and `ffprobe` installed, run `yarn vitest run src/encoders/Metadat
 
 The gain is computed before limiting. When limited peaks carry much of the program's energy, the result lands below the target. The limiter detects true peaks with a 145-tap Kaiser-windowed interpolator, so exports hold the −1 dBTP ceiling to within 0.1 dB as measured by ffmpeg's `ebur128`, including on full-band noise.
 
-## Dropbox backup
+## Cloud backup
 
-**Import / Export** can back up the current project to the user's Dropbox App Folder and restore any backup there as a new project. The section appears only in builds with `VITE_DROPBOX_APP_KEY` set to the app key of a Dropbox app registered with:
+**Import / Export** can back up the current project to Dropbox or to S3-compatible storage, and restore any backup there as a new project. **Service** picks the destination; it is fixed while a backup runs or waits paused. Credentials and backup progress live in their own IndexedDB database, `soundetch-cloud`.
+
+A backup is one folder per project and time, holding the project manifest, one file per stored project file, and a `backup.json` index written last; a folder without the index is incomplete and is not listed. Only 48 kHz projects without unrecovered video recordings can be backed up. Files over 8 MiB upload in 8 MiB chunks (Dropbox upload sessions, S3 multipart uploads), and progress is saved after every acknowledged request: after a reload, a lost connection, refused credentials, or full storage, **Resume Backup** sends only what was not acknowledged. If a project file changes during the backup, the backup fails and what it uploaded is removed. **Cancel Backup** also removes it, including an unfinished S3 multipart upload.
+
+The index records each file's content hash: SHA-256 of every 4 MiB block, then SHA-256 of the block digests, which is Dropbox's content hash. Restoring checks free browser storage first, then verifies every file's size and content hash as it streams in. A failed restore leaves no project behind; a restore or archive import interrupted by closing the tab is hidden from the project list and deleted the next time the list loads while no import is running. Backups are managed, renamed, or deleted in the service itself.
+
+### Dropbox
+
+Dropbox is offered only in builds with `VITE_DROPBOX_APP_KEY` set to the app key of a Dropbox app registered with:
 
 - Scoped access to an **App folder**, with the permissions `files.metadata.read`, `files.content.read`, and `files.content.write` checked and submitted on the **Permissions** tab. A token keeps the scopes the app had when the user connected, so after changing permissions, disconnect and connect again; SoundEtch names any missing permission when connecting or backing up.
 - **Allow public clients (Implicit Grant & PKCE)** on.
 - Redirect URIs for each deployment's `dropbox-auth.html`, e.g. `http://localhost:4173/soundetch/dropbox-auth.html` for `yarn preview` and `https://soundetch.org/dropbox-auth.html`.
 
-The key is public under PKCE. **Connect Dropbox** opens Dropbox's authorization in a new tab, so the editor, and any recording in it, never navigates away. The editor keeps only a short-lived access token (about 4 hours, no refresh token) in its own IndexedDB database `soundetch-dropbox`; after it expires, **Reconnect Dropbox** continues where the backup stopped.
+The key is public under PKCE. **Connect Dropbox** opens Dropbox's authorization in a new tab, so the editor, and any recording in it, never navigates away. The editor keeps only a short-lived access token (about 4 hours, no refresh token); after it expires, **Reconnect Dropbox** continues where the backup stopped. Dropbox verifies every upload against its content hash.
 
-A backup is one folder per project and time, holding the project manifest, one file per stored project file, and a `backup.json` index written last; a folder without the index is incomplete and is not listed. Only 48 kHz projects without unrecovered video recordings can be backed up. Each upload is verified against its Dropbox content hash. Large files upload in 8 MiB chunks through upload sessions, and progress is saved after every acknowledged request: after a reload, a lost connection, an expired authorization, or a full Dropbox, **Resume Backup** sends only what Dropbox has not acknowledged. If a project file changes during the backup, the backup fails and its partial folder is removed. **Cancel Backup** also removes the partial folder.
+### S3-compatible storage
 
-Restoring checks free browser storage first, then verifies every file's size and content hash as it streams in. A failed restore leaves no project behind; a restore or archive import interrupted by closing the tab is hidden from the project list and deleted the next time the list loads while no import is running. Backups are managed, renamed, or deleted in Dropbox itself.
+Amazon S3, Cloudflare R2, Backblaze B2, MinIO, and other services with the S3 API work without any build setting. The user enters the endpoint (empty for Amazon S3), region (`auto` for R2), bucket, an optional folder prefix, and an access key; **Path-style URLs** is for servers such as MinIO that do not serve `bucket.host` names. **Connect S3** lists the folder, writes and deletes `.soundetch-connection-check`, and names what to fix when that fails. The secret is stored in the browser, so the key should reach only this bucket, for example with this IAM policy:
+
+```json
+{
+  "Version": "2012-10-17",
+  "Statement": [
+    { "Effect": "Allow", "Action": "s3:ListBucket", "Resource": "arn:aws:s3:::BUCKET" },
+    {
+      "Effect": "Allow",
+      "Action": ["s3:GetObject", "s3:PutObject", "s3:DeleteObject", "s3:AbortMultipartUpload"],
+      "Resource": "arn:aws:s3:::BUCKET/*"
+    }
+  ]
+}
+```
+
+The bucket's CORS rules must allow each deployment's origin, every header, and expose `ETag`, which multipart uploads need:
+
+```json
+[
+  {
+    "AllowedOrigins": ["https://soundetch.org", "http://localhost:5173"],
+    "AllowedMethods": ["GET", "PUT", "POST", "DELETE", "HEAD"],
+    "AllowedHeaders": ["*"],
+    "ExposeHeaders": ["ETag"],
+    "MaxAgeSeconds": 3600
+  }
+]
+```
+
+Requests are signed with AWS Signature Version 4 over the SHA-256 of their body, so S3 rejects any upload whose bytes changed on the way. Refused credentials pause the backup and forget the secret; the other settings stay, and **Connect S3** with a working key resumes the backup.
 
 ## Importing media
 

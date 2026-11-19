@@ -1,9 +1,9 @@
 import { isObjectRecord } from '../global/TypeGuards'
+import { CloudError, CloudStorageFullError, retryAfterHeaderSeconds, waitBeforeRetry } from './CloudStorage'
 import { clearToken, DropboxAuthorizationError, DropboxPermissionError, getAccessToken } from './DropboxAuthorization'
 
 const API_URL = 'https://api.dropboxapi.com/2'
 const CONTENT_URL = 'https://content.dropboxapi.com/2'
-const MAX_ATTEMPTS = 6
 
 export interface FileMetadata {
   readonly size: number
@@ -25,7 +25,7 @@ const LOOKUP_FAILURE_TAGS: readonly string[] = [
   'too_large',
 ] satisfies LookupFailureTag[]
 
-export class DropboxError extends Error {
+export class DropboxError extends CloudError {
   override name = 'DropboxError'
 
   /** `detail` is the response's parsed `error` field; `userMessage` its readable `user_message`, if any. */
@@ -35,15 +35,7 @@ export class DropboxError extends Error {
     readonly detail: unknown,
     readonly userMessage: string | null = null,
   ) {
-    super(`Dropbox rejected the request (${userMessage ?? summary})`)
-  }
-}
-
-export class DropboxUnavailableError extends Error {
-  override name = 'DropboxUnavailableError'
-
-  constructor() {
-    super('Dropbox could not be reached.')
+    super('Dropbox', userMessage ?? summary)
   }
 }
 
@@ -165,10 +157,6 @@ export function lookupFailure(error: unknown): { tag: LookupFailureTag; correctO
   return { tag: tag as LookupFailureTag, correctOffset }
 }
 
-export function isInsufficientSpace(error: unknown): boolean {
-  return error instanceof DropboxError && error.summary.includes('insufficient_space')
-}
-
 export function isNotFound(error: unknown): boolean {
   return error instanceof DropboxError && error.status == 409 && error.summary.startsWith('path/not_found')
 }
@@ -207,7 +195,7 @@ async function request(url: string, { arg, bytes, json }: RequestBody, signal?: 
       if (!(error instanceof TypeError)) {
         throw error
       }
-      await waitBeforeRetry(attempt, null, signal)
+      await waitBeforeRetry('Dropbox', attempt, null, signal)
       continue
     }
     if (response.ok) {
@@ -248,41 +236,20 @@ async function request(url: string, { arg, bytes, json }: RequestBody, signal?: 
       (response.status == 409 &&
         (summary.includes('content_hash_mismatch') || summary.includes('too_many_write_operations')))
     if (!transient) {
+      if (summary.includes('insufficient_space')) {
+        throw new CloudStorageFullError('Your Dropbox is full.')
+      }
       throw new DropboxError(response.status, summary, detail, userMessage)
     }
-    await waitBeforeRetry(attempt, retryAfterSeconds(detail, response), signal)
+    await waitBeforeRetry('Dropbox', attempt, retryAfterSeconds(detail, response), signal)
   }
-}
-
-/** Waits the server's requested delay, or 1, 2, 4, 8, then 16 seconds; gives up after the last attempt. */
-async function waitBeforeRetry(attempt: number, retryAfter: number | null, signal?: AbortSignal): Promise<void> {
-  if (attempt >= MAX_ATTEMPTS) {
-    throw new DropboxUnavailableError()
-  }
-  const milliseconds = (retryAfter ?? 2 ** (attempt - 1)) * 1000
-  await new Promise<void>((resolve, reject) => {
-    if (signal?.aborted) {
-      reject(signal.reason)
-      return
-    }
-    const onAbort = () => {
-      clearTimeout(timer)
-      reject(signal!.reason)
-    }
-    const timer = setTimeout(() => {
-      signal?.removeEventListener('abort', onAbort)
-      resolve()
-    }, milliseconds)
-    signal?.addEventListener('abort', onAbort, { once: true })
-  })
 }
 
 function retryAfterSeconds(detail: unknown, response: Response): number | null {
   if (isObjectRecord(detail) && typeof detail.retry_after == 'number') {
     return detail.retry_after
   }
-  const header = Number(response.headers.get('Retry-After'))
-  return response.headers.has('Retry-After') && Number.isFinite(header) && header >= 0 ? header : null
+  return retryAfterHeaderSeconds(response)
 }
 
 /** JSON for an HTTP header: every non-ASCII character escaped. */

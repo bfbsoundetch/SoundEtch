@@ -10,26 +10,20 @@ import {
 } from '../project/ProjectArchive'
 import { humanizeBytes } from '../ui/DiskUsage'
 import { deleteRecord, getRecord, putRecord } from './BackupStore'
+import { getCloudStorage } from './CloudProviders'
 import {
-  appendSession,
-  deletePath,
-  download,
-  DropboxError,
-  DropboxUnavailableError,
-  finishSession,
-  isInsufficientSpace,
-  isNotFound,
-  listFolders,
-  lookupFailure,
-  startSession,
-  upload,
-  type FileMetadata,
-  type FolderMetadata,
-} from './DropboxApi'
-import { DropboxAuthorizationError, DropboxPermissionError } from './DropboxAuthorization'
-import { dropboxContentHash, DropboxContentHasher, fromHex, toHex } from './DropboxContentHasher'
+  CloudAuthorizationError,
+  CloudError,
+  CloudStorageFullError,
+  CloudUnavailableError,
+  CloudUploadLostError,
+  type ChunkedUploadState,
+  type CloudProviderId,
+  type CloudStorage,
+} from './CloudStorage'
+import { contentHash, ContentHasher, fromHex, toHex } from './ContentHasher'
 
-export type BackupPauseReason = 'interrupted' | 'authorization' | 'network' | 'dropbox-full' | 'error'
+export type BackupPauseReason = 'interrupted' | 'authorization' | 'network' | 'storage-full' | 'error'
 
 export type BackupStatus =
   | { readonly kind: 'idle' }
@@ -50,7 +44,7 @@ export type BackupStatus =
   | { readonly kind: 'complete'; readonly projectTitle: string }
   | { readonly kind: 'failed'; readonly projectTitle: string; readonly message: string }
 
-export interface DropboxBackupMember {
+export interface CloudBackupMember {
   /** Path inside the backup folder, as inside a project archive. */
   readonly path: string
   readonly size: number
@@ -58,12 +52,13 @@ export interface DropboxBackupMember {
 }
 
 /** A complete backup: a folder whose `backup.json` index was written. */
-export interface DropboxBackupListing {
+export interface CloudBackupListing {
+  readonly provider: CloudProviderId
   readonly folderPath: string
   readonly projectTitle: string
   readonly createdAt: string
   readonly totalBytes: number
-  readonly members: readonly DropboxBackupMember[]
+  readonly members: readonly CloudBackupMember[]
 }
 
 interface BackupJobMember {
@@ -75,16 +70,18 @@ interface BackupJobMember {
 
 interface UploadSession {
   readonly path: string
-  readonly sessionId: string
-  /** Bytes Dropbox acknowledged. */
+  /** Bytes the provider acknowledged. */
   offset: number
   /** Hex digests of the acknowledged 4 MiB blocks. */
   blockHashes: string[]
+  /** The provider's progress of this upload. */
+  state: ChunkedUploadState
 }
 
 /** The persisted state of the one backup that may be running or paused. */
 interface BackupJob {
   readonly key: typeof JOB_KEY
+  readonly provider: CloudProviderId
   readonly projectId: number
   readonly projectTitle: string
   readonly folderPath: string
@@ -93,7 +90,7 @@ interface BackupJob {
   readonly members: readonly BackupJobMember[]
   /** Path → verified content hash of each uploaded member. */
   uploaded: Record<string, string>
-  /** The upload session of a large member in flight. */
+  /** The chunked upload of a large member in flight. */
   session: UploadSession | null
 }
 
@@ -107,26 +104,32 @@ interface BackupIndex {
   readonly version: 1
   readonly projectTitle: string
   readonly createdAt: string
-  readonly members: readonly DropboxBackupMember[]
+  readonly members: readonly CloudBackupMember[]
 }
 
 const JOB_KEY = 'backup-job'
 const MANIFEST_KEY = 'backup-manifest'
-const BACKUP_FORMAT = 'soundetch-dropbox-backup'
+const BACKUP_FORMAT = 'soundetch-cloud-backup'
 const BACKUP_INDEX_NAME = 'backup.json'
-const BACKUP_LOCK_NAME = 'soundetch-dropbox-backup'
+const BACKUP_LOCK_NAME = 'soundetch-cloud-backup'
 const MAX_BACKUP_INDEX_SIZE = 1024 * 1024
 const LISTING_CONCURRENCY = 4
-/** Larger members upload through a session, one chunk per request. A multiple of the 4 MiB hash block. */
-export const UPLOAD_CHUNK_SIZE = 8 * 1024 * 1024
+/**
+ * Larger members upload in chunks, one per request. A multiple of the 4 MiB hash block, and above S3's 5 MiB minimum
+ * part size.
+ */
+const UPLOAD_CHUNK_SIZE = 8 * 1024 * 1024
 
 /** A project file differs from the snapshot the backup started with. */
 class ProjectChangedError extends Error {
   override name = 'ProjectChangedError'
 }
 
-/** Backs up a saved project to the Dropbox App Folder, one remote file per project file, and restores backups. */
-export class DropboxBackup {
+/**
+ * Backs up a saved project to a cloud provider, one remote file per project file, and restores backups. One backup runs
+ * or waits paused at a time, whichever provider it targets.
+ */
+export class CloudBackup {
   private static status: BackupStatus = { kind: 'idle' }
   private static readonly listeners = new Set<(status: BackupStatus) => void>()
   /** The backup operation running in this tab. */
@@ -134,40 +137,45 @@ export class DropboxBackup {
 
   /** Calls `listener` now and on every status change. */
   static addStatusListener(listener: (status: BackupStatus) => void): void {
-    DropboxBackup.listeners.add(listener)
-    listener(DropboxBackup.status)
+    CloudBackup.listeners.add(listener)
+    listener(CloudBackup.status)
   }
 
   static getStatus(): BackupStatus {
-    return DropboxBackup.status
+    return CloudBackup.status
+  }
+
+  /** The provider of the backup that is running or paused, if any. */
+  static async getJobProvider(): Promise<CloudProviderId | null> {
+    return (await getRecord<BackupJob>(JOB_KEY))?.provider ?? null
   }
 
   /** Reports a backup that a reload or crash interrupted, so the user can resume it. */
   static async loadInterruptedJob(): Promise<void> {
     const job = await getRecord<BackupJob>(JOB_KEY)
-    const { kind } = DropboxBackup.status
-    if (!job || DropboxBackup.running || kind == 'uploading' || kind == 'paused') {
+    const { kind } = CloudBackup.status
+    if (!job || CloudBackup.running || kind == 'uploading' || kind == 'paused') {
       return
     }
-    DropboxBackup.setStatus({
+    CloudBackup.setStatus({
       kind: 'paused',
       projectTitle: job.projectTitle,
-      uploadedBytes: DropboxBackup.getUploadedBytes(job),
-      totalBytes: DropboxBackup.getTotalBytes(job),
+      uploadedBytes: CloudBackup.getUploadedBytes(job),
+      totalBytes: CloudBackup.getTotalBytes(job),
       reason: 'interrupted',
       message: `Backup of “${job.projectTitle}” was interrupted. Resume to continue.`,
     })
   }
 
   /**
-   * Backs up `project`, which the caller has stopped recording into and saved. Rejects when the backup cannot start;
-   * once it runs, resolves with the final status, `paused` or `failed` included.
+   * Backs up `project`, which the caller has stopped recording into and saved, to `provider`. Rejects when the backup
+   * cannot start; once it runs, resolves with the final status, `paused` or `failed` included.
    */
-  static start(project: Project): Promise<BackupStatus> {
-    if (DropboxBackup.status.kind == 'paused') {
+  static start(project: Project, provider: CloudProviderId): Promise<BackupStatus> {
+    if (CloudBackup.status.kind == 'paused') {
       return Promise.reject(new Error('A backup is already in progress.'))
     }
-    return DropboxBackup.runExclusively(async (signal) => {
+    return CloudBackup.runExclusively(async (signal) => {
       if (await getRecord<BackupJob>(JOB_KEY)) {
         throw new Error('A backup is already in progress.')
       }
@@ -185,6 +193,7 @@ export class DropboxBackup {
       const folderTitle = Array.from(ProjectArchive.getSafeFileTitle(project.title)).slice(0, 100).join('')
       const job: BackupJob = {
         key: JOB_KEY,
+        provider,
         projectId: project.id!,
         projectTitle: project.title,
         folderPath: `/${folderTitle} ${createdAt.slice(0, 19).replaceAll(':', '-')}`,
@@ -207,44 +216,45 @@ export class DropboxBackup {
       signal.throwIfAborted()
       await putRecord(manifest)
       await putRecord(job)
-      return DropboxBackup.runJobHoldingLock(job, signal)
+      return CloudBackup.runJobHoldingLock(job, signal)
     })
   }
 
   /** Continues the persisted backup. Resolves with its final status, `paused` or `failed` included. */
   static resume(): Promise<BackupStatus> {
-    return DropboxBackup.runExclusively(async (signal) => {
+    return CloudBackup.runExclusively(async (signal) => {
       const job = await getRecord<BackupJob>(JOB_KEY)
       if (!job) {
         throw new Error('No interrupted backup to resume.')
       }
-      return DropboxBackup.runJobHoldingLock(job, signal)
+      return CloudBackup.runJobHoldingLock(job, signal)
     })
   }
 
-  /** Stops the backup and removes its local state and its partial folder in Dropbox. */
+  /** Stops the backup and removes its local state and what it uploaded. */
   static async cancel(): Promise<void> {
-    const running = DropboxBackup.running
+    const running = CloudBackup.running
     if (running) {
       running.controller.abort()
       await running.completion.catch(() => undefined)
     }
     const job = await getRecord<BackupJob>(JOB_KEY)
-    await DropboxBackup.deleteJobRecords()
+    await CloudBackup.deleteJobRecords()
     if (job) {
-      await deletePath(job.folderPath).catch(() => undefined)
+      await CloudBackup.discardUploads(job)
     }
-    DropboxBackup.setStatus({ kind: 'idle' })
+    CloudBackup.setStatus({ kind: 'idle' })
   }
 
-  /** Complete backups in the App Folder, newest first. */
-  static async listBackups(): Promise<DropboxBackupListing[]> {
-    const folders = await listFolders()
-    const listings = new Array<DropboxBackupListing>()
+  /** Complete backups at `provider`, newest first. */
+  static async listBackups(provider: CloudProviderId): Promise<CloudBackupListing[]> {
+    const storage = getCloudStorage(provider)
+    const folders = await storage.listFolders()
+    const listings = new Array<CloudBackupListing>()
     let next = 0
     const readFolders = async () => {
       while (next < folders.length) {
-        const listing = await DropboxBackup.readListing(folders[next++])
+        const listing = await CloudBackup.readListing(storage, folders[next++])
         if (listing) {
           listings.push(listing)
         }
@@ -259,9 +269,10 @@ export class DropboxBackup {
    * against the index; a failure leaves no project behind.
    */
   static async restore(
-    listing: DropboxBackupListing,
+    listing: CloudBackupListing,
     onProgress: (written: number, total: number) => void,
   ): Promise<number> {
+    const storage = getCloudStorage(listing.provider)
     const total = listing.members.reduce((sum, member) => sum + member.size, 0)
     const estimate = await globalThis.navigator?.storage?.estimate?.()
     if (estimate?.quota != null && estimate.usage != null && estimate.quota - estimate.usage < total) {
@@ -275,13 +286,16 @@ export class DropboxBackup {
     if (manifestMember.size > MAX_PROJECT_ARCHIVE_MANIFEST_SIZE) {
       throw new Error("The project's metadata is larger than 16 MiB and cannot be archived")
     }
-    const manifestResponse = await download(`${listing.folderPath}/${manifestMember.path}`)
-    const manifestBytes = new Uint8Array(await manifestResponse.arrayBuffer())
+    const manifestStream = await storage.readFile(`${listing.folderPath}/${manifestMember.path}`)
+    if (!manifestStream) {
+      throw CloudBackup.integrityError(manifestMember.path)
+    }
+    const manifestBytes = new Uint8Array(await new Response(manifestStream).arrayBuffer())
     if (
       manifestBytes.length != manifestMember.size ||
-      (await dropboxContentHash(manifestBytes)) != manifestMember.contentHash
+      (await contentHash(manifestBytes)) != manifestMember.contentHash
     ) {
-      throw DropboxBackup.integrityError(manifestMember.path)
+      throw CloudBackup.integrityError(manifestMember.path)
     }
     const manifest = ProjectArchive.parseManifest(manifestBytes)
     let written = manifestBytes.length
@@ -292,8 +306,12 @@ export class DropboxBackup {
       .map((member): ProjectArchiveMember => ({
         name: member.path,
         copyTo: async (write) => {
-          const reader = (await download(`${listing.folderPath}/${member.path}`)).body.getReader()
-          const hasher = new DropboxContentHasher()
+          const stream = await storage.readFile(`${listing.folderPath}/${member.path}`)
+          if (!stream) {
+            throw CloudBackup.integrityError(member.path)
+          }
+          const reader = stream.getReader()
+          const hasher = new ContentHasher()
           let size = 0
           for (;;) {
             const { done, value } = await reader.read()
@@ -303,15 +321,15 @@ export class DropboxBackup {
             size += value.length
             if (size > member.size) {
               await reader.cancel()
-              throw DropboxBackup.integrityError(member.path)
+              throw CloudBackup.integrityError(member.path)
             }
             await hasher.update(value)
-            await write(value)
+            await write(value as Uint8Array<ArrayBuffer>)
             written += value.length
             onProgress(written, total)
           }
           if (size != member.size || (await hasher.digest()) != member.contentHash) {
-            throw DropboxBackup.integrityError(member.path)
+            throw CloudBackup.integrityError(member.path)
           }
         },
       }))
@@ -320,16 +338,16 @@ export class DropboxBackup {
 
   /** Runs one backup operation at a time in this tab; claimed synchronously, so a double click cannot start two. */
   private static runExclusively(operation: (signal: AbortSignal) => Promise<BackupStatus>): Promise<BackupStatus> {
-    if (DropboxBackup.running || DropboxBackup.status.kind == 'uploading') {
+    if (CloudBackup.running || CloudBackup.status.kind == 'uploading') {
       return Promise.reject(new Error('A backup is already in progress.'))
     }
     const controller = new AbortController()
     const completion = operation(controller.signal).finally(() => {
-      if (DropboxBackup.running?.controller == controller) {
-        DropboxBackup.running = null
+      if (CloudBackup.running?.controller == controller) {
+        CloudBackup.running = null
       }
     })
-    DropboxBackup.running = { controller, completion }
+    CloudBackup.running = { controller, completion }
     return completion
   }
 
@@ -337,38 +355,39 @@ export class DropboxBackup {
   private static async runJobHoldingLock(job: BackupJob, signal: AbortSignal): Promise<BackupStatus> {
     const locks: LockManager | undefined = globalThis.navigator?.locks
     if (!locks) {
-      return DropboxBackup.runJob(job, signal)
+      return CloudBackup.runJob(job, signal)
     }
     return locks.request(BACKUP_LOCK_NAME, { ifAvailable: true }, (lock) =>
       lock
-        ? DropboxBackup.runJob(job, signal)
-        : DropboxBackup.pause(job, 'error', 'A backup is running in another SoundEtch tab.'),
+        ? CloudBackup.runJob(job, signal)
+        : CloudBackup.pause(job, 'error', 'A backup is running in another SoundEtch tab.'),
     )
   }
 
   private static async runJob(job: BackupJob, signal: AbortSignal): Promise<BackupStatus> {
-    DropboxBackup.reportProgress(job)
+    const storage = getCloudStorage(job.provider)
+    CloudBackup.reportProgress(job)
     try {
       const manifest = await getRecord<ManifestRecord>(MANIFEST_KEY)
       if (!manifest) {
         throw new ProjectChangedError('The backup lost its project manifest')
       }
-      const sources = await DropboxBackup.getSources(job, manifest)
+      const sources = await CloudBackup.getSources(job, manifest)
       for (const member of job.members) {
         if (member.path in job.uploaded) {
           continue
         }
-        const data = DropboxBackup.getUnchangedSource(sources, member)
+        const data = CloudBackup.getUnchangedSource(sources, member)
         const remotePath = `${job.folderPath}/${member.path}`
         if (member.size <= UPLOAD_CHUNK_SIZE) {
-          await DropboxBackup.uploadSmallMember(job, member, data, remotePath, signal)
+          await CloudBackup.uploadSmallMember(storage, job, member, data, remotePath, signal)
         } else {
-          await DropboxBackup.uploadLargeMember(job, member, data, remotePath, signal)
+          await CloudBackup.uploadLargeMember(storage, job, member, data, remotePath, signal)
         }
       }
 
-      const finalSources = await DropboxBackup.getSources(job, manifest)
-      job.members.forEach((member) => DropboxBackup.getUnchangedSource(finalSources, member))
+      const finalSources = await CloudBackup.getSources(job, manifest)
+      job.members.forEach((member) => CloudBackup.getUnchangedSource(finalSources, member))
       const index: BackupIndex = {
         format: BACKUP_FORMAT,
         version: 1,
@@ -381,25 +400,21 @@ export class DropboxBackup {
         })),
       }
       const indexBytes = new TextEncoder().encode(JSON.stringify(index))
-      const indexHash = await dropboxContentHash(indexBytes)
-      DropboxBackup.verifyUpload(
-        BACKUP_INDEX_NAME,
-        await upload(`${job.folderPath}/${BACKUP_INDEX_NAME}`, indexBytes, indexHash, signal),
-        indexHash,
-        indexBytes.length,
-      )
-      await DropboxBackup.deleteJobRecords()
-      return DropboxBackup.setStatus({ kind: 'complete', projectTitle: job.projectTitle })
+      const indexFile = { size: indexBytes.length, contentHash: await contentHash(indexBytes) }
+      await storage.writeFile(`${job.folderPath}/${BACKUP_INDEX_NAME}`, indexBytes, indexFile, signal)
+      await CloudBackup.deleteJobRecords()
+      return CloudBackup.setStatus({ kind: 'complete', projectTitle: job.projectTitle })
     } catch (error) {
       if (signal.aborted) {
         // Cancelled: `cancel` removes the job and sets the status.
-        return DropboxBackup.status
+        return CloudBackup.status
       }
-      return DropboxBackup.handleFailure(job, error)
+      return CloudBackup.handleFailure(storage, job, error)
     }
   }
 
   private static async uploadSmallMember(
+    storage: CloudStorage,
     job: BackupJob,
     member: BackupJobMember,
     data: Blob,
@@ -410,89 +425,86 @@ export class DropboxBackup {
     if (bytes.length != member.size) {
       throw new ProjectChangedError(`${member.path} changed size`)
     }
-    const hash = await dropboxContentHash(bytes)
-    DropboxBackup.verifyUpload(member.path, await upload(remotePath, bytes, hash, signal), hash, member.size)
+    const hash = await contentHash(bytes)
+    await storage.writeFile(remotePath, bytes, { size: member.size, contentHash: hash }, signal)
     job.uploaded[member.path] = hash
-    await DropboxBackup.persist(job, signal)
+    await CloudBackup.persist(job, signal)
   }
 
   /**
-   * Uploads one chunk per request through an upload session that survives reloads. Each acknowledged chunk is persisted
+   * Uploads one chunk per request through a chunked upload that survives reloads. Each acknowledged chunk is persisted
    * with its block hashes, so a resumed upload neither resends nor rereads acknowledged bytes.
    */
   private static async uploadLargeMember(
+    storage: CloudStorage,
     job: BackupJob,
     member: BackupJobMember,
     data: Blob,
     remotePath: string,
     signal: AbortSignal,
   ) {
-    if (job.session && job.session.path != member.path) {
+    if (job.session?.path != member.path) {
       job.session = null
     }
     let restarted = false
     for (;;) {
+      if (!job.session) {
+        const state = await storage.startChunkedUpload(remotePath, signal)
+        job.session = { path: member.path, offset: 0, blockHashes: [], state }
+        await CloudBackup.persist(job, signal)
+      }
       const session = job.session
-      const offset = session?.offset ?? 0
+      const offset = session.offset
       const end = Math.min(offset + UPLOAD_CHUNK_SIZE, member.size)
       const bytes = new Uint8Array(await data.slice(offset, end).arrayBuffer())
       if (bytes.length != end - offset) {
         throw new ProjectChangedError(`${member.path} changed size`)
       }
-      const hasher = new DropboxContentHasher()
+      const hasher = new ContentHasher()
       await hasher.update(bytes)
-      const chunkHash = await hasher.digest()
-      const chunkBlockHashes = hasher.blockHashes
+      const chunk = { offset, bytes, contentHash: await hasher.digest() }
 
       try {
         signal.throwIfAborted()
-        if (!session) {
-          const sessionId = await startSession(bytes, chunkHash, signal)
-          job.session = { path: member.path, sessionId, offset: end, blockHashes: chunkBlockHashes.map(toHex) }
-        } else if (end < member.size) {
-          await appendSession(session.sessionId, offset, bytes, chunkHash, signal)
-          DropboxBackup.acknowledge(session, end, chunkBlockHashes)
+        if (end < member.size) {
+          session.state = await storage.appendChunk(remotePath, session.state, chunk, signal)
+          session.offset = end
+          session.blockHashes.push(...hasher.blockHashes.map(toHex))
         } else {
-          const metadata = await finishSession(session.sessionId, offset, bytes, chunkHash, remotePath, signal)
-          const contentHash = await new DropboxContentHasher([
-            ...session.blockHashes.map(fromHex),
-            ...chunkBlockHashes,
-          ]).digest()
-          DropboxBackup.verifyUpload(member.path, metadata, contentHash, member.size)
-          job.uploaded[member.path] = contentHash
+          const hash = await new ContentHasher([...session.blockHashes.map(fromHex), ...hasher.blockHashes]).digest()
+          await storage.finishChunkedUpload(
+            remotePath,
+            session.state,
+            chunk,
+            { size: member.size, contentHash: hash },
+            signal,
+          )
+          job.uploaded[member.path] = hash
           job.session = null
-          await DropboxBackup.persist(job, signal)
+          await CloudBackup.persist(job, signal)
           return
         }
       } catch (error) {
-        const failure = lookupFailure(error)
-        if (!failure || !session) {
+        if (!(error instanceof CloudUploadLostError) || restarted) {
           throw error
         }
-        if (failure.tag == 'incorrect_offset' && failure.correctOffset == end) {
-          // An earlier attempt of this request reached Dropbox, but its response did not reach us.
-          DropboxBackup.acknowledge(session, end, chunkBlockHashes)
-        } else if (restarted) {
-          throw error
-        } else {
-          // The session expired or diverged: upload this member again in a new session.
-          restarted = true
-          job.session = null
-        }
+        // The upload expired or diverged: upload this member again in a new one.
+        restarted = true
+        job.session = null
       }
-      await DropboxBackup.persist(job, signal)
+      await CloudBackup.persist(job, signal)
     }
   }
 
-  private static acknowledge(session: UploadSession, end: number, chunkBlockHashes: readonly Uint8Array[]) {
-    session.offset = end
-    session.blockHashes.push(...chunkBlockHashes.map(toHex))
-  }
-
-  private static verifyUpload(path: string, metadata: FileMetadata, contentHash: string, size: number) {
-    if (metadata.content_hash != contentHash || metadata.size != size) {
-      throw new Error(`Dropbox stored ${path} with a different size or content hash`)
+  /** Discards the job's unfinished chunked upload and its folder, as far as the provider can be reached. */
+  private static async discardUploads(job: BackupJob) {
+    const storage = getCloudStorage(job.provider)
+    if (job.session) {
+      await storage
+        .abortChunkedUpload(`${job.folderPath}/${job.session.path}`, job.session.state)
+        .catch(() => undefined)
     }
+    await storage.deleteFolder(job.folderPath).catch(() => undefined)
   }
 
   /** The current bytes of every member: the manifest as snapshotted, and the project's files as they are now. */
@@ -515,75 +527,61 @@ export class DropboxBackup {
     // A cancelled job must not write its record back after `cancel` deleted it.
     signal.throwIfAborted()
     await putRecord(job)
-    DropboxBackup.reportProgress(job)
+    CloudBackup.reportProgress(job)
   }
 
-  private static async handleFailure(job: BackupJob, error: unknown): Promise<BackupStatus> {
+  private static async handleFailure(storage: CloudStorage, job: BackupJob, error: unknown): Promise<BackupStatus> {
     if (
       error instanceof ProjectChangedError ||
       (error instanceof DOMException && (error.name == 'NotFoundError' || error.name == 'NotReadableError'))
     ) {
-      await DropboxBackup.deleteJobRecords().catch(() => undefined)
-      await deletePath(job.folderPath).catch(() => undefined)
-      return DropboxBackup.setStatus({
+      await CloudBackup.deleteJobRecords().catch(() => undefined)
+      await CloudBackup.discardUploads(job)
+      return CloudBackup.setStatus({
         kind: 'failed',
         projectTitle: job.projectTitle,
         message: `“${job.projectTitle}” changed during the backup. Back it up again.`,
       })
     }
-    if (error instanceof DropboxAuthorizationError) {
-      return DropboxBackup.pause(
+    if (error instanceof CloudAuthorizationError) {
+      return CloudBackup.pause(job, 'authorization', error.message)
+    }
+    if (error instanceof CloudUnavailableError) {
+      return CloudBackup.pause(job, 'network', `${error.message} Check the connection, then resume the backup.`)
+    }
+    if (error instanceof CloudStorageFullError) {
+      return CloudBackup.pause(
         job,
-        'authorization',
-        error instanceof DropboxPermissionError
-          ? error.message
-          : 'Dropbox authorization expired. Reconnect Dropbox to continue the backup.',
+        'storage-full',
+        `${error.message} Free space in ${storage.service}, then resume the backup.`,
       )
     }
-    if (error instanceof DropboxUnavailableError) {
-      return DropboxBackup.pause(
-        job,
-        'network',
-        'Dropbox could not be reached. Check the connection, then resume the backup.',
-      )
-    }
-    if (isInsufficientSpace(error)) {
-      return DropboxBackup.pause(
-        job,
-        'dropbox-full',
-        'Your Dropbox is full. Free space in Dropbox, then resume the backup.',
-      )
-    }
-    const reason =
-      error instanceof DropboxError
-        ? (error.userMessage ?? error.summary)
-        : error instanceof Error
-          ? error.message
-          : String(error)
-    return DropboxBackup.pause(
+    const service = error instanceof CloudError ? error.service : storage.service
+    const reason = error instanceof CloudError ? error.reason : error instanceof Error ? error.message : String(error)
+    return CloudBackup.pause(
       job,
       'error',
-      `Dropbox rejected the backup (${reason}). Resume to retry or cancel the backup.`,
+      `${service} rejected the backup (${reason}). Resume to retry or cancel the backup.`,
     )
   }
 
   private static pause(job: BackupJob, reason: BackupPauseReason, message: string): BackupStatus {
-    return DropboxBackup.setStatus({
+    return CloudBackup.setStatus({
       kind: 'paused',
       projectTitle: job.projectTitle,
-      uploadedBytes: DropboxBackup.getUploadedBytes(job),
-      totalBytes: DropboxBackup.getTotalBytes(job),
+      uploadedBytes: CloudBackup.getUploadedBytes(job),
+      totalBytes: CloudBackup.getTotalBytes(job),
       reason,
       message,
     })
   }
 
   private static reportProgress(job: BackupJob) {
-    DropboxBackup.setStatus({
+    CloudBackup.setStatus({
       kind: 'uploading',
       projectTitle: job.projectTitle,
-      uploadedBytes: DropboxBackup.getUploadedBytes(job),
-      totalBytes: DropboxBackup.getTotalBytes(job),
+      uploadedBytes: CloudBackup.getUploadedBytes(job),
+      totalBytes: CloudBackup.getTotalBytes(job),
     })
   }
 
@@ -597,8 +595,8 @@ export class DropboxBackup {
   }
 
   private static setStatus(status: BackupStatus): BackupStatus {
-    DropboxBackup.status = status
-    DropboxBackup.listeners.forEach((listener) => listener(status))
+    CloudBackup.status = status
+    CloudBackup.listeners.forEach((listener) => listener(status))
     return status
   }
 
@@ -612,17 +610,12 @@ export class DropboxBackup {
   }
 
   /** The folder's backup, or null when it has no valid index. */
-  private static async readListing(folder: FolderMetadata): Promise<DropboxBackupListing | null> {
-    let response: Response & { body: ReadableStream<Uint8Array> }
-    try {
-      response = await download(`${folder.path_display}/${BACKUP_INDEX_NAME}`)
-    } catch (error) {
-      if (isNotFound(error)) {
-        return null
-      }
-      throw error
+  private static async readListing(storage: CloudStorage, folderPath: string): Promise<CloudBackupListing | null> {
+    const stream = await storage.readFile(`${folderPath}/${BACKUP_INDEX_NAME}`)
+    if (!stream) {
+      return null
     }
-    const reader = response.body.getReader()
+    const reader = stream.getReader()
     const chunks = new Array<Uint8Array>()
     let size = 0
     for (;;) {
@@ -653,7 +646,7 @@ export class DropboxBackup {
     ) {
       return null
     }
-    const members = new Array<DropboxBackupMember>()
+    const members = new Array<CloudBackupMember>()
     for (const member of index.members) {
       if (
         !isObjectRecord(member) ||
@@ -671,7 +664,8 @@ export class DropboxBackup {
       return null
     }
     return {
-      folderPath: folder.path_display,
+      provider: storage.provider,
+      folderPath,
       projectTitle: index.projectTitle,
       createdAt: index.createdAt,
       totalBytes: members.reduce((sum, member) => sum + member.size, 0),

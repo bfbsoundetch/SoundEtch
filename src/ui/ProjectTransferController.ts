@@ -1,5 +1,5 @@
 import { stopAndWaitForRecordings } from '../recording/UnsettledRecordings'
-import { DropboxBackupController } from './DropboxBackupController'
+import { CloudBackupController } from './CloudBackupController'
 import { ProjectArchive } from '../project/ProjectArchive'
 import { ProjectManager } from '../project/ProjectManager'
 import { NotificationsController } from './NotificationsController'
@@ -16,7 +16,7 @@ export class ProjectTransferController {
     this.exportButton.onclick = () => void this.exportProject()
     this.importButton.onclick = () => this.importInput.click()
     this.importInput.onchange = () => void this.importProject()
-    new DropboxBackupController(this.dialog)
+    new CloudBackupController(this.dialog)
   }
 
   private async exportProject() {

@@ -1,4 +1,5 @@
 import { deleteRecord, getRecord, putRecord } from './BackupStore'
+import { CloudAuthorizationError } from './CloudStorage'
 import {
   DROPBOX_AUTHORIZATION_CHANNEL,
   type DropboxAuthorizationReceived,
@@ -12,19 +13,19 @@ export interface PreparedAuthorization {
 }
 
 interface TokenRecord {
-  readonly key: 'token'
+  readonly key: typeof TOKEN_KEY
   readonly accessToken: string
   readonly expiresAt: number
   readonly accountId: string
 }
 
-const TOKEN_KEY = 'token'
+const TOKEN_KEY = 'dropbox-token'
 /** Tokens this close to expiry are treated as expired, so a request never starts with one. */
 const EXPIRY_MARGIN = 2 * 60_000
 /** The scopes backup and restore use; the Dropbox app must have every one enabled. */
 const REQUIRED_SCOPES: readonly string[] = ['files.metadata.read', 'files.content.read', 'files.content.write']
 
-export class DropboxAuthorizationError extends Error {
+export class DropboxAuthorizationError extends CloudAuthorizationError {
   override name = 'DropboxAuthorizationError'
 }
 

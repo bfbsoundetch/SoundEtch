@@ -918,20 +918,69 @@
             </button>
           </section>
         </div>
-        <section id="dropbox-backup" class="project-transfer-option" hidden>
-          <h2>Dropbox backup</h2>
-          <p id="dropbox-connection-status">Not connected.</p>
-          <div class="dropbox-backup-actions">
-            <button id="dropbox-connect-button" class="bordered clickable" type="button">Connect Dropbox</button>
-            <button id="dropbox-disconnect-button" class="bordered clickable" type="button" hidden>Disconnect</button>
-            <button id="dropbox-backup-button" class="bordered clickable" type="button">Back Up Current Project</button>
-            <button id="dropbox-resume-button" class="bordered clickable" type="button" hidden>Resume Backup</button>
-            <button id="dropbox-cancel-button" class="bordered clickable" type="button" hidden>Cancel Backup</button>
-            <button id="dropbox-list-button" class="bordered clickable" type="button">Show Backups</button>
+        <section id="cloud-backup" class="project-transfer-option">
+          <h2>Cloud backup</h2>
+          <div id="cloud-provider-row" class="settings-grid">
+            <label for="cloud-provider-select">Service</label>
+            <select id="cloud-provider-select"></select>
           </div>
-          <progress id="dropbox-backup-progress" max="1" value="0" hidden></progress>
-          <p id="dropbox-backup-status" role="status" aria-live="polite"></p>
-          <ul id="dropbox-backup-list" hidden></ul>
+          <p id="cloud-connection-status">Not connected.</p>
+          <form id="s3-settings-form" class="settings-grid" hidden>
+            <label for="s3-endpoint">Endpoint</label>
+            <input
+              id="s3-endpoint"
+              name="endpoint"
+              type="url"
+              placeholder="Empty for Amazon S3"
+              autocomplete="off"
+              aria-describedby="s3-endpoint-description"
+            />
+            <p id="s3-endpoint-description">
+              For other services, their S3 API address, e.g. https://ACCOUNT.r2.cloudflarestorage.com.
+            </p>
+            <label for="s3-region">Region</label>
+            <input id="s3-region" name="region" type="text" placeholder="us-east-1" autocomplete="off" required />
+            <label for="s3-bucket">Bucket</label>
+            <input id="s3-bucket" name="bucket" type="text" autocomplete="off" required />
+            <label for="s3-prefix">Folder</label>
+            <input
+              id="s3-prefix"
+              name="prefix"
+              type="text"
+              placeholder="Optional, e.g. soundetch/"
+              autocomplete="off"
+            />
+            <label for="s3-access-key-id">Access key ID</label>
+            <input id="s3-access-key-id" name="accessKeyId" type="text" autocomplete="off" required />
+            <label for="s3-secret-access-key">Secret access key</label>
+            <input
+              id="s3-secret-access-key"
+              name="secretAccessKey"
+              type="password"
+              autocomplete="new-password"
+              required
+            />
+            <label for="s3-path-style">Path-style URLs</label>
+            <input id="s3-path-style" name="pathStyle" type="checkbox" aria-describedby="s3-path-style-description" />
+            <p id="s3-path-style-description">Needed by MinIO and some other servers.</p>
+            <p class="s3-settings-help">
+              The bucket's CORS rules must allow <span id="s3-settings-origin"></span> to GET, PUT, POST, DELETE, and
+              HEAD with any header, and expose the ETag header. Use a key that can only reach this bucket: the secret
+              stays in this browser.
+            </p>
+            <button id="s3-connect-button" class="bordered clickable" type="submit">Connect S3</button>
+          </form>
+          <div class="cloud-backup-actions">
+            <button id="dropbox-connect-button" class="bordered clickable" type="button" hidden>Connect Dropbox</button>
+            <button id="cloud-disconnect-button" class="bordered clickable" type="button" hidden>Disconnect</button>
+            <button id="cloud-backup-button" class="bordered clickable" type="button">Back Up Current Project</button>
+            <button id="cloud-resume-button" class="bordered clickable" type="button" hidden>Resume Backup</button>
+            <button id="cloud-cancel-button" class="bordered clickable" type="button" hidden>Cancel Backup</button>
+            <button id="cloud-list-button" class="bordered clickable" type="button">Show Backups</button>
+          </div>
+          <progress id="cloud-backup-progress" max="1" value="0" hidden></progress>
+          <p id="cloud-backup-status" role="status" aria-live="polite"></p>
+          <ul id="cloud-backup-list" hidden></ul>
         </section>
         <p id="project-transfer-status" role="status" aria-live="polite"></p>
       </div>

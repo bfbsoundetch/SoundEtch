@@ -1,5 +1,6 @@
-// Kept apart from the `soundetch` database, whose unguarded upgrade would need a version bump for a new store.
-const DATABASE_NAME = 'soundetch-dropbox'
+// Cloud credentials and backup progress. Kept apart from the `soundetch` database, whose unguarded upgrade would need a
+// version bump for a new store.
+const DATABASE_NAME = 'soundetch-cloud'
 const STORE_NAME = 'records'
 
 let database: Promise<IDBDatabase> | null = null
