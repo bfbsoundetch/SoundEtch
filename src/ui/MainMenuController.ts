@@ -1,24 +1,24 @@
 import { AudioControl, AudioState } from '../audiocontext/AudioControl'
+import { ProjectManager } from '../project/ProjectManager'
 import { editorHistory } from './undo/EditorHistory'
 import { announce } from './LiveAnnouncer'
 
 export class MainMenuController {
   private readonly menuDropdown = document.getElementById('menu-dropdown') as HTMLDivElement
-  private readonly editSubmenu = document.getElementById('main-menu-edit-submenu') as HTMLDivElement
-  private readonly editButton = document.getElementById('main-menu-edit-button') as HTMLButtonElement
   private readonly undoButton = document.getElementById('main-menu-undo-button') as HTMLButtonElement
   private readonly redoButton = document.getElementById('main-menu-redo-button') as HTMLButtonElement
   private readonly feedbackButton = document.getElementById('open-feedback-button') as HTMLButtonElement
+  private openSubmenuButton: HTMLButtonElement | null = null
+  private openedByHover = false
 
   constructor() {
-    this.editButton.onclick = () => this.setEditSubmenuOpen(this.editButton.getAttribute('aria-expanded') != 'true')
-    this.editSubmenu.addEventListener('focusout', (event) => {
-      if (!(event.relatedTarget instanceof Node && this.editSubmenu.contains(event.relatedTarget))) {
-        this.setEditSubmenuOpen(false)
-      }
+    this.menuDropdown.querySelectorAll<HTMLButtonElement>('.main-menu-submenu-button').forEach((button) => {
+      this.bindSubmenu(button)
     })
-    this.editSubmenu.onmouseenter = () => this.setEditSubmenuOpen(true)
-    this.editSubmenu.onmouseleave = () => this.setEditSubmenuOpen(false)
+    const projectTitle = document.getElementById('main-menu-project-title') as HTMLDivElement
+    void ProjectManager.addProjectListener((project) => {
+      projectTitle.textContent = project.title
+    })
     this.undoButton.onclick = () => void this.undo()
     this.redoButton.onclick = () => void this.redo()
     const configuredFeedbackUrl = import.meta.env.VITE_FEEDBACK_URL?.trim()
@@ -51,7 +51,7 @@ export class MainMenuController {
     this.menuDropdown.addEventListener('toggle', () => {
       this.update()
       if (!this.menuDropdown.matches(':popover-open')) {
-        this.setEditSubmenuOpen(false)
+        this.setOpenSubmenu(null)
       }
     })
     editorHistory.addChangeListener(() => this.update())
@@ -101,13 +101,48 @@ export class MainMenuController {
     return shortcut
   }
 
-  private setEditSubmenuOpen(open: boolean) {
-    this.editSubmenu.classList.toggle('open', open)
-    this.editButton.setAttribute('aria-expanded', String(open))
+  private bindSubmenu(button: HTMLButtonElement) {
+    const submenu = button.parentElement!
+    button.onclick = () => {
+      this.setOpenSubmenu(this.openSubmenuButton == button && !this.openedByHover ? null : button)
+    }
+    submenu.addEventListener('pointerenter', (event) => {
+      if (event.pointerType == 'mouse' && this.openSubmenuButton != button) {
+        this.setOpenSubmenu(button, true)
+      }
+    })
+    submenu.addEventListener('pointerleave', (event) => {
+      if (
+        event.pointerType == 'mouse' &&
+        this.openSubmenuButton == button &&
+        this.openedByHover &&
+        !submenu.contains(document.activeElement)
+      ) {
+        this.setOpenSubmenu(null)
+      }
+    })
+    submenu.addEventListener('focusout', (event) => {
+      if (
+        this.openSubmenuButton == button &&
+        event.relatedTarget instanceof Node &&
+        !submenu.contains(event.relatedTarget)
+      ) {
+        this.setOpenSubmenu(null)
+      }
+    })
+  }
+
+  private setOpenSubmenu(button: HTMLButtonElement | null, byHover = false) {
+    if (this.openSubmenuButton != button) {
+      this.openSubmenuButton?.setAttribute('aria-expanded', 'false')
+      this.openSubmenuButton = button
+      button?.setAttribute('aria-expanded', 'true')
+    }
+    this.openedByHover = byHover
   }
 
   private close() {
-    this.setEditSubmenuOpen(false)
+    this.setOpenSubmenu(null)
     if (this.menuDropdown.matches(':popover-open')) {
       this.menuDropdown.hidePopover()
     }

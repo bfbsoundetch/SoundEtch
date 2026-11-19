@@ -160,10 +160,29 @@
           </svg>
         </button>
         <div popover="auto" id="menu-dropdown">
-          <button id="open-project-manager-modal-button" class="menu-item clickable">Projects</button>
-          <div id="main-menu-edit-submenu" class="main-menu-submenu">
+          <div class="main-menu-submenu">
             <button
-              id="main-menu-edit-button"
+              class="menu-item clickable main-menu-submenu-button"
+              aria-expanded="false"
+              aria-controls="main-menu-project-submenu-content"
+            >
+              <span>Project</span>
+              <span aria-hidden="true">&gt;</span>
+            </button>
+            <div id="main-menu-project-submenu-content" class="main-menu-submenu-content">
+              <div id="main-menu-project-title" class="menu-item" dir="auto"></div>
+              <button id="open-project-manager-modal-button" class="menu-item clickable">Manage Projects</button>
+              <button
+                id="open-project-transfer-modal-button"
+                class="menu-item clickable"
+                onclick="showDialog(document.getElementById('project-transfer-modal'))"
+              >
+                Import / Export
+              </button>
+            </div>
+          </div>
+          <div class="main-menu-submenu">
+            <button
               class="menu-item clickable main-menu-submenu-button"
               aria-expanded="false"
               aria-controls="main-menu-edit-submenu-content"
@@ -190,13 +209,6 @@
             onclick="showDialog(document.getElementById('publish-project-modal'))"
           >
             Publish
-          </button>
-          <button
-            id="open-project-transfer-modal-button"
-            class="menu-item clickable"
-            onclick="showDialog(document.getElementById('project-transfer-modal'))"
-          >
-            Import / Export
           </button>
           <button id="open-clip-manager-modal-button" class="menu-item clickable">Manage Clips</button>
           <button id="open-settings-modal-button" class="menu-item clickable">Settings</button>

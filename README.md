@@ -123,9 +123,13 @@ With `ffmpeg` and `ffprobe` installed, run `yarn vitest run src/encoders/Metadat
 
 The gain is computed before limiting. When limited peaks carry much of the program's energy, the result lands below the target. The limiter detects true peaks with a 145-tap Kaiser-windowed interpolator, so exports hold the −1 dBTP ceiling to within 0.1 dB as measured by ffmpeg's `ebur128`, including on full-band noise.
 
+## Project menu
+
+Open **Project** from the main menu to see the current project title. The title is informational; choose **Manage Projects** below it to create, switch, rename, or delete projects. Choose **Import / Export** to transfer project archives or manage cloud backups.
+
 ## Cloud backup
 
-**Import / Export** can back up the current project to Dropbox or to S3-compatible storage, and restore any backup there as a new project. **Service** picks the destination; it is fixed while a backup runs or waits paused. Credentials and backup progress live in their own IndexedDB database, `soundetch-cloud`.
+**Project → Import / Export** can back up the current project to Dropbox or to S3-compatible storage, and restore any backup there as a new project. **Service** picks the destination; it is fixed while a backup runs or waits paused. Credentials and backup progress live in their own IndexedDB database, `soundetch-cloud`.
 
 A backup is one folder per project and time, holding the project manifest, one file per stored project file, and a `backup.json` index written last; a folder without the index is incomplete and is not listed. Only 48 kHz projects without unrecovered video recordings can be backed up. Files over 8 MiB upload in 8 MiB chunks (Dropbox upload sessions, S3 multipart uploads), and progress is saved after every acknowledged request: after a reload, a lost connection, refused credentials, or full storage, **Resume Backup** sends only what was not acknowledged. If a project file changes during the backup, the backup fails and what it uploaded is removed. **Cancel Backup** also removes it, including an unfinished S3 multipart upload.
 

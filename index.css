@@ -167,7 +167,7 @@ body {
   position: relative;
 }
 
-.main-menu-submenu-button {
+.menu-item.main-menu-submenu-button {
   display: flex;
   justify-content: space-between;
   gap: 1rem;
@@ -184,8 +184,7 @@ body {
   color: var(--color);
 }
 
-.main-menu-submenu.open .main-menu-submenu-content,
-.main-menu-submenu:hover .main-menu-submenu-content {
+.main-menu-submenu-button[aria-expanded='true'] + .main-menu-submenu-content {
   display: block;
 }
 
@@ -214,6 +213,14 @@ body {
 
 .menu-item:disabled::after {
   display: none;
+}
+
+#main-menu-project-title {
+  color: var(--muted-text-color);
+  border-color: var(--color);
+  font-size: 1.25rem;
+  text-align: center;
+  overflow-wrap: anywhere;
 }
 
 .menu-item-shortcut {
