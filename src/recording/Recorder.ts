@@ -2,7 +2,8 @@ import { Track } from '../project/Track'
 import { RingBuffer } from 'ringbuf.js'
 import { AudioInput } from '../audioinputs/AudioInput'
 import { AudioInputs } from '../audioinputs/AudioInputs'
-import { VideoInputs, type VideoInput } from '../videoinputs/VideoInputs'
+import type { VideoInput } from '../videoinputs/VideoInputs'
+import { RecordingModeSetting } from './RecordingMode'
 import { NetworkUtils } from '../NetworkUtils'
 import { ProjectManager } from '../project/ProjectManager'
 import { WorkerController } from '../audiocontext/WorkerController'
@@ -35,7 +36,7 @@ export class Recorder {
     if (!activeProject) {
       throw new Error('No active project.')
     }
-    return Recorder.startRecording(AudioInputs.gatherActiveAudioInputs(), VideoInputs.gather())
+    return Recorder.startRecording(AudioInputs.gatherActiveAudioInputs(), RecordingModeSetting.gatherVideoInputs())
   }
 
   /** One new track per source; a person's or device's audio and video share one linked clip. */

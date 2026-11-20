@@ -546,6 +546,44 @@ dialog.overlay[open] {
   flex: 1;
 }
 
+/* The record button, with the recording mode caret over its right edge. */
+#record-button-group {
+  display: flex;
+  flex: 1;
+  position: relative;
+}
+
+#recording-mode-button {
+  position: absolute;
+  /* Inside the record button's margin and border. */
+  inset: calc(0.3rem + 1px) calc(0.3rem + 1px) calc(0.3rem + 1px) auto;
+  width: 1.5rem;
+  display: grid;
+  place-items: center;
+  padding: 0;
+  border: none;
+  border-left: 1px dotted;
+  background: transparent;
+  color: inherit;
+}
+
+#recording-mode-button[hidden] {
+  display: none;
+}
+
+#recording-mode-button > svg {
+  width: 100%;
+}
+
+#recording-mode-button.tooltipped span {
+  top: 100%;
+  right: 0;
+}
+
+#recording-mode-button[aria-expanded='true'] span {
+  opacity: 0;
+}
+
 .error-span {
   background: #c62828;
   text-align: center;
@@ -1166,6 +1204,7 @@ svg {
 }
 
 #pause > polygon,
+#caret-down > polygon,
 #three-dots > ellipse {
   fill: currentColor;
 }
@@ -2350,7 +2389,7 @@ video {
   height: 100%;
 }
 
-.track-display-mode-menu {
+.popover-menu {
   position: fixed;
   inset: auto;
   min-width: 9rem;
@@ -2364,17 +2403,17 @@ video {
   user-select: none;
 }
 
-.track-display-mode-menu:popover-open,
-.track-display-mode-menu-positioning {
+.popover-menu:popover-open,
+.popover-menu-positioning {
   display: grid;
   gap: 0.125rem;
 }
 
-.track-display-mode-menu-positioning {
+.popover-menu-positioning {
   visibility: hidden;
 }
 
-.track-display-mode-option {
+.popover-menu-option {
   padding: 0.45rem 0.6rem;
   border: none;
   background: transparent;
@@ -2384,16 +2423,16 @@ video {
   cursor: pointer;
 }
 
-.track-display-mode-option[hidden] {
+.popover-menu-option[hidden] {
   display: none;
 }
 
-.track-display-mode-option:hover,
-.track-display-mode-option:focus-visible {
+.popover-menu-option:hover,
+.popover-menu-option:focus-visible {
   background: var(--clickable-hover);
 }
 
-.track-display-mode-option[aria-checked='true'] {
+.popover-menu-option[aria-checked='true'] {
   background: var(--clickable-active);
   font-weight: bold;
 }
@@ -4780,7 +4819,7 @@ input::placeholder {
   .project-button[aria-pressed='true'],
   .top-panel-tab[aria-selected='true'],
   .track-solo-button[aria-pressed='true'],
-  .track-display-mode-option[aria-checked='true'],
+  .popover-menu-option[aria-checked='true'],
   #transcript-panel-content .transcript-word.playing,
   #transcript-panel-content .transcript-gap.playing {
     forced-color-adjust: none;

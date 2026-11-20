@@ -1,6 +1,7 @@
 import { AudioControl, AudioState } from '../audiocontext/AudioControl'
 import type { TrackListController } from './timeline/TrackListController'
 import { RecordButtonController } from './RecordButtonController'
+import { RecordingModeMenuController } from './RecordingModeMenuController'
 import { announce } from './LiveAnnouncer'
 
 export class HeaderController {
@@ -8,6 +9,7 @@ export class HeaderController {
   private secondHeaderButton = document.getElementById('second-header-button') as HTMLButtonElement
   private thirdHeaderButton = document.getElementById('third-header-button') as HTMLButtonElement
   private readonly recordButtonController = new RecordButtonController(this.firstHeaderButton, 'project-button')
+  private readonly recordingModeMenu = new RecordingModeMenuController()
   private previousState: AudioState | null = null
   private static readonly STATE_ANNOUNCEMENTS: Partial<Record<AudioState, string>> = {
     [AudioState.RECORDING]: 'Recording',
@@ -56,6 +58,7 @@ export class HeaderController {
 
   private handleSwitchToActiveState() {
     this.recordButtonController.cancelCountdown()
+    this.recordingModeMenu.setAvailable(false)
     if (AudioControl.getState() == AudioState.PLAYING) {
       ;(this.firstHeaderButton.getElementsByClassName('play')[0] as SVGUseElement).style.opacity = '1'
       ;(this.firstHeaderButton.getElementsByClassName('record')[0] as SVGUseElement).style.opacity = '0'
@@ -84,6 +87,7 @@ export class HeaderController {
 
   private handleSwitchToPausedState() {
     this.recordButtonController.cancelCountdown()
+    this.recordingModeMenu.setAvailable(false)
     if (AudioControl.getState() == AudioState.PLAYING_PAUSED) {
       ;(this.firstHeaderButton.getElementsByClassName('play')[0] as SVGUseElement).style.opacity = '1'
       ;(this.firstHeaderButton.getElementsByClassName('record')[0] as SVGUseElement).style.opacity = '0'
@@ -114,6 +118,7 @@ export class HeaderController {
     ;(this.firstHeaderButton.getElementsByClassName('record')[0] as SVGUseElement).style.opacity = '1'
     this.firstHeaderButton.getElementsByTagName('span')[0].innerText = 'Record'
     this.recordButtonController.configureStoppedState()
+    this.recordingModeMenu.setAvailable(true)
     this.firstHeaderButton.removeAttribute('aria-pressed')
     ;(this.secondHeaderButton.getElementsByClassName('pause')[0] as SVGUseElement).style.opacity = '0'
     ;(this.secondHeaderButton.getElementsByClassName('play')[0] as SVGUseElement).style.opacity = '1'

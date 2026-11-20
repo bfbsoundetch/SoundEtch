@@ -1,6 +1,7 @@
 import { AudioInputs } from '../audioinputs/AudioInputs'
 import { VideoInputs } from '../videoinputs/VideoInputs'
 import { AudioControl, AudioState } from '../audiocontext/AudioControl'
+import { RecordingModeSetting } from '../recording/RecordingMode'
 import type { RecordingActivity } from '../remote/RemoteMediaClient3'
 import { announce } from './LiveAnnouncer'
 
@@ -30,6 +31,7 @@ export class RecordButtonController {
     }
     AudioInputs.addListener(handleInputChange)
     VideoInputs.addListener(handleInputChange)
+    RecordingModeSetting.addListener(handleInputChange)
 
     this.configureStoppedState()
   }
@@ -39,9 +41,14 @@ export class RecordButtonController {
       return
     }
     const hasAvailableInputs = this.hasAvailableInputs()
+    const audioOnly = RecordingModeSetting.get() == 'audio-only'
     this.button.getElementsByTagName('span')[0].innerText = hasAvailableInputs
-      ? 'Record'
-      : 'Nothing to record. Enable a mic, camera or screen share.'
+      ? audioOnly
+        ? 'Record audio only'
+        : 'Record'
+      : audioOnly
+        ? 'Nothing to record in audio-only mode. Enable a mic or a screen share with audio.'
+        : 'Nothing to record. Enable a mic, camera or screen share.'
     this.button.disabled = false
     this.button.setAttribute('aria-disabled', String(!hasAvailableInputs))
     this.button.className = `${this.baseClassName} tooltipped${hasAvailableInputs ? ' clickable' : ' record-button-unavailable'}`
@@ -132,11 +139,13 @@ export class RecordButtonController {
   }
 
   private hasAvailableInputs() {
-    return AudioInputs.gatherActiveAudioInputs().length > 0 || VideoInputs.gather().length > 0
+    return AudioInputs.gatherActiveAudioInputs().length > 0 || RecordingModeSetting.gatherVideoInputs().length > 0
   }
 
   private hasRemoteInputs() {
-    return AudioInputs.getRemoteInputs().length > 0 || VideoInputs.gather().some((input) => input.remote)
+    return (
+      AudioInputs.getRemoteInputs().length > 0 || RecordingModeSetting.gatherVideoInputs().some((input) => input.remote)
+    )
   }
 
   private hideCountdown() {

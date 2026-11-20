@@ -7,6 +7,7 @@ import { PeakMeterController } from '../PeakMeterController'
 import { Project } from '../../project/Project'
 import type { TrackDisplayMode } from './TrackDisplayMode'
 import { createSvgIcon } from '../SvgIcon'
+import { positionPopoverMenu } from '../PopoverMenu'
 import { announce } from '../LiveAnnouncer'
 
 let nextDisplayModeMenuId = 0
@@ -290,7 +291,7 @@ export class TrackListTrack {
   ) {
     const popover = document.createElement('div')
     popover.id = `track-display-mode-menu-${++nextDisplayModeMenuId}`
-    popover.className = 'track-display-mode-menu'
+    popover.className = 'popover-menu'
     popover.setAttribute('popover', 'auto')
     popover.setAttribute('role', 'menu')
 
@@ -311,7 +312,7 @@ export class TrackListTrack {
     const createItem = (label: string, role: 'menuitem' | 'menuitemradio') => {
       const item = document.createElement('button')
       item.type = 'button'
-      item.className = 'track-display-mode-option'
+      item.className = 'popover-menu-option'
       item.setAttribute('role', role)
       item.tabIndex = -1
       item.textContent = label
@@ -382,28 +383,9 @@ export class TrackListTrack {
         optionButtons[index].setAttribute('aria-checked', `${modes[index].mode == currentDisplayMode}`)
       }
     }
-    const positionPopover = () => {
-      const triggerBounds = button.getBoundingClientRect()
-      const gap = 4
-      const viewportPadding = 8
-      const left = Math.max(
-        viewportPadding,
-        Math.min(triggerBounds.right - popover.offsetWidth, window.innerWidth - popover.offsetWidth - viewportPadding),
-      )
-      let top = triggerBounds.bottom + gap
-      if (top + popover.offsetHeight > window.innerHeight - viewportPadding) {
-        top = Math.max(viewportPadding, triggerBounds.top - popover.offsetHeight - gap)
-      }
-      popover.style.left = `${left}px`
-      popover.style.top = `${top}px`
-    }
 
     popover.addEventListener('beforetoggle', (event) => {
-      if (event.newState !== 'open') return
-      // Closed popovers have no layout; measure invisibly before the browser reveals the menu.
-      popover.classList.add('track-display-mode-menu-positioning')
-      positionPopover()
-      popover.classList.remove('track-display-mode-menu-positioning')
+      if (event.newState === 'open') positionPopoverMenu(popover, button)
     })
     popover.addEventListener('toggle', () => {
       const isOpen = popover.matches(':popover-open')

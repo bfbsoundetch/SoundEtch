@@ -1,4 +1,5 @@
 import { LocalMediaStreams } from '../mediastreams/LocalMediaStreams'
+import { RecordingModeSetting } from '../recording/RecordingMode'
 import type { Recorder } from '../recording/Recorder'
 
 interface WelcomePageWindow extends Window {
@@ -16,11 +17,14 @@ export class WelcomePageController {
       await LocalMediaStreams.startAudioDevice()
       await startRecordingActiveInputs()
     }
+    // These choices ask for video, which a previously chosen audio-only mode would leave out.
     document.getElementById('welcome-camera')!.onclick = async () => {
+      RecordingModeSetting.set('audio-video')
       await Promise.all([LocalMediaStreams.startAudioDevice(), LocalMediaStreams.startVideoDevice()])
       await startRecordingActiveInputs()
     }
     document.getElementById('welcome-screen')!.onclick = async () => {
+      RecordingModeSetting.set('audio-video')
       await LocalMediaStreams.startCapturingTab()
       await startRecordingActiveInputs()
     }

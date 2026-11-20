@@ -229,16 +229,54 @@
           </svg>
         </div>
         <div id="project-header">
-          <button id="first-header-button" class="project-button tooltipped clickable">
-            <svg class="header-button record" viewBox="0 0 500 500" aria-hidden="true">
-              <use xlink:href="#record" />
-              <use class="record-button-slash" xlink:href="#slash" />
-            </svg>
-            <svg class="header-button play" viewBox="0 0 500 500" aria-hidden="true">
-              <use xlink:href="#play" />
-            </svg>
-            <span>Record</span>
-          </button>
+          <div id="record-button-group">
+            <button id="first-header-button" class="project-button tooltipped clickable">
+              <svg class="header-button record" viewBox="0 0 500 500" aria-hidden="true">
+                <use xlink:href="#record" />
+                <use class="record-button-slash" xlink:href="#slash" />
+              </svg>
+              <svg class="header-button play" viewBox="0 0 500 500" aria-hidden="true">
+                <use xlink:href="#play" />
+              </svg>
+              <span>Record</span>
+            </button>
+            <button
+              id="recording-mode-button"
+              type="button"
+              class="tooltipped clickable"
+              aria-haspopup="menu"
+              aria-expanded="false"
+              aria-controls="recording-mode-menu"
+              popovertarget="recording-mode-menu"
+            >
+              <svg viewBox="0 0 500 500" aria-hidden="true">
+                <use xlink:href="#caret-down" />
+              </svg>
+              <span>Recording mode: audio and video</span>
+            </button>
+            <div id="recording-mode-menu" class="popover-menu" popover="auto" role="menu" aria-label="Recording mode">
+              <button
+                type="button"
+                class="popover-menu-option"
+                role="menuitemradio"
+                aria-checked="true"
+                tabindex="-1"
+                data-recording-mode="audio-video"
+              >
+                Audio and video
+              </button>
+              <button
+                type="button"
+                class="popover-menu-option"
+                role="menuitemradio"
+                aria-checked="false"
+                tabindex="-1"
+                data-recording-mode="audio-only"
+              >
+                Audio only
+              </button>
+            </div>
+          </div>
           <button id="second-header-button" class="project-button tooltipped clickable">
             <svg class="header-button play" viewBox="0 0 500 500" aria-hidden="true">
               <use xlink:href="#play" />
@@ -1369,6 +1407,9 @@
       </g>
       <g id="arrow-block-right" viewBox="0 0 500 500">
         <path d="M 45 200 H 255 V 100 L 455 250 L 255 400 V 300 H 45 V 200 Z" />
+      </g>
+      <g id="caret-down" viewBox="0 0 500 500">
+        <polygon points="130 200 370 200 250 320" />
       </g>
       <g id="chevron-down" viewBox="0 0 500 125">
         <polyline points="25 30 250 95 475 30" />
