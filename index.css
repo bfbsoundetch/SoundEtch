@@ -49,6 +49,9 @@ button {
   --waveform-5: hsla(300, 100%, 90%, 1);
   --record-button-red: hsla(0, 100%, 25%, 0.9);
   --play-button-green: hsla(147, 74%, 20%, 0.9);
+  /* Record and play icons on a pressed button, whose background is the text color. */
+  --record-button-red-pressed: #ff9999;
+  --play-button-green-pressed: #4fce86;
   --track-mute-active: #a35f00;
   --track-solo-active: #28794b;
   --track-mix-active-text: #ffffff;
@@ -77,6 +80,8 @@ button {
     --waveform-5: #ad88b4;
     --record-button-red: #ff9999;
     --play-button-green: #4fce86;
+    --record-button-red-pressed: hsla(0, 100%, 25%, 0.9);
+    --play-button-green-pressed: hsla(147, 74%, 20%, 0.9);
     --track-mute-active: #f0a020;
     --track-solo-active: #4fce86;
     --track-mix-active-text: #171717;
@@ -506,9 +511,12 @@ dialog.overlay[open] {
   user-select: none;
 }
 
-.media-stream-button[aria-pressed='true'] {
+.media-stream-button[aria-pressed='true'],
+.project-button[aria-pressed='true'] {
   background: var(--color);
   color: var(--bg-color);
+  --record-button-red: var(--record-button-red-pressed);
+  --play-button-green: var(--play-button-green-pressed);
 }
 
 .tooltipped span {
@@ -4769,6 +4777,7 @@ input::placeholder {
 @media (forced-colors: active) {
   .track-mute-button[aria-pressed='true'],
   .media-stream-button[aria-pressed='true'],
+  .project-button[aria-pressed='true'],
   .top-panel-tab[aria-selected='true'],
   .track-solo-button[aria-pressed='true'],
   .track-display-mode-option[aria-checked='true'],

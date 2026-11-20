@@ -69,13 +69,13 @@ export class HeaderController {
     this.firstHeaderButton.disabled = false
     this.firstHeaderButton.setAttribute('aria-disabled', 'true')
     this.firstHeaderButton.className = 'project-button tooltipped animated-brightness'
+    this.firstHeaderButton.setAttribute('aria-pressed', 'true')
     this.firstHeaderButton.onclick = () => {}
-    this.firstHeaderButton.style.background = 'rgba(0,0,0,.2)'
     ;(this.secondHeaderButton.getElementsByClassName('pause')[0] as SVGUseElement).style.opacity = '1'
     ;(this.secondHeaderButton.getElementsByClassName('play')[0] as SVGUseElement).style.opacity = '0'
     this.secondHeaderButton.getElementsByTagName('span')[0].innerText = 'Pause'
+    this.secondHeaderButton.setAttribute('aria-pressed', 'false')
     this.secondHeaderButton.onclick = AudioControl.pause
-    this.secondHeaderButton.style.background = ''
     ;(this.thirdHeaderButton.getElementsByClassName('stop')[0] as SVGUseElement).style.opacity = '1'
     ;(this.thirdHeaderButton.getElementsByClassName('plus')[0] as SVGUseElement).style.opacity = '0'
     this.thirdHeaderButton.getElementsByTagName('span')[0].innerText = 'Stop'
@@ -96,12 +96,13 @@ export class HeaderController {
     this.firstHeaderButton.disabled = false
     this.firstHeaderButton.setAttribute('aria-disabled', 'false')
     this.firstHeaderButton.className = 'project-button tooltipped clickable'
+    this.firstHeaderButton.setAttribute('aria-pressed', 'true')
     this.firstHeaderButton.onclick = AudioControl.unpause
-    ;(this.secondHeaderButton.getElementsByClassName('pause')[0] as SVGUseElement).style.opacity = '0'
-    ;(this.secondHeaderButton.getElementsByClassName('play')[0] as SVGUseElement).style.opacity = '1'
+    ;(this.secondHeaderButton.getElementsByClassName('pause')[0] as SVGUseElement).style.opacity = '1'
+    ;(this.secondHeaderButton.getElementsByClassName('play')[0] as SVGUseElement).style.opacity = '0'
     this.secondHeaderButton.getElementsByTagName('span')[0].innerText = 'Unpause'
+    this.secondHeaderButton.setAttribute('aria-pressed', 'true')
     this.secondHeaderButton.onclick = AudioControl.unpause
-    this.secondHeaderButton.style.background = 'rgba(0,0,0,.2)'
     ;(this.thirdHeaderButton.getElementsByClassName('stop')[0] as SVGUseElement).style.opacity = '1'
     ;(this.thirdHeaderButton.getElementsByClassName('plus')[0] as SVGUseElement).style.opacity = '0'
     this.thirdHeaderButton.getElementsByTagName('span')[0].innerText = 'Stop'
@@ -113,7 +114,7 @@ export class HeaderController {
     ;(this.firstHeaderButton.getElementsByClassName('record')[0] as SVGUseElement).style.opacity = '1'
     this.firstHeaderButton.getElementsByTagName('span')[0].innerText = 'Record'
     this.recordButtonController.configureStoppedState()
-    this.firstHeaderButton.style.background = ''
+    this.firstHeaderButton.removeAttribute('aria-pressed')
     ;(this.secondHeaderButton.getElementsByClassName('pause')[0] as SVGUseElement).style.opacity = '0'
     ;(this.secondHeaderButton.getElementsByClassName('play')[0] as SVGUseElement).style.opacity = '1'
     this.secondHeaderButton.getElementsByTagName('span')[0].innerText = 'Play'
@@ -122,7 +123,7 @@ export class HeaderController {
       const { Player } = await import('../playback/Player')
       await Player.playActiveProject2(((window as any).trackListController as TrackListController).selectedRegion)
     }
-    this.secondHeaderButton.style.background = ''
+    this.secondHeaderButton.removeAttribute('aria-pressed')
     ;(this.thirdHeaderButton.getElementsByClassName('stop')[0] as SVGUseElement).style.opacity = '0'
     ;(this.thirdHeaderButton.getElementsByClassName('plus')[0] as SVGUseElement).style.opacity = '1'
     this.thirdHeaderButton.getElementsByTagName('span')[0].innerText = 'Add clip...'

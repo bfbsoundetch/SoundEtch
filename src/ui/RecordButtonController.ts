@@ -50,7 +50,6 @@ export class RecordButtonController {
         ? () => void this.startCountdown()
         : () => void this.startRecording()
       : null
-    this.button.style.background = ''
     this.hideCountdown()
   }
 
