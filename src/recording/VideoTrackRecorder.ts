@@ -30,9 +30,18 @@ const FrameProcessorConstructor =
 
 type Pump = { readonly track: MediaStreamTrack; stop(): void }
 
+/** Receives the muxer's bytes at absolute positions; earlier positions may be rewritten. */
+export type VideoByteSink = {
+  write(data: Uint8Array<ArrayBuffer>, position: number): Promise<void>
+  close(): Promise<void>
+}
+
+export type VideoTrackOutput =
+  | { readonly kind: 'file'; readonly directory: string; readonly filename: string }
+  | { readonly kind: 'sink'; open(): Promise<VideoByteSink> }
+
 export interface VideoTrackRecorderOptions {
-  readonly directory: string
-  readonly filename: string
+  readonly output: VideoTrackOutput
   readonly sampleRate: number
   /** Seconds since the first recorded sample, and whether the timeline is advancing (not paused). */
   readonly timeline: () => { seconds: number; running: boolean }
@@ -58,7 +67,7 @@ export function getRecordingSize(width: number, height: number, minimumHeight: n
  */
 export class VideoTrackRecorder {
   private readonly clock = new VideoFrameClock()
-  private writer: VideoFileWriter | null = null
+  private writer: VideoByteSink | null = null
   private output: Output | null = null
   private source: VideoSampleSource | null = null
   private size: { width: number; height: number } | null = null
@@ -105,22 +114,26 @@ export class VideoTrackRecorder {
       try {
         await this.output.finalize()
         if (this.failure) throw this.failure
-        return await readRecordedVideoSegment(this.options.directory, this.options.filename, this.options.sampleRate)
+        const target = this.options.output
+        if (target.kind == 'sink') return null
+        return await readRecordedVideoSegment(target.directory, target.filename, this.options.sampleRate)
       } catch (error) {
         this.fail(error)
       }
     }
     if (!this.failure) return null
     await this.closePromise
+    const target = this.options.output
+    if (target.kind == 'sink') return null
     if (this.failure.name == 'QuotaExceededError') {
       // The failed muxer must no longer be able to write into the prefix we are about to recover.
-      const playable = await VideoFileWriter.trimInterruptedFile(this.options.directory, this.options.filename)
+      const playable = await VideoFileWriter.trimInterruptedFile(target.directory, target.filename)
       if (playable > 0) {
-        return readRecordedVideoSegment(this.options.directory, this.options.filename, this.options.sampleRate)
+        return readRecordedVideoSegment(target.directory, target.filename, this.options.sampleRate)
       }
-      await FileSystemUtils.deleteFile(this.options.directory, this.options.filename)
+      await FileSystemUtils.deleteFile(target.directory, target.filename)
     } else if (this.writer) {
-      await FileSystemUtils.deleteFile(this.options.directory, this.options.filename)
+      await FileSystemUtils.deleteFile(target.directory, target.filename)
     }
     return null
   }
@@ -245,7 +258,9 @@ export class VideoTrackRecorder {
       size,
     )
     if (!codec) throw new Error('This browser cannot encode video')
-    const writer = await VideoFileWriter.open(this.options.directory, this.options.filename)
+    const target = this.options.output
+    const writer: VideoByteSink =
+      target.kind == 'file' ? await VideoFileWriter.open(target.directory, target.filename) : await target.open()
     this.writer = writer
     const output = new Output({
       format,

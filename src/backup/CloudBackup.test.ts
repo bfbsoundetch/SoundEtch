@@ -12,6 +12,9 @@ import { Track } from '../project/Track'
 import { getRecord, putRecord } from './BackupStore'
 import { CloudBackup } from './CloudBackup'
 import { connectS3, getS3Settings, isS3Connected } from './S3Storage'
+import { presignS3Url } from './S3Signer'
+import { getCloudStorage } from './CloudProviders'
+import { uploadToLink, UploadLinkUnusableError } from '../remote/CloudUploadLink'
 
 GlobalSettings.useMemoryFS = true
 
@@ -79,6 +82,8 @@ function dropboxErrorResponse(status: number, summary: string, error: unknown): 
   return Response.json({ error_summary: summary, error }, { status })
 }
 
+const UPLOAD_LINK_ORIGIN = 'https://content.dropboxapi.com'
+
 interface Session {
   readonly chunks: Uint8Array[]
   offset: number
@@ -91,10 +96,16 @@ class FakeDropbox {
   readonly sessions = new Map<string, Session>()
   /** The `[offset, end)` byte range of every upload session request Dropbox accepted. */
   readonly acceptedRanges = new Array<[number, number]>()
+  readonly uploadLinks = new Map<string, { readonly path: string; used: boolean }>()
+  /** The argument of every `get_temporary_upload_link` request. */
+  readonly linkRequests = new Array<Record<string, any>>()
   /** Runs before each request; a response it returns replaces Dropbox's. */
   intercept: (endpoint: string, arg: Record<string, any>) => Response | void | Promise<Response | void> = () => {}
 
   readonly fetch = async (url: URL, init: RequestInit): Promise<Response> => {
+    if (url.origin == UPLOAD_LINK_ORIGIN && url.pathname.startsWith('/apitul/1/')) {
+      return this.consumeUploadLink(url.pathname.slice('/apitul/1/'.length), init)
+    }
     const endpoint = url.pathname.replace(/^\/2/, '')
     const headers = new Headers(init.headers)
     if (headers.get('Authorization') != 'Bearer t') {
@@ -144,13 +155,20 @@ class FakeDropbox {
       }
       case '/files/list_folder':
       case '/files/list_folder/continue': {
-        // One folder per page, so listing follows the cursor.
-        const folders = [...new Set([...this.files.keys()].map((path) => path.split('/')[1]))]
-        const index = endpoint == '/files/list_folder' ? 0 : Number(arg.cursor)
-        const entries = folders
-          .slice(index, index + 1)
-          .map((name) => ({ '.tag': 'folder', name, path_display: `/${name}`, path_lower: `/${name}`.toLowerCase() }))
-        return Response.json({ entries, cursor: String(index + 1), has_more: index + 1 < folders.length })
+        // One entry per page, so listing follows the cursor.
+        const { path, index } = endpoint == '/files/list_folder' ? { path: arg.path, index: 0 } : JSON.parse(arg.cursor)
+        const entries = this.listEntries(path)
+        if (!entries) {
+          return dropboxErrorResponse(409, 'path/not_found/', { '.tag': 'path', path: { '.tag': 'not_found' } })
+        }
+        const cursor = JSON.stringify({ path, index: index + 1 })
+        return Response.json({ entries: entries.slice(index, index + 1), cursor, has_more: index + 1 < entries.length })
+      }
+      case '/files/get_temporary_upload_link': {
+        const id = `link-${this.uploadLinks.size + 1}`
+        this.uploadLinks.set(id, { path: arg.commit_info.path, used: false })
+        this.linkRequests.push(arg)
+        return Response.json({ link: `${UPLOAD_LINK_ORIGIN}/apitul/1/${id}` })
       }
       case '/files/delete_v2': {
         const deleted = [...this.files.keys()].filter((path) => path == arg.path || path.startsWith(`${arg.path}/`))
@@ -162,6 +180,47 @@ class FakeDropbox {
       }
     }
     return new Response('unknown endpoint', { status: 404 })
+  }
+
+  /** The entries directly in the folder at `path` ('' for the root), or null when there is no such folder. */
+  private listEntries(path: string): Array<Record<string, unknown>> | null {
+    const entries = new Map<string, Record<string, unknown>>()
+    for (const [filePath, data] of this.files) {
+      if (!filePath.startsWith(`${path}/`)) continue
+      const [name, ...rest] = filePath.slice(path.length + 1).split('/')
+      const childPath = `${path}/${name}`
+      entries.set(
+        name,
+        rest.length > 0
+          ? { '.tag': 'folder', name, path_display: childPath, path_lower: childPath.toLowerCase() }
+          : {
+              '.tag': 'file',
+              name,
+              path_display: childPath,
+              size: data.length,
+              content_hash: referenceContentHash(data),
+            },
+      )
+    }
+    return path && entries.size == 0 ? null : [...entries.values()]
+  }
+
+  /** A temporary upload link: one upload without credentials, answering 410 once consumed. */
+  private async consumeUploadLink(id: string, init: RequestInit): Promise<Response> {
+    const link = this.uploadLinks.get(id)
+    if (!link) {
+      return new Response('no such link', { status: 404 })
+    }
+    if (link.used) {
+      return new Response('link consumed', { status: 410 })
+    }
+    link.used = true
+    const response = this.commit(link.path, await readBody(init))
+    if (!response.ok) {
+      return response
+    }
+    const { content_hash } = await response.json()
+    return Response.json({ 'content-hash': content_hash })
   }
 
   private append(cursor: { session_id: string; offset: number }, body: Uint8Array): Record<string, unknown> | null {
@@ -226,6 +285,9 @@ class FakeS3 {
     const body = await readBody(init)
     if (bucket != 'backups') {
       return s3ErrorResponse(404, 'NoSuchBucket')
+    }
+    if (url.searchParams.has('X-Amz-Signature')) {
+      return this.presignedPut(url, method, key, body)
     }
     if (!headers.get('Authorization')?.startsWith('AWS4-HMAC-SHA256 Credential=AKID/')) {
       return s3ErrorResponse(403, 'AccessDenied')
@@ -297,6 +359,33 @@ class FakeS3 {
         return new Response(null, { status: 204 })
     }
     return s3ErrorResponse(405, 'MethodNotAllowed')
+  }
+
+  /** A query-signed request: the signature must match the secret and the URL must not have expired. */
+  private async presignedPut(url: URL, method: string, key: string, body: Uint8Array): Promise<Response> {
+    const query = url.searchParams
+    const date = new Date(
+      query.get('X-Amz-Date')!.replace(/^(\d{4})(\d\d)(\d\d)T(\d\d)(\d\d)(\d\d)Z$/, '$1-$2-$3T$4:$5:$6Z'),
+    )
+    const seconds = Number(query.get('X-Amz-Expires'))
+    const credentials = { accessKeyId: 'AKID', secretAccessKey: 'secret', region: 'us-east-1' }
+    const expected = await presignS3Url(
+      { method, host: url.host, path: url.pathname, query: [] },
+      credentials,
+      date,
+      seconds,
+    )
+    if (new URL(expected).searchParams.get('X-Amz-Signature') != query.get('X-Amz-Signature')) {
+      return s3ErrorResponse(403, 'SignatureDoesNotMatch')
+    }
+    if (Date.now() > date.getTime() + seconds * 1000) {
+      return s3ErrorResponse(403, 'AccessDenied')
+    }
+    if (method != 'PUT') {
+      return s3ErrorResponse(405, 'MethodNotAllowed')
+    }
+    this.objects.set(key, body)
+    return new Response(null, { headers: { ETag: `"${sha256(body).slice(0, 32)}"` } })
   }
 
   /** ListObjectsV2, one key or common prefix per page, so listing follows the continuation token. */
@@ -591,4 +680,74 @@ test('a project that is not 48 kHz is refused before anything is written', async
   expect(await getRecord('backup-job')).toBeUndefined()
   expect(await getRecord('backup-manifest')).toBeUndefined()
   await DatabasePersister.deleteObjectsByIds([project.id!])
+})
+
+test('files directly in a folder list with sizes, and Dropbox content hashes; a missing folder lists as null', async () => {
+  const first = pseudoRandomBytes(1000, 4)
+  const second = pseudoRandomBytes(2000, 5)
+  dropbox.files.set('/Meeting/audio-00001.pcm', first)
+  dropbox.files.set('/Meeting/video-00001.part', second)
+  dropbox.files.set('/Meeting/nested/other', second)
+  s3.objects.set('soundetch/Meeting/audio-00001.pcm', first)
+  s3.objects.set('soundetch/Meeting/video-00001.part', second)
+  s3.objects.set('soundetch/Meeting/nested/other', second)
+
+  expect(await getCloudStorage('dropbox').listFiles('/Meeting')).toEqual([
+    { name: 'audio-00001.pcm', size: 1000, contentHash: referenceContentHash(first) },
+    { name: 'video-00001.part', size: 2000, contentHash: referenceContentHash(second) },
+  ])
+  expect(await getCloudStorage('s3').listFiles('/Meeting')).toEqual([
+    { name: 'audio-00001.pcm', size: 1000, contentHash: null },
+    { name: 'video-00001.part', size: 2000, contentHash: null },
+  ])
+  expect(await getCloudStorage('dropbox').listFiles('/Missing')).toBeNull()
+  expect(await getCloudStorage('s3').listFiles('/Missing')).toBeNull()
+})
+
+test('a Dropbox upload link takes one upload, returns its content hash, then answers 410', async () => {
+  const bytes = pseudoRandomBytes(5000, 6)
+  const link = await getCloudStorage('dropbox').createUploadLink('/Meeting/audio-00001.pcm', 86_400)
+
+  expect(link).toMatchObject({ method: 'POST', singleUse: true })
+  expect(dropbox.linkRequests).toEqual([
+    {
+      commit_info: { path: '/Meeting/audio-00001.pcm', mode: 'add', autorename: false, mute: true },
+      duration: 14_400,
+    },
+  ])
+  expect(await uploadToLink(link, bytes)).toBe(referenceContentHash(bytes))
+  expect(sameBytes(dropbox.files.get('/Meeting/audio-00001.pcm')!, bytes)).toBe(true)
+  await expect(uploadToLink(link, bytes)).rejects.toEqual(new UploadLinkUnusableError(410))
+
+  // Different bytes through a fresh link for the same path conflict in mode add.
+  const fresh = await getCloudStorage('dropbox').createUploadLink('/Meeting/audio-00001.pcm', 60)
+  const error = await uploadToLink(fresh, pseudoRandomBytes(5000, 7)).catch((caught: unknown) => caught)
+  expect(error).toBeInstanceOf(UploadLinkUnusableError)
+  expect((error as UploadLinkUnusableError).status).toBe(409)
+})
+
+test('an S3 upload link is a presigned PUT that stores, replaces, and fails with 403 once expired or altered', async () => {
+  const link = await getCloudStorage('s3').createUploadLink('/Meeting/audio-00001.pcm', 10_000_000)
+
+  expect(link).toMatchObject({ method: 'PUT', singleUse: false })
+  expect(new URL(link.url).searchParams.get('X-Amz-Expires')).toBe('604800')
+  const first = pseudoRandomBytes(5000, 8)
+  const second = pseudoRandomBytes(3000, 9)
+  expect(await uploadToLink(link, first)).toBeNull()
+  expect(sameBytes(s3.objects.get('soundetch/Meeting/audio-00001.pcm')!, first)).toBe(true)
+  expect(await uploadToLink(link, second)).toBeNull()
+  expect(sameBytes(s3.objects.get('soundetch/Meeting/audio-00001.pcm')!, second)).toBe(true)
+
+  const altered = { ...link, url: link.url.replace('audio-00001', 'audio-00002') }
+  await expect(uploadToLink(altered, first)).rejects.toEqual(new UploadLinkUnusableError(403))
+
+  const shortLived = await getCloudStorage('s3').createUploadLink('/Meeting/audio-00003.pcm', 60)
+  vi.useFakeTimers({ now: Date.now() + 61_000, toFake: ['Date'] })
+  try {
+    await expect(uploadToLink(shortLived, first)).rejects.toEqual(new UploadLinkUnusableError(403))
+  } finally {
+    vi.useRealTimers()
+  }
+  expect(s3.objects.has('soundetch/Meeting/audio-00002.pcm')).toBe(false)
+  expect(s3.objects.has('soundetch/Meeting/audio-00003.pcm')).toBe(false)
 })

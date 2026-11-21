@@ -105,8 +105,7 @@ export class VideoRecordingSession {
     clip.videoRecordingInProgress = true
     await ProjectManager.saveClip(clip)
     const recorder = new VideoTrackRecorder({
-      directory: this.project.directoryName,
-      filename: recordedVideoFilename(clip),
+      output: { kind: 'file', directory: this.project.directoryName, filename: recordedVideoFilename(clip) },
       sampleRate: this.project.sampleRate,
       timeline: () => ({
         seconds: (this.audioContext.getPosition() - this.originPosition) / this.audioContext.sampleRate,

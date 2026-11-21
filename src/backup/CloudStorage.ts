@@ -17,6 +17,20 @@ export interface StoredFile {
 /** A chunked upload's provider-specific progress. Structured-cloneable, so it is persisted between chunks. */
 export type ChunkedUploadState = Readonly<Record<string, unknown>>
 
+export interface UploadLink {
+  readonly method: 'POST' | 'PUT'
+  readonly url: string
+  /** Takes one upload (Dropbox); otherwise any number until it expires (S3). */
+  readonly singleUse: boolean
+}
+
+export interface CloudFile {
+  readonly name: string
+  readonly size: number
+  /** The `ContentHasher` digest, when the provider reports one. */
+  readonly contentHash: string | null
+}
+
 /**
  * Files in one cloud account or bucket, addressed by `/`-separated paths that start with `/`. Requests retry transient
  * failures themselves and fail with the `Cloud*Error` classes below, so callers handle every provider alike.
@@ -55,6 +69,10 @@ export interface CloudStorage {
   abortChunkedUpload(path: string, state: ChunkedUploadState, signal?: AbortSignal): Promise<void>
   /** Deletes the folder and everything in it; a missing folder counts as deleted. */
   deleteFolder(path: string, signal?: AbortSignal): Promise<void>
+  /** A URL that uploads the file at `path` without credentials, valid for up to `seconds`. */
+  createUploadLink(path: string, seconds: number, signal?: AbortSignal): Promise<UploadLink>
+  /** The files directly in `folder`, or null when it holds none or does not exist. */
+  listFiles(folder: string, signal?: AbortSignal): Promise<CloudFile[] | null>
 }
 
 /** The service rejected a request; `reason` is its readable explanation. */

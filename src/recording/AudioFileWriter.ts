@@ -2,6 +2,13 @@ import { FileSystemSyncAccessHandle } from 'filesystem/FileSystemSyncAccessHandl
 import { RingBuffer } from 'ringbuf.js'
 import { Summary } from '../project/Summary'
 import { Logger } from '../global/Logger'
+import { LiveRecordingFiles } from './LiveRecordingFiles'
+
+/** Identifies the clip's file to the high-quality patch service while this writer holds it. */
+export interface LiveFileOptions {
+  readonly key: string
+  readonly summaryHandle: FileSystemSyncAccessHandle
+}
 
 export class AudioFileWriter {
   private readonly ringBuffer: RingBuffer
@@ -24,11 +31,25 @@ export class AudioFileWriter {
     ringBufferArray: SharedArrayBuffer,
     overrunSampleCount: SharedArrayBuffer,
     private readonly channelCount: number,
+    private readonly live: LiveFileOptions | null = null,
   ) {
     this.ringBuffer = new RingBuffer(ringBufferArray, Float32Array)
     const sampleCapacity = 8192 - (8192 % channelCount)
     this.writeBuffer = new Float32Array(sampleCapacity)
     this.overrunSampleCount = new Int32Array(overrunSampleCount)
+    if (live) {
+      LiveRecordingFiles.register(live.key, {
+        handle: fileSyncHandle,
+        summaryHandle: live.summaryHandle,
+        summary,
+        writtenFrames: () => this.writtenFrames(),
+      })
+    }
+  }
+
+  /** Complete frames in the file and in the summary. */
+  writtenFrames(): number {
+    return this.position / (Float32Array.BYTES_PER_ELEMENT * this.channelCount)
   }
 
   stop(discardPending = false) {
@@ -60,6 +81,8 @@ export class AudioFileWriter {
     } catch (error) {
       this.recordFailure(error)
     } finally {
+      // Before any handle closes, so the patch service never borrows a closed handle.
+      if (this.live) LiveRecordingFiles.unregister(this.live.key)
       try {
         this.fileSyncHandle.close()
       } catch (error) {

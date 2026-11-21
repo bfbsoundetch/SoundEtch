@@ -1,4 +1,4 @@
-import { stopAndWaitForRecordings } from '../recording/UnsettledRecordings'
+import { withRecordingsStopped } from '../recording/UnsettledRecordings'
 import { CloudBackupController } from './CloudBackupController'
 import { ProjectArchive } from '../project/ProjectArchive'
 import { ProjectManager } from '../project/ProjectManager'
@@ -33,25 +33,26 @@ export class ProjectTransferController {
       })
 
       this.setBusy(true)
-      await stopAndWaitForRecordings()
-      this.status.innerText = `Exporting “${project.title}”…`
-      await ProjectManager.saveProject(project)
-      const writable = await fileHandle.createWritable()
-      try {
-        await ProjectArchive.exportProject(project, {
-          async write(data) {
-            await writable.write(data)
-          },
-        })
-        await writable.close()
-      } catch (error) {
+      await withRecordingsStopped(async () => {
+        this.status.innerText = `Exporting “${project.title}”…`
+        await ProjectManager.saveProject(project)
+        const writable = await fileHandle.createWritable()
         try {
-          await writable.abort()
-        } catch (abortError) {
-          throw new AggregateError([error, abortError], 'Project export failed and the output could not be discarded')
+          await ProjectArchive.exportProject(project, {
+            async write(data) {
+              await writable.write(data)
+            },
+          })
+          await writable.close()
+        } catch (error) {
+          try {
+            await writable.abort()
+          } catch (abortError) {
+            throw new AggregateError([error, abortError], 'Project export failed and the output could not be discarded')
+          }
+          throw error
         }
-        throw error
-      }
+      })
       this.status.innerText = `Exported “${project.title}”.`
       NotificationsController.showShortDurationMessage(`Exported project “${project.title}”.`)
     } catch (error) {
@@ -73,11 +74,12 @@ export class ProjectTransferController {
 
     this.setBusy(true)
     try {
-      await stopAndWaitForRecordings()
-      this.status.innerText = `Importing “${archive.name}”…`
-      const projectId = await ProjectArchive.importProject(archive)
-      editorHistory.clear()
-      const project = await ProjectManager.openProject(projectId)
+      const project = await withRecordingsStopped(async () => {
+        this.status.innerText = `Importing “${archive.name}”…`
+        const projectId = await ProjectArchive.importProject(archive)
+        editorHistory.clear()
+        return ProjectManager.openProject(projectId)
+      })
       this.dialog.close()
       NotificationsController.showShortDurationMessage(`Imported project “${project.title}”.`)
     } catch (error) {

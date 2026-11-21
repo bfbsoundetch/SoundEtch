@@ -149,12 +149,7 @@ export class Summary {
       }
     }
     for (const nextValue of numberIterable) {
-      const int16Value =
-        nextValue > 1.0
-          ? 2 ** 15 - 1
-          : nextValue < -1.0
-            ? -(2 ** 15)
-            : Math.round(nextValue > 0 ? nextValue * (2 ** 15 - 1) : nextValue * 2 ** 15)
+      const int16Value = Summary.toInt16(nextValue)
 
       this.summaryValues[chunkIndex][chunkPosition + channel * 2] = Math.max(
         int16Value,
@@ -208,14 +203,73 @@ export class Summary {
       return
     }
     const values = this.summaryValues[chunkIndex].subarray(chunkPosition, chunkPosition + 2 * this.channelCount)
+    this.writeBytesToDisk(values, (chunkIndex * this.chunkSize + chunkPosition) * Int16Array.BYTES_PER_ELEMENT)
+  }
+
+  private writeBytesToDisk(values: Int16Array, position: number) {
     const bytes = new Uint8Array(values.buffer, values.byteOffset, values.byteLength)
-    const position = (chunkIndex * this.chunkSize + chunkPosition) * Int16Array.BYTES_PER_ELEMENT
     let written = 0
     while (written < bytes.byteLength) {
-      const byteCount = this.syncFileHandle.write(bytes.subarray(written), { at: position + written })
+      const byteCount = this.syncFileHandle!.write(bytes.subarray(written), { at: position + written })
       if (byteCount <= 0) throw new Error('Summary file write made no progress')
       written += byteCount
     }
+  }
+
+  /**
+   * Replaces whole buckets from `firstBucket` on with `values` ([max, min] per channel per bucket), in memory where
+   * the chunks reach that far (a recording shares them with the main thread) and in the summary file.
+   */
+  overwriteBuckets(firstBucket: number, values: Int16Array) {
+    const valuesPerBucket = 2 * this.channelCount
+    if (values.length % valuesPerBucket !== 0) {
+      throw new Error(`${values.length} summary values are not whole buckets of ${this.channelCount} channels`)
+    }
+    const bucketCount = values.length / valuesPerBucket
+    if (bucketCount === 0) return
+    const lastChunk = Math.floor(((firstBucket + bucketCount - 1) * valuesPerBucket) / this.chunkSize)
+    if (lastChunk < this.summaryValues.length) {
+      for (let bucket = 0; bucket < bucketCount; ++bucket) {
+        const index = (firstBucket + bucket) * valuesPerBucket
+        this.summaryValues[Math.floor(index / this.chunkSize)].set(
+          values.subarray(bucket * valuesPerBucket, (bucket + 1) * valuesPerBucket),
+          index % this.chunkSize,
+        )
+      }
+    }
+    if (this.syncFileHandle) {
+      this.writeBytesToDisk(values, firstBucket * valuesPerBucket * Int16Array.BYTES_PER_ELEMENT)
+      this.syncFileHandle.flush()
+    }
+  }
+
+  static toInt16(value: number): number {
+    return value > 1.0
+      ? 2 ** 15 - 1
+      : value < -1.0
+        ? -(2 ** 15)
+        : Math.round(value > 0 ? value * (2 ** 15 - 1) : value * 2 ** 15)
+  }
+
+  /** [max, min] per channel per bucket of interleaved `samples`, which start on a bucket boundary. */
+  static computeBuckets(samples: Float32Array, channelCount: number): Int16Array {
+    const frameCount = Math.floor(samples.length / channelCount)
+    const valuesPerBucket = 2 * channelCount
+    const result = new Int16Array(Math.ceil(frameCount / Summary.SAMPLES_PER_SUMMARY) * valuesPerBucket)
+    for (let index = 0; index < result.length; index += 2) {
+      result[index] = -(2 ** 15)
+      result[index + 1] = 2 ** 15 - 1
+    }
+    for (let frame = 0; frame < frameCount; ++frame) {
+      const bucketStart = Math.floor(frame / Summary.SAMPLES_PER_SUMMARY) * valuesPerBucket
+      for (let channel = 0; channel < channelCount; ++channel) {
+        const value = Summary.toInt16(samples[frame * channelCount + channel])
+        const position = bucketStart + 2 * channel
+        if (value > result[position]) result[position] = value
+        if (value < result[position + 1]) result[position + 1] = value
+      }
+    }
+    return result
   }
 
   private addNewChunk() {

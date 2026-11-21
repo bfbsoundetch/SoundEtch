@@ -7,11 +7,13 @@ import {
   retryAfterHeaderSeconds,
   waitBeforeRetry,
   type ChunkedUploadState,
+  type CloudFile,
   type CloudStorage,
   type StoredFile,
   type UploadChunk,
+  type UploadLink,
 } from './CloudStorage'
-import { amzDate, canonicalQuery, encodeS3Path, sha256Hex, signS3Request } from './S3Signer'
+import { amzDate, canonicalQuery, encodeS3Path, presignS3Url, sha256Hex, signS3Request } from './S3Signer'
 
 /** Where backups go in an S3-compatible service: Amazon S3, Cloudflare R2, Backblaze B2, MinIO, and others. */
 export interface S3Settings {
@@ -56,6 +58,8 @@ const SETTINGS_KEY = 's3-settings'
 const SERVICE = 'S3'
 const EMPTY = new Uint8Array()
 const DELETE_CONCURRENCY = 4
+/** The longest a presigned URL may last: 7 days. */
+const MAX_UPLOAD_LINK_SECONDS = 604800
 /** Written and deleted again by the connection check. */
 const CHECK_NAME = '.soundetch-connection-check'
 const ETAG_HIDDEN = "the bucket's CORS rules do not expose the ETag header, which uploads need"
@@ -267,7 +271,7 @@ export class S3Storage implements CloudStorage {
 
   async deleteFolder(path: string, signal?: AbortSignal): Promise<void> {
     const config = await this.getConfig()
-    const { keys } = await this.list(config, `${objectKey(config, path)}/`, false, { signal })
+    const keys = (await this.list(config, `${objectKey(config, path)}/`, false, { signal })).objects.map((o) => o.key)
     let next = 0
     const deleteNext = async () => {
       while (next < keys.length) {
@@ -275,6 +279,25 @@ export class S3Storage implements CloudStorage {
       }
     }
     await Promise.all(Array.from({ length: Math.min(DELETE_CONCURRENCY, keys.length) }, deleteNext))
+  }
+
+  async createUploadLink(path: string, seconds: number): Promise<UploadLink> {
+    const config = await this.getConfig()
+    const location = requestLocation(config, objectKey(config, path))
+    const expires = Math.min(seconds, MAX_UPLOAD_LINK_SECONDS)
+    const url = await presignS3Url({ method: 'PUT', ...location, query: [] }, config, new Date(), expires)
+    return { method: 'PUT', url, singleUse: false }
+  }
+
+  async listFiles(folder: string, signal?: AbortSignal): Promise<CloudFile[] | null> {
+    const config = await this.getConfig()
+    const prefix = `${objectKey(config, folder)}/`
+    const { objects } = await this.list(config, prefix, true, { signal })
+    // A console-made folder is an empty object named like the prefix; it is not a file.
+    const files = objects
+      .filter(({ key }) => key != prefix)
+      .map(({ key, size }) => ({ name: key.slice(prefix.length), size, contentHash: null }))
+    return files.length == 0 ? null : files
   }
 
   /** Lists, writes, and deletes a small file, failing fast with what to fix. */
@@ -351,9 +374,9 @@ export class S3Storage implements CloudStorage {
     }
   }
 
-  /** Keys under `prefix`, and with `foldersOnly`, the `prefix…/` folders directly in it instead. */
+  /** Objects under `prefix`, and with `foldersOnly`, only those directly in it plus the `prefix…/` folders in it. */
   private async list(config: S3Config, prefix: string, foldersOnly: boolean, options: RequestOptions) {
-    const keys = new Array<string>()
+    const objects = new Array<{ key: string; size: number }>()
     const prefixes = new Array<string>()
     let token: string | null = null
     do {
@@ -366,7 +389,7 @@ export class S3Storage implements CloudStorage {
       const xml = await (await this.request(config, 'GET', null, { ...options, query })).text()
       for (const contents of xmlElements(xml, 'Contents')) {
         const key = xmlValue(contents, 'Key')
-        if (key != null) keys.push(key)
+        if (key != null) objects.push({ key, size: Number(xmlValue(contents, 'Size') ?? 0) })
       }
       for (const commonPrefix of xmlElements(xml, 'CommonPrefixes')) {
         const value = xmlValue(commonPrefix, 'Prefix')
@@ -374,17 +397,14 @@ export class S3Storage implements CloudStorage {
       }
       token = xmlValue(xml, 'IsTruncated') == 'true' ? xmlValue(xml, 'NextContinuationToken') : null
     } while (token)
-    return { keys, prefixes }
+    return { objects, prefixes }
   }
 
   /** Sends one signed request for the object `key`, or the bucket when null; retries transient failures. */
   private async request(config: S3Config, method: string, key: string | null, options: RequestOptions) {
-    const endpoint = new URL(config.endpoint)
-    const host = config.pathStyle ? endpoint.host : `${config.bucket}.${endpoint.host}`
-    const segments = [...(config.pathStyle ? [config.bucket] : []), ...(key == null ? [] : [key])]
-    const path = encodeS3Path(...segments)
+    const { protocol, host, path } = requestLocation(config, key)
     const query = canonicalQuery(options.query ?? [])
-    const url = `${endpoint.protocol}//${host}${path}${query ? `?${query}` : ''}`
+    const url = `${protocol}//${host}${path}${query ? `?${query}` : ''}`
     const payloadHash = await sha256Hex(options.body ?? EMPTY)
     for (let attempt = 1; ; ++attempt) {
       options.signal?.throwIfAborted()
@@ -441,6 +461,14 @@ export class S3Storage implements CloudStorage {
       throw new S3Error(response.status, code, message)
     }
   }
+}
+
+/** Where requests for the object `key`, or the bucket when null, go. */
+function requestLocation(config: S3Settings, key: string | null) {
+  const endpoint = new URL(config.endpoint)
+  const host = config.pathStyle ? endpoint.host : `${config.bucket}.${endpoint.host}`
+  const segments = [...(config.pathStyle ? [config.bucket] : []), ...(key == null ? [] : [key])]
+  return { protocol: endpoint.protocol, host, path: encodeS3Path(...segments) }
 }
 
 function objectKey(config: S3Settings, path: string): string {

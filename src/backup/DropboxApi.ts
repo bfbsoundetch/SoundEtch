@@ -15,6 +15,12 @@ export interface FolderMetadata {
   readonly path_display: string
 }
 
+export interface ListedFile {
+  readonly name: string
+  readonly size: number
+  readonly content_hash: string | null
+}
+
 export type LookupFailureTag = 'not_found' | 'incorrect_offset' | 'closed' | 'not_closed' | 'too_large'
 
 const LOOKUP_FAILURE_TAGS: readonly string[] = [
@@ -106,22 +112,53 @@ export async function download(path: string, signal?: AbortSignal): Promise<Resp
 /** The folders at the root of the App Folder. */
 export async function listFolders(signal?: AbortSignal): Promise<FolderMetadata[]> {
   const folders = new Array<FolderMetadata>()
-  let page = await readListFolderPage(
-    await request(`${API_URL}/files/list_folder`, { json: { path: '', recursive: false } }, signal),
+  for (const entry of await listEntries('', signal)) {
+    if (entry['.tag'] == 'folder' && typeof entry.name == 'string' && typeof entry.path_display == 'string') {
+      folders.push({ name: entry.name, path_display: entry.path_display })
+    }
+  }
+  return folders
+}
+
+/** The files directly in the folder at `path`; fails with `isNotFound` when it does not exist. */
+export async function listFiles(path: string, signal?: AbortSignal): Promise<ListedFile[]> {
+  const files = new Array<ListedFile>()
+  for (const entry of await listEntries(path, signal)) {
+    if (entry['.tag'] == 'file' && typeof entry.name == 'string' && typeof entry.size == 'number') {
+      const contentHash = typeof entry.content_hash == 'string' ? entry.content_hash : null
+      files.push({ name: entry.name, size: entry.size, content_hash: contentHash })
+    }
+  }
+  return files
+}
+
+/** A URL that takes one upload of a new file at `path` within `duration` seconds (at most 4 hours). */
+export async function getTemporaryUploadLink(path: string, duration: number, signal?: AbortSignal): Promise<string> {
+  const commitInfo = { path, mode: 'add', autorename: false, mute: true }
+  const response = await request(
+    `${API_URL}/files/get_temporary_upload_link`,
+    { json: { commit_info: commitInfo, duration } },
+    signal,
   )
-  for (;;) {
-    for (const entry of page.entries) {
-      if (entry['.tag'] == 'folder' && typeof entry.name == 'string' && typeof entry.path_display == 'string') {
-        folders.push({ name: entry.name, path_display: entry.path_display })
-      }
-    }
-    if (!page.has_more) {
-      return folders
-    }
+  const result: unknown = await response.json()
+  if (!isObjectRecord(result) || typeof result.link != 'string') {
+    throw new DropboxError(response.status, 'unexpected upload link', result)
+  }
+  return result.link
+}
+
+async function listEntries(path: string, signal?: AbortSignal): Promise<Array<Record<string, unknown>>> {
+  let page = await readListFolderPage(
+    await request(`${API_URL}/files/list_folder`, { json: { path, recursive: false } }, signal),
+  )
+  const entries = [...page.entries]
+  while (page.has_more) {
     page = await readListFolderPage(
       await request(`${API_URL}/files/list_folder/continue`, { json: { cursor: page.cursor } }, signal),
     )
+    entries.push(...page.entries)
   }
+  return entries
 }
 
 /** Deletes a file or folder; a path that does not exist counts as deleted. */

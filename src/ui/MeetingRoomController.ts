@@ -11,6 +11,8 @@ import { Logger } from '../global/Logger'
 import { AudioControl, AudioState } from '../audiocontext/AudioControl'
 import { RecordButtonController } from './RecordButtonController'
 import { announce } from './LiveAnnouncer'
+import { HighQualityMediaSender } from '../remote/HighQualityMediaSender'
+import { HighQualityMediaReceiver } from '../remote/HighQualityMediaReceiver'
 
 enum VideoLayout {
   SPOTLIGHT = 'spotlight',
@@ -106,6 +108,9 @@ class VideoContainer {
       case 'recording':
         announce(`${username} is recording`)
         break
+      case 'paused':
+        announce(`${username} paused recording`)
+        break
       case 'idle':
         if (previousState !== 'idle') announce(`${username} stopped recording`)
         break
@@ -122,6 +127,9 @@ class VideoContainer {
         break
       case 'recording':
         this.showRecordingActivity(`${username} is recording`)
+        break
+      case 'paused':
+        this.showRecordingActivity(`${username} paused recording`)
         break
     }
   }
@@ -193,6 +201,10 @@ export class MeetingRoomController {
   private currentState: State = DISCONNECTED_STATE
   private renderedJoinRequestsKey = ''
   private remoteMediaClient: RemoteMediaClient3 | null = null
+  /** Sends this member's high-quality media to whoever records it. */
+  private highQualityMediaSender: HighQualityMediaSender | null = null
+  /** Upgrades this recorder's recordings of the other members with their high-quality media. */
+  private highQualityMediaReceiver: HighQualityMediaReceiver | null = null
 
   private readonly usernameErrorBubble = new ErrorBubbleController(
     'MeetingUsername',
@@ -346,7 +358,7 @@ export class MeetingRoomController {
     })
     // Closing the tab tears down connections without telling anyone, so the others would only notice once ICE times
     // out. Leaving explicitly removes us from their meeting right away.
-    window.addEventListener('pagehide', () => this.disconnect())
+    window.addEventListener('pagehide', () => this.disconnectNow())
   }
 
   async createMeeting(): Promise<boolean> {
@@ -362,6 +374,7 @@ export class MeetingRoomController {
     this.remoteMediaClient = new RemoteMediaClient3(username)
     AudioInputs.registerRemoteMediaClient(this.remoteMediaClient)
     VideoInputs.registerRemoteMediaClient(this.remoteMediaClient)
+    this.startHighQualityMedia(this.remoteMediaClient)
     this.remoteMediaClient.setRecordingActivity(this.localRecordingActivity)
     this.remoteMediaClient.addStateListener((state) => this.stateListener(state))
     this.remoteMediaClient.addMessageListener((message) =>
@@ -392,6 +405,7 @@ export class MeetingRoomController {
       this.remoteMediaClient = new RemoteMediaClient3(username, meetingId)
       AudioInputs.registerRemoteMediaClient(this.remoteMediaClient)
       VideoInputs.registerRemoteMediaClient(this.remoteMediaClient)
+      this.startHighQualityMedia(this.remoteMediaClient)
       this.remoteMediaClient.setRecordingActivity(this.localRecordingActivity)
       this.remoteMediaClient.addStateListener((state) => this.stateListener(state))
       this.remoteMediaClient.addMessageListener((message) =>
@@ -574,10 +588,36 @@ export class MeetingRoomController {
     }
   }
 
-  disconnect() {
+  /** Leaves the meeting once a cloud upload in progress has the links it needs to finish without the meeting. */
+  async disconnect() {
+    const client = this.remoteMediaClient
+    try {
+      await this.highQualityMediaSender?.prepareToLeave()
+    } catch (error) {
+      this.logger.error(error instanceof Error ? error : new Error(String(error)))
+    }
+    if (this.remoteMediaClient === client) {
+      this.disconnectNow()
+    }
+  }
+
+  private disconnectNow() {
+    this.disposeHighQualityMedia()
     this.remoteMediaClient?.disconnect()
     this.remoteMediaClient = null
     this.setUiForDisconnectedState()
+  }
+
+  private startHighQualityMedia(client: RemoteMediaClient3) {
+    this.highQualityMediaSender = new HighQualityMediaSender(client)
+    this.highQualityMediaReceiver = new HighQualityMediaReceiver(client)
+  }
+
+  private disposeHighQualityMedia() {
+    this.highQualityMediaSender?.dispose()
+    this.highQualityMediaReceiver?.dispose()
+    this.highQualityMediaSender = null
+    this.highQualityMediaReceiver = null
   }
 
   private *containers() {
@@ -596,6 +636,7 @@ export class MeetingRoomController {
       }
 
       NotificationsController.showErrorMessage(state.error)
+      this.disposeHighQualityMedia()
       this.remoteMediaClient = null
       this.setUiForDisconnectedState()
       return
@@ -837,16 +878,19 @@ export class MeetingRoomController {
   }
 
   private setLocalRecordingActivityFromAudioState(state: AudioState) {
+    const previous = this.localRecordingActivity
     switch (state) {
       case AudioState.RECORDING:
-      case AudioState.RECORDING_PAUSED:
         this.setLocalRecordingActivity({
           state: 'recording',
-          countdownId:
-            this.localRecordingActivity.state == 'countdown' || this.localRecordingActivity.state == 'recording'
-              ? this.localRecordingActivity.countdownId
-              : null,
+          countdownId: previous.state == 'idle' ? null : previous.countdownId,
         })
+        break
+      case AudioState.RECORDING_PAUSED:
+        // Every recording context is suspended before it starts, which reports a pause before the recording begins.
+        if (previous.state == 'recording' || previous.state == 'paused') {
+          this.setLocalRecordingActivity({ state: 'paused', countdownId: previous.countdownId })
+        }
         break
       default:
         this.setLocalRecordingActivity({ state: 'idle', countdownId: null })

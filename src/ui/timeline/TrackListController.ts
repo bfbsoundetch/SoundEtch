@@ -486,6 +486,12 @@ export class TrackListController {
     this.trackPanelController.show(track, 'video')
   }
 
+  /** Redraws `clipId` after its audio file changed in place, such as a high-quality upgrade patching it. */
+  clipAudioChanged(clipId: number): void {
+    this.spectrogramService?.invalidateClip(clipId)
+    this.draw()
+  }
+
   private getSpectrogramService(): SpectrogramService {
     this.spectrogramService ??= new SpectrogramService()
     return this.spectrogramService

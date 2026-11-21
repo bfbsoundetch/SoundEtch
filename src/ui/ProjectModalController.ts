@@ -1,4 +1,4 @@
-import { stopAndWaitForRecordings } from '../recording/UnsettledRecordings'
+import { withRecordingsStopped } from '../recording/UnsettledRecordings'
 import { Project } from '../project/Project'
 import { ProjectManager } from '../project/ProjectManager'
 import { humanizeBytes } from './DiskUsage'
@@ -193,9 +193,10 @@ export class ProjectModalController {
   private async openProject(project: Project, button: HTMLButtonElement) {
     try {
       button.disabled = true
-      await stopAndWaitForRecordings()
-      editorHistory.clear()
-      await ProjectManager.openProject(project)
+      await withRecordingsStopped(async () => {
+        editorHistory.clear()
+        await ProjectManager.openProject(project)
+      })
       this.dialog.close()
     } catch (error) {
       this.showError(error)
@@ -208,9 +209,10 @@ export class ProjectModalController {
       this.newProjectButton.disabled = true
       const activeProject = await ProjectManager.getActiveProject()
       const title = this.getNewProjectTitle(await ProjectManager.getProjects())
-      await stopAndWaitForRecordings()
-      editorHistory.clear()
-      const project = await ProjectManager.createProject(title, activeProject.sampleRate)
+      const project = await withRecordingsStopped(async () => {
+        editorHistory.clear()
+        return ProjectManager.createProject(title, activeProject.sampleRate)
+      })
       this.projectIdToEditAfterRefresh = project.id
     } catch (error) {
       this.showError(error)
@@ -234,10 +236,13 @@ export class ProjectModalController {
       const activeProject = await ProjectManager.getActiveProject()
       const isActive = project.id == activeProject.id
       if (isActive) {
-        await stopAndWaitForRecordings()
-        editorHistory.clear()
+        await withRecordingsStopped(async () => {
+          editorHistory.clear()
+          await ProjectManager.deleteProject(project)
+        })
+      } else {
+        await ProjectManager.deleteProject(project)
       }
-      await ProjectManager.deleteProject(project)
       if (!isActive) {
         await this.refresh()
       }

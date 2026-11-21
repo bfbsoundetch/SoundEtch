@@ -1,4 +1,4 @@
-import type { ChunkedUploadState, CloudStorage, StoredFile, UploadChunk } from './CloudStorage'
+import type { ChunkedUploadState, CloudFile, CloudStorage, StoredFile, UploadChunk, UploadLink } from './CloudStorage'
 import { CloudError, CloudUploadLostError } from './CloudStorage'
 import {
   appendSession,
@@ -7,6 +7,8 @@ import {
   finishSession,
   isNotFound,
   listFolders,
+  listFiles,
+  getTemporaryUploadLink,
   lookupFailure,
   startSession,
   upload,
@@ -14,6 +16,8 @@ import {
 } from './DropboxApi'
 
 const EMPTY = new Uint8Array()
+/** The longest a Dropbox temporary upload link may last. */
+const MAX_UPLOAD_LINK_SECONDS = 14400
 /** The content hash of no bytes: SHA-256 of an empty list of block digests. */
 const EMPTY_HASH = 'e3b0c44298fc1c149afbf4c8996fb92427ae41e4649b934ca495991b7852b855'
 
@@ -87,6 +91,25 @@ export class DropboxStorage implements CloudStorage {
 
   async deleteFolder(path: string, signal?: AbortSignal): Promise<void> {
     await deletePath(path, signal)
+  }
+
+  async createUploadLink(path: string, seconds: number, signal?: AbortSignal): Promise<UploadLink> {
+    const url = await getTemporaryUploadLink(path, Math.min(seconds, MAX_UPLOAD_LINK_SECONDS), signal)
+    return { method: 'POST', url, singleUse: true }
+  }
+
+  async listFiles(folder: string, signal?: AbortSignal): Promise<CloudFile[] | null> {
+    try {
+      const files = await listFiles(folder, signal)
+      return files.length == 0
+        ? null
+        : files.map((file) => ({ name: file.name, size: file.size, contentHash: file.content_hash }))
+    } catch (error) {
+      if (isNotFound(error)) {
+        return null
+      }
+      throw error
+    }
   }
 }
 

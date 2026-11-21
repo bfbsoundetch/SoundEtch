@@ -15,6 +15,9 @@ import { NotificationsController } from '../ui/NotificationsController'
 import { MediaImporter } from './MediaImporter'
 import { VideoRecordingSession } from './VideoRecordingSession'
 import { trackUnsettledRecording } from './UnsettledRecordings'
+import { RecordingSessions } from './RecordingSessions'
+import type { Clip } from '../project/Clip'
+import type { Project } from '../project/Project'
 import type { ProcessingModalController } from '../ui/ProcessingModalController'
 import type { TrackListController } from '../ui/timeline/TrackListController'
 
@@ -42,6 +45,7 @@ export class Recorder {
   /** One new track per source; a person's or device's audio and video share one linked clip. */
   static async startRecording(audioInputs: Array<AudioInput>, videoInputs: Array<VideoInput>) {
     await Recorder.audioWriting
+    const project = await ProjectManager.getActiveProject()
     const audioContext = await AudioControl.createNewAudioContext(AudioState.RECORDING)
     let failed = false
     const onError = (error: Error) => {
@@ -55,22 +59,45 @@ export class Recorder {
       )
     }
     const writers = new Array<Promise<void>>()
-    const connected = Recorder.connectRecording(audioContext, audioInputs, videoInputs, onError, writers).catch(
-      (error) => onError(error instanceof Error ? error : new Error(String(error))),
-    )
+    const clipsByInputId = new Map<string, Clip>()
+    const connected = Recorder.connectRecording(
+      audioContext,
+      project,
+      audioInputs,
+      videoInputs,
+      onError,
+      writers,
+      clipsByInputId,
+    ).catch((error) => onError(error instanceof Error ? error : new Error(String(error))))
     const settled = connected.then(() => Promise.allSettled(writers)).then(() => undefined)
     trackUnsettledRecording(settled)
     await connected
+    if (!failed && clipsByInputId.size > 0) {
+      RecordingSessions.publish({
+        dirname: project.directoryName,
+        clipsByInputId,
+        finished: settled,
+        openPatchPort: () => Recorder.openHighQualityPatchPort(),
+      })
+    }
+  }
+
+  /** Hands the writing worker a port over which high-quality audio patches the recording's files. */
+  static openHighQualityPatchPort(): MessagePort {
+    const { port1, port2 } = new MessageChannel()
+    Recorder.getWritingWorkerController().worker.postMessage({ type: 'hqPort', port: port2 }, [port2])
+    return port1
   }
 
   private static async connectRecording(
     audioContext: EnhancedAudioContext,
+    project: Project,
     audioInputs: Array<AudioInput>,
     videoInputs: Array<VideoInput>,
     onError: (error: Error) => void,
     writers: Array<Promise<void>>,
+    clipsByInputId: Map<string, Clip>,
   ) {
-    const project = await ProjectManager.getActiveProject()
     const workerController = Recorder.getWritingWorkerController()
     const unusedAddModuleResult = audioContext.audioWorklet.addModule('./assets/recordingAudioWorklet.js')
     const videoSession =
@@ -92,6 +119,7 @@ export class Recorder {
         trackIndex++,
       )
       const clipView = track.clipViews[0]!
+      clipsByInputId.set(audioInput.id, clipView.clip)
       const ringBufferArray = RingBuffer.getStorageForCapacity(64 * 1024, Float32Array)
       const overrunSampleCount = new SharedArrayBuffer(Int32Array.BYTES_PER_ELEMENT)
       inputs.push({

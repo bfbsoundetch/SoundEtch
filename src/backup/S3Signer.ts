@@ -73,25 +73,63 @@ export async function signS3Request(request: S3SignedRequest, credentials: S3Cre
   const headers = new Map(Object.entries({ ...request.headers, host: request.host }).map(([n, v]) => [n, v.trim()]))
   const names = [...headers.keys()].sort()
   const signedHeaders = names.join(';')
-  const canonicalRequest = [
-    request.method,
-    request.path,
-    request.query,
-    ...names.map((name) => `${name}:${headers.get(name)}`),
-    '',
-    signedHeaders,
-    request.payloadHash,
-  ].join('\n')
+  const canonicalHeaders = names.map((name) => `${name}:${headers.get(name)}`)
+  const canonicalRequest = [request.method, request.path, request.query, ...canonicalHeaders, '', signedHeaders]
+  const { scope, signature } = await sign([...canonicalRequest, request.payloadHash], credentials, date)
+  return `AWS4-HMAC-SHA256 Credential=${credentials.accessKeyId}/${scope}, SignedHeaders=${signedHeaders}, Signature=${signature}`
+}
+
+export interface S3PresignedRequest {
+  readonly method: string
+  /** `https:` unless given; a custom endpoint may be plain HTTP. */
+  readonly protocol?: string
+  readonly host: string
+  /** The absolute path, already encoded by `encodeS3Path`. */
+  readonly path: string
+  /** Further query parameters, unencoded. */
+  readonly query: ReadonlyArray<readonly [string, string]>
+}
+
+/**
+ * A URL that makes `request` without credentials until `seconds` after `date`. Only `host` is signed and the payload is
+ * not, so the URL takes any body.
+ * https://docs.aws.amazon.com/AmazonS3/latest/API/sigv4-query-string-auth.html
+ */
+export async function presignS3Url(
+  request: S3PresignedRequest,
+  credentials: S3Credentials,
+  date: Date,
+  seconds: number,
+): Promise<string> {
+  const timestamp = amzDate(date)
+  const query = canonicalQuery([
+    ...request.query,
+    ['X-Amz-Algorithm', 'AWS4-HMAC-SHA256'],
+    ['X-Amz-Credential', `${credentials.accessKeyId}/${credentialScope(timestamp, credentials)}`],
+    ['X-Amz-Date', timestamp],
+    ['X-Amz-Expires', String(seconds)],
+    ['X-Amz-SignedHeaders', 'host'],
+  ])
+  const canonicalRequest = [request.method, request.path, query, `host:${request.host}`, '', 'host', 'UNSIGNED-PAYLOAD']
+  const { signature } = await sign(canonicalRequest, credentials, date)
+  return `${request.protocol ?? 'https:'}//${request.host}${request.path}?${query}&X-Amz-Signature=${signature}`
+}
+
+function credentialScope(timestamp: string, credentials: S3Credentials): string {
+  return `${timestamp.slice(0, 8)}/${credentials.region}/s3/aws4_request`
+}
+
+/** The signature of the canonical request made of `lines`, and its credential scope. */
+async function sign(lines: readonly string[], credentials: S3Credentials, date: Date) {
   const timestamp = amzDate(date)
   const day = timestamp.slice(0, 8)
-  const scope = `${day}/${credentials.region}/s3/aws4_request`
-  const stringToSign = ['AWS4-HMAC-SHA256', timestamp, scope, await sha256Hex(canonicalRequest)].join('\n')
+  const scope = credentialScope(timestamp, credentials)
+  const stringToSign = ['AWS4-HMAC-SHA256', timestamp, scope, await sha256Hex(lines.join('\n'))].join('\n')
   let key: Uint8Array<ArrayBuffer> = encoder.encode(`AWS4${credentials.secretAccessKey}`)
   for (const part of [day, credentials.region, 's3', 'aws4_request']) {
     key = await hmac(key, part)
   }
-  const signature = toHex(await hmac(key, stringToSign))
-  return `AWS4-HMAC-SHA256 Credential=${credentials.accessKeyId}/${scope}, SignedHeaders=${signedHeaders}, Signature=${signature}`
+  return { scope, signature: toHex(await hmac(key, stringToSign)) }
 }
 
 async function hmac(key: Uint8Array<ArrayBuffer>, message: string): Promise<Uint8Array<ArrayBuffer>> {

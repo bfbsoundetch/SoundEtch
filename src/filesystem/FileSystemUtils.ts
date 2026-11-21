@@ -18,6 +18,9 @@ interface IterableDirectoryHandle extends FileSystemDirectoryHandle {
   values(): AsyncIterableIterator<FileSystemFileHandle | FileSystemDirectoryHandle>
 }
 
+export const READ_ONLY_OPEN_RETRY_MS = 50
+export const READ_ONLY_OPEN_TIMEOUT_MS = 1000
+
 export class FileSystemUtils {
   static async getOperatingSystemFileSystemFileHandle(): Promise<FileSystemFileHandle> {
     const fileHandle = await window.showSaveFilePicker()
@@ -44,13 +47,45 @@ export class FileSystemUtils {
     }
   }
 
-  /** Immutable source PCM can be read by playback, export, and transcription concurrently. */
+  /**
+   * Immutable source PCM can be read by playback, export, and transcription concurrently. A high-quality patch holds
+   * a file exclusively for one short batch, so readers wait it out instead of failing.
+   */
   static async getReadOnlySyncAccessHandle(dirName: string, fileName: string): Promise<FileSystemSyncAccessHandle> {
     // The DOM types omit the worker-only sync access API and its lock mode.
     const file = (await FileSystemUtils.getFileHandle(dirName, fileName)) as FileSystemFileHandle & {
       createSyncAccessHandle(options: { mode: 'read-only' }): Promise<FileSystemSyncAccessHandle>
     }
-    return file.createSyncAccessHandle({ mode: 'read-only' })
+    const deadline = Date.now() + READ_ONLY_OPEN_TIMEOUT_MS
+    for (;;) {
+      try {
+        return await file.createSyncAccessHandle({ mode: 'read-only' })
+      } catch (error) {
+        if (!(error instanceof DOMException && error.name == 'NoModificationAllowedError') || Date.now() >= deadline) {
+          throw error
+        }
+      }
+      const { promise, resolve } = Promise.withResolvers<void>()
+      setTimeout(resolve, READ_ONLY_OPEN_RETRY_MS)
+      await promise
+    }
+  }
+
+  /** Like `getFileHandle`, but a missing file or directory throws `NotFoundError` instead of being created. */
+  static async getExistingFileHandle(dirName: string, fileName: string): Promise<FileSystemFileHandle> {
+    if (GlobalSettings.useMemoryFS || (!FileSystemUtils.hasOpfs() && typeof window !== 'undefined')) {
+      const handle = MemoryBackedFileSystem.getExistingFileHandle(dirName, fileName)
+      if (!handle) {
+        throw new DOMException(`File not found: ${fileName}`, 'NotFoundError')
+      }
+      return handle
+    }
+    if (!FileSystemUtils.hasOpfs()) {
+      throw new Error('File access requires OPFS')
+    }
+    const root = await navigator.storage.getDirectory()
+    const directory = await root.getDirectoryHandle(dirName, { create: false })
+    return directory.getFileHandle(fileName, { create: false })
   }
 
   static async getExistingFile(dirName: string, fileName: string): Promise<Blob> {

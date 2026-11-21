@@ -45,6 +45,7 @@ export default defineConfig({
         ringBufferBackedWorklet: fileURLToPath(
           new URL('./src/noisereduction/RingBufferBackedAudioWorkletProcessor.js', import.meta.url),
         ),
+        hqCaptureWorklet: fileURLToPath(new URL('./src/remote/HighQualityCaptureProcessor.js', import.meta.url)),
         renderingWorker: fileURLToPath(new URL('./src/rendering/RenderingJob.ts', import.meta.url)),
       },
       output: {
@@ -54,6 +55,7 @@ export default defineConfig({
             assetInfo.name == 'recordingAudioWorklet' ||
             assetInfo.name == 'renderingWorker' ||
             assetInfo.name == 'ringBufferBackedWorklet' ||
+            assetInfo.name == 'hqCaptureWorklet' ||
             0
           ) {
             return 'assets/[name].js'

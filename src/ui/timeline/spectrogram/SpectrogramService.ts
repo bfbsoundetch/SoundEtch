@@ -167,6 +167,23 @@ export class SpectrogramService {
     for (const renderer of this.renderers) renderer.projectChanged()
   }
 
+  /** Forgets `clipId`'s tiles after its audio changed in place, and retries tiles whose reads raced the change. */
+  invalidateClip(clipId: number): void {
+    const prefix = `${clipId}:`
+    for (const key of [...this.failedKeys]) {
+      if (key.startsWith(prefix)) this.failedKeys.delete(key)
+    }
+    if (this.workflow?.keyString.startsWith(prefix)) this.cancelWorkflow()
+    for (const [key, entry] of [...this.cache]) {
+      if (!key.startsWith(prefix)) continue
+      this.cache.delete(key)
+      this.cacheBytes -= entry.bytes
+      this.pinnedKeys.delete(key)
+      this.destroyTileAfterSubmittedWork(entry.gpuTile)
+    }
+    this.rebuildQueue()
+  }
+
   get fallbackColor(): string {
     return getSpectrogramFallbackColor(this.settings.colormap)
   }

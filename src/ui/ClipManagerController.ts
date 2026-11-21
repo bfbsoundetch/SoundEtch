@@ -1,4 +1,5 @@
 import { Clip } from '../project/Clip'
+import type { MeetingMedia } from '../project/MeetingMedia'
 import { Project } from '../project/Project'
 import { ProjectManager } from '../project/ProjectManager'
 import { getClipDiskUsage, humanizeBytes } from './DiskUsage'
@@ -156,6 +157,9 @@ export class ClipManagerController {
     for (const [name, value] of Object.entries(clip.tags ?? {}).sort(([a], [b]) => a.localeCompare(b))) {
       this.appendMetadata(name, value)
     }
+    if (clip.meetingMedia) {
+      this.appendMeetingMedia(clip, clip.meetingMedia)
+    }
     if (this.dialog.open) {
       this.dialog.close()
     }
@@ -225,12 +229,40 @@ export class ClipManagerController {
     }
   }
 
-  private appendMetadata(name: string, value: string) {
+  private appendMetadata(name: string, value: string): HTMLElement {
     const label = document.createElement('dt')
     label.innerText = name
     const content = document.createElement('dd')
     content.innerText = value
     this.metadataList.append(label, content)
+    return content
+  }
+
+  private appendMeetingMedia(clip: Clip, media: MeetingMedia) {
+    const status =
+      media.audio == 'pending'
+        ? 'Waiting for uploads'
+        : media.video == 'done'
+          ? 'Upgraded'
+          : media.video == 'kept'
+            ? 'Audio upgraded; call video kept'
+            : 'Video replacement unfinished'
+    const content = this.appendMetadata('High-quality media', status)
+    if (media.audio != 'pending' && media.video != 'pending' && media.video != 'replacing') {
+      return
+    }
+    const button = document.createElement('button')
+    button.className = 'bordered clickable'
+    button.type = 'button'
+    button.innerText = 'Finish high-quality upgrade'
+    button.addEventListener('click', async () => {
+      button.disabled = true
+      const project = await ProjectManager.getActiveProject()
+      // The upgrade code is loaded only when a meeting recording needs it.
+      const { scheduleUpgrade } = await import('../remote/MeetingMediaUpgrade')
+      scheduleUpgrade(project, clip)
+    })
+    content.append(' ', button)
   }
 
   private formatDate(timestamp: number | undefined): string {

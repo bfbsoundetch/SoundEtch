@@ -37,8 +37,7 @@ beforeEach(() => {
 function createRecorder() {
   const onError = vi.fn()
   const recorder = new VideoTrackRecorder({
-    directory: 'project',
-    filename: 'clip_video_0',
+    output: { kind: 'file', directory: 'project', filename: 'clip_video_0' },
     sampleRate: 48000,
     timeline: () => ({ seconds: 2, running: true }),
     minimumHeight: 0,

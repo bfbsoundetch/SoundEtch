@@ -59,6 +59,41 @@ export type PeerMessage =
       activity: RecordingActivity
     }
   | TimestampMessage
+  | HighQualityMessage
+
+/**
+ * The high-quality media protocol between a recorder (R) and a member it records (G); see MEETING_HQ_AUDIO_PLAN.md.
+ * Cloud sessions upload through links the recorder issues; peer sessions send frames over this data connection.
+ */
+export type HighQualityMessage =
+  // R→G. `video` asks for the camera too; a recorder that records audio only never asks.
+  | { type: 'hqOffer'; sessionId: string; transport: 'peer' | 'cloud'; video: boolean }
+  | { type: 'hqAccept'; sessionId: string } // G→R
+  | { type: 'hqDecline'; sessionId: string; reason: 'busy' | 'recording' | 'noMicrophone' | 'unsupported' } // G→R
+  | { type: 'hqCancel'; sessionId: string } // R→G: stop now, discard, no end message
+  | { type: 'hqFailed'; sessionId: string; message: string } // G→R: the guest gave up
+  | { type: 'hqFrame'; sessionId: string; seq: number; pcm: ArrayBuffer } // G→R, peer
+  | { type: 'hqEnd'; sessionId: string; frameCount: number; sentCount: number } // G→R, peer
+  | { type: 'hqLinks'; sessionId: string; links: Array<{ name: string; method: 'POST' | 'PUT'; url: string }> } // R→G, cloud
+  | { type: 'hqLinkRequest'; sessionId: string; names: string[] } // G→R, cloud
+  | { type: 'hqUploaded'; sessionId: string; name: string; size: number; contentHash: string } // G→R, cloud
+  | { type: 'hqComplete'; sessionId: string } // G→R, cloud: manifest uploaded
+
+export type HighQualityListener = (peerId: string, message: HighQualityMessage) => void
+
+const HIGH_QUALITY_MESSAGE_TYPES: readonly string[] = [
+  'hqOffer',
+  'hqAccept',
+  'hqDecline',
+  'hqCancel',
+  'hqFailed',
+  'hqFrame',
+  'hqEnd',
+  'hqLinks',
+  'hqLinkRequest',
+  'hqUploaded',
+  'hqComplete',
+] satisfies HighQualityMessage['type'][]
 
 export type RecordingActivity =
   | {
@@ -72,6 +107,10 @@ export type RecordingActivity =
     }
   | {
       state: 'recording'
+      countdownId: number | null
+    }
+  | {
+      state: 'paused'
       countdownId: number | null
     }
 
@@ -180,6 +219,7 @@ export class RemoteMediaClient3 {
   }
   private readonly stateListeners = new Array<StateListener>()
   private readonly messageListeners = new Array<MessageListener>()
+  private readonly highQualityListeners = new Array<HighQualityListener>()
   private readonly initializedDataConnections = new Set<string>()
   private readonly openedDataConnections = new Set<string>()
   /** Peers whose messages are processed: guests the host admitted, or for a guest, the host and members it vouched for. */
@@ -391,6 +431,23 @@ export class RemoteMediaClient3 {
   addStateListener(listener: StateListener) {
     this.stateListeners.push(listener)
     listener(this.state)
+  }
+
+  addHighQualityListener(listener: HighQualityListener) {
+    this.highQualityListeners.push(listener)
+  }
+
+  /** Sends `message` to the admitted peer `peerId`; false when there is no open connection to it. */
+  sendHighQuality(peerId: string, message: HighQualityMessage): boolean {
+    const connection = this.admittedPeers.has(peerId) ? this.getOpenDataConnection(peerId) : null
+    connection?.send(message)
+    return connection != null
+  }
+
+  /** Bytes queued on the data channel to `peerId`, or null without an open connection. */
+  getSendBufferedAmount(peerId: string): number | null {
+    const connection = this.getOpenDataConnection(peerId)
+    return connection ? (connection.dataChannel?.bufferedAmount ?? 0) : null
   }
 
   async amInRoom() {
@@ -851,6 +908,14 @@ export class RemoteMediaClient3 {
   }
 
   private async handleDataMessage(self: DataConnection, data: unknown) {
+    // High-quality frames arrive ten times a second: never stringify them or hold them for unadmitted peers.
+    const type = (data as { type?: unknown } | null)?.type
+    if (typeof type == 'string' && HIGH_QUALITY_MESSAGE_TYPES.includes(type)) {
+      if (this.admittedPeers.has(self.peer)) {
+        this.highQualityListeners.forEach((listener) => listener(self.peer, data as HighQualityMessage))
+      }
+      return
+    }
     console.debug('received message', JSON.stringify(data))
     const peerMessage = data as PeerMessage
     if (peerMessage.type == 'timestamp') {

@@ -87,6 +87,7 @@ export class ProjectManager {
         this.migrateCaptionShadow(result)
         await this.populateSummaries(result)
         await this.recoverInterruptedVideo(result)
+        this.resumeMeetingMediaUpgrades(result)
       } else {
         result = await DatabasePersister.save(new Project(ProjectManager.DEFAULT_PROJECT_TITLE, 48000))
         await DatabasePersister.setGlobalProperty(ProjectManager.ACTIVE_PROJECT_PROPERTY_NAME, result.id)
@@ -162,6 +163,7 @@ export class ProjectManager {
     ProjectManager.activeProject = Promise.resolve(project)
     await this.populateSummaries(project)
     await this.recoverInterruptedVideo(project)
+    this.resumeMeetingMediaUpgrades(project)
     await DatabasePersister.setGlobalProperty(ProjectManager.ACTIVE_PROJECT_PROPERTY_NAME, project.id)
     ProjectManager.projectListeners.forEach((listener) => listener(project))
     return project
@@ -236,6 +238,17 @@ export class ProjectManager {
     // Imported on demand: recovery shares the recording modules, which stay out of the initial chunk.
     const { recoverInterruptedVideoRecordings } = await import('../recording/VideoRecovery')
     await recoverInterruptedVideoRecordings(project)
+  }
+
+  /** Continues cloud upgrades of meeting recordings in the background; loading does not wait for them. */
+  private static resumeMeetingMediaUpgrades(project: Project) {
+    const pending = project.getClips().some((clip) => {
+      const media = clip.meetingMedia
+      return media && (media.audio == 'pending' || media.video == 'pending' || media.video == 'replacing')
+    })
+    if (!pending) return
+    // Imported on demand: the upgrade code stays out of the initial chunk.
+    void import('../remote/MeetingMediaUpgrade').then((module) => module.resumeUpgrades(project))
   }
 
   static async addNewClip(clip: Clip) {

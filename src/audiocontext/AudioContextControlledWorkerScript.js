@@ -44,5 +44,11 @@ self.onmessage = async (e) => {
       self.controllable?.stop()
       self.controllable = null
       break
+    case 'hqPort': {
+      // Loaded on first use, so recordings without meeting guests never load the alignment code.
+      const { attachPatchPort } = await import('../recording/HighQualityPatchService.ts')
+      attachPatchPort(e.data.port)
+      break
+    }
   }
 }

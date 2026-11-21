@@ -181,6 +181,17 @@ The bucket's CORS rules must allow each deployment's origin, every header, and e
 
 Requests are signed with AWS Signature Version 4 over the SHA-256 of their body, so S3 rejects any upload whose bytes changed on the way. Refused credentials pause the backup and forget the secret; the other settings stay, and **Connect S3** with a working key resumes the backup.
 
+## Meeting high-quality media
+
+While someone in a meeting records, every other member also sends that recorder lossless audio of itself (48 kHz 16-bit mono, from the same processed mic track the call uses), and with cloud storage its camera video too. The recorder records the call as usual, then upgrades each member's clip with it. `MEETING_HQ_AUDIO_PLAN.md` has the full design.
+
+- **Transport.** A recorder whose cloud backup service is connected (Dropbox or S3) gives members upload links: Dropbox temporary upload links, or presigned S3 `PUT` URLs signed locally. Members upload 30 s audio chunks and 8 MiB video chunks plus a `manifest.json` to `/Meeting media/<project> <time>/<name> <session>/`; the app never deletes them. Without cloud storage, members send audio frames over the meeting's data connection instead, and the recorded call video is kept.
+- **One copy, one stream.** Audio is mixed into the recorded clip's own file in place, so nothing is stored twice. A cloud upgrade deletes the call video only after verifying every uploaded chunk, then writes the high-quality video. Each member serves one recorder at a time, and a member who is recording itself declines cloud sessions so as not to spool a second copy.
+- **Alignment.** Each 5 s block of lossless audio is placed by cross-correlation against the recorder's own call recording of that member, so clock drift and network jitter are followed; where frames are missing or alignment fails, the call audio stays, joined with 5 ms crossfades. Camera video timestamps go through the same mapping. Peer audio is patched while the recording runs; cloud media after the recording, or on the next project load.
+- **Undo.** Upgrades are not undoable: the call-quality audio is overwritten, and the call video is replaced.
+- **Capture.** The member's audio worklet writes into a SharedArrayBuffer ring (no `postMessage` from the audio thread), drained by a dedicated worker so a hidden tab's throttled timers cannot overflow it. Like the recording worklet, it loads from `assets/` and so works in builds (`yarn build && yarn preview`), not under `yarn dev`.
+- **Pausing** the recording ends members' sessions; resuming starts new ones. Members see "… paused recording" on the recorder's tile.
+
 ## Importing media
 
 Drag one local media file onto the timeline, or onto the welcome area in an empty project, to use the same importer as **Add Clip → Local file**. The drop area gets a dashed outline while it can accept the file. Audio is placed on a new track at the current cursor position, not at the pointer's drop position, with the same import progress, cancellation, metadata, and error handling as the file picker.

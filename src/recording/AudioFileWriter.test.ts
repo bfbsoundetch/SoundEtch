@@ -201,7 +201,7 @@ function createRecording(samples: Float32Array, channelCount = 1) {
   return { audio, summaryFile, audioClose, summaryClose, closeAudio, closeSummary, summary, ringBuffer, writer }
 }
 
-function bufferBytes(buffer: BufferSource): Uint8Array {
+function bufferBytes(buffer: AllowSharedBufferSource): Uint8Array {
   return ArrayBuffer.isView(buffer)
     ? new Uint8Array(buffer.buffer, buffer.byteOffset, buffer.byteLength)
     : new Uint8Array(buffer)

@@ -50,21 +50,24 @@ export class MemoryBackedFileSystemSyncAccessHandle implements FileSystemSyncAcc
     return new Blob([data])
   }
 
-  read(buffer: ArrayBuffer, options: { at: number } = { at: 0 }): number {
+  read(buffer: BufferSource, options: { at: number } = { at: 0 }): number {
     if (options.at < 0 || options.at > this.size) {
       throw new TypeError('offset `options.at` value out of range: ' + options.at + ' for file of size ' + this.size)
     }
+    const target = MemoryBackedFileSystemSyncAccessHandle.bytesOf(buffer)
     const start = options.at ?? 0
-    var read = 0
-    while (read < buffer.byteLength && start + read < this.size) {
-      const chunkIndex = Math.floor((start + read) / MemoryBackedFileSystemSyncAccessHandle.CHUNK_SIZE)
-      const readStart = start + read - chunkIndex * MemoryBackedFileSystemSyncAccessHandle.CHUNK_SIZE
-      const readBuffer = new Uint8Array(this.buffers[chunkIndex]).subarray(
-        readStart,
-        Math.min(buffer.byteLength, this.size) - read,
+    let read = 0
+    while (read < target.byteLength && start + read < this.size) {
+      const position = start + read
+      const chunkIndex = Math.floor(position / MemoryBackedFileSystemSyncAccessHandle.CHUNK_SIZE)
+      const chunkOffset = position - chunkIndex * MemoryBackedFileSystemSyncAccessHandle.CHUNK_SIZE
+      const count = Math.min(
+        target.byteLength - read,
+        MemoryBackedFileSystemSyncAccessHandle.CHUNK_SIZE - chunkOffset,
+        this.size - position,
       )
-      new Uint8Array(buffer).set(readBuffer, read)
-      read += readBuffer.byteLength
+      target.set(new Uint8Array(this.buffers[chunkIndex], chunkOffset, count), read)
+      read += count
     }
     return read
   }
@@ -79,27 +82,37 @@ export class MemoryBackedFileSystemSyncAccessHandle implements FileSystemSyncAcc
     this.size = newSize
   }
 
-  write(buffer: ArrayBuffer, options: { at: number } = { at: 0 }): number {
+  write(buffer: AllowSharedBufferSource, options: { at: number } = { at: 0 }): number {
     if (options.at < 0 || options.at > 2 * 1024 * 1024 * 1024) {
       throw new TypeError('offset `options.at` value out of range: ' + options.at)
     }
+    const source = MemoryBackedFileSystemSyncAccessHandle.bytesOf(buffer)
     const start = options.at ?? this.size
-    while (start + buffer.byteLength > this.buffers.length * MemoryBackedFileSystemSyncAccessHandle.CHUNK_SIZE) {
+    while (start + source.byteLength > this.buffers.length * MemoryBackedFileSystemSyncAccessHandle.CHUNK_SIZE) {
       this.buffers.push(new SharedArrayBuffer(MemoryBackedFileSystemSyncAccessHandle.CHUNK_SIZE))
     }
-    var written = 0
-    while (written < buffer.byteLength) {
-      const chunkIndex = Math.floor((start + written) / MemoryBackedFileSystemSyncAccessHandle.CHUNK_SIZE)
-      const writeStart = start + written - chunkIndex * MemoryBackedFileSystemSyncAccessHandle.CHUNK_SIZE
-      const writeBuffer = new Uint8Array(buffer).subarray(
-        written,
-        written + MemoryBackedFileSystemSyncAccessHandle.CHUNK_SIZE - writeStart,
+    let written = 0
+    while (written < source.byteLength) {
+      const position = start + written
+      const chunkIndex = Math.floor(position / MemoryBackedFileSystemSyncAccessHandle.CHUNK_SIZE)
+      const chunkOffset = position - chunkIndex * MemoryBackedFileSystemSyncAccessHandle.CHUNK_SIZE
+      const count = Math.min(
+        source.byteLength - written,
+        MemoryBackedFileSystemSyncAccessHandle.CHUNK_SIZE - chunkOffset,
       )
-      new Uint8Array(this.buffers[chunkIndex]).set(writeBuffer, writeStart)
-      written += writeBuffer.byteLength
+      new Uint8Array(this.buffers[chunkIndex]).set(source.subarray(written, written + count), chunkOffset)
+      written += count
     }
-    this.size += written
+    // Overwriting within the file leaves its size alone, as OPFS does.
+    this.size = Math.max(this.size, start + written)
     return written
+  }
+
+  /** The bytes `buffer` refers to, without copying, so reads land in the caller's view. */
+  private static bytesOf(buffer: AllowSharedBufferSource): Uint8Array {
+    return ArrayBuffer.isView(buffer)
+      ? new Uint8Array(buffer.buffer, buffer.byteOffset, buffer.byteLength)
+      : new Uint8Array(buffer)
   }
 
   async createSyncAccessHandle(): Promise<FileSystemSyncAccessHandle> {

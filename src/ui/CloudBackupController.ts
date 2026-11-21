@@ -10,7 +10,7 @@ import type { CloudProviderId } from '../backup/CloudStorage'
 import { connect, disconnect, prepareAuthorization, type PreparedAuthorization } from '../backup/DropboxAuthorization'
 import { connectS3, disconnectS3, getS3Settings, type S3Settings } from '../backup/S3Storage'
 import { ProjectManager } from '../project/ProjectManager'
-import { stopAndWaitForRecordings } from '../recording/UnsettledRecordings'
+import { withRecordingsStopped, withUpgradesPaused } from '../recording/UnsettledRecordings'
 import { humanizeBytes } from './DiskUsage'
 import { NotificationsController } from './NotificationsController'
 import { editorHistory } from './undo/EditorHistory'
@@ -66,7 +66,7 @@ export class CloudBackupController {
     }
     this.disconnectButton.onclick = () => void this.disconnect()
     this.backupButton.onclick = () => void this.backUp()
-    this.resumeButton.onclick = () => void this.runAction(() => CloudBackup.resume())
+    this.resumeButton.onclick = () => void this.runAction(() => withUpgradesPaused(() => CloudBackup.resume()))
     this.cancelButton.onclick = () => void this.runAction(() => CloudBackup.cancel())
     this.listButton.onclick = () => void this.showBackups()
     window.addEventListener('beforeunload', (event) => {
@@ -169,7 +169,7 @@ export class CloudBackupController {
     this.notice = null
     await this.refreshConnection()
     if (this.backupStatus.kind == 'paused' && this.backupStatus.reason == 'authorization') {
-      await CloudBackup.resume()
+      await withUpgradesPaused(() => CloudBackup.resume())
     }
   }
 
@@ -201,9 +201,10 @@ export class CloudBackupController {
     this.render()
     try {
       const project = await ProjectManager.getActiveProject()
-      await stopAndWaitForRecordings()
-      await ProjectManager.saveProject(project)
-      await CloudBackup.start(project, this.provider)
+      await withRecordingsStopped(async () => {
+        await ProjectManager.saveProject(project)
+        await CloudBackup.start(project, this.provider)
+      })
     } catch (error) {
       this.showError(error)
     } finally {
@@ -259,13 +260,14 @@ export class CloudBackupController {
     this.notice = `Restoring “${title}”: ${humanizeBytes(0)} of ${humanizeBytes(listing.totalBytes)}`
     this.render()
     try {
-      await stopAndWaitForRecordings()
-      const projectId = await CloudBackup.restore(listing, (written, total) => {
-        this.notice = `Restoring “${title}”: ${humanizeBytes(written)} of ${humanizeBytes(total)}`
-        this.status.textContent = this.notice
+      await withRecordingsStopped(async () => {
+        const projectId = await CloudBackup.restore(listing, (written, total) => {
+          this.notice = `Restoring “${title}”: ${humanizeBytes(written)} of ${humanizeBytes(total)}`
+          this.status.textContent = this.notice
+        })
+        editorHistory.clear()
+        await ProjectManager.openProject(projectId)
       })
-      editorHistory.clear()
-      await ProjectManager.openProject(projectId)
       this.notice = null
       this.dialog.close()
       NotificationsController.showShortDurationMessage(`Restored project “${title}”.`)

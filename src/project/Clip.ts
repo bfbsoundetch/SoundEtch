@@ -3,6 +3,7 @@ import { DatabasePersisted } from '../persistence/DatabasePersisted'
 import { Summary } from './Summary'
 import type { TranscribedRange } from './Transcription'
 import type { VideoSegment } from './Video'
+import type { MeetingMedia } from './MeetingMedia'
 
 @Restorable('Clip')
 export class Clip extends DatabasePersisted {
@@ -14,6 +15,8 @@ export class Clip extends DatabasePersisted {
   videoSegments: VideoSegment[] = []
   /** Set while a recording writes this clip's video; still set on load means the tab closed mid-recording. */
   videoRecordingInProgress = false
+  /** High-quality media from a meeting member that upgrades this recording; null for other clips. */
+  meetingMedia: MeetingMedia | null = null
   readonly tags: Record<string, string>
   readonly sourceFilename: string | null
 

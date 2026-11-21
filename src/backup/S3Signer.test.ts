@@ -1,5 +1,5 @@
 import { expect, test } from 'vitest'
-import { amzDate, canonicalQuery, encodeS3Path, sha256Hex, signS3Request } from './S3Signer'
+import { amzDate, canonicalQuery, encodeS3Path, presignS3Url, sha256Hex, signS3Request } from './S3Signer'
 
 // The examples in https://docs.aws.amazon.com/AmazonS3/latest/API/sig-v4-header-based-auth.html
 const credentials = {
@@ -73,4 +73,20 @@ test('paths keep slashes and encode everything else; query values encode slashes
       ['delimiter', '/'],
     ]),
   ).toBe('delimiter=%2F&list-type=2&prefix=soundetch%2Fa%20b%2F')
+})
+
+// The example in https://docs.aws.amazon.com/AmazonS3/latest/API/sigv4-query-string-auth.html
+test('presigned URLs match the AWS query authentication example', async () => {
+  const url = await presignS3Url(
+    { method: 'GET', host: 'examplebucket.s3.amazonaws.com', path: encodeS3Path('test.txt'), query: [] },
+    credentials,
+    date,
+    86400,
+  )
+  expect(url).toBe(
+    'https://examplebucket.s3.amazonaws.com/test.txt?X-Amz-Algorithm=AWS4-HMAC-SHA256' +
+      '&X-Amz-Credential=AKIAIOSFODNN7EXAMPLE%2F20130524%2Fus-east-1%2Fs3%2Faws4_request&X-Amz-Date=20130524T000000Z' +
+      '&X-Amz-Expires=86400&X-Amz-SignedHeaders=host' +
+      '&X-Amz-Signature=aeeed9bbccd4d02ee5c0109b86d86835f995330da4c265957d157751f604d404',
+  )
 })

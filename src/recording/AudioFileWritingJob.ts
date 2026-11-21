@@ -3,6 +3,7 @@ import { ControllableWorkerJob } from '../audiocontext/ControllableWorkerJob'
 import { AudioFileWriter } from './AudioFileWriter'
 import { Summary } from '../project/Summary'
 import { FileSystemSyncAccessHandle } from '../filesystem/FileSystemSyncAccessHandle'
+import { LiveRecordingFiles } from './LiveRecordingFiles'
 
 interface RecordingInput {
   readonly dirname: string
@@ -18,6 +19,7 @@ export class AudioFileWritingJob implements ControllableWorkerJob {
   static async create(argument: readonly RecordingInput[]): Promise<AudioFileWritingJob> {
     const audioFileWriters = new Array<AudioFileWriter>()
     const acquiredHandles = new Array<FileSystemSyncAccessHandle>()
+    const liveKeys = new Array<string>()
     try {
       for (const input of argument) {
         // The DOM types omit the worker-only sync access API.
@@ -38,6 +40,7 @@ export class AudioFileWritingJob implements ControllableWorkerJob {
         const summarySyncHandle = await summaryFileHandle.createSyncAccessHandle()
         acquiredHandles.push(summarySyncHandle)
         summary.setSyncFileHandle(summarySyncHandle)
+        const liveKey = `${input.dirname}/${input.clip.filename}`
         audioFileWriters.push(
           new AudioFileWriter(
             fileSyncHandle,
@@ -45,11 +48,15 @@ export class AudioFileWritingJob implements ControllableWorkerJob {
             input.ringBufferArray,
             input.overrunSampleCount,
             input.channelCount,
+            { key: liveKey, summaryHandle: summarySyncHandle },
           ),
         )
+        liveKeys.push(liveKey)
       }
       return new AudioFileWritingJob(audioFileWriters)
     } catch (error) {
+      // These writers never run, so nothing else withdraws their handles before they close.
+      liveKeys.forEach((key) => LiveRecordingFiles.unregister(key))
       for (const handle of acquiredHandles) {
         try {
           handle.close()
