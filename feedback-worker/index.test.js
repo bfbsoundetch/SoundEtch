@@ -412,9 +412,9 @@ describe.sequential('private feedback Worker with real local D1', () => {
     expect(await rows()).toHaveLength(6)
   })
 
-  test('atomically permits at most 100 reports per UTC day across distinct IPs', async () => {
+  test('atomically permits at most 1000 reports per UTC day across distinct IPs', async () => {
     const now = Math.floor(Date.now() / 1_000)
-    await seed(Array.from({ length: 98 }, (_, index) => ({ time: now, hash: `seed-${index}` })))
+    await seed(Array.from({ length: 998 }, (_, index) => ({ time: now, hash: `seed-${index}` })))
     const responses = await Promise.all(
       Array.from({ length: 8 }, (_, index) =>
         post(
@@ -429,19 +429,19 @@ describe.sequential('private feedback Worker with real local D1', () => {
     for (const response of responses.filter((response) => response.status !== 201)) {
       await expectError(response, 429, 'rate_limited')
     }
-    expect(await rows()).toHaveLength(100)
+    expect(await rows()).toHaveLength(1000)
   }, 30_000)
 
   test('UTC-day accounting includes midnight but excludes previous day and next midnight', async () => {
     const dayStart = Math.floor(Date.now() / 86_400_000) * 86_400
     await seed([
-      ...Array.from({ length: 99 }, (_, index) => ({ time: dayStart, hash: `today-${index}` })),
+      ...Array.from({ length: 999 }, (_, index) => ({ time: dayStart, hash: `today-${index}` })),
       { time: dayStart - 1, hash: 'yesterday' },
       { time: dayStart + 86_400, hash: 'tomorrow' },
     ])
     expect((await post()).status).toBe(201)
     await expectError(await post(undefined, { headers: { 'CF-Connecting-IP': '198.51.100.29' } }), 429, 'rate_limited')
-    expect(await rows()).toHaveLength(102)
+    expect(await rows()).toHaveLength(1002)
   })
 
   test('has no public inbox or report-reading route and returns exact method headers', async () => {
