@@ -394,7 +394,7 @@ export class AutomationController extends TrackListItemController {
     const actionsCell = document.createElement('td')
     const deleteButton = document.createElement('button')
     deleteButton.type = 'button'
-    deleteButton.className = 'bordered clickable automation-delete-point-button'
+    deleteButton.className = 'bordered clickable'
     deleteButton.textContent = 'Delete'
     deleteButton.addEventListener('click', () => {
       const points = this.paramVals.transitionSequence

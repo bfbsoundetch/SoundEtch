@@ -734,7 +734,7 @@ export class TrackListController {
 
     const exitButton = document.createElement('button')
     exitButton.type = 'button'
-    exitButton.className = 'clickable automation-exit-button'
+    exitButton.className = 'bordered clickable automation-exit-button'
     exitButton.textContent = 'Back'
     exitButton.addEventListener('click', () => this.exitAutomationMode())
     panel.append(heading, exitButton)

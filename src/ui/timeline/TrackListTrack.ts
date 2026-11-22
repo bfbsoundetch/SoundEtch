@@ -59,7 +59,7 @@ export class TrackListTrack {
     // Shown by CSS only while the track has a video lane.
     const videoButton = document.createElement('button')
     videoButton.type = 'button'
-    videoButton.className = 'track-video-button clickable'
+    videoButton.className = 'bordered clickable track-video-button'
     videoButton.textContent = 'Video'
     const updateVideoButtonName = () => videoButton.setAttribute('aria-label', `Video for ${track.name}`)
     updateVideoButtonName()
@@ -78,7 +78,7 @@ export class TrackListTrack {
     this.trackInfoDiv.appendChild(deleteTrackButton)
 
     const effectButton = document.createElement('button')
-    effectButton.classList = 'track-effect-selector clickable'
+    effectButton.classList = 'bordered clickable track-effect-selector'
     effectButton.innerText = 'Effects'
     effectButton.addEventListener('click', () => {
       EffectPanelController.getInstance().showEffectsList(track)
@@ -276,7 +276,7 @@ export class TrackListTrack {
   private createMixButton(label: string, title: string, className: string) {
     const button = document.createElement('button')
     button.type = 'button'
-    button.className = `clickable track-mix-button ${className}`
+    button.className = `bordered clickable track-mix-button ${className}`
     button.textContent = label
     button.title = title
     button.setAttribute('aria-label', title)

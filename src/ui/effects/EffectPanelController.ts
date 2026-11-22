@@ -760,7 +760,7 @@ export class EffectPanelController {
 
     const addEffectButton = document.createElement('button')
     addEffectButton.type = 'button'
-    addEffectButton.className = 'clickable effect-catalog-add'
+    addEffectButton.className = 'bordered clickable effect-catalog-add'
     addEffectButton.textContent = `Add to ${chainOwner(host)}`
     addEffectButton.addEventListener('click', () => {
       addEffectButton.disabled = true

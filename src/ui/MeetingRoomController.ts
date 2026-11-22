@@ -859,7 +859,7 @@ export class MeetingRoomController {
     ] as const) {
       const button = document.createElement('button')
       button.type = 'button'
-      button.className = 'meeting-join-request-button clickable'
+      button.className = 'bordered clickable'
       button.innerText = text
       button.setAttribute('aria-label', `${text} ${joinRequest.username}`)
       button.onclick = respond

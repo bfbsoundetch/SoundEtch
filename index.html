@@ -441,7 +441,7 @@
               aria-labelledby="timeline-output-title"
             >
               <h3 id="timeline-output-title">Output</h3>
-              <button type="button" id="timeline-output-effects" class="track-effect-selector clickable">
+              <button type="button" id="timeline-output-effects" class="bordered clickable track-effect-selector">
                 Effects
               </button>
             </div>
@@ -459,16 +459,16 @@
       </div>
     </div>
     <dialog id="add-clip-modal" class="overlay" aria-labelledby="add-clip-modal-title">
+      <button
+        type="button"
+        class="overlay-close-button clickable"
+        aria-label="Close add clip"
+        title="Close"
+        onclick="this.closest('dialog').close()"
+      >
+        <svg class="meeting-icon" viewBox="0 0 500 500" aria-hidden="true"><use xlink:href="#menu-close" /></svg>
+      </button>
       <div id="add-clip-modal-content" class="overlay-content" onclick="event.stopPropagation()">
-        <button
-          type="button"
-          class="overlay-close-button clickable"
-          aria-label="Close add clip"
-          title="Close"
-          onclick="this.closest('dialog').close()"
-        >
-          <svg class="meeting-icon" viewBox="0 0 500 500" aria-hidden="true"><use xlink:href="#menu-close" /></svg>
-        </button>
         <h1 id="add-clip-modal-title">Add Clip</h1>
         <div class="add-clip-source-toggle" role="radiogroup" aria-label="Clip source">
           <label class="add-clip-source-option">
@@ -487,7 +487,7 @@
         <div id="add-clip-local-section">
           <button
             type="button"
-            class="bordered clickable add-clip-option"
+            class="bordered clickable"
             onclick="document.getElementById('audio-file-local').click()"
           >
             Choose local file...
@@ -497,17 +497,11 @@
         <div id="add-clip-remote-section" class="add-clip-url-option" hidden>
           <label for="audio-file-url">From URL</label>
           <input type="text" id="audio-file-url" placeholder="https://example.com/audio-file.wav" />
-          <button class="bordered clickable add-clip-option" onclick="audioFileRemoteHandler()">
-            Load remote file
-          </button>
+          <button class="bordered clickable" onclick="audioFileRemoteHandler()">Load remote file</button>
         </div>
         <div id="add-clip-existing-section" class="add-clip-existing-option" hidden>
           <div id="add-clip-existing-list"></div>
-          <button
-            id="add-clip-open-clip-manager-button"
-            class="bordered clickable add-clip-manager-button"
-            type="button"
-          >
+          <button id="add-clip-open-clip-manager-button" class="bordered clickable" type="button">
             Manage clips...
           </button>
         </div>
@@ -656,7 +650,7 @@
                 <button
                   id="meeting-link"
                   type="button"
-                  class="meeting-link clickable"
+                  class="bordered clickable meeting-link"
                   onclick="meetingRoomController.copyMeetingLink()"
                 ></button>
               </div>
@@ -732,8 +726,8 @@
       </button>
       <div id="logs-modal-content" class="overlay-content">
         <div id="logs-modal-toolbar">
-          <button id="logs-modal-refresh-button" class="bordered clickable logs-modal-button">Refresh</button>
-          <button id="logs-modal-download-button" class="bordered clickable logs-modal-button">Download .txt</button>
+          <button id="logs-modal-refresh-button" class="bordered clickable">Refresh</button>
+          <button id="logs-modal-download-button" class="bordered clickable">Download .txt</button>
         </div>
         <pre id="logs-modal-content-text" tabindex="0" role="region" aria-label="Log output"></pre>
       </div>
@@ -749,7 +743,7 @@
           <use xlink:href="#menu-close" />
         </svg>
       </button>
-      <form id="settings-form" class="overlay-content settings-modal-content" onclick="event.stopPropagation()">
+      <form id="settings-form" class="overlay-content" onclick="event.stopPropagation()">
         <header>
           <h1 id="settings-modal-title">Settings</h1>
         </header>
@@ -1355,12 +1349,7 @@
           </template>
         </details>
 
-        <button
-          class="bordered clickable publish-project-button"
-          onclick="window.publishProjectController.publishProject()"
-        >
-          Publish
-        </button>
+        <button class="bordered clickable" onclick="window.publishProjectController.publishProject()">Publish</button>
       </div>
     </dialog>
     <dialog id="processing-modal" class="overlay no-backdrop-close" aria-labelledby="processing-modal-title">
