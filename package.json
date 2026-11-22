@@ -26,6 +26,7 @@
   "type": "module",
   "scripts": {
     "test": "vitest run --reporter=verbose",
+    "test:e2e": "playwright test",
     "prepare:timing": "node scripts/prepare-granite-timing.mjs",
     "prettier": "prettier -w '**/*.{js,ts,css,html}'",
     "dev": "vite",
@@ -35,6 +36,7 @@
     "feedback:deploy": "wrangler deploy --config feedback-worker/wrangler.jsonc"
   },
   "devDependencies": {
+    "@playwright/test": "^1.65.1",
     "@types/node": "^20.16.11",
     "@types/websocket": "^1.0.10",
     "@typescript-eslint/eslint-plugin": "^6.18.1",

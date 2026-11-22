@@ -8,3 +8,4 @@ server
 /tmp/granite-verify/
 /feedback-worker/.dev.vars
 /feedback-worker/.wrangler/
+/test-results/

@@ -2,6 +2,20 @@
 
 Web audio recorder and editor
 
+## Testing
+
+`yarn test` runs the Vitest unit and integration tests in Node.
+
+`yarn test:e2e` runs the Playwright end-to-end tests in `e2e/` against a production build in headless Chromium. Install the browser once with `yarn playwright install chromium`. Each run builds with `vite build` into `dist/` and serves it with `vite preview` on port 4180, because worklets and the rendering worker load from fixed `./assets/` paths that only a build emits. Each test starts from an empty browser profile and fails on any uncaught page error or `console.error`. The tests cover:
+
+- startup with cross-origin isolation, and every main-menu dialog
+- file import, which must survive a reload, and real-time playback
+- recording from Chromium's fake microphone
+- moving and trimming clips with undo and redo
+- WAV publishing, compared sample by sample with the imported audio
+
+Playwright cannot drive the native save dialog, so the export test replaces `showSaveFilePicker` with a picker that returns a file in OPFS, then reads it back. `.yarnclean` exempts Playwright's packages, which ship runtime code in directories named `test`.
+
 ## Private feedback
 
 **Send Feedback…** in the application menu opens a separate, no-login feedback page. The action is disabled until the editor is built with an absolute HTTPS `VITE_FEEDBACK_URL` (HTTP localhost is allowed only in development). The separate page keeps third-party verification out of the editor's cross-origin-isolated audio environment.

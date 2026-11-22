@@ -42,3 +42,9 @@ wercker.yml
 
 # misc
 *.md
+
+# Playwright ships runtime code under directories named "test" (including @playwright/test itself).
+!@playwright/test
+!@playwright/test/**
+!playwright/**
+!playwright-core/**

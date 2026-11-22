@@ -1,5 +1,5 @@
 import { fileURLToPath } from 'url'
-import { defineConfig } from 'vitest/config'
+import { configDefaults, defineConfig } from 'vitest/config'
 import { PluginOption } from 'vite'
 import wasm from 'vite-plugin-wasm'
 import { nodePolyfills } from 'vite-plugin-node-polyfills'
@@ -72,5 +72,7 @@ export default defineConfig({
   test: {
     environment: 'node',
     globals: true,
+    // Playwright runs e2e/ against a production build: `yarn test:e2e`.
+    exclude: [...configDefaults.exclude, 'e2e/**'],
   },
 })
