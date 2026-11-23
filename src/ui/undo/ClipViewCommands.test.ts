@@ -1,3 +1,4 @@
+import 'fake-indexeddb/auto'
 import { expect, test } from 'vitest'
 import { Clip } from '../../project/Clip'
 import { ClipView } from '../../project/ClipView'

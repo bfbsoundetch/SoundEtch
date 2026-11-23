@@ -16,6 +16,12 @@ Web audio recorder and editor
 
 Playwright cannot drive the native save dialog, so the export test replaces `showSaveFilePicker` with a picker that returns a file in OPFS, then reads it back. `.yarnclean` exempts Playwright's packages, which ship runtime code in directories named `test`.
 
+GitHub Actions (`.github/workflows/ci.yml`) runs on pushes to `main`, on pull requests, and on demand. It has three parallel jobs on Ubuntu 24.04 with Node 26:
+
+- **Formatting**: `yarn prettier:check`. Fix failures with `yarn prettier`.
+- **Type-check and unit tests**: `tsc --noEmit` and `yarn test`. It installs `ffmpeg` so the encoder round-trip tests run instead of skipping.
+- **End-to-end tests**: `yarn test:e2e`, one test at a time. When it fails, the Playwright traces are uploaded as the `playwright-traces` artifact; open them with `yarn playwright show-trace <trace.zip>`.
+
 ## Private feedback
 
 **Send Feedback…** in the application menu opens a separate, no-login feedback page in a new tab. The action is disabled until the editor is built with an absolute HTTPS `VITE_FEEDBACK_URL` (HTTP localhost is allowed only in development). The separate page keeps third-party verification out of the editor's cross-origin-isolated audio environment.

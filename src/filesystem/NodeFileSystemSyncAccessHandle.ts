@@ -14,8 +14,12 @@ export class NodeFileSystemSyncAccessHandle implements FileSystemSyncAccessHandl
     this.name = path
   }
 
+  /** Like OPFS `getDirectoryHandle(dirName, { create: true })`, a missing directory is created rather than an error. */
   static async create(path: string): Promise<NodeFileSystemSyncAccessHandle> {
+    // Node built-ins load lazily: the browser build also bundles this module, behind FileSystemUtils' Node-only branch.
     const fs = await import('fs')
+    const { dirname } = await import('path')
+    fs.mkdirSync(dirname(path), { recursive: true })
     return new NodeFileSystemSyncAccessHandle(fs, null, path)
   }
 

@@ -29,6 +29,7 @@
     "test:e2e": "playwright test",
     "prepare:timing": "node scripts/prepare-granite-timing.mjs",
     "prettier": "prettier -w '**/*.{js,ts,css,html}'",
+    "prettier:check": "prettier --check '**/*.{js,ts,css,html}'",
     "dev": "vite",
     "build": "tsc && vite build",
     "preview": "vite preview",

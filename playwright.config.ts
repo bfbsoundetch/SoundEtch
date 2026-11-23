@@ -8,6 +8,8 @@ export default defineConfig({
   testDir: './e2e',
   fullyParallel: true,
   forbidOnly: !!process.env.CI,
+  // Recording and playback run in real time; on small CI runners, parallel browsers would compete for the CPU.
+  workers: process.env.CI ? 1 : undefined,
   reporter: 'list',
   use: {
     baseURL: BASE_URL,
