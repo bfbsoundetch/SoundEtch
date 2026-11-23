@@ -18,13 +18,13 @@ Playwright cannot drive the native save dialog, so the export test replaces `sho
 
 ## Private feedback
 
-**Send Feedback…** in the application menu opens a separate, no-login feedback page. The action is disabled until the editor is built with an absolute HTTPS `VITE_FEEDBACK_URL` (HTTP localhost is allowed only in development). The separate page keeps third-party verification out of the editor's cross-origin-isolated audio environment.
+**Send Feedback…** in the application menu opens a separate, no-login feedback page in a new tab. The action is disabled until the editor is built with an absolute HTTPS `VITE_FEEDBACK_URL` (HTTP localhost is allowed only in development). The separate page keeps third-party verification out of the editor's cross-origin-isolated audio environment.
 
 Production feedback is live at [soundetch-feedback.bfb-e2a.workers.dev](https://soundetch-feedback.bfb-e2a.workers.dev/). `.env.production` sets that URL for production editor builds. The editor remains on the existing assets-only Worker `damp-block-3bec`, serving `soundetch.org` and `www.soundetch.org` with its original cross-origin isolation headers.
 
-The optional log attachment controls on the feedback page explain how to open **Logs**, choose **Download .txt**, and select the export. File selection only reads the text locally. Review/redact the preview and check **Include these logs** before sending. Messages are limited to 4,000 characters and UTF-8 logs to 64 KiB; filenames, project/audio files, names, and email addresses are not requested or attached automatically. Feedback is private to the operator, not anonymous from Cloudflare.
+Logs are opt-out. The editor opens the page with a cross-site form POST to `VITE_FEEDBACK_URL` carrying its most recent whole log lines, up to 64 KiB of UTF-8. The Worker escapes them into the page's logs box (`Cache-Control: no-store`) without storing anything. **Include these logs** starts checked; the user can review, redact, or uncheck the logs before sending. Opening the page directly shows an empty logs box that accepts pasted logs. Any site can prefill this box the same way, so its contents are not proof of origin. Messages are limited to 4,000 characters and UTF-8 logs to 64 KiB. Names and email addresses are not requested and project/audio files are never attached, but logs can mention file or track names. Feedback is private to the operator, not anonymous from Cloudflare.
 
-`feedback-worker/` serves the form and `/api/feedback` from one Worker origin. Every accepted report requires server-side Turnstile verification bound to that hostname and the `feedback` action. One atomic D1 INSERT enforces 3 accepted reports per IP per rolling hour and 100 per UTC day, including concurrent requests. Only a keyed IP hash is stored. A daily 03:17 UTC job removes reports older than 30 days (up to approximately 31 days live); deleted data can remain in D1's 7-day recovery history.
+`feedback-worker/` serves the form, the log-prefilled `POST /`, and `/api/feedback` from one Worker origin. Every accepted report requires server-side Turnstile verification bound to that hostname and the `feedback` action. One atomic D1 INSERT enforces 3 accepted reports per IP per rolling hour and 1,000 per UTC day, including concurrent requests. Only a keyed IP hash is stored. A daily 03:17 UTC job removes reports older than 30 days (up to approximately 31 days live); deleted data can remain in D1's 7-day recovery history.
 
 ### Feedback deployment
 
@@ -61,7 +61,7 @@ SELECT message, logs FROM feedback WHERE id = '<selected-uuid>';
 
 Put a real development widget's `TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY`, `TURNSTILE_ACTION="feedback"`, and a nonproduction `IP_HASH_SECRET` in ignored `feedback-worker/.dev.vars`. Allow the development hostname on that widget. Run `yarn wrangler d1 migrations apply DB --local --config feedback-worker/wrangler.jsonc`, then `yarn feedback:dev`. For the editor entry point, use `VITE_FEEDBACK_URL=http://localhost:8787/ yarn dev`.
 
-`yarn test feedback-worker/index.test.js` uses the real Worker, assets, migrations, and isolated D1 through Wrangler's test harness; only outbound Siteverify responses are simulated. It covers admission caps/concurrency, input and wire-size boundaries, verification failures and replay, private storage, and retention.
+`yarn test feedback-worker/index.test.js` uses the real Worker, assets, migrations, and isolated D1 through Wrangler's test harness; only outbound Siteverify responses are simulated. It covers admission caps/concurrency, input and wire-size boundaries, log prefill escaping and limits, verification failures and replay, private storage, and retention.
 
 Cloudflare's public dummy keys are not a valid end-to-end substitute for the required hostname/action binding: the observed dummy Siteverify response reported `example.com` and omitted `action`. Keep the production checks intact. Browser-flow verification can isolate external verification in a temporary test harness, but live end-to-end acceptance requires a genuine configured widget. No test bypass is included in the Worker.
 

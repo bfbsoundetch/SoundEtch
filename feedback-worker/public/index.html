@@ -14,18 +14,15 @@
       <header>
         <p class="eyebrow">SoundEtch</p>
         <h1>Send Feedback</h1>
-        <p>No account is needed. Please do not include passwords, secrets, or audio/project files.</p>
       </header>
 
       <aside class="notice" aria-labelledby="privacy-heading">
         <h2 id="privacy-heading">Private feedback</h2>
         <p>
-          Feedback is private to the operator and stored in Cloudflare. Reports older than 30 days are removed daily.
-          Deleted data may remain in Cloudflare's 7-day recovery history.
+          Feedback is sent only to the SoundEtch team.
         </p>
         <p>
-          Cloudflare processes verification requests. This form does not guarantee anonymity from Cloudflare or
-          automatically redact sensitive text.
+          Please do not include passwords, secrets, or audio/project files.
         </p>
       </aside>
 
@@ -55,34 +52,21 @@
           </div>
 
           <div class="field">
-            <label for="log-file">Existing log export <span class="hint">(optional .txt, up to 64 KiB)</span></label>
+            <label for="logs-preview">Logs <span class="hint">(optional, up to 64 KiB)</span></label>
             <p id="logs-help" class="hint">
-              To attach logs to this feedback, open SoundEtch's main menu, choose Logs, then Download .txt, and select
-              the file below. Logs are optional and may contain sensitive text; review and redact them before including
-              them.
+              Logs may contain sensitive text such as file or track names; review and redact
+              them, or uncheck Include these logs.
             </p>
-            <input
-              id="log-file"
-              type="file"
-              accept=".txt,text/plain"
-              aria-describedby="logs-help logs-consent-help logs-error"
-            />
-            <button id="remove-logs" type="button" class="secondary" disabled>Remove logs</button>
-            <p id="logs-consent-help" class="hint">
-              Choosing a file only reads it on this device. Review and edit the text below, then explicitly choose
-              whether to include it. No file name is sent.
-            </p>
-            <label for="logs-preview">Review and redact logs</label>
             <textarea
               id="logs-preview"
+              name="logs"
               rows="8"
               spellcheck="false"
-              disabled
-              aria-describedby="logs-consent-help logs-size logs-error"
+              aria-describedby="logs-help logs-size logs-error"
             ></textarea>
-            <p id="logs-size" class="hint">No log file selected.</p>
+            <p id="logs-size" class="hint">No logs.</p>
             <label class="checkbox-label" for="include-logs">
-              <input id="include-logs" type="checkbox" disabled aria-describedby="logs-consent-help logs-error" />
+              <input id="include-logs" type="checkbox" checked aria-describedby="logs-help logs-error" />
               <span>Include these logs</span>
             </label>
             <p id="logs-error" class="error" hidden></p>
@@ -91,10 +75,7 @@
 
         <section class="field" aria-labelledby="verification-heading">
           <h2 id="verification-heading">Verification</h2>
-          <p id="verification-help" class="hint">
-            Complete the verification before sending. If it expires or fails, retry without losing your draft.
-          </p>
-          <div id="turnstile-widget" aria-describedby="verification-help verification-error"></div>
+          <div id="turnstile-widget" aria-describedby="verification-error"></div>
           <p id="verification-error" class="error" hidden></p>
           <button
             id="retry-verification"

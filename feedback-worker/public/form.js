@@ -7,8 +7,6 @@ const form = document.getElementById('feedback-form')
 const draftFields = document.getElementById('draft-fields')
 const message = document.getElementById('message')
 const messageError = document.getElementById('message-error')
-const logFile = document.getElementById('log-file')
-const removeLogs = document.getElementById('remove-logs')
 const logsPreview = document.getElementById('logs-preview')
 const logsSize = document.getElementById('logs-size')
 const includeLogs = document.getElementById('include-logs')
@@ -28,9 +26,6 @@ let widgetGeneration = 0
 let scriptPromise = null
 let preparingVerification = false
 let submitting = false
-let fileGeneration = 0
-let fileReading = false
-let hasLogFile = false
 let submissionResultVisible = false
 
 function showError(element, text, controls = []) {
@@ -52,15 +47,10 @@ function logByteCount() {
 }
 
 function updateControls() {
-  const logsValid = !includeLogs.checked || (hasLogFile && logByteCount() <= MAX_LOG_BYTES)
-  sendFeedback.disabled =
-    submitting || preparingVerification || fileReading || !config || !token || !validMessage() || !logsValid
+  const logsValid = !includeLogs.checked || logByteCount() <= MAX_LOG_BYTES
+  sendFeedback.disabled = submitting || preparingVerification || !config || !token || !validMessage() || !logsValid
   retryVerification.disabled = submitting || preparingVerification
   draftFields.disabled = submitting
-  logFile.disabled = submitting
-  removeLogs.disabled = submitting || (!hasLogFile && !fileReading && !logFile.value)
-  logsPreview.disabled = submitting || !hasLogFile || fileReading
-  includeLogs.disabled = submitting || !hasLogFile || fileReading
   form.setAttribute('aria-busy', String(submitting))
 }
 
@@ -74,11 +64,15 @@ function validateMessage() {
 
 function updateLogSize() {
   const bytes = logByteCount()
-  logsSize.textContent = `${bytes.toLocaleString()} of ${MAX_LOG_BYTES.toLocaleString()} UTF-8 bytes.`
+  logsSize.textContent = bytes
+    ? `${bytes.toLocaleString()} of ${MAX_LOG_BYTES.toLocaleString()} UTF-8 bytes.`
+    : 'No logs.'
   showError(
     logsError,
-    bytes > MAX_LOG_BYTES ? 'The edited logs exceed 64 KiB. Remove more text or uncheck Include these logs.' : '',
-    [logFile, logsPreview, includeLogs],
+    includeLogs.checked && bytes > MAX_LOG_BYTES
+      ? 'The logs exceed 64 KiB. Remove more text or uncheck Include these logs.'
+      : '',
+    [logsPreview, includeLogs],
   )
   updateControls()
 }
@@ -95,53 +89,6 @@ function verificationFailed(text) {
   if (!submissionResultVisible) status.textContent = text
 }
 
-function clearLogs({ clearSelection = true } = {}) {
-  fileGeneration += 1
-  fileReading = false
-  hasLogFile = false
-  if (clearSelection) logFile.value = ''
-  logsPreview.value = ''
-  includeLogs.checked = false
-  logsSize.textContent = 'No log file selected.'
-  showError(logsError, '', [logFile, logsPreview, includeLogs])
-  updateControls()
-}
-
-logFile.addEventListener('change', async () => {
-  const file = logFile.files?.[0]
-  // Every selection invalidates an earlier asynchronous read and all previous consent.
-  clearLogs({ clearSelection: false })
-  const generation = fileGeneration
-  if (!file) return
-  if (!/\.txt$/i.test(file.name)) {
-    clearLogs()
-    showError(logsError, 'Choose an existing .txt log export.', [logFile])
-    return
-  }
-  if (file.size > MAX_LOG_BYTES) {
-    clearLogs()
-    showError(logsError, 'The log file exceeds 64 KiB. Choose a smaller .txt export.', [logFile])
-    return
-  }
-  fileReading = true
-  logsSize.textContent = 'Reading the file locally…'
-  updateControls()
-  try {
-    const bytes = await file.arrayBuffer()
-    if (generation !== fileGeneration) return
-    const text = new TextDecoder('utf-8', { fatal: true }).decode(bytes)
-    logsPreview.value = text
-    hasLogFile = true
-    fileReading = false
-    updateLogSize()
-  } catch {
-    if (generation !== fileGeneration) return
-    clearLogs()
-    showError(logsError, 'The file could not be read as UTF-8 text. Choose a UTF-8 .txt log export.', [logFile])
-  }
-})
-
-removeLogs.addEventListener('click', clearLogs)
 logsPreview.addEventListener('input', updateLogSize)
 includeLogs.addEventListener('change', updateLogSize)
 message.addEventListener('input', () => {
@@ -311,18 +258,17 @@ function explainFailure(responseStatus, code) {
 
 form.addEventListener('submit', async (event) => {
   event.preventDefault()
-  if (submitting || preparingVerification || fileReading) return
+  if (submitting || preparingVerification) return
   if (!validateMessage()) {
     message.focus()
     updateControls()
     return
   }
-  if (includeLogs.checked && (!hasLogFile || logByteCount() > MAX_LOG_BYTES)) {
-    showError(
-      logsError,
-      'Included logs must be reviewed text of at most 64 KiB. Edit the preview or uncheck Include these logs.',
-      [logsPreview, includeLogs],
-    )
+  if (includeLogs.checked && logByteCount() > MAX_LOG_BYTES) {
+    showError(logsError, 'Included logs must be at most 64 KiB. Edit the logs or uncheck Include these logs.', [
+      logsPreview,
+      includeLogs,
+    ])
     logsPreview.focus()
     updateControls()
     return
@@ -357,7 +303,9 @@ form.addEventListener('submit', async (event) => {
     if (response.status === 201 && result.ok === true) {
       message.value = ''
       showError(messageError, '', [message])
-      clearLogs()
+      logsPreview.value = ''
+      includeLogs.checked = true
+      updateLogSize()
       resultText = 'Feedback sent. Thank you.'
     } else {
       resultText = explainFailure(response.status, result.error)
@@ -375,5 +323,6 @@ form.addEventListener('submit', async (event) => {
 })
 
 // Keep controls safe before configuration or the third-party script is available.
-updateControls()
+// Logs the editor posted with this page are already in the preview.
+updateLogSize()
 prepareVerification()

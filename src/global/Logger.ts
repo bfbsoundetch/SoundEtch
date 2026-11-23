@@ -16,6 +16,20 @@ export class Logger {
     return Logger.logItems.map((item) => item.toString()).join('\n')
   }
 
+  /** The most recent whole log lines whose joined UTF-8 text fits in `maxBytes`. */
+  static getRecentLogText(maxBytes: number): string {
+    const encoder = new TextEncoder()
+    const lines: string[] = []
+    let bytes = 0
+    for (let i = Logger.logItems.length - 1; i >= 0; i--) {
+      const line = Logger.logItems[i].toString()
+      bytes += encoder.encode(line).byteLength + (lines.length ? 1 : 0)
+      if (bytes > maxBytes) break
+      lines.push(line)
+    }
+    return lines.reverse().join('\n')
+  }
+
   debug(text: string, tag: string | null = null) {
     this.logAtLevel(text, Level.DEBUG)
   }

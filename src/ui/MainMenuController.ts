@@ -1,7 +1,11 @@
 import { AudioControl, AudioState } from '../audiocontext/AudioControl'
+import { Logger } from '../global/Logger'
 import { ProjectManager } from '../project/ProjectManager'
 import { editorHistory } from './undo/EditorHistory'
 import { announce } from './LiveAnnouncer'
+
+/** The feedback service accepts at most this many UTF-8 bytes of logs. */
+const MAX_FEEDBACK_LOG_BYTES = 65_536
 
 export class MainMenuController {
   private readonly menuDropdown = document.getElementById('menu-dropdown') as HTMLDivElement
@@ -39,11 +43,13 @@ export class MainMenuController {
       }
     }
     this.feedbackButton.disabled = !feedbackUrl
-    this.feedbackButton.title = feedbackUrl ? 'Opens in a new tab' : 'Feedback is not configured for this deployment.'
+    this.feedbackButton.title = feedbackUrl
+      ? 'Opens in a new tab with your recent logs, which you can review or exclude before sending'
+      : 'Feedback is not configured for this deployment.'
     if (feedbackUrl) {
       const url = feedbackUrl.href
       this.feedbackButton.onclick = () => {
-        window.open(url, '_blank', 'noopener,noreferrer')
+        this.openFeedback(url)
         this.close()
       }
     }
@@ -91,6 +97,24 @@ export class MainMenuController {
     )
     this.undoButton.disabled = !canEdit || !editorHistory.canUndo
     this.redoButton.disabled = !canEdit || !editorHistory.canRedo
+  }
+
+  /** Opens the feedback page in a new tab with a form POST carrying the recent logs for the user to review. */
+  private openFeedback(url: string) {
+    const form = document.createElement('form')
+    form.method = 'post'
+    form.action = url
+    form.target = '_blank'
+    form.rel = 'noopener noreferrer'
+    form.hidden = true
+    const logs = document.createElement('input')
+    logs.type = 'hidden'
+    logs.name = 'logs'
+    logs.value = Logger.getRecentLogText(MAX_FEEDBACK_LOG_BYTES)
+    form.append(logs)
+    document.body.append(form)
+    form.submit()
+    form.remove()
   }
 
   private createShortcut(text: string) {

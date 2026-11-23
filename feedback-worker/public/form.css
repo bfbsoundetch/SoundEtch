@@ -36,7 +36,7 @@ main {
 
 h1 {
   margin: 0 0 0.75rem;
-  font-size: clamp(1.75rem, 5vw, 2.4rem);
+  font-size: clamp(2rem, 5vw, 4rem);
   line-height: 1.2;
 }
 
@@ -112,14 +112,7 @@ textarea {
   overflow-wrap: anywhere;
 }
 
-input[type='file'] {
-  display: block;
-  width: 100%;
-  margin: 0.5rem 0;
-}
-
-button,
-input[type='file']::file-selector-button {
+button {
   min-height: 2.75rem;
   padding: 0.55rem 0.9rem;
   border: 1px solid currentColor;
@@ -130,8 +123,7 @@ input[type='file']::file-selector-button {
   cursor: pointer;
 }
 
-button:not(:disabled):hover,
-input[type='file']:not(:disabled)::file-selector-button:hover {
+button:not(:disabled):hover {
   background: var(--clickable-hover);
 }
 
@@ -156,6 +148,7 @@ textarea:disabled {
   align-items: center;
   gap: 0.6rem;
   min-height: 2.75rem;
+  user-select: none;
 }
 
 input[type='checkbox'] {

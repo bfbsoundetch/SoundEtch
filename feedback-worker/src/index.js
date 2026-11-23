@@ -60,7 +60,7 @@ async function readBody(request) {
       parts.push(decoder.decode(value, { stream: true }))
     }
     parts.push(decoder.decode())
-    return JSON.parse(parts.join(''))
+    return parts.join('')
   } catch (cause) {
     if (cause instanceof BodyError) throw cause
     await reader.cancel().catch(() => {})
@@ -124,7 +124,7 @@ async function submit(request, env, url) {
 
   let body
   try {
-    body = await readBody(request)
+    body = JSON.parse(await readBody(request))
   } catch (cause) {
     return cause instanceof BodyError && cause.status === 413
       ? error('payload_too_large', 413)
@@ -176,6 +176,39 @@ async function submit(request, env, url) {
   }
 }
 
+// The editor opens this page with a cross-site form POST carrying its recent logs. Nothing is stored here;
+// the logs are only placed in the page for the user to review, redact, or exclude before sending.
+async function prefillLogs(request, env, url) {
+  const mediaType = request.headers.get('Content-Type')?.split(';', 1)[0].trim().toLowerCase()
+  if (mediaType !== 'application/x-www-form-urlencoded') return error('unsupported_media_type', 415)
+
+  let logs
+  try {
+    // Form submission sends CRLF line breaks; the textarea would normalize them the same way.
+    logs = (new URLSearchParams(await readBody(request)).get('logs') ?? '').replace(/\r\n?/g, '\n')
+  } catch (cause) {
+    return cause instanceof BodyError && cause.status === 413
+      ? error('payload_too_large', 413)
+      : error('invalid_request', 400)
+  }
+  if (encoder.encode(logs).byteLength > MAX_LOG_BYTES) return error('payload_too_large', 413)
+
+  const page = await env.ASSETS.fetch(new Request(new URL('/', url)))
+  if (!page.ok) return page
+  return new HTMLRewriter()
+    .on('#logs-preview', {
+      element(element) {
+        // Escaped as text. HTML parsing drops one newline right after <textarea>, so a leading newline survives.
+        element.setInnerContent(`\n${logs}`)
+      },
+    })
+    .transform(
+      new Response(page.body, {
+        headers: { 'Content-Type': page.headers.get('Content-Type') ?? 'text/html', 'Cache-Control': 'no-store' },
+      }),
+    )
+}
+
 export default {
   async fetch(request, env) {
     const url = new URL(request.url)
@@ -189,6 +222,7 @@ export default {
       return submit(request, env, url)
     }
     if (url.pathname === '/api' || url.pathname.startsWith('/api/')) return error('not_found', 404)
+    if (url.pathname === '/' && request.method === 'POST') return prefillLogs(request, env, url)
     return env.ASSETS.fetch(request)
   },
 

@@ -120,6 +120,50 @@ describe.sequential('private feedback Worker with real local D1', () => {
     expect(outbound).not.toHaveBeenCalled()
   })
 
+  function postPage(body, contentType = 'application/x-www-form-urlencoded') {
+    return server.fetch(`${ORIGIN}/`, {
+      method: 'POST',
+      headers: { Origin: 'https://editor.example.test', 'Content-Type': contentType },
+      body,
+    })
+  }
+
+  function prefilledLogs(html) {
+    const content = html.match(/<textarea[^>]*\bid="logs-preview"[^>]*>([^<]*)<\/textarea>/)[1]
+    // HTML parsing drops one newline right after <textarea> and decodes character references.
+    return content
+      .replace(/^\n/, '')
+      .replace(/&(lt|gt|amp|quot);/g, (_, name) => ({ lt: '<', gt: '>', amp: '&', quot: '"' })[name])
+  }
+
+  test('prefills cross-site posted logs as page text without storing them', async () => {
+    const logs = '\nfirst\r\n</textarea><script>alert(1)</script> &amp; ✓\rlast'
+    const response = await postPage(new URLSearchParams({ logs }))
+    expect(response.status).toBe(200)
+    expect(response.headers.get('Content-Type')).toContain('text/html')
+    expect(response.headers.get('Cache-Control')).toBe('no-store')
+    const html = await response.text()
+    expect(html).not.toContain('<script>alert')
+    expect(prefilledLogs(html)).toBe('\nfirst\n</textarea><script>alert(1)</script> &amp; ✓\nlast')
+    expect(prefilledLogs(await (await postPage(new URLSearchParams({ logs: '' }))).text())).toBe('')
+    expect(await rows()).toEqual([])
+    expect(outbound).not.toHaveBeenCalled()
+  })
+
+  test('measures prefilled logs after line-break normalization and rejects other bodies', async () => {
+    // Browsers submit form line breaks as CRLF; the page's textarea counts them as LF.
+    const crlf = await postPage(new URLSearchParams({ logs: '\r\n'.repeat(65_536) }))
+    expect(crlf.status).toBe(200)
+    expect(prefilledLogs(await crlf.text())).toBe('\n'.repeat(65_536))
+    await expectError(await postPage(new URLSearchParams({ logs: 'a'.repeat(65_537) })), 413, 'payload_too_large')
+    await expectError(
+      await postPage(JSON.stringify({ logs: 'text' }), 'application/json'),
+      415,
+      'unsupported_media_type',
+    )
+    expect(await rows()).toEqual([])
+  })
+
   test('stores only accepted trimmed message and reviewed plain-text logs', async () => {
     const logs = '<script>not executed</script>\r\nprivate log\n\u0000✓'
     const start = Math.floor(Date.now() / 1_000)
