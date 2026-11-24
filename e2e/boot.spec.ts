@@ -1,4 +1,4 @@
-import { expect, test } from './fixtures'
+import { expect, importFile, test, toneFile } from './fixtures'
 
 test('a fresh profile opens on the welcome page, cross-origin isolated', async ({ page }) => {
   // Recording and playback hand audio to worklets through SharedArrayBuffer, which only exists with COOP/COEP.
@@ -56,6 +56,30 @@ test('a modal stays open when a drag starts in its content and ends outside, and
   await page.mouse.move(outside.x, outside.y, { steps: 5 })
   await page.mouse.up()
   await expect(dialog).toBeVisible()
+
+  await page.mouse.click(outside.x, outside.y)
+  await expect(dialog).toBeHidden()
+})
+
+test('the time entry dialog stays open when a drag starts anywhere inside it and ends outside', async ({ page }) => {
+  await importFile(page, toneFile)
+  await page.getByRole('button', { name: 'Go to time…' }).click()
+  const dialog = page.getByRole('dialog', { name: 'Go to time', exact: true })
+  const heading = (await dialog.getByRole('heading', { name: 'Go to time' }).boundingBox())!
+  const minutes = (await dialog.getByLabel('Minutes (MM)').boundingBox())!
+  const outside = { x: 10, y: page.viewportSize()!.height / 2 }
+
+  // From a field, as when selecting its text, and from the blank margin beside the heading.
+  for (const start of [
+    { x: minutes.x + minutes.width / 2, y: minutes.y + minutes.height / 2 },
+    { x: heading.x - 8, y: heading.y + heading.height / 2 },
+  ]) {
+    await page.mouse.move(start.x, start.y)
+    await page.mouse.down()
+    await page.mouse.move(outside.x, outside.y, { steps: 5 })
+    await page.mouse.up()
+    await expect(dialog).toBeVisible()
+  }
 
   await page.mouse.click(outside.x, outside.y)
   await expect(dialog).toBeHidden()

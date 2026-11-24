@@ -2464,29 +2464,32 @@ video {
   border-bottom: solid 1px;
 }
 
-/* Small dialogs, opened over the timeline and the transcript. */
-.go-to-time-dialog,
+/* The transcript text editor, opened over the transcript. */
 .transcript-edit-dialog {
   box-sizing: border-box;
+  width: min(42rem, calc(100vw - 2rem));
+  max-height: calc(100vh - 2rem);
   padding: 1.5rem;
+  overflow-y: auto;
   border: 1px solid var(--color);
   background-color: var(--bg-color);
   color: var(--color);
 }
 
-.go-to-time-dialog {
-  min-width: min(20rem, calc(100vw - 2rem));
-}
-
-.transcript-edit-dialog {
-  width: min(42rem, calc(100vw - 2rem));
-  max-height: calc(100vh - 2rem);
-  overflow-y: auto;
-}
-
-:is(.go-to-time-dialog, .transcript-edit-dialog) h1 {
+.transcript-edit-dialog h1 {
   margin: 0 0 1rem;
   font-size: 1.2rem;
+}
+
+.transcript-edit-actions {
+  margin-top: 1rem;
+}
+
+/* The time entry modal box, opened over the timeline, fits its fields rather than the shared modal width. */
+.go-to-time-content {
+  width: auto;
+  min-width: min(20rem, 90vw);
+  user-select: none;
 }
 
 .go-to-time-buttons,
@@ -2494,7 +2497,6 @@ video {
   display: flex;
   justify-content: flex-end;
   gap: 0.75rem;
-  margin-top: 1rem;
 }
 
 .go-to-time-fields {
@@ -2581,7 +2583,6 @@ video {
 }
 
 .go-to-time-error {
-  margin: 0.75rem 0 0;
   color: var(--record-button-red);
 }
 
@@ -4138,7 +4139,6 @@ input::placeholder {
 
   .notification-error,
   .overlay-content,
-  .go-to-time-dialog,
   .context-menu {
     border: 1px solid CanvasText;
   }

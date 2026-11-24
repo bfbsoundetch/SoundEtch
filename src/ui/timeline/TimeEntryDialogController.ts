@@ -1,4 +1,4 @@
-import { closeOnBackdropClick } from '../BackdropDismiss'
+import { createSvgIcon } from '../SvgIcon'
 
 export type TimeEntryRequest = { title: string; submitLabel: string; initialMs: number; onSubmit: (ms: number) => void }
 
@@ -21,7 +21,7 @@ export class TimeEntryDialogController {
   private returnFocus: HTMLElement | null = null
 
   constructor() {
-    this.dialog.className = 'go-to-time-dialog'
+    this.dialog.className = 'overlay'
     this.dialog.setAttribute('aria-labelledby', 'time-entry-dialog-title')
 
     this.heading.id = 'time-entry-dialog-title'
@@ -69,7 +69,19 @@ export class TimeEntryDialogController {
     this.errorElement.hidden = true
     this.errorElement.textContent = 'Enter numbers 0 or greater.'
 
-    this.dialog.append(this.heading, fieldsRow, this.errorElement, buttonRow)
+    const closeButton = document.createElement('button')
+    closeButton.type = 'button'
+    closeButton.className = 'overlay-close-button clickable'
+    closeButton.setAttribute('aria-label', 'Close')
+    closeButton.title = 'Close'
+    closeButton.append(createSvgIcon('menu-close', { className: 'meeting-icon' }))
+    closeButton.addEventListener('click', () => this.dialog.close())
+
+    const content = document.createElement('div')
+    content.className = 'overlay-content go-to-time-content'
+    content.append(this.heading, fieldsRow, this.errorElement, buttonRow)
+
+    this.dialog.append(closeButton, content)
     this.dialog.addEventListener('close', () => {
       const target = this.returnFocus
       this.returnFocus = null
@@ -77,7 +89,6 @@ export class TimeEntryDialogController {
         target.focus()
       }
     })
-    closeOnBackdropClick(this.dialog)
     document.body.appendChild(this.dialog)
   }
 
