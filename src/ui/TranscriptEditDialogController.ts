@@ -1,3 +1,4 @@
+import { createSvgIcon } from './SvgIcon'
 import type { TranscriptTextEdit } from './transcript/TranscriptTextEdit'
 
 export class TranscriptEditDialogController {
@@ -8,6 +9,7 @@ export class TranscriptEditDialogController {
   private readonly fieldsContainer = document.createElement('div')
   private readonly guidance = document.createElement('p')
   private readonly errorElement = document.createElement('p')
+  private readonly closeButton = document.createElement('button')
   private readonly cancelButton = document.createElement('button')
   private readonly submitButton = document.createElement('button')
   private readonly fields: HTMLTextAreaElement[] = []
@@ -19,7 +21,7 @@ export class TranscriptEditDialogController {
   private requestId = 0
 
   constructor() {
-    this.dialog.className = 'transcript-edit-dialog'
+    this.dialog.className = 'overlay'
     this.dialog.setAttribute('aria-labelledby', `${this.id}-title`)
     this.dialog.setAttribute('aria-describedby', `${this.id}-guidance`)
 
@@ -27,10 +29,20 @@ export class TranscriptEditDialogController {
     heading.id = `${this.id}-title`
     heading.textContent = 'Edit transcript text'
     this.guidance.id = `${this.id}-guidance`
+    this.fieldsContainer.className = 'transcript-edit-fields'
 
     this.errorElement.className = 'transcript-edit-error'
     this.errorElement.setAttribute('role', 'alert')
     this.errorElement.hidden = true
+
+    this.closeButton.type = 'button'
+    this.closeButton.className = 'overlay-close-button clickable'
+    this.closeButton.setAttribute('aria-label', 'Close')
+    this.closeButton.title = 'Close'
+    this.closeButton.append(createSvgIcon('menu-close', { className: 'meeting-icon' }))
+    this.closeButton.addEventListener('click', () => {
+      if (!this.submitting) this.dismiss()
+    })
 
     this.cancelButton.type = 'button'
     this.cancelButton.className = 'bordered clickable'
@@ -46,6 +58,7 @@ export class TranscriptEditDialogController {
     const actions = document.createElement('div')
     actions.className = 'transcript-edit-actions'
     actions.append(this.cancelButton, this.submitButton)
+    this.form.className = 'overlay-content transcript-edit-content'
     this.form.append(heading, this.guidance, this.fieldsContainer, this.errorElement, actions)
     this.form.addEventListener('submit', (event) => {
       event.preventDefault()
@@ -66,7 +79,7 @@ export class TranscriptEditDialogController {
       // A close event can arrive after the same dialog has already reopened.
       if (!this.dialog.open) this.finishClose()
     })
-    this.dialog.append(this.form)
+    this.dialog.append(this.closeButton, this.form)
     document.body.appendChild(this.dialog)
   }
 
@@ -138,9 +151,12 @@ export class TranscriptEditDialogController {
   private setSubmitting(submitting: boolean): void {
     this.submitting = submitting
     this.form.setAttribute('aria-busy', String(submitting))
+    // Escape, Cancel and the close button wait for the edit to settle; so does a click outside the box.
+    this.dialog.classList.toggle('no-backdrop-close', submitting)
     this.fields.forEach((field) => {
       field.disabled = submitting
     })
+    this.closeButton.disabled = submitting
     this.cancelButton.disabled = submitting
     this.submitButton.disabled = submitting
   }

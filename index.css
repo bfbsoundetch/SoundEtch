@@ -2464,32 +2464,15 @@ video {
   border-bottom: solid 1px;
 }
 
-/* The transcript text editor, opened over the transcript. */
-.transcript-edit-dialog {
-  box-sizing: border-box;
-  width: min(42rem, calc(100vw - 2rem));
-  max-height: calc(100vh - 2rem);
-  padding: 1.5rem;
-  overflow-y: auto;
-  border: 1px solid var(--color);
-  background-color: var(--bg-color);
-  color: var(--color);
+/* Modal boxes for the time entry and the transcript editor; the time entry box fits its fields. */
+.go-to-time-content,
+.transcript-edit-content {
+  user-select: none;
 }
 
-.transcript-edit-dialog h1 {
-  margin: 0 0 1rem;
-  font-size: 1.2rem;
-}
-
-.transcript-edit-actions {
-  margin-top: 1rem;
-}
-
-/* The time entry modal box, opened over the timeline, fits its fields rather than the shared modal width. */
 .go-to-time-content {
   width: auto;
   min-width: min(20rem, 90vw);
-  user-select: none;
 }
 
 .go-to-time-buttons,
@@ -3391,13 +3374,17 @@ body.moving-selection * {
   border-left: 1px solid var(--color);
 }
 
-.transcript-edit-dialog label {
+.transcript-edit-fields {
   display: grid;
-  gap: 0.5rem;
-  margin-top: 1rem;
+  gap: 1rem;
 }
 
-.transcript-edit-dialog label > span {
+.transcript-edit-fields label {
+  display: grid;
+  gap: 0.5rem;
+}
+
+.transcript-edit-fields label > span {
   font-size: 0.875rem;
   overflow-wrap: anywhere;
 }
