@@ -1626,6 +1626,17 @@ video {
   align-content: start;
 }
 
+/* Explicit rows: hiding the inputs while playing or recording must not shift the Output row into the 1fr row. */
+#input-info-list,
+#input-list {
+  grid-row: 1;
+}
+
+#track-info-list,
+#track-list {
+  grid-row: 2;
+}
+
 /* Keep the footer's space available to keyboard focus and scrollIntoView. */
 #input-track-lists:has(.timeline-output-row.is-automating) {
   --output-lane-height: 12rem;
@@ -1639,6 +1650,7 @@ video {
 }
 
 .timeline-output-row {
+  grid-row: 3;
   min-height: var(--output-lane-height);
   margin: 0;
   box-sizing: border-box;
