@@ -20,6 +20,7 @@ import { WelcomePageController } from './ui/WelcomePageController.ts'
 import { SettingsController } from './ui/SettingsController.ts'
 import { InputsPanelController } from './ui/InputsPanelController.ts'
 import { OutputPanelController } from './ui/OutputPanelController.ts'
+import { closeOnBackdropClick } from './ui/BackdropDismiss.ts'
 import { Logger } from './global/Logger.ts'
 
 const logger = new Logger('TopLevel')
@@ -92,6 +93,7 @@ window.WelcomePageController = WelcomePageController
 window.SettingsController = SettingsController
 window.InputsPanelController = InputsPanelController
 window.OutputPanelController = OutputPanelController
+window.closeOnBackdropClick = closeOnBackdropClick
 
 // These interaction boundaries keep publishing, project transfer, recording, and conferencing out of the initial chunk.
 // A failed dynamic import (e.g. a missing chunk after a deploy) must not stay cached:

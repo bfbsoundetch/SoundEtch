@@ -1,3 +1,5 @@
+import { closeOnBackdropClick } from '../BackdropDismiss'
+
 export type TimeEntryRequest = { title: string; submitLabel: string; initialMs: number; onSubmit: (ms: number) => void }
 
 /**
@@ -75,11 +77,7 @@ export class TimeEntryDialogController {
         target.focus()
       }
     })
-    this.dialog.addEventListener('click', (event) => {
-      if (event.target == this.dialog) {
-        this.dialog.close()
-      }
-    })
+    closeOnBackdropClick(this.dialog)
     document.body.appendChild(this.dialog)
   }
 

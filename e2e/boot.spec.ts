@@ -34,3 +34,29 @@ test('every main menu dialog opens, including those whose code loads on demand',
     await expect(opened).toBeHidden()
   }
 })
+
+test('a modal stays open when a drag starts in its content and ends outside, and closes on a click outside', async ({
+  page,
+}) => {
+  await page.getByRole('button', { name: 'Main menu' }).click()
+  const menu = page.locator('#menu-dropdown')
+  await menu.getByRole('button', { name: 'Project', exact: true }).click()
+  await menu.getByRole('button', { name: 'Import / Export', exact: true }).click()
+  const dialog = page.getByRole('dialog', { name: 'Import / Export Project', exact: true })
+  await dialog.getByLabel('Service').selectOption({ label: 'S3-compatible storage' })
+  const endpoint = dialog.getByLabel('Endpoint')
+  await endpoint.fill('https://ACCOUNT.r2.cloudflarestorage.com')
+  const field = (await endpoint.boundingBox())!
+  const content = (await dialog.locator('.overlay-content').boundingBox())!
+  const outside = { x: content.x / 2, y: field.y + field.height / 2 }
+
+  // Selecting the field's text by dragging past the content's edge.
+  await page.mouse.move(field.x + field.width / 2, outside.y)
+  await page.mouse.down()
+  await page.mouse.move(outside.x, outside.y, { steps: 5 })
+  await page.mouse.up()
+  await expect(dialog).toBeVisible()
+
+  await page.mouse.click(outside.x, outside.y)
+  await expect(dialog).toBeHidden()
+})

@@ -8,12 +8,6 @@ export class LogsModalController {
     this.logsDisplay = document.getElementById('logs-modal-content-text') as HTMLPreElement
     this.logsDialog = document.getElementById('logs-modal') as HTMLDialogElement
 
-    this.logsDialog.onclick = (event) => {
-      if (event.target === this.logsDialog) {
-        this.logsDialog.close()
-      }
-    }
-
     const refreshButton = document.getElementById('logs-modal-refresh-button') as HTMLButtonElement
     refreshButton.onclick = () => this.refresh()
 

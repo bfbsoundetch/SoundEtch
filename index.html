@@ -103,13 +103,7 @@
           showDialog(document.getElementById('meeting-room'))
         }
       }
-      document.querySelectorAll('dialog.overlay').forEach((dialogElement) => {
-        dialogElement.addEventListener('click', (event) => {
-          if (event.target === dialogElement && !dialogElement.classList.contains('no-backdrop-close')) {
-            dialogElement.close()
-          }
-        })
-      })
+      document.querySelectorAll('dialog.overlay:not(.no-backdrop-close)').forEach(window.closeOnBackdropClick)
 
       document.addEventListener('keydown', (event) => {
         if (event.key === 'Escape') {
