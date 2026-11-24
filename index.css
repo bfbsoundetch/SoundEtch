@@ -2616,13 +2616,19 @@ video {
   color: white;
 }
 
+/* Long text wraps anywhere and scrolls vertically, so the close button always stays in the box. */
 .notification-message {
   flex: 1;
+  min-width: 0;
+  max-height: 30vh;
+  overflow: hidden auto;
+  overflow-wrap: anywhere;
   text-align: left;
   margin-left: 0.75rem;
 }
 
 .notification-close {
+  flex: none;
   cursor: pointer;
   font-size: 1.5rem;
   line-height: 1;
