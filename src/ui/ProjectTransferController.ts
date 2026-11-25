@@ -16,7 +16,7 @@ export class ProjectTransferController {
     this.exportButton.onclick = () => void this.exportProject()
     this.importButton.onclick = () => this.importInput.click()
     this.importInput.onchange = () => void this.importProject()
-    new CloudBackupController(this.dialog)
+    CloudBackupController.start()
   }
 
   private async exportProject() {

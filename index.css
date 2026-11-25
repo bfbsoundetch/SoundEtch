@@ -849,11 +849,22 @@ body.tooltips-dismissed :is(.tooltipped span, .slider-value) {
   gap: 0.5rem;
 }
 
-#s3-settings-form input[type='checkbox'] {
+.cloud-connection-row {
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 0.5rem 1rem;
+}
+
+.cloud-connection-row > p {
+  flex: 1;
+}
+
+#s3-settings-fields input[type='checkbox'] {
   justify-self: start;
 }
 
-#s3-settings-form > .s3-settings-help {
+#s3-settings-fields > .s3-settings-help {
   grid-column: 1 / -1;
 }
 

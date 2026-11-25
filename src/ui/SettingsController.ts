@@ -36,6 +36,8 @@ export class SettingsController {
   private readonly otherTracksSelect = document.getElementById('editing-other-tracks') as HTMLSelectElement
   private readonly resetButton = document.getElementById('settings-reset-button') as HTMLButtonElement
   private readonly firstSectionSummary = this.dialog.querySelector('.settings-section-summary') as HTMLElement
+  private readonly cloudBackupSection = document.getElementById('cloud-backup-settings') as HTMLDetailsElement
+  private readonly cloudBackupSettingsButton = document.getElementById('cloud-settings-button') as HTMLButtonElement
   private readonly modelCacheControls = Object.fromEntries(
     MODEL_CACHE_INFO.map(({ id }) => {
       const row = this.dialog.querySelector(`[data-model-cache-id="${id}"]`) as HTMLLIElement
@@ -52,6 +54,17 @@ export class SettingsController {
 
   constructor() {
     this.menuButton.addEventListener('click', () => this.open())
+    // Import / Export's Cloud Backup Settings button.
+    this.cloudBackupSettingsButton.addEventListener('click', () => {
+      this.cloudBackupSettingsButton.closest('dialog')?.close()
+      this.open(this.cloudBackupSection)
+    })
+    // The section's controls stay unwired until it first opens, keeping cloud backup out of the initial chunk.
+    this.cloudBackupSection.addEventListener('toggle', () => {
+      if (this.cloudBackupSection.open) {
+        void import('./CloudBackupController').then(({ CloudBackupController }) => CloudBackupController.start())
+      }
+    })
     this.form.addEventListener('submit', (event) => {
       event.preventDefault()
       this.apply()
@@ -72,11 +85,18 @@ export class SettingsController {
     }
   }
 
-  private open(): void {
+  /** Opens the dialog, with `section` expanded and scrolled to when given. */
+  private open(section?: HTMLDetailsElement): void {
     this.setFormValues(spectrogramSettings.current, editingSettings.current)
     if (this.menuDropdown.matches(':popover-open')) this.menuDropdown.hidePopover()
     this.dialog.showModal()
-    this.firstSectionSummary.focus()
+    if (section) {
+      section.open = true
+      section.querySelector('summary')!.focus({ preventScroll: true })
+      section.scrollIntoView({ block: 'start' })
+    } else {
+      this.firstSectionSummary.focus()
+    }
     void this.refreshModelCacheUsage()
   }
 

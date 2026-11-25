@@ -893,6 +893,99 @@
             </ul>
           </div>
         </details>
+        <details id="cloud-backup-settings" class="settings-section">
+          <summary class="settings-section-summary">Cloud backup</summary>
+          <div class="settings-section-content">
+            <p class="settings-section-description">
+              The service that Import / Export backs projects up to and restores them from. Changes here take effect
+              immediately.
+            </p>
+            <div id="cloud-provider-row" class="settings-grid">
+              <label for="cloud-provider-select">Service</label>
+              <select id="cloud-provider-select"></select>
+            </div>
+            <div class="cloud-connection-row">
+              <p id="cloud-connection-status">Not connected.</p>
+              <button id="dropbox-connect-button" class="bordered clickable" type="button" hidden>
+                Connect Dropbox
+              </button>
+              <button id="cloud-disconnect-button" class="bordered clickable" type="button" hidden>Disconnect</button>
+            </div>
+            <!-- These fields belong to #s3-settings-form, outside the settings form: Enter and Connect S3 submit only them. -->
+            <div id="s3-settings-fields" class="settings-grid" hidden>
+              <label for="s3-endpoint">Endpoint</label>
+              <input
+                id="s3-endpoint"
+                form="s3-settings-form"
+                name="endpoint"
+                type="url"
+                placeholder="Empty for Amazon S3"
+                autocomplete="off"
+                aria-describedby="s3-endpoint-description"
+              />
+              <p id="s3-endpoint-description">
+                For other services, their S3 API address, e.g. https://ACCOUNT.r2.cloudflarestorage.com.
+              </p>
+              <label for="s3-region">Region</label>
+              <input
+                id="s3-region"
+                form="s3-settings-form"
+                name="region"
+                type="text"
+                placeholder="us-east-1"
+                autocomplete="off"
+                required
+              />
+              <label for="s3-bucket">Bucket</label>
+              <input id="s3-bucket" form="s3-settings-form" name="bucket" type="text" autocomplete="off" required />
+              <label for="s3-prefix">Folder</label>
+              <input
+                id="s3-prefix"
+                form="s3-settings-form"
+                name="prefix"
+                type="text"
+                placeholder="Optional, e.g. soundetch/"
+                autocomplete="off"
+              />
+              <label for="s3-access-key-id">Access key ID</label>
+              <input
+                id="s3-access-key-id"
+                form="s3-settings-form"
+                name="accessKeyId"
+                type="text"
+                autocomplete="off"
+                required
+              />
+              <label for="s3-secret-access-key">Secret access key</label>
+              <input
+                id="s3-secret-access-key"
+                form="s3-settings-form"
+                name="secretAccessKey"
+                type="password"
+                autocomplete="new-password"
+                required
+              />
+              <label for="s3-path-style">Path-style URLs</label>
+              <input
+                id="s3-path-style"
+                form="s3-settings-form"
+                name="pathStyle"
+                type="checkbox"
+                aria-describedby="s3-path-style-description"
+              />
+              <p id="s3-path-style-description">Needed by MinIO and some other servers.</p>
+              <p class="s3-settings-help">
+                The bucket's CORS rules must allow <span id="s3-settings-origin"></span> to GET, PUT, POST, DELETE, and
+                HEAD with any header, and expose the ETag header. Use a key that can only reach this bucket: the secret
+                stays in this browser.
+              </p>
+              <button id="s3-connect-button" class="bordered clickable" type="submit" form="s3-settings-form">
+                Connect S3
+              </button>
+            </div>
+            <p id="cloud-settings-status" role="status" aria-live="polite"></p>
+          </div>
+        </details>
         <footer class="settings-actions">
           <button id="settings-reset-button" class="bordered clickable" type="button">Reset to defaults</button>
           <span class="settings-actions-spacer"></span>
@@ -902,6 +995,7 @@
           <button class="bordered clickable" type="submit">Apply</button>
         </footer>
       </form>
+      <form id="s3-settings-form" hidden></form>
     </dialog>
     <dialog id="project-manager-modal" class="overlay" aria-labelledby="project-manager-modal-title">
       <button
@@ -957,63 +1051,13 @@
         </div>
         <section id="cloud-backup" class="project-transfer-option">
           <h2>Cloud backup</h2>
-          <div id="cloud-provider-row" class="settings-grid">
-            <label for="cloud-provider-select">Service</label>
-            <select id="cloud-provider-select"></select>
-          </div>
-          <p id="cloud-connection-status">Not connected.</p>
-          <form id="s3-settings-form" class="settings-grid" hidden>
-            <label for="s3-endpoint">Endpoint</label>
-            <input
-              id="s3-endpoint"
-              name="endpoint"
-              type="url"
-              placeholder="Empty for Amazon S3"
-              autocomplete="off"
-              aria-describedby="s3-endpoint-description"
-            />
-            <p id="s3-endpoint-description">
-              For other services, their S3 API address, e.g. https://ACCOUNT.r2.cloudflarestorage.com.
-            </p>
-            <label for="s3-region">Region</label>
-            <input id="s3-region" name="region" type="text" placeholder="us-east-1" autocomplete="off" required />
-            <label for="s3-bucket">Bucket</label>
-            <input id="s3-bucket" name="bucket" type="text" autocomplete="off" required />
-            <label for="s3-prefix">Folder</label>
-            <input
-              id="s3-prefix"
-              name="prefix"
-              type="text"
-              placeholder="Optional, e.g. soundetch/"
-              autocomplete="off"
-            />
-            <label for="s3-access-key-id">Access key ID</label>
-            <input id="s3-access-key-id" name="accessKeyId" type="text" autocomplete="off" required />
-            <label for="s3-secret-access-key">Secret access key</label>
-            <input
-              id="s3-secret-access-key"
-              name="secretAccessKey"
-              type="password"
-              autocomplete="new-password"
-              required
-            />
-            <label for="s3-path-style">Path-style URLs</label>
-            <input id="s3-path-style" name="pathStyle" type="checkbox" aria-describedby="s3-path-style-description" />
-            <p id="s3-path-style-description">Needed by MinIO and some other servers.</p>
-            <p class="s3-settings-help">
-              The bucket's CORS rules must allow <span id="s3-settings-origin"></span> to GET, PUT, POST, DELETE, and
-              HEAD with any header, and expose the ETag header. Use a key that can only reach this bucket: the secret
-              stays in this browser.
-            </p>
-            <button id="s3-connect-button" class="bordered clickable" type="submit">Connect S3</button>
-          </form>
+          <p id="cloud-backup-connection-status">Not connected.</p>
           <div class="cloud-backup-actions">
-            <button id="dropbox-connect-button" class="bordered clickable" type="button" hidden>Connect Dropbox</button>
-            <button id="cloud-disconnect-button" class="bordered clickable" type="button" hidden>Disconnect</button>
             <button id="cloud-backup-button" class="bordered clickable" type="button">Back Up Current Project</button>
             <button id="cloud-resume-button" class="bordered clickable" type="button" hidden>Resume Backup</button>
             <button id="cloud-cancel-button" class="bordered clickable" type="button" hidden>Cancel Backup</button>
             <button id="cloud-list-button" class="bordered clickable" type="button">Show Backups</button>
+            <button id="cloud-settings-button" class="bordered clickable" type="button">Cloud Backup Settings</button>
           </div>
           <progress id="cloud-backup-progress" max="1" value="0" hidden></progress>
           <p id="cloud-backup-status" role="status" aria-live="polite"></p>

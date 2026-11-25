@@ -20,15 +20,28 @@ const PROVIDER_LABELS: Readonly<Record<CloudProviderId, string>> = {
   s3: 'S3-compatible storage',
 }
 
-/** The cloud backup section of the Import / Export dialog: Dropbox in builds with its app key, and S3. */
+/**
+ * Cloud backup, Dropbox in builds with its app key and S3: connecting in Settings › Cloud backup, and backing up and
+ * restoring in the Import / Export dialog. One instance serves both, from whichever opens first.
+ */
 export class CloudBackupController {
+  private static instance: CloudBackupController | null = null
+
+  // Settings › Cloud backup
   private readonly providerRow = document.getElementById('cloud-provider-row') as HTMLElement
   private readonly providerSelect = document.getElementById('cloud-provider-select') as HTMLSelectElement
   private readonly connectionStatus = document.getElementById('cloud-connection-status') as HTMLParagraphElement
-  private readonly s3Form = document.getElementById('s3-settings-form') as HTMLFormElement
-  private readonly s3ConnectButton = document.getElementById('s3-connect-button') as HTMLButtonElement
   private readonly dropboxConnectButton = document.getElementById('dropbox-connect-button') as HTMLButtonElement
   private readonly disconnectButton = document.getElementById('cloud-disconnect-button') as HTMLButtonElement
+  private readonly s3Form = document.getElementById('s3-settings-form') as HTMLFormElement
+  private readonly s3Fields = document.getElementById('s3-settings-fields') as HTMLElement
+  private readonly s3ConnectButton = document.getElementById('s3-connect-button') as HTMLButtonElement
+  private readonly setupStatus = document.getElementById('cloud-settings-status') as HTMLParagraphElement
+  // Import / Export › Cloud backup
+  private readonly transferDialog = document.getElementById('project-transfer-modal') as HTMLDialogElement
+  private readonly backupConnectionStatus = document.getElementById(
+    'cloud-backup-connection-status',
+  ) as HTMLParagraphElement
   private readonly backupButton = document.getElementById('cloud-backup-button') as HTMLButtonElement
   private readonly resumeButton = document.getElementById('cloud-resume-button') as HTMLButtonElement
   private readonly cancelButton = document.getElementById('cloud-cancel-button') as HTMLButtonElement
@@ -50,10 +63,16 @@ export class CloudBackupController {
   private listing = false
   private restoring = false
   private connectingS3 = false
-  /** Shown instead of the backup status until the next status change or action. */
+  /** Shown in Import / Export instead of the backup status until the next status change or action. */
   private notice: string | null = null
+  /** Shown in Settings › Cloud backup until the next connection action. */
+  private setupNotice: string | null = null
 
-  constructor(private readonly dialog: HTMLDialogElement) {
+  static start(): void {
+    CloudBackupController.instance ??= new CloudBackupController()
+  }
+
+  private constructor() {
     const available = getAvailableProviders()
     this.providerSelect.replaceChildren(...available.map((provider) => new Option(PROVIDER_LABELS[provider], provider)))
     this.providerRow.hidden = available.length < 2
@@ -85,7 +104,7 @@ export class CloudBackupController {
       this.fillS3Form(await getS3Settings())
       await this.refreshConnection()
     } catch (error) {
-      this.showError(error)
+      this.showError(error, 'backup')
     }
     if (getAvailableProviders().includes('dropbox')) {
       await this.prepareConnect()
@@ -95,6 +114,7 @@ export class CloudBackupController {
   private async selectProvider(provider: CloudProviderId) {
     this.provider = provider
     this.notice = null
+    this.setupNotice = null
     this.list.replaceChildren()
     this.list.hidden = true
     this.render()
@@ -102,7 +122,7 @@ export class CloudBackupController {
       await setSelectedProvider(provider)
       await this.refreshConnection()
     } catch (error) {
-      this.showError(error)
+      this.showError(error, 'setup')
     }
   }
 
@@ -112,7 +132,7 @@ export class CloudBackupController {
     try {
       this.prepared = await prepareAuthorization()
     } catch (error) {
-      this.showError(error)
+      this.showError(error, 'setup')
     }
     this.render()
   }
@@ -123,7 +143,7 @@ export class CloudBackupController {
       return
     }
     const connecting = connect(this.prepared)
-    this.notice = 'Waiting for Dropbox authorization in the new tab…'
+    this.setupNotice = 'Waiting for Dropbox authorization in the new tab…'
     void this.prepareConnect()
     connecting
       .then(() => this.afterConnecting())
@@ -132,7 +152,7 @@ export class CloudBackupController {
         if (error instanceof DOMException && error.name == 'AbortError') {
           return
         }
-        this.showError(error)
+        this.showError(error, 'setup')
       })
   }
 
@@ -140,7 +160,7 @@ export class CloudBackupController {
     const form = new FormData(this.s3Form)
     const field = (name: string) => String(form.get(name) ?? '')
     this.connectingS3 = true
-    this.notice = 'Checking the bucket…'
+    this.setupNotice = 'Checking the bucket…'
     this.render()
     try {
       const settings = await connectS3(
@@ -157,7 +177,7 @@ export class CloudBackupController {
       this.fillS3Form(settings)
       await this.afterConnecting()
     } catch (error) {
-      this.showError(error)
+      this.showError(error, 'setup')
     } finally {
       this.connectingS3 = false
       this.render()
@@ -167,6 +187,7 @@ export class CloudBackupController {
   /** Continues a backup that paused for authorization. */
   private async afterConnecting() {
     this.notice = null
+    this.setupNotice = null
     await this.refreshConnection()
     if (this.backupStatus.kind == 'paused' && this.backupStatus.reason == 'authorization') {
       await withUpgradesPaused(() => CloudBackup.resume())
@@ -189,7 +210,13 @@ export class CloudBackupController {
   }
 
   private async disconnect() {
-    await this.runAction(() => (this.provider == 'dropbox' ? disconnect() : disconnectS3()))
+    this.setupNotice = null
+    this.render()
+    try {
+      await (this.provider == 'dropbox' ? disconnect() : disconnectS3())
+    } catch (error) {
+      this.showError(error, 'setup')
+    }
     this.list.replaceChildren()
     this.list.hidden = true
     await this.refreshConnection()
@@ -206,7 +233,7 @@ export class CloudBackupController {
         await CloudBackup.start(project, this.provider)
       })
     } catch (error) {
-      this.showError(error)
+      this.showError(error, 'backup')
     } finally {
       this.startingBackup = false
       this.render()
@@ -227,7 +254,7 @@ export class CloudBackupController {
       }
       this.list.hidden = false
     } catch (error) {
-      this.showError(error)
+      this.showError(error, 'backup')
     } finally {
       this.listing = false
       this.render()
@@ -269,10 +296,10 @@ export class CloudBackupController {
         await ProjectManager.openProject(projectId)
       })
       this.notice = null
-      this.dialog.close()
+      this.transferDialog.close()
       NotificationsController.showShortDurationMessage(`Restored project “${title}”.`)
     } catch (error) {
-      this.showError(error)
+      this.showError(error, 'backup')
     } finally {
       this.restoring = false
       this.render()
@@ -286,7 +313,7 @@ export class CloudBackupController {
     try {
       await action()
     } catch (error) {
-      this.showError(error)
+      this.showError(error, 'backup')
     }
   }
 
@@ -318,9 +345,14 @@ export class CloudBackupController {
     }
   }
 
-  private showError(error: unknown) {
+  /** Reports `error` in the notification area and next to the controls of `area`. */
+  private showError(error: unknown, area: 'setup' | 'backup') {
     const reported = error instanceof Error ? error : new Error(String(error))
-    this.notice = reported.message
+    if (area == 'setup') {
+      this.setupNotice = reported.message
+    } else {
+      this.notice = reported.message
+    }
     NotificationsController.showError(reported)
     void this.refreshConnection()
   }
@@ -345,13 +377,13 @@ export class CloudBackupController {
 
     this.providerSelect.value = this.provider
     this.providerSelect.disabled = active || this.startingBackup || this.listing || this.restoring || this.connectingS3
-    this.connectionStatus.textContent = !this.connected
-      ? 'Not connected.'
-      : `Connected to ${dropbox ? 'Dropbox' : this.describeLocation()}.`
+    const connection = this.connected ? `Connected to ${dropbox ? 'Dropbox' : this.describeLocation()}.` : null
+    this.connectionStatus.textContent = connection ?? 'Not connected.'
+    this.backupConnectionStatus.textContent = connection ?? 'Not connected. Connect a service in Cloud Backup Settings.'
     this.dropboxConnectButton.textContent = pausedForAuthorization ? 'Reconnect Dropbox' : 'Connect Dropbox'
     this.dropboxConnectButton.hidden = !dropbox || (this.connected && !pausedForAuthorization)
     this.dropboxConnectButton.disabled = !this.prepared || this.restoring
-    this.s3Form.hidden = dropbox || this.connected
+    this.s3Fields.hidden = dropbox || this.connected
     this.s3ConnectButton.disabled = this.connectingS3 || this.restoring
     this.disconnectButton.hidden = !this.connected
     this.disconnectButton.disabled = this.restoring
@@ -373,6 +405,7 @@ export class CloudBackupController {
     if (active) {
       this.progress.value = status.totalBytes > 0 ? status.uploadedBytes / status.totalBytes : 0
     }
+    this.setupStatus.textContent = this.setupNotice ?? ''
     this.status.textContent = this.notice ?? CloudBackupController.describe(status)
   }
 

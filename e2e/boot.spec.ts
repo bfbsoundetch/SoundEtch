@@ -39,10 +39,9 @@ test('a modal stays open when a drag starts in its content and ends outside, and
   page,
 }) => {
   await page.getByRole('button', { name: 'Main menu' }).click()
-  const menu = page.locator('#menu-dropdown')
-  await menu.getByRole('button', { name: 'Project', exact: true }).click()
-  await menu.getByRole('button', { name: 'Import / Export', exact: true }).click()
-  const dialog = page.getByRole('dialog', { name: 'Import / Export Project', exact: true })
+  await page.locator('#menu-dropdown').getByRole('button', { name: 'Settings', exact: true }).click()
+  const dialog = page.getByRole('dialog', { name: 'Settings', exact: true })
+  await dialog.getByText('Cloud backup', { exact: true }).click()
   await dialog.getByLabel('Service').selectOption({ label: 'S3-compatible storage' })
   const endpoint = dialog.getByLabel('Endpoint')
   await endpoint.fill('https://ACCOUNT.r2.cloudflarestorage.com')
