@@ -7,6 +7,7 @@ import ortWasmModuleUrl from 'onnxruntime-web/ort-wasm-simd-threaded.jsep.mjs?ur
 import SoxrResampler from 'wasm-audio-resampler/app/soxr_resampler.js'
 import { SoxrDatatype, SoxrQuality } from 'wasm-audio-resampler/app/utils.js'
 import { FileSystemUtils } from '../filesystem/FileSystemUtils'
+import { NetworkUtils } from '../NetworkUtils'
 import {
   GRANITE_MODEL_CACHE_NAME as MODEL_CACHE_NAME,
   GRANITE_MODEL_DATA_FILE as MODEL_DATA_FILE,
@@ -430,9 +431,9 @@ async function readSelectedAudio16k(command: TranscribeCommand, interval: Worker
 
 async function getSoxrWasmBinary(): Promise<ArrayBuffer> {
   if (!soxrWasmPromise) {
-    soxrWasmPromise = fetch(SOXR_WASM_URL).then(async (response) => {
+    soxrWasmPromise = NetworkUtils.fetchResource(SOXR_WASM_URL, 'the audio resampler').then(async (response) => {
       if (!response.ok) {
-        throw new Error(`Could not load the audio resampler: HTTP ${response.status}`)
+        throw new Error(`Could not load the audio resampler from ${SOXR_WASM_URL}: HTTP ${response.status}`)
       }
       return response.arrayBuffer()
     })
@@ -789,14 +790,14 @@ async function fetchNetworkAsset(
 ): Promise<Uint8Array<ArrayBuffer>> {
   const started = performance.now()
   graniteLog(`Asset ${name}: network request started`)
-  const response = await fetch(url)
+  const response = await NetworkUtils.fetchResource(url, name)
   graniteLog(`Asset ${name}: HTTP ${response.status}`, {
     host: new URL(response.url).host,
     redirected: response.redirected,
     contentLength: response.headers.get('content-length'),
   })
   if (!response.ok) {
-    throw new Error(`Could not download ${name}: HTTP ${response.status}`)
+    throw new Error(`Could not load ${name} from ${url}: HTTP ${response.status}`)
   }
 
   const declaredLength = Number(response.headers.get('content-length'))

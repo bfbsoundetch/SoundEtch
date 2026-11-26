@@ -17,6 +17,20 @@ export class NetworkUtils {
     return response
   }
 
+  /**
+   * Browsers reject DNS, CORS, and COEP failures alike with only "Failed to fetch"; this names the resource and URL.
+   * Uses the global fetch, so workers can call it too.
+   */
+  public static async fetchResource(url: string, description: string): Promise<Response> {
+    try {
+      return await fetch(url)
+    } catch (error) {
+      throw new Error(
+        `Could not load ${description} from ${url}: ${error instanceof Error ? error.message : String(error)}`,
+      )
+    }
+  }
+
   public static async downloadFile(
     url: string,
     filename: string,

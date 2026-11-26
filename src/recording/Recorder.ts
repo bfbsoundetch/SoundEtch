@@ -191,11 +191,12 @@ export class Recorder {
   static async createFromUrl(url: string): Promise<Track | null> {
     const abortController = new AbortController()
     ;(window as RecorderWindow).processingModalController?.show('Downloading media...', () => abortController.abort())
+    const filename = Recorder.filenameFromUrl(url)
 
     try {
       const importedFile = await NetworkUtils.downloadFile(
         url,
-        Recorder.filenameFromUrl(url),
+        filename,
         (progress) => (window as RecorderWindow).processingModalController?.setProgress(progress),
         abortController.signal,
       )
@@ -207,7 +208,7 @@ export class Recorder {
         Recorder.showImportCanceledNotification()
         return null
       }
-      NotificationsController.showErrorMessage(error instanceof Error ? error.message : String(error))
+      Recorder.showImportError(filename, error)
       throw error
     } finally {
       ;(window as RecorderWindow).processingModalController?.hide()
@@ -225,7 +226,7 @@ export class Recorder {
         Recorder.showImportCanceledNotification()
         return null
       }
-      NotificationsController.showErrorMessage(error instanceof Error ? error.message : String(error))
+      Recorder.showImportError(file.name, error)
       throw error
     } finally {
       ;(window as RecorderWindow).processingModalController?.hide()
@@ -264,6 +265,11 @@ export class Recorder {
 
   private static showImportCanceledNotification() {
     NotificationsController.showShortDurationMessage('Media import canceled.')
+  }
+
+  private static showImportError(name: string, error: unknown) {
+    const message = error instanceof Error ? error.message : String(error)
+    NotificationsController.showErrorMessage(`Could not import ${name}: ${message}`)
   }
 }
 

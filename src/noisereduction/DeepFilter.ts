@@ -3,6 +3,7 @@ import type { InitOutput } from './wasm/df.js'
 import { defaultDeepFilterParameters } from './DeepFilterParameters'
 import type { DeepFilterParameters } from './DeepFilterParameters'
 import { DEEP_FILTER_CACHE_NAME } from '../ModelCache'
+import { NetworkUtils } from '../NetworkUtils'
 
 export { defaultDeepFilterParameters, readDeepFilterParameters } from './DeepFilterParameters'
 export type { DeepFilterParameters } from './DeepFilterParameters'
@@ -120,9 +121,9 @@ async function getCachedOrFetch(url: string) {
   if (cached) {
     return cached.arrayBuffer()
   }
-  const response = await fetch(url)
+  const response = await NetworkUtils.fetchResource(url, 'noise reduction resource')
   if (!response.ok) {
-    throw new Error(`Could not load noise reduction resource: ${response.status} ${response.statusText}`)
+    throw new Error(`Could not load noise reduction resource from ${url}: HTTP ${response.status}`)
   }
   await cache.put(url, response.clone())
   await deleteSupersededVersions(cache, url)
