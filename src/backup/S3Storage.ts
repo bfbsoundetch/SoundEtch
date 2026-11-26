@@ -304,21 +304,52 @@ export class S3Storage implements CloudStorage {
   async checkAccess(): Promise<void> {
     const config = await this.getConfig()
     const key = `${config.prefix}${CHECK_NAME}`
-    try {
-      await this.list(config, config.prefix, true, { retry: false })
-      const response = await this.request(config, 'PUT', key, { body: new TextEncoder().encode('ok'), retry: false })
-      await this.request(config, 'DELETE', key, { retry: false })
-      if (!response.headers.has('ETag')) {
-        throw new Error(`The key works, but ${ETAG_HIDDEN}. Add ETag to the bucket's exposed CORS headers.`)
-      }
-    } catch (error) {
-      if (error instanceof CloudUnavailableError) {
-        throw new Error(
-          `Could not reach ${new URL(config.endpoint).host}. Check the endpoint and region, and that the bucket's CORS rules allow ${globalThis.location?.origin ?? 'this site'}.`,
-        )
-      }
-      throw error
+    await this.list(config, config.prefix, true, { retry: false }).catch(async (error: unknown) => {
+      throw error instanceof CloudUnavailableError ? new Error(await this.explainBlockedList(config)) : error
+    })
+    const response = await this.request(config, 'PUT', key, {
+      body: new TextEncoder().encode('ok'),
+      retry: false,
+    }).catch(
+      blockedAs(
+        `The key can list the bucket, but writing ${CHECK_NAME} there was blocked. Check that the key can write objects (Object Read & Write, for a Cloudflare R2 token) and that the bucket's CORS rules allow PUT.`,
+      ),
+    )
+    await this.request(config, 'DELETE', key, { retry: false }).catch(
+      blockedAs(
+        `The key can list and write in the bucket, but deleting ${CHECK_NAME} was blocked, so it is still there. Check that the key can delete objects and that the bucket's CORS rules allow DELETE.`,
+      ),
+    )
+    if (!response.headers.has('ETag')) {
+      throw new Error(`The key works, but ${ETAG_HIDDEN}. Add ETag to the bucket's exposed CORS headers.`)
     }
+  }
+
+  /**
+   * What to fix when listing the bucket got no readable response. The browser hides any response that the bucket's
+   * CORS rules do not allow, and Cloudflare R2 leaves the CORS headers off every error, so a refused key or a missing
+   * bucket looks the same as missing rules. A list signed in its query sends no headers, so it skips the CORS
+   * preflight: when its response is readable, the rules allow this origin but not the signed request's method or
+   * headers.
+   */
+  private async explainBlockedList(config: S3Config): Promise<string> {
+    const origin = globalThis.location?.origin ?? 'this site'
+    const { protocol, host, path } = requestLocation(config, null)
+    const query: Array<[string, string]> = [
+      ['list-type', '2'],
+      ['max-keys', '1'],
+      ['prefix', config.prefix],
+    ]
+    const url = await presignS3Url({ method: 'GET', protocol, host, path, query }, config, new Date(), 60)
+    try {
+      await fetch(url, { credentials: 'omit', cache: 'no-store' })
+      return `The bucket's CORS rules allow ${origin}, but not the methods or headers of SoundEtch's requests. Set AllowedMethods to GET, PUT, POST, DELETE, and HEAD, and AllowedHeaders to ["*"].`
+    } catch (error) {
+      if (!(error instanceof TypeError)) {
+        throw error
+      }
+    }
+    return `No readable response from ${host}. Check the access key ID and secret access key (Cloudflare R2 answers a wrong key this way), the bucket name, the endpoint and region, and that the bucket's CORS rules allow ${origin}.`
   }
 
   private async getConfig(): Promise<S3Config> {
@@ -473,6 +504,13 @@ function requestLocation(config: S3Settings, key: string | null) {
 
 function objectKey(config: S3Settings, path: string): string {
   return `${config.prefix}${path.replace(/^\//, '')}`
+}
+
+/** Rethrows a request's error, or `message` when the request got no readable response. */
+function blockedAs(message: string): (error: unknown) => never {
+  return (error) => {
+    throw error instanceof CloudUnavailableError ? new Error(message) : error
+  }
 }
 
 /** The contents of each `<tag>` element; S3's responses never nest an element in one of the same name. */

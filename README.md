@@ -169,7 +169,7 @@ The key is public under PKCE. **Connect Dropbox** opens Dropbox's authorization 
 
 ### S3-compatible storage
 
-Amazon S3, Cloudflare R2, Backblaze B2, MinIO, and other services with the S3 API work without any build setting. The user enters the endpoint (empty for Amazon S3), region (`auto` for R2), bucket, an optional folder prefix, and an access key; **Path-style URLs** is for servers such as MinIO that do not serve `bucket.host` names. **Connect S3** lists the folder, writes and deletes `.soundetch-connection-check`, and names what to fix when that fails. The secret is stored in the browser, so the key should reach only this bucket, for example with this IAM policy:
+Amazon S3, Cloudflare R2, Backblaze B2, MinIO, and other services with the S3 API work without any build setting. The user enters the endpoint (empty for Amazon S3), region (`auto` for R2), bucket, an optional folder prefix, and an access key; **Path-style URLs** is for servers such as MinIO that do not serve `bucket.host` names. **Connect S3** lists the folder, writes and deletes `.soundetch-connection-check`, and names what to fix when that fails. A response without CORS headers is hidden from the page, and R2 sends none with its errors, so a wrong key or bucket name looks like missing CORS rules; the message then lists each of them. When the CORS preflight is the only failure, which a list signed in its URL bypasses, it names the rule to change. The secret is stored in the browser, so the key should reach only this bucket, for example with this IAM policy:
 
 ```json
 {

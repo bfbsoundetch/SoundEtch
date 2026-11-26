@@ -287,7 +287,7 @@ class FakeS3 {
       return s3ErrorResponse(404, 'NoSuchBucket')
     }
     if (url.searchParams.has('X-Amz-Signature')) {
-      return this.presignedPut(url, method, key, body)
+      return this.presigned(url, method, key, body)
     }
     if (!headers.get('Authorization')?.startsWith('AWS4-HMAC-SHA256 Credential=AKID/')) {
       return s3ErrorResponse(403, 'AccessDenied')
@@ -362,7 +362,7 @@ class FakeS3 {
   }
 
   /** A query-signed request: the signature must match the secret and the URL must not have expired. */
-  private async presignedPut(url: URL, method: string, key: string, body: Uint8Array): Promise<Response> {
+  private async presigned(url: URL, method: string, key: string, body: Uint8Array): Promise<Response> {
     const query = url.searchParams
     const date = new Date(
       query.get('X-Amz-Date')!.replace(/^(\d{4})(\d\d)(\d\d)T(\d\d)(\d\d)(\d\d)Z$/, '$1-$2-$3T$4:$5:$6Z'),
@@ -370,7 +370,7 @@ class FakeS3 {
     const seconds = Number(query.get('X-Amz-Expires'))
     const credentials = { accessKeyId: 'AKID', secretAccessKey: 'secret', region: 'us-east-1' }
     const expected = await presignS3Url(
-      { method, host: url.host, path: url.pathname, query: [] },
+      { method, host: url.host, path: url.pathname, query: [...query].filter(([name]) => !name.startsWith('X-Amz-')) },
       credentials,
       date,
       seconds,
@@ -380,6 +380,9 @@ class FakeS3 {
     }
     if (Date.now() > date.getTime() + seconds * 1000) {
       return s3ErrorResponse(403, 'AccessDenied')
+    }
+    if (method == 'GET' && !key) {
+      return this.list(query)
     }
     if (method != 'PUT') {
       return s3ErrorResponse(405, 'MethodNotAllowed')
@@ -606,6 +609,29 @@ test('connecting S3 through CORS rules that hide the ETag header fails with what
   expect(await isS3Connected()).toBe(false)
   expect(await getS3Settings()).toEqual(s3Settings)
   expect([...s3.objects.keys()]).toEqual([])
+})
+
+test('connecting S3 when the browser hides the response names what to check, and the CORS fix when only the preflight fails', async () => {
+  await putRecord({ key: 's3-settings', ...s3Settings, secretAccessKey: null })
+  // R2 with a wrong key, or a bucket without CORS rules for this origin: nothing is readable.
+  vi.stubGlobal('fetch', async () => {
+    throw new TypeError('Failed to fetch')
+  })
+  await expect(connectS3(s3Settings, 'secret')).rejects.toThrow(
+    "No readable response from s3.test. Check the access key ID and secret access key (Cloudflare R2 answers a wrong key this way), the bucket name, the endpoint and region, and that the bucket's CORS rules allow this site.",
+  )
+
+  // Rules that allow the origin but no headers fail every preflight; a request without headers needs none.
+  vi.stubGlobal('fetch', async (input: string | URL | Request, init: RequestInit = {}) => {
+    if (new Headers(init.headers).has('Authorization')) {
+      throw new TypeError('Failed to fetch')
+    }
+    return s3.fetch(new URL(String(input)), init)
+  })
+  await expect(connectS3(s3Settings, 'secret')).rejects.toThrow(
+    'Set AllowedMethods to GET, PUT, POST, DELETE, and HEAD, and AllowedHeaders to ["*"].',
+  )
+  expect(await isS3Connected()).toBe(false)
 })
 
 test('a file that changes during the backup fails it and removes the partial backup', async () => {
