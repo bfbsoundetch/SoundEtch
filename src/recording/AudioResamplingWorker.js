@@ -1,6 +1,7 @@
 import SoxrResampler from 'wasm-audio-resampler/app/soxr_resampler.js'
 import { SoxrDatatype, SoxrQuality } from 'wasm-audio-resampler/app/utils.js'
-const soxrWasmUrl = new URL(`${import.meta.env.BASE_URL}/soxr_wasm.wasm`, globalThis.location.origin).href
+const appBasePath = import.meta.env.BASE_URL.endsWith('/') ? import.meta.env.BASE_URL : `${import.meta.env.BASE_URL}/`
+const soxrWasmUrl = new URL('soxr_wasm.wasm', new URL(appBasePath, globalThis.location.origin)).href
 
 self.onmessage = async (e) => {
   if (self.failed) return
