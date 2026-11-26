@@ -404,7 +404,7 @@ export class TopPanelController {
     const viewportHeight = window.innerHeight
     const collapsed = this.footer.offsetHeight + this.root.offsetHeight - this.root.clientHeight
     const full = Math.max(collapsed, viewportHeight - this.applicationHeader.getBoundingClientRect().bottom)
-    return { collapsed, half: Math.min(full, Math.max(collapsed, viewportHeight / 2)), full }
+    return { collapsed, half: Math.min(full, Math.max(collapsed, (full - this.footer.offsetHeight) / 2)), full }
   }
 
   /** The size a drag released at `height` selects: the nearest one, but at least one step in the drag's direction. */

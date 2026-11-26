@@ -4160,8 +4160,8 @@ input::placeholder {
   grid-template-rows: minmax(0, 1fr);
   height: 100%;
   min-height: 0;
-  gap: 1.5rem;
-  padding: 1rem;
+  gap: 1rem;
+  padding: .5rem;
   box-sizing: border-box;
   align-items: stretch;
 }
