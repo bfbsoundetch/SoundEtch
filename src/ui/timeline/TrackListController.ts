@@ -211,11 +211,16 @@ export class TrackListController {
     return this.cursorPoint.matrixTransform(this.positionMarkerController.positionMarkerSvg.getScreenCTM()!.inverse()).x
   }
 
+  /**
+   * Trackpad pinches arrive as wheel events whose ctrlKey is synthetic, with no Control keydown, and their deltaY
+   * tracks the pinch scale. A physically held Control means a real wheel, whose notches zoom at a quarter of that rate.
+   */
   zoomWithWheel(wheelEvent: WheelEvent) {
     if (wheelEvent.deltaY == 0) {
       return
     }
-    this.zoomBy(1.01 ** wheelEvent.deltaY, this.mouseEventToSvgCoord(wheelEvent).x)
+    const delta = KeyPressController.ctrlPressed ? wheelEvent.deltaY / 4 : wheelEvent.deltaY
+    this.zoomBy(1.01 ** delta, this.mouseEventToSvgCoord(wheelEvent).x)
   }
 
   zoomBy(scaling: number, anchorX: number) {

@@ -23,6 +23,14 @@ export class KeyPressController {
       this.keysPressed.delete(event.code)
       this.keyListeners.forEach((l) => l())
     })
+    // Keyups after the window loses focus (Ctrl+Tab, Cmd+Tab) never arrive here.
+    window.addEventListener('blur', () => {
+      this.ctrlPressed = false
+      this.metaPressed = false
+      this.shiftPressed = false
+      this.keysPressed.clear()
+      this.keyListeners.forEach((l) => l())
+    })
   }
 
   static addKeyDownListener(listener: (event: KeyboardEvent) => any) {
