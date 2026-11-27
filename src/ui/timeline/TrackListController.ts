@@ -162,7 +162,7 @@ export class TrackListController {
     new ContextMenuItem('Cut', () => this.sliceSelection(true)),
     new ContextMenuItem('Copy', () => this.sliceSelection(false)),
     new ContextMenuItem('Paste', (activeTrackIndex, startSample) => this.paste(activeTrackIndex, startSample)),
-    new ContextMenuItem('Freeze', () => this.freezeSelection()),
+    new ContextMenuItem('Freeze effects', () => this.freezeSelection()),
     new ContextMenuItem('Generate transcription', () => this.generateTranscription()),
     new ContextMenuSeparator(),
     new ContextMenuItem('Set selection start here', (_, sample) => this.setSelectionEdge('start', sample)),
@@ -460,6 +460,7 @@ export class TrackListController {
             const entry = getTrackTranscriptEntries(track)[0]
             if (entry) this.openTrackTranscript(track, entry)
           },
+          onFreezeEffects: () => void this.freezeTrackEffects(track),
           onChangeHeight: (deltaRem) => this.changeTrackHeight(trackInfoDiv, waveformDiv, waveform, deltaRem),
           onShowVideo: () => this.trackPanelController.show(track, 'video'),
         })
@@ -986,18 +987,39 @@ export class TrackListController {
     if (!selection) {
       return
     }
+    if (await this.freezeEffects(selection, 'Freezing effects of selection...')) {
+      this.clearSelection()
+    }
+  }
 
+  /** Freezes the effects of all of `track`'s audio, from its first clip to its last, as for a selection. */
+  async freezeTrackEffects(track: Track): Promise<void> {
+    if (!this.canEdit()) {
+      NotificationsController.showLongDurationMessage('Stop playback or recording before freezing effects.')
+      return
+    }
+    const startSample = track.clipViews[0]?.startPosition ?? 0
+    await this.freezeEffects(
+      { startSample, endSample: track.length, tracks: [track] },
+      `Freezing effects of ${track.name}...`,
+    )
+  }
+
+  /** Renders `region` through its tracks' effects into a new track; resolves whether that succeeded. */
+  private async freezeEffects(region: SelectedRegion, title: string): Promise<boolean> {
     // Rendering is loaded only after freeze starts, keeping it out of the initial timeline chunk.
     const { Freezer } = await import('../../freezer/Freezer')
 
-    ;(window as any).processingModalController?.show('Freezing selection...', () => Freezer.cancelFreeze())
+    const modal = (window as TrackListWindow).processingModalController
+    modal?.show(title, () => Freezer.cancelFreeze())
     try {
-      await Freezer.freezeSelection(selection)
-      this.clearSelection()
+      await Freezer.freezeSelection(region)
+      return true
     } catch (error) {
       NotificationsController.showError(error as Error)
+      return false
     } finally {
-      ;(window as any).processingModalController?.hide()
+      modal?.hide()
     }
   }
 

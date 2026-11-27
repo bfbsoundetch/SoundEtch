@@ -16,6 +16,7 @@ export type TrackMenuActions = {
   onDisplayModeChange: (mode: TrackDisplayMode) => void
   hasTranscript: () => boolean
   onShowTranscript: () => void
+  onFreezeEffects: () => void
   onChangeHeight: (deltaRem: number) => void
   onShowVideo: () => void
 }
@@ -344,14 +345,20 @@ export class TrackListTrack {
       onRename()
     })
     const transcriptItem = createItem('Show transcript', 'menuitem')
-    // A transcript can be added or removed between openings of the menu.
-    const refreshTranscriptItem = () => {
+    const freezeEffectsItem = createItem('Freeze effects', 'menuitem')
+    // A transcript or audio can be added or removed between openings of the menu.
+    const refreshContextualItems = () => {
       transcriptItem.hidden = !actions.hasTranscript()
+      freezeEffectsItem.hidden = track.clipViews.length == 0
     }
-    refreshTranscriptItem()
+    refreshContextualItems()
     transcriptItem.addEventListener('click', () => {
       closeMenu()
       actions.onShowTranscript()
+    })
+    freezeEffectsItem.addEventListener('click', () => {
+      closeMenu()
+      actions.onFreezeEffects()
     })
     const increaseHeightItem = createItem('Increase track height', 'menuitem')
     increaseHeightItem.addEventListener('click', () => {
@@ -363,12 +370,20 @@ export class TrackListTrack {
       actions.onChangeHeight(-2)
       button.focus()
     })
-    popover.append(...optionButtons, separator, renameItem, transcriptItem, increaseHeightItem, decreaseHeightItem)
+    popover.append(
+      ...optionButtons,
+      separator,
+      renameItem,
+      transcriptItem,
+      freezeEffectsItem,
+      increaseHeightItem,
+      decreaseHeightItem,
+    )
     popover.addEventListener('click', (event) => event.stopPropagation())
 
     button.addEventListener('click', (event) => {
       event.stopPropagation()
-      refreshTranscriptItem()
+      refreshContextualItems()
     })
 
     const updateAccessibleName = () => {
@@ -405,7 +420,7 @@ export class TrackListTrack {
     button.addEventListener('keydown', (event) => {
       if (event.key != 'ArrowDown' && event.key != 'ArrowUp') return
       event.preventDefault()
-      refreshTranscriptItem()
+      refreshContextualItems()
       if (!popover.matches(':popover-open')) {
         popover.showPopover()
         button.setAttribute('aria-expanded', 'true')
