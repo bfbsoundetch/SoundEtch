@@ -16,7 +16,7 @@ test('interleaved test', async () => {
   }
 
   summary.summarizeInterleavedData(sampleData, sampleDataLength * channelCount)
-  const bothChannelSummary = summary.getSummaryOfRange(0, sampleDataLength, Summary.SAMPLES_PER_SUMMARY)
+  const bothChannelSummary = summary.getSummaryOfBins([0, 256, 512, 768, sampleDataLength])
   const firstChannelSummary = bothChannelSummary[0]
   const secondChannelSummary = bothChannelSummary[1]
 
@@ -58,7 +58,7 @@ test('interleaved multiple input test', async () => {
     }
   }
 
-  const bothChannelSummary = summary.getSummaryOfRange(0, sampleDataLength, Summary.SAMPLES_PER_SUMMARY)
+  const bothChannelSummary = summary.getSummaryOfBins([0, 256, 512, 768, sampleDataLength])
   const firstChannelSummary = bothChannelSummary[0]
   const secondChannelSummary = bothChannelSummary[1]
 
@@ -100,7 +100,7 @@ test('separate channel multiple input test', async () => {
     }
   }
 
-  const bothChannelSummary = summary.getSummaryOfRange(0, sampleDataLength, Summary.SAMPLES_PER_SUMMARY)
+  const bothChannelSummary = summary.getSummaryOfBins([0, 256, 512, 768, sampleDataLength])
   const firstChannelSummary = bothChannelSummary[0]
   const secondChannelSummary = bothChannelSummary[1]
 
@@ -229,7 +229,7 @@ test('a summary write failure still represents all saved input frames in memory'
   expect(() => summary.summarizeInterleavedData(data, data.length)).toThrow(quota)
 
   expect(summary.length).toBe(600)
-  expect(summary.getSummaryOfRange(512, 600, 256)[0]).toEqual([expect.closeTo(-0.5, 4), expect.closeTo(-0.5, 4)])
+  expect(summary.getSummaryOfBins([512, 600])[0]).toEqual([expect.closeTo(-0.5, 4), expect.closeTo(-0.5, 4)])
   expect(handle.write).toHaveBeenCalledOnce()
   expect(() => summary.finishSummarizing()).not.toThrow()
   expect(handle.write).toHaveBeenCalledOnce()
@@ -264,7 +264,7 @@ test('an empty summary is regenerated from saved stereo PCM without advertising 
   await summary.populateFromFile(new File([], 'summary'), new File([data], 'audio'), 2)
 
   expect(summary.length).toBe(2)
-  expect(summary.getSummaryOfRange(0, 2, 256)).toEqual([
+  expect(summary.getSummaryOfBins([0, 2])).toEqual([
     [expect.closeTo(0.75, 4), expect.closeTo(0.25, 4)],
     [expect.closeTo(-0.5, 4), expect.closeTo(-1, 4)],
   ])
@@ -282,7 +282,7 @@ test('a partial summary bucket is rebuilt only from the missing saved audio tail
 
   expect(summary.length).toBe(600)
   expect(readTail).toHaveBeenCalledExactlyOnceWith(256 * 4, 600 * 4)
-  expect(summary.getSummaryOfRange(0, 600, 256)[0]).toEqual([
+  expect(summary.getSummaryOfBins([0, 256, 512, 600])[0]).toEqual([
     expect.closeTo(0.25, 4),
     expect.closeTo(0.25, 4),
     expect.closeTo(-0.75, 4),
@@ -307,6 +307,18 @@ test('missing summary recovery reads saved audio in bounded chunks', async () =>
   ])
   expect(summary.length).toBe(frameCount)
   expect(summary.getMeanSquaredPeak(8192, frameCount)).toBeCloseTo(0.25, 4)
+})
+
+test('bins straddling buckets each take the buckets centered in them, so a peak shows in one bin', () => {
+  const summary = new Summary(1, 4)
+  const data = new Float32Array(1024)
+  data[300] = 0.5
+  summary.summarizeInterleavedData(data, data.length)
+
+  // Bucket middles are 128, 384, 640 and 896; the last bin holds none, so it takes the bucket it starts in.
+  const maxima = summary.getSummaryOfBins([0, 300, 600, 900, 1024])[0].filter((_, index) => index % 2 === 0)
+
+  expect(maxima).toEqual([0, expect.closeTo(0.5, 4), 0, 0])
 })
 
 function summaryHandle() {

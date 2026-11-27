@@ -128,7 +128,7 @@ test('quota during final summary write releases both handles and keeps saved aud
   const restored = new Summary(1)
   await restored.populateFromFile(await recording.summaryFile.getFile(), await recording.audio.getFile(), 1)
   expect(restored.length).toBe(2)
-  expect(restored.getSummaryOfRange(0, 2, 256)[0]).toEqual([expect.closeTo(0.25, 4), expect.closeTo(-0.5, 4)])
+  expect(restored.getSummaryOfBins([0, 2])[0]).toEqual([expect.closeTo(0.25, 4), expect.closeTo(-0.5, 4)])
 })
 
 test('short byte writes preserve all audio samples and their summary length', async () => {
@@ -165,7 +165,7 @@ test('quota after a partial stereo write retains only complete interleaved frame
 
   expect(await recordedSamples(recording.audio)).toEqual(samples.subarray(0, 2))
   expect(recording.summary.length).toBe(1)
-  expect(recording.summary.getSummaryOfRange(0, 1, 256)).toEqual([
+  expect(recording.summary.getSummaryOfBins([0, 1])).toEqual([
     [expect.closeTo(0.25, 4), expect.closeTo(0.25, 4)],
     [expect.closeTo(-0.5, 4), expect.closeTo(-0.5, 4)],
   ])

@@ -9,22 +9,29 @@ export class SummaryGenerator {
 
   private constructor() {}
 
+  /**
+   * [max, min] per channel for each bin [binEdges[i], binEdges[i + 1]) of the clip's source samples, through the last
+   * bin with summarized audio. Bins narrower than a summary bucket (`samplesPerBin`) read the raw samples.
+   */
   static async summarizeClipChannel(
     clip: Clip,
-    startPosition: number,
-    endPosition: number,
-    skip: number,
+    binEdges: readonly number[],
+    samplesPerBin: number,
   ): Promise<Array<Array<number>>> {
-    endPosition = Math.min(endPosition, clip.summary.length)
-    if (!clip.audioPresent || startPosition >= endPosition) {
+    const length = clip.summary.length
+    let binCount = binEdges.length - 1
+    while (binCount > 0 && binEdges[binCount - 1] >= length) --binCount
+    if (!clip.audioPresent || binCount <= 0) {
       return Array.from({ length: clip.getChannelCount() }, () => [])
     }
+    const edges = binEdges.slice(0, binCount + 1)
+    edges[binCount] = Math.min(edges[binCount], length)
     let clipSummarizer = this.clipSummarizers.get(clip)
     if (!clipSummarizer) {
       clipSummarizer = new ClipSummarizer(clip)
       this.clipSummarizers.set(clip, clipSummarizer)
     }
-    return await clipSummarizer.summarizeChannel(startPosition, endPosition, skip)
+    return await clipSummarizer.summarizeChannel(edges, samplesPerBin)
   }
 }
 
@@ -45,7 +52,9 @@ class ClipSummarizer {
     return fileHandle.getFile()
   }
 
-  async summarizeChannel(startPosition: number, endPosition: number, skip: number): Promise<Array<Array<number>>> {
+  async summarizeChannel(binEdges: readonly number[], samplesPerBin: number): Promise<Array<Array<number>>> {
+    const startPosition = binEdges[0]
+    const endPosition = binEdges[binEdges.length - 1]
     if (startPosition < 0 || endPosition > this.clip.length) {
       throw new Error(
         `Range provided does not cover this ClipView : start ${startPosition} end ${endPosition} ${this.clip.length}`,
@@ -55,15 +64,15 @@ class ClipSummarizer {
     // prewarm to reduce laggy transitions from summary to raw file
     if (
       !isRecordingState(AudioControl.getState()) &&
-      skip > Summary.SAMPLES_PER_SUMMARY &&
-      skip < Summary.SAMPLES_PER_SUMMARY * 1.2
+      samplesPerBin > Summary.SAMPLES_PER_SUMMARY &&
+      samplesPerBin < Summary.SAMPLES_PER_SUMMARY * 1.2
     ) {
       this.warmFileCache(startPosition, endPosition)
     }
 
-    return !isRecordingState(AudioControl.getState()) && skip < Summary.SAMPLES_PER_SUMMARY
-      ? this.getPcmSlice(startPosition, endPosition, skip)
-      : (this.clip.summary?.getSummaryOfRange(startPosition, endPosition, skip) ?? [])
+    return !isRecordingState(AudioControl.getState()) && samplesPerBin < Summary.SAMPLES_PER_SUMMARY
+      ? this.getPcmBins(binEdges)
+      : (this.clip.summary?.getSummaryOfBins(binEdges) ?? [])
   }
 
   private async warmFileCache(startPosition: number, endPosition: number) {
@@ -84,54 +93,24 @@ class ClipSummarizer {
     }
   }
 
-  private async getPcmSlice(startPosition: number, endPosition: number, skip: number) {
+  private async getPcmBins(binEdges: readonly number[]) {
     const channelCount = this.clip.getChannelCount()
-    let data: Float32Array
-    await this.warmFileCache(startPosition, endPosition)
-    const sliceStart = (startPosition - this.fileCacheStart) * channelCount
-    data = this.fileCache!.subarray(sliceStart, sliceStart + (endPosition - startPosition) * channelCount)
-
-    const result = new Array<Array<number>>(channelCount)
-    if (skip < 2) {
-      for (let i = 0; i < channelCount; ++i) {
-        result[i] = new Array<number>((2 * data.length) / channelCount)
-      }
-      for (let i = 0; i < data.length; ++i) {
-        result[i % channelCount][2 * Math.floor(i / channelCount)] = Math.max(data[i], 0)
-        result[i % channelCount][2 * Math.floor(i / channelCount) + 1] = Math.min(data[i], 0)
-      }
-      return result
-    }
-
-    for (let i = 0; i < channelCount; ++i) {
-      result[i] = new Array<number>(2 * Math.round(data.length / channelCount / skip))
-    }
-
-    let max = new Array<number>(channelCount).fill(-1)
-    let min = new Array<number>(channelCount).fill(1)
-    let resultIndex = 0
-    for (let i = 0; i < data.length; ++i) {
-      const channel = i % this.clip.getChannelCount()
-      if (i >= skip * this.clip.getChannelCount() * (resultIndex / 2 + 1)) {
-        for (let c = 0; c < this.clip.getChannelCount(); ++c) {
-          result[c][resultIndex] = Math.min(max[c], 1)
-          result[c][resultIndex + 1] = Math.max(min[c], -1)
+    await this.warmFileCache(binEdges[0], binEdges[binEdges.length - 1])
+    const data = this.fileCache!
+    const binCount = binEdges.length - 1
+    const result = Array.from({ length: channelCount }, () => new Array<number>(2 * binCount))
+    for (let bin = 0; bin < binCount; ++bin) {
+      const binStart = (binEdges[bin] - this.fileCacheStart) * channelCount
+      const binEnd = (binEdges[bin + 1] - this.fileCacheStart) * channelCount
+      for (let channel = 0; channel < channelCount; ++channel) {
+        let max = -1
+        let min = 1
+        for (let i = binStart + channel; i < binEnd; i += channelCount) {
+          if (data[i] > max) max = data[i]
+          if (data[i] < min) min = data[i]
         }
-        max.fill(-1)
-        min.fill(1)
-        resultIndex += 2
-      }
-      if (data[i] < min[channel]) {
-        min[channel] = data[i]
-      }
-      if (data[i] > max[channel]) {
-        max[channel] = data[i]
-      }
-    }
-    for (let channel = 0; channel < this.clip.getChannelCount(); ++channel) {
-      if (max[channel] != -1 || min[channel] != 1) {
-        result[channel][resultIndex] = Math.min(max[channel], 1)
-        result[channel][resultIndex + 1] = Math.max(min[channel], -1)
+        result[channel][2 * bin] = Math.min(max, 1)
+        result[channel][2 * bin + 1] = Math.max(min, -1)
       }
     }
     return result

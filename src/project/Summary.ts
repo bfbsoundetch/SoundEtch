@@ -26,47 +26,37 @@ export class Summary {
     this.summaryValues = new Array<Int16Array>()
   }
 
-  getSummaryOfRange(startSample: number, endSample: number, skip: number): Array<Array<number>> {
-    if (startSample < 0 || startSample > endSample) {
-      throw new Error(
-        `Bad input: start ${startSample} end ${endSample}, summarized samples ${this.samplesRepresented[0]}`,
+  /**
+   * [max, min] per channel for each bin [binEdges[i], binEdges[i + 1]). A bucket counts toward the bin holding its
+   * middle sample, so neighboring bins don't share peaks; a bin holding no bucket middle takes the bucket its first
+   * sample is in. Stops at the first bin past the represented samples or whose buckets haven't reached this thread.
+   */
+  getSummaryOfBins(binEdges: readonly number[]): Array<Array<number>> {
+    const end = this.samplesRepresented[0]
+    const lastRepresentedBucket = Math.floor((end - 1) / Summary.SAMPLES_PER_SUMMARY)
+    const halfBucket = Summary.SAMPLES_PER_SUMMARY / 2
+    const result = Array.from({ length: this.channelCount }, () => new Array<number>())
+    for (let bin = 0; bin + 1 < binEdges.length && binEdges[bin] < end; ++bin) {
+      let firstBucket = Math.ceil((binEdges[bin] - halfBucket) / Summary.SAMPLES_PER_SUMMARY)
+      let lastBucket = Math.min(
+        Math.ceil((binEdges[bin + 1] - halfBucket) / Summary.SAMPLES_PER_SUMMARY) - 1,
+        lastRepresentedBucket,
       )
-    }
-    if (endSample > this.samplesRepresented[0]) {
-      endSample = this.samplesRepresented[0]
-    }
-    const result = new Array<Array<number>>(this.channelCount)
-    for (let i = 0; i < this.channelCount; ++i) {
-      result[i] = new Array<number>(2 * Math.round((endSample - startSample) / skip))
-    }
-
-    for (let channel = 0; channel < this.channelCount; ++channel) {
-      let resultIndex = 0
-      for (let i = startSample; i < endSample; i += skip) {
-        let chunkIndex = this.getChunkIndex(i)
-        let chunkPosition = this.getChunkPosition(i) + 2 * channel
-        let max = this.summaryValues[chunkIndex][chunkPosition]
-        let min = this.summaryValues[chunkIndex][chunkPosition + 1]
-        // How much should the summary buckets overlap for each output value?
-        // This makes sure they don't overlap. It seems to be how Audacity
-        // does it. Note that, while zooming, you can see where `skip`
-        // becomes a new multiple of SAMPLE_PER_SUMMARY (same as Audacity).
-        const maxIndex = skip / Summary.SAMPLES_PER_SUMMARY
-        for (let j = 1; j < maxIndex; ++j) {
-          chunkPosition += 2 * this.channelCount
-          if (chunkPosition >= this.summaryValues[chunkIndex].length) {
-            ++chunkIndex
-            if (chunkIndex >= this.summaryValues.length) {
-              break
-            }
-            chunkPosition = 2 * channel
-          }
-          max = Math.max(max, this.summaryValues[chunkIndex][chunkPosition])
-          min = Math.min(min, this.summaryValues[chunkIndex][chunkPosition + 1])
+      if (lastBucket < firstBucket) {
+        firstBucket = lastBucket = Math.floor(binEdges[bin] / Summary.SAMPLES_PER_SUMMARY)
+      }
+      if (!this.summaryValues[this.getChunkIndex(lastBucket * Summary.SAMPLES_PER_SUMMARY)]) break
+      for (let channel = 0; channel < this.channelCount; ++channel) {
+        let max = -(2 ** 15)
+        let min = 2 ** 15 - 1
+        for (let bucket = firstBucket; bucket <= lastBucket; ++bucket) {
+          const sample = bucket * Summary.SAMPLES_PER_SUMMARY
+          const values = this.summaryValues[this.getChunkIndex(sample)]
+          const position = this.getChunkPosition(sample) + 2 * channel
+          if (values[position] > max) max = values[position]
+          if (values[position + 1] < min) min = values[position + 1]
         }
-        result[channel][resultIndex] = this.int16ToFloat(max)
-        result[channel][resultIndex + 1] = this.int16ToFloat(min)
-        resultIndex += 2
+        result[channel].push(this.int16ToFloat(max), this.int16ToFloat(min))
       }
     }
     return result

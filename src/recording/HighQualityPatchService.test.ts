@@ -282,7 +282,10 @@ test('a recording in progress is patched through its writer, updating the shared
   const patched = await fileSamples('live')
   expectRunInteriorsEqualSpeech(patched, result.runs)
   const expected = Summary.computeBuckets(patched, 1)
-  const inMemory = recording.summary.getSummaryOfRange(0, patched.length, Summary.SAMPLES_PER_SUMMARY)[0]
+  const bucketEdges = Array.from({ length: expected.length / 2 + 1 }, (_, bucket) =>
+    Math.min(bucket * Summary.SAMPLES_PER_SUMMARY, patched.length),
+  )
+  const inMemory = recording.summary.getSummaryOfBins(bucketEdges)[0]
   const toFloat = (value: number) => (value > 0 ? value / (2 ** 15 - 1) : value / 2 ** 15)
   expect(inMemory).toEqual(Array.from(expected, toFloat))
 

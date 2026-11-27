@@ -32,6 +32,7 @@ import { TimeUtils } from '../../global/TimeUtils'
 import { VideoThumbnailRenderer } from '../../video/VideoThumbnailRenderer'
 import { VIDEO_LANE_HEIGHT } from '../../video/VideoThumbnailLayout'
 import type { VideoPlacement } from '../../video/VideoFrameResolver'
+import { SAMPLE_DETAIL_SAMPLES_PER_UNIT, waveformBins } from './WaveformBins'
 
 let nextClipMenuId = 0
 
@@ -857,7 +858,8 @@ export class ClipViewController extends TrackListItemController {
   private readonly endCrossFadeHeaderTitleDivElement = document.createElement('div')
 
   private readonly infoButton = document.createElement('button')
-  private pathElementTranslation = 0
+  /** Counts waveform draws, so one that finishes summarizing after a later one started leaves its lines alone. */
+  private waveformDrawGeneration = 0
   private readonly transcriptionOverlay: TranscriptionOverlayController
   /** A handle drag in progress: `shift` is the samples it moves that side's edge by, later positive. */
   private resizeInfo: { side: 'left' | 'right'; shift: number } | null = null
@@ -1139,56 +1141,55 @@ export class ClipViewController extends TrackListItemController {
     this.spectrogramFallbackElement.height.baseVal.value = this.waveformHeight
     this.updateSpectrogramFallbackFill()
     const spectrogramPlacement = this.getSpectrogramPlacement()
-    const fallbackStartX = Math.max(this.getXValueForSample(spectrogramPlacement.timelineStart), -10000)
-    const fallbackEndX = Math.min(
-      this.getXValueForSample(spectrogramPlacement.timelineStart + spectrogramPlacement.length),
-      10000,
-    )
+    const fallbackStartX = this.getPixelXForSample(spectrogramPlacement.timelineStart)
+    const fallbackEndX = this.getPixelXForSample(spectrogramPlacement.timelineStart + spectrogramPlacement.length)
     this.spectrogramFallbackElement.x.baseVal.value = fallbackStartX
     this.spectrogramFallbackElement.width.baseVal.value = Math.max(0, fallbackEndX - fallbackStartX)
     // A resize grays the audio its dragged side trims off.
     const resizedSide = this.resizeInfo?.side
-    const trimmedStartX = Math.max(
-      this.getXValueForSample(resizedSide === 'left' ? this.clipStartPosition : this.endPosition),
-      -10000,
-    )
-    const trimmedEndX = Math.min(
-      this.getXValueForSample(
-        resizedSide === 'left' ? this.startPosition : this.clipStartPosition + this.clipView.clip.length,
-      ),
-      10000,
+    const trimmedStartX = this.getPixelXForSample(resizedSide === 'left' ? this.clipStartPosition : this.endPosition)
+    const trimmedEndX = this.getPixelXForSample(
+      resizedSide === 'left' ? this.startPosition : this.clipStartPosition + this.clipView.clip.length,
     )
     this.fullClipGrayFilter.x.baseVal.value = trimmedStartX
     this.fullClipGrayFilter.width.baseVal.value = resizedSide ? Math.max(0, trimmedEndX - trimmedStartX) : 0
-    // for some reason this breaks down when zooming in too much, so limit to +/-10000
-    const xStart = Math.max(this.getXValueForSample(this.startPosition + this.startCrossFadeDuration), -10000)
-    const startCrossFadeLength = this.startCrossFadeDuration / this.samplesPerUnit
+    const leftX = this.getPixelXForSample(this.startPosition)
+    const rightX = this.getPixelXForSample(this.endPosition)
+    this.leftHandle.x1.baseVal.value = leftX
+    this.leftHandle.x2.baseVal.value = leftX
+    this.rightHandle.x1.baseVal.value = rightX
+    this.rightHandle.x2.baseVal.value = rightX
+    this.videoHitElement.x.baseVal.value = leftX
+    this.videoHitElement.width.baseVal.value = Math.max(0, rightX - leftX)
+
+    // The clip's own audio, between the crossfades.
+    const xStart = this.getPixelXForSample(this.startPosition + this.startCrossFadeDuration)
+    const xEnd = this.getPixelXForSample(this.endPosition - this.endCrossFadeDuration)
+    const width = Math.max(0, xEnd - xStart)
     this.rectElement.x.baseVal.value = xStart
+    this.rectElement.width.baseVal.value = width
     this.headerElement.x.baseVal.value = xStart
-    this.leftHandle.x1.baseVal.value = xStart - startCrossFadeLength
-    this.leftHandle.x2.baseVal.value = xStart - startCrossFadeLength
-
-    const xEnd = Math.min(this.getXValueForSample(this.endPosition - this.endCrossFadeDuration), 10000)
-    const endCrossFadeLength = this.endCrossFadeDuration / this.samplesPerUnit
-    this.rightHandle.x1.baseVal.value = xEnd + endCrossFadeLength
-    this.rightHandle.x2.baseVal.value = xEnd + endCrossFadeLength
-
-    this.rectElement.width.baseVal.value = Math.ceil(xEnd - xStart)
-    const videoStartX = Math.max(this.getXValueForSample(this.startPosition), -10000)
-    const videoEndX = Math.min(this.getXValueForSample(this.endPosition), 10000)
-    this.videoHitElement.x.baseVal.value = videoStartX
-    this.videoHitElement.width.baseVal.value = Math.max(0, videoEndX - videoStartX)
+    this.headerElement.width.baseVal.value = width
+    this.layoutHeader(xStart, width)
     const visibleStart = Math.max(0, xStart)
     const visibleEnd = Math.min(this.waveform.width, xEnd)
     this.noAudioLabel.setAttribute('x', `${(visibleStart + visibleEnd) / 2}`)
     this.noAudioLabel.setAttribute('y', `${this.waveform.audioLaneTop + this.waveformHeight / 2}`)
     this.noAudioLabel.style.display = !this.clipView.clip.audioPresent && visibleEnd - visibleStart > 64 ? '' : 'none'
-    this.headerElement.width.baseVal.value = Math.ceil(xEnd - xStart)
-    this.layoutHeader(xStart, Math.max(0, Math.ceil(xEnd - xStart)))
     this.endCrossFadeHeaderElement.x.baseVal.value = xEnd
-    this.endCrossFadeHeaderElement.width.baseVal.value = Math.max(0, endCrossFadeLength)
+    this.endCrossFadeHeaderElement.width.baseVal.value = Math.max(0, rightX - xEnd)
     this.endCrossFadeHeaderTitleElement.x.baseVal.value = xEnd
-    this.endCrossFadeHeaderTitleElement.width.baseVal.value = Math.max(0, endCrossFadeLength)
+    this.endCrossFadeHeaderTitleElement.width.baseVal.value = Math.max(0, rightX - xEnd)
+  }
+
+  /**
+   * View x of `sample` on the nearest device pixel, so clip edges stay crisp and keep their shape while scrolling.
+   * Limited to ±10000, past which the SVG geometry breaks down when zoomed far in.
+   */
+  private getPixelXForSample(sample: number) {
+    const devicePixelRatio = window.devicePixelRatio || 1
+    const x = Math.round(this.getXValueForSample(sample) * devicePixelRatio) / devicePixelRatio
+    return Math.min(Math.max(x, -10000), 10000)
   }
 
   private layoutHeader(x: number, width: number) {
@@ -1223,67 +1224,59 @@ export class ClipViewController extends TrackListItemController {
     this.drawTranscriptionOverlay(startSample, endSample)
     this.waveform.requestVideoDraw()
     if (this.waveform.displayMode === 'waveform') {
-      await this.drawWaveform(startSample, endSample)
+      await this.drawWaveform()
     } else {
       this.waveform.requestSpectrogramDraw()
     }
   }
 
-  async drawWaveform(startSample: number, endSample: number) {
-    if (!this.clipView.clip.audioPresent) {
+  async drawWaveform() {
+    const generation = ++this.waveformDrawGeneration
+    const clip = this.clipView.clip
+    if (!clip.audioPresent) {
       this.svgPathElement.setAttribute('d', '')
       this.startCrossFadePathElement.setAttribute('d', '')
       this.endCrossFadePathElement.setAttribute('d', '')
       return
     }
-    let realStart, realEnd: number
-    const offset = this.clipView.offset + this.edgeShift('left')
-    const clipViewStart = this.getXValueForSample(this.startPosition)
-    const startSampleX = this.getXValueForSample(startSample)
-    const crossFadeStartLastX = this.getXValueForSample(this.startCrossFadeDuration + this.startPosition)
-    const crossFadeEndFirstX = this.getXValueForSample(this.endPosition - this.endCrossFadeDuration)
-
-    realStart = Math.max(0, startSample - this.startPosition) + offset
-    realEnd = Math.min(endSample, this.endPosition) - this.startPosition + offset
-
-    this.pathElementTranslation = Math.max(startSampleX, clipViewStart)
-
-    if (this.fullClipPreview) {
-      let extendedShift = clipViewStart <= 0 ? 0 : Math.min(this.startPosition - startSample, offset)
-      extendedShift = Math.floor(extendedShift / this.samplesPerUnit) * this.samplesPerUnit
-      this.pathElementTranslation -= extendedShift / this.samplesPerUnit
-      realStart -= extendedShift
-      realEnd = Math.min(realStart + endSample - startSample, this.clipView.clip.length)
-    }
-
-    this.startCrossFadePathElement.setAttribute('transform', `translate(${this.pathElementTranslation}, 0)`)
-    this.svgPathElement.setAttribute('transform', `translate(${this.pathElementTranslation}, 0)`)
-    this.endCrossFadePathElement.setAttribute('transform', `translate(${this.pathElementTranslation}, 0)`)
-
-    const summary = await SummaryGenerator.summarizeClipChannel(
-      this.clipView.clip,
-      realStart,
-      realEnd,
-      this.samplesPerUnit,
+    const sampleDetail = this.samplesPerUnit < SAMPLE_DETAIL_SAMPLES_PER_UNIT
+    // Source samples at the clip view's edges, and the range drawn: a resize previews the whole clip.
+    const viewStart = this.clipView.offset + this.edgeShift('left')
+    const viewEnd = this.clipView.offset + this.clipView.length + this.edgeShift('right')
+    const bins = waveformBins(
+      {
+        translation: this.translation,
+        width: this.waveform.width,
+        samplesPerUnit: this.samplesPerUnit,
+        devicePixelRatio: window.devicePixelRatio || 1,
+      },
+      this.clipStartPosition,
+      this.fullClipPreview ? 0 : viewStart,
+      this.fullClipPreview ? clip.length : viewEnd,
     )
+    const summary = await SummaryGenerator.summarizeClipChannel(clip, bins.edges, this.samplesPerUnit)
+    // A later draw has started; its lines are for the current view.
+    if (generation !== this.waveformDrawGeneration) return
 
-    const channelCount = this.clipView.clip.getChannelCount()
+    const startCrossFadeEnd = viewStart + this.startCrossFadeDuration
+    const endCrossFadeStart = viewEnd - this.endCrossFadeDuration
+    const channelCount = clip.getChannelCount()
     const channelHeight = this.waveformHeight / channelCount
-
-    let fullPath = ''
-    let startCrossFadePath = ''
-    let endCrossFadePath = ''
-    let mainPathStartX = -1
-    let endCrossFadeStartX = -1
+    const fullPath = new Array<string>()
+    const startCrossFadePath = new Array<string>()
+    const endCrossFadePath = new Array<string>()
     for (let channel = 0; channel < channelCount; ++channel) {
+      const peaks = summary[channel]
       const xAxis = this.waveform.audioLaneTop + channel * channelHeight + channelHeight / 2
-      const startCrossFadeSegments = new Array()
-      const endCrossFadeSegments = new Array()
-      const pathSegments = new Array(summary[channel].length)
-      const xIncrement = this.samplesPerUnit > 2 ? 1 : 1 / this.samplesPerUnit
-      for (let i = 0; i < summary[channel].length; i += 2) {
-        let maximum = xAxis - (summary[channel][i] * channelHeight) / 2
-        let minimum = xAxis - (summary[channel][i + 1] * channelHeight) / 2
+      const pathSegments = new Array<string>()
+      const startCrossFadeSegments = new Array<string>()
+      const endCrossFadeSegments = new Array<string>()
+      for (let bin = 0; 2 * bin < peaks.length; ++bin) {
+        // Each sample is its own line from the axis.
+        const high = sampleDetail ? Math.max(peaks[2 * bin], 0) : peaks[2 * bin]
+        const low = sampleDetail ? Math.min(peaks[2 * bin + 1], 0) : peaks[2 * bin + 1]
+        let maximum = xAxis - (high * channelHeight) / 2
+        let minimum = xAxis - (low * channelHeight) / 2
 
         if (maximum - minimum < 1 && !(maximum > 0 && minimum < 0)) {
           if (maximum > 0) {
@@ -1292,47 +1285,30 @@ export class ClipViewController extends TrackListItemController {
             ++maximum
           }
         }
-        const position = (i / 2) * xIncrement
-        const pathSegment = `${this.samplesPerUnit > 2 ? 'L' : 'M'} ${position} ${maximum.toFixed(0)} L ${position} ${minimum.toFixed(0)}`
-        if (position + this.pathElementTranslation < crossFadeStartLastX) {
-          startCrossFadeSegments.push(pathSegment)
-        } else if (position + this.pathElementTranslation > crossFadeEndFirstX) {
-          if (endCrossFadeStartX == -1) {
-            endCrossFadeStartX = position
-          }
-          endCrossFadeSegments.push(pathSegment)
-        } else {
-          if (mainPathStartX == -1) {
-            mainPathStartX = position
-          }
-          pathSegments.push(pathSegment)
-        }
+        const x = bins.xs[bin]
+        const segments =
+          bins.edges[bin] < startCrossFadeEnd
+            ? startCrossFadeSegments
+            : bins.edges[bin] >= endCrossFadeStart
+              ? endCrossFadeSegments
+              : pathSegments
+        if (segments.length === 0) segments.push(`M ${x} ${xAxis}`)
+        segments.push(`${sampleDetail ? 'M' : 'L'} ${x} ${maximum.toFixed(0)} L ${x} ${minimum.toFixed(0)}`)
       }
-      startCrossFadePath += `M 0 ${xAxis} ` + startCrossFadeSegments.join(' ')
-      fullPath += `M ${mainPathStartX} ${xAxis} ` + pathSegments.join(' ')
-      endCrossFadePath += `M ${endCrossFadeStartX} ${xAxis} ` + endCrossFadeSegments.join(' ')
+      fullPath.push(...pathSegments)
+      startCrossFadePath.push(...startCrossFadeSegments)
+      endCrossFadePath.push(...endCrossFadeSegments)
     }
-    this.svgPathElement.setAttribute('d', fullPath)
-    this.startCrossFadePathElement.setAttribute('d', startCrossFadePath)
-    this.endCrossFadePathElement.setAttribute('d', endCrossFadePath)
+    this.svgPathElement.setAttribute('d', fullPath.join(' '))
+    this.startCrossFadePathElement.setAttribute('d', startCrossFadePath.join(' '))
+    this.endCrossFadePathElement.setAttribute('d', endCrossFadePath.join(' '))
 
-    this.clipElementsGroup.classList.toggle('waveform-sample-detail', this.samplesPerUnit < 2)
+    this.clipElementsGroup.classList.toggle('waveform-sample-detail', sampleDetail)
   }
 
   reset() {
     this.waveform.clipViewGroupElement.appendChild(this.clipElementsGroup)
     this.waveform.aboveClipViewGroupElement.appendChild(this.handleElementsGroup)
-
-    this.rectElement.setAttribute('transform', '')
-    this.headerElement.setAttribute('transform', '')
-    this.headerTitleElement.setAttribute('transform', '')
-    this.headerInfoElement.setAttribute('transform', '')
-    this.endCrossFadeHeaderElement.setAttribute('transform', '')
-    this.endCrossFadeHeaderTitleElement.setAttribute('transform', '')
-    this.svgPathElement.setAttribute('transform', '')
-    this.startCrossFadePathElement.setAttribute('transform', '')
-    this.endCrossFadePathElement.setAttribute('transform', '')
-
     this.draw(this.getSampleForXValue(0), this.getSampleForXValue(this.waveform.width))
   }
 
