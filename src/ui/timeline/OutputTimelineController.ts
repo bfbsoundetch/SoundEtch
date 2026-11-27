@@ -9,7 +9,7 @@ import {
   moveOutputSceneBoundary,
   splitOutputScene,
 } from '../../project/OutputScene'
-import type { OutputScene } from '../../project/OutputScene'
+import type { OutputLayout, OutputScene } from '../../project/OutputScene'
 import { EffectPanelController } from '../effects/EffectPanelController'
 import { NotificationsController } from '../NotificationsController'
 import { ContextMenuController, ContextMenuItem } from '../ContextMenuController'
@@ -21,6 +21,13 @@ import { getOutputTransitionWindow, OUTPUT_TRANSITION_LABELS } from '../../video
 
 interface OutputTimelineWindow extends Window {
   readonly outputPanelController?: OutputPanelController
+}
+
+const LAYOUT_LABELS: Record<OutputLayout, string> = {
+  single: 'One video',
+  'side-by-side': 'Side by side',
+  'three-across': 'Three in a row',
+  'grid-2x2': '2×2 grid',
 }
 
 type BoundaryDrag = {
@@ -194,7 +201,7 @@ export class OutputTimelineController {
         block.hidden = right <= left
         block.style.left = `${left}px`
         block.style.width = `${Math.max(0, right - left)}px`
-        block.textContent = `Scene ${index + 1} · ${scene.layout === 'single' ? 'One video' : 'Side by side'} · ${scene.fit === 'contain' ? 'Fit' : 'Crop'}`
+        block.textContent = `Scene ${index + 1} · ${LAYOUT_LABELS[scene.layout]} · ${scene.fit === 'contain' ? 'Fit' : 'Crop'}`
         block.classList.toggle('is-active', index === active)
       }
       while (this.transitionBands.length > Math.max(0, scenes.length - 1)) this.transitionBands.pop()!.remove()

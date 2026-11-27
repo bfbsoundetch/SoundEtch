@@ -7,13 +7,20 @@ import {
   DEFAULT_OUTPUT_TRANSITION_DURATION,
   getOutputCropPosition,
   getOutputCropScale,
+  getOutputLayoutCells,
+  getOutputSceneTrack,
   getOutputTransition,
   MAX_OUTPUT_CROP_SCALE,
+  MAX_OUTPUT_LAYOUT_CELLS,
   MIN_OUTPUT_CROP_SCALE,
   getOutputSceneIndex,
+  OUTPUT_LAYOUTS,
   OUTPUT_TRANSITION_DIRECTIONS,
   OUTPUT_TRANSITION_KINDS,
+  setOutputCropPosition,
+  setOutputSceneTrack,
   splitOutputScene,
+  type OutputLayout,
   type OutputScene,
   type OutputTransitionDirection,
 } from '../project/OutputScene'
@@ -37,7 +44,7 @@ interface OutputPanelWindow extends Window {
 
 type PreviewSlot = {
   layer: PreviewLayer
-  /** Position in the layer's scene: 0 is the single or left video. */
+  /** Area in the layer's scene layout, in source order. */
   index: number
   element: HTMLDivElement
   canvas: HTMLCanvasElement
@@ -50,6 +57,8 @@ type PreviewSlot = {
 type PreviewLayer = {
   element: HTMLDivElement
   slots: PreviewSlot[]
+  /** The layout the slots are positioned for; null before any is applied. */
+  layout: OutputLayout | null
   /** Start of the scene shown by the last render; NaN while hidden. */
   sceneStart: number
   /** The applied stacking order, opacity, and transform. */
@@ -103,6 +112,32 @@ const DIRECTION_LABELS: Record<OutputTransitionDirection, string> = {
   down: 'Down',
 }
 const TRANSITION_DURATIONS = [0.25, 0.5, 0.75, 1, 1.5, 2]
+const LAYOUT_LABELS: Record<OutputLayout, string> = {
+  single: 'Single video',
+  'side-by-side': 'Side by side',
+  'three-across': 'Three in a row',
+  'grid-2x2': '2×2 grid',
+}
+/** Names of each layout's areas, in source order. */
+const AREA_NAMES: Record<OutputLayout, readonly string[]> = {
+  single: ['video'],
+  'side-by-side': ['left video', 'right video'],
+  'three-across': ['left video', 'middle video', 'right video'],
+  'grid-2x2': ['top-left video', 'top-right video', 'bottom-left video', 'bottom-right video'],
+}
+
+function areaName(layout: OutputLayout, slot: number): string {
+  return AREA_NAMES[layout][slot] ?? `video ${slot + 1}`
+}
+
+function sourceLabel(layout: OutputLayout, slot: number): string {
+  const name = areaName(layout, slot)
+  return `${name[0].toUpperCase()}${name.slice(1)} source`
+}
+
+function scaleButtonLabel(layout: OutputLayout, slot: number, direction: -1 | 1): string {
+  return `${direction < 0 ? 'Decrease' : 'Increase'} ${areaName(layout, slot)} scale`
+}
 
 const cancelledEdit = new Error('The output scene is no longer editable.')
 
@@ -120,8 +155,11 @@ export class OutputPanelController {
   private readonly fitSelect = document.createElement('select')
   private readonly cornerRadiusInput = document.createElement('input')
   private readonly marginInput = document.createElement('input')
-  private readonly sourceSelects = [document.createElement('select'), document.createElement('select')]
+  private readonly sourceSelects = Array.from({ length: MAX_OUTPUT_LAYOUT_CELLS }, () =>
+    document.createElement('select'),
+  )
   private readonly sourceFields: HTMLLabelElement[] = []
+  private readonly sourceLabels: HTMLSpanElement[] = []
   private readonly scaleFields: HTMLDivElement[] = []
   private readonly scaleButtons: [HTMLButtonElement, HTMLButtonElement][] = []
   private readonly transitionSelect = document.createElement('select')
@@ -221,7 +259,7 @@ export class OutputPanelController {
     this.sceneLabel.className = 'output-panel-scene'
     this.controls.appendChild(this.sceneLabel)
     this.layoutSelect.id = 'output-panel-layout'
-    this.layoutSelect.append(new Option('Single video', 'single'), new Option('Side by side', 'side-by-side'))
+    this.layoutSelect.append(...OUTPUT_LAYOUTS.map((layout) => new Option(LAYOUT_LABELS[layout], layout)))
     this.fitSelect.id = 'output-panel-fit'
     this.fitSelect.append(new Option('Fit (contain)', 'contain'), new Option('Crop (cover)', 'cover'))
     const layoutSection = this.createControlsSection(
@@ -256,8 +294,9 @@ export class OutputPanelController {
     const sourceControls: HTMLElement[] = []
     this.sourceSelects.forEach((select, index) => {
       select.id = `output-panel-source-${index + 1}`
-      const field = this.field(index === 0 ? 'Video source' : 'Right video source', select)
+      const field = this.field(sourceLabel('single', index), select)
       this.sourceFields.push(field)
+      this.sourceLabels.push(field.querySelector('span')!)
       sourceControls.push(field)
       const scaleField = document.createElement('div')
       scaleField.className = 'output-panel-field'
@@ -277,7 +316,7 @@ export class OutputPanelController {
         button.type = 'button'
         button.className = 'bordered clickable'
         button.textContent = text
-        const label = `${direction < 0 ? 'Decrease' : 'Increase'} ${index === 0 ? 'left video' : 'right video'} scale`
+        const label = scaleButtonLabel('single', index, direction)
         button.setAttribute('aria-label', label)
         button.title = label
         button.addEventListener('click', () => this.changeCropScale(index, direction))
@@ -291,7 +330,7 @@ export class OutputPanelController {
         const track = this.videoTracks[select.selectedIndex - 1] ?? null
         void this.editScene((scene) => {
           if (track && !this.project?.getTracks().includes(track)) return
-          scene.tracks[index] = track
+          setOutputSceneTrack(scene, index, track)
         }, 'change output video source')
       })
     })
@@ -348,7 +387,8 @@ export class OutputPanelController {
       }, 'change output transition duration')
     })
     this.layoutSelect.addEventListener('change', () => {
-      const layout = this.layoutSelect.value === 'side-by-side' ? 'side-by-side' : 'single'
+      const layout = OUTPUT_LAYOUTS.find((candidate) => candidate === this.layoutSelect.value)
+      if (!layout) return
       void this.editScene((scene) => {
         scene.layout = layout
       }, 'change output layout')
@@ -585,8 +625,9 @@ export class OutputPanelController {
     this.fitSelect.disabled = !editable
     this.cornerRadiusInput.disabled = !editable
     this.marginInput.disabled = !editable
+    const areas = getOutputLayoutCells(scene.layout).length
     this.sourceSelects.forEach((select, slot) => {
-      const track = scene.tracks[slot]
+      const track = getOutputSceneTrack(scene, slot)
       const trackIndex = track === null ? -1 : this.videoTracks.indexOf(track)
       const unavailable = select.options[this.videoTracks.length + 1]
       // A track that no longer has video remains explicit (black), not Automatic.
@@ -602,14 +643,15 @@ export class OutputPanelController {
         select.selectedIndex = trackIndex + 1
       }
       select.disabled = !editable
-      this.sourceFields[slot].hidden = slot === 1 && scene.layout === 'single'
+      const sourceText = sourceLabel(scene.layout, slot)
+      if (this.sourceLabels[slot].textContent !== sourceText) this.sourceLabels[slot].textContent = sourceText
+      this.sourceFields[slot].hidden = slot >= areas
       const scale = getOutputCropScale(scene, slot)
-      this.scaleFields[slot].hidden = scene.fit !== 'cover' || (slot === 1 && scene.layout === 'single')
+      this.scaleFields[slot].hidden = scene.fit !== 'cover' || slot >= areas
       this.scaleButtons[slot][0].disabled = !editable || scale <= MIN_OUTPUT_CROP_SCALE
       this.scaleButtons[slot][1].disabled = !editable || scale >= MAX_OUTPUT_CROP_SCALE
       this.scaleButtons[slot].forEach((button, direction) => {
-        const video = slot === 1 ? 'right video' : scene.layout === 'single' ? 'video' : 'left video'
-        const label = `${direction === 0 ? 'Decrease' : 'Increase'} ${video} scale`
+        const label = scaleButtonLabel(scene.layout, slot, direction === 0 ? -1 : 1)
         if (button.title !== label) {
           button.title = label
           button.setAttribute('aria-label', label)
@@ -695,17 +737,25 @@ export class OutputPanelController {
     let redraw = this.geometryChanged || layer.element.hidden
     layer.element.hidden = false
     layer.sceneStart = scene.startSample
-    const count = scene.layout === 'single' ? 1 : 2
-    if (layer.slots.length !== count) {
-      while (layer.slots.length > count) {
+    const cells = getOutputLayoutCells(scene.layout)
+    if (layer.slots.length !== cells.length || layer.layout !== scene.layout) {
+      while (layer.slots.length > cells.length) {
         const slot = layer.slots.pop()!
         slot.preview.release()
         slot.element.remove()
       }
-      while (layer.slots.length < count) this.addSlot(layer)
+      while (layer.slots.length < cells.length) this.addSlot(layer)
+      // Place each area as the export paints it.
+      layer.slots.forEach((slot, index) => {
+        const cell = cells[index]
+        slot.element.style.left = `${cell.x * 100}%`
+        slot.element.style.top = `${cell.y * 100}%`
+        slot.element.style.width = `${cell.width * 100}%`
+        slot.element.style.height = `${cell.height * 100}%`
+      })
+      layer.layout = scene.layout
       redraw = true
     }
-    layer.element.classList.toggle('output-panel-preview-split', count === 2)
     const { x, y, scale } = composition
     const transform = x !== 0 || y !== 0 || scale !== 1 ? `translate(${x * 100}%, ${y * 100}%) scale(${scale})` : ''
     const opacity = composition.opacity === 1 ? '' : String(composition.opacity)
@@ -724,7 +774,7 @@ export class OutputPanelController {
     // Reframing edits the scene at the marker, and only while no transition moves or fades its picture.
     const reframable = layer === this.controlLayer && !this.transitioning && this.canEdit() && !this.editing
     for (const slot of layer.slots) {
-      const selected = scene.tracks[slot.index]
+      const selected = getOutputSceneTrack(scene, slot.index)
       const track = selected === null ? this.videoTracks[slot.index] : selected
       const target =
         !recording && track && project.getTracks().includes(track)
@@ -756,10 +806,7 @@ export class OutputPanelController {
         continue
       }
       slot.empty = false
-      slot.canvas.setAttribute(
-        'aria-label',
-        `Output ${count === 1 ? 'video' : slot.index === 0 ? 'left video' : 'right video'}: ${track!.name}`,
-      )
+      slot.canvas.setAttribute('aria-label', `Output ${areaName(scene.layout, slot.index)}: ${track!.name}`)
       slot.preview.request(project.directoryName, project.sampleRate, target, redraw)
       const overflow = slot.preview.getCropOverflow()
       if (
@@ -786,7 +833,7 @@ export class OutputPanelController {
     element.className = 'output-panel-preview-layer'
     element.hidden = true
     this.stage.appendChild(element)
-    return { element, slots: [], sceneStart: NaN, style: '' }
+    return { element, slots: [], layout: null, sceneStart: NaN, style: '' }
   }
 
   private addSlot(layer: PreviewLayer): void {
@@ -950,7 +997,7 @@ export class OutputPanelController {
       if (this.cropDrag !== drag || !this.isCropDragValid(drag)) return null
       const scenes = project.outputScenes.map(cloneOutputScene)
       const scene = scenes.find((candidate) => candidate.startSample === drag.scene.startSample)!
-      this.setSceneCropPosition(scene, drag.slotIndex, drag.x, drag.y)
+      setOutputCropPosition(scene, drag.slotIndex, drag.x, drag.y)
       return scenes
     }, 'pan output video').finally(() => {
       if (this.cropDrag === drag) this.cancelCropDrag()
@@ -974,19 +1021,11 @@ export class OutputPanelController {
     }
   }
 
-  private setSceneCropPosition(scene: OutputScene, slot: number, x: number, y: number): void {
-    scene.cropPositions ??= [
-      { x: 0.5, y: 0.5 },
-      { x: 0.5, y: 0.5 },
-    ]
-    scene.cropPositions[slot] = { ...scene.cropPositions[slot], x, y }
-  }
-
   private changeCropScale(index: number, direction: -1 | 1): void {
     const project = this.project
     if (!project || !this.running || !this.canEdit() || this.editing || this.cropDrag) return
     const scene = project.outputScenes[getOutputSceneIndex(project.outputScenes, this.cursorSample())]
-    if (!scene || scene.fit !== 'cover' || (index === 1 && scene.layout === 'single')) return
+    if (!scene || scene.fit !== 'cover' || index >= getOutputLayoutCells(scene.layout).length) return
     const oldScale = getOutputCropScale(scene, index)
     const scale = clampOutputCropScale(Math.round((oldScale + direction * 0.1) * 10) / 10)
     if (scale === oldScale) return
@@ -1005,7 +1044,7 @@ export class OutputPanelController {
       y = recenter(y, slot.canvas.clientHeight, overflow.y)
     }
     void this.editScene((current) => {
-      this.setSceneCropPosition(current, index, x, y)
+      setOutputCropPosition(current, index, x, y)
       current.cropPositions![index].scale = scale
     }, 'scale output video')
   }
@@ -1059,7 +1098,7 @@ export class OutputPanelController {
     const x = overflow.x > 0 ? Math.max(0, Math.min(1, position.x - dx / overflow.x)) : position.x
     const y = overflow.y > 0 ? Math.max(0, Math.min(1, position.y - dy / overflow.y)) : position.y
     if (x === position.x && y === position.y) return
-    void this.editScene((current) => this.setSceneCropPosition(current, index, x, y), 'pan output video')
+    void this.editScene((current) => setOutputCropPosition(current, index, x, y), 'pan output video')
   }
 
   private frameStyleValue(scene: OutputScene, property: FrameStyleProperty): number {

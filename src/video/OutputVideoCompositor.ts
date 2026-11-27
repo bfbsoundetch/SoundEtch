@@ -1,6 +1,14 @@
 import type { VideoSample } from 'mediabunny'
 import type { OutputCaptionSettings } from '../project/OutputCaptions'
-import { cloneOutputScene, getOutputCropPosition, getOutputCropScale, type OutputScene } from '../project/OutputScene'
+import {
+  cloneOutputScene,
+  getOutputCropPosition,
+  getOutputCropScale,
+  getOutputLayoutCells,
+  getOutputSceneTrack,
+  MAX_OUTPUT_LAYOUT_CELLS,
+  type OutputScene,
+} from '../project/OutputScene'
 import type { Project } from '../project/Project'
 import type { Track } from '../project/Track'
 import { findOutputCaptionWord } from './OutputCaptionCues'
@@ -11,7 +19,8 @@ import { paintVideoFrame } from './VideoFramePainter'
 import { VideoFrameReader } from './VideoFrameReader'
 import { resolveVideoFrame, type VideoFrameTarget, type VideoPlacement } from './VideoFrameResolver'
 
-type ReaderPair = readonly [VideoFrameReader, VideoFrameReader]
+/** One reader per layout area. */
+type ReaderGroup = readonly VideoFrameReader[]
 
 /** A fixed snapshot of the Output scene and source edits, independent of preview size and device pixels. */
 export class OutputVideoCompositor {
@@ -20,13 +29,13 @@ export class OutputVideoCompositor {
   private readonly captionSettings: Readonly<OutputCaptionSettings>
   private readonly captionSource: OutputCaptionSource | null
   /**
-   * The reader pair of each scene. A cut keeps the previous scene's pair, so its decoders continue; a transition
-   * switches pairs, so both of its scenes decode sequentially while it plays.
+   * The reader group of each scene. A cut keeps the previous scene's group, so its decoders continue; a transition
+   * switches groups, so both of its scenes decode sequentially while it plays.
    */
   private readonly sceneReaders: (0 | 1)[] = []
   private readonly placements = new Map<Track, readonly VideoPlacement[]>()
   private readonly automaticSources: (readonly VideoPlacement[])[] = []
-  private readonly readers: readonly [ReaderPair, ReaderPair]
+  private readonly readers: readonly [ReaderGroup, ReaderGroup]
   /** The current output frame's pictures; identical requests reuse the first reader's borrowed sample. */
   private readonly reads: { target: VideoFrameTarget; frame: VideoSample | null }[] = []
   /** Scenes that a transition moves or fades are composed here first, by paint order. */
@@ -79,11 +88,12 @@ export class OutputVideoCompositor {
     this.viewportHeight = 1080 * this.scale
     this.viewportX = (width - this.viewportWidth) / 2
     this.viewportY = (height - this.viewportHeight) / 2
-    const pairOfReaders = (): ReaderPair => [
-      new VideoFrameReader(project.directoryName, this.sampleRate, signal),
-      new VideoFrameReader(project.directoryName, this.sampleRate, signal),
-    ]
-    this.readers = [pairOfReaders(), pairOfReaders()]
+    const groupOfReaders = (): ReaderGroup =>
+      Array.from(
+        { length: MAX_OUTPUT_LAYOUT_CELLS },
+        () => new VideoFrameReader(project.directoryName, this.sampleRate, signal),
+      )
+    this.readers = [groupOfReaders(), groupOfReaders()]
     signal.addEventListener('abort', this.onAbort, { once: true })
     if (signal.aborted) this.dispose()
   }
@@ -102,7 +112,7 @@ export class OutputVideoCompositor {
       const scene = this.scenes[layer.index]
       const readers = this.readers[this.sceneReaders[layer.index]]
       const frames: (VideoSample | null)[] = []
-      for (let slot = 0; slot < (scene.layout === 'single' ? 1 : 2); ++slot) {
+      for (let slot = 0; slot < getOutputLayoutCells(scene.layout).length; ++slot) {
         frames.push(await this.readFrame(readers[slot], scene, slot, projectSample))
       }
       pictures.push(frames)
@@ -171,7 +181,7 @@ export class OutputVideoCompositor {
     if (this.disposed) return
     this.disposed = true
     this.signal.removeEventListener('abort', this.onAbort)
-    for (const pair of this.readers) for (const reader of pair) reader.dispose()
+    for (const group of this.readers) for (const reader of group) reader.dispose()
     this.reads.length = 0
     this.layerContexts.length = 0
   }
@@ -182,7 +192,7 @@ export class OutputVideoCompositor {
     slot: number,
     projectSample: number,
   ): Promise<VideoSample | null> {
-    const selected = scene.tracks[slot]
+    const selected = getOutputSceneTrack(scene, slot)
     const placements = selected === null ? this.automaticSources[slot] : this.placements.get(selected)
     const target = placements ? resolveVideoFrame(placements, projectSample, this.sampleRate) : null
     if (!target) return null
@@ -206,17 +216,18 @@ export class OutputVideoCompositor {
   ): void {
     const margin = Math.max(0, Math.min(240, scene.margin ?? 0)) * this.scale
     const radius = Math.max(0, Math.min(540, scene.cornerRadius ?? 0)) * this.scale
-    const cellWidth = this.viewportWidth / frames.length
+    const cells = getOutputLayoutCells(scene.layout)
     frames.forEach((frame, slot) => {
       if (!frame) return
+      const cell = cells[slot]
       const crop = getOutputCropPosition(scene, slot)
       paintVideoFrame(
         context,
         frame,
-        this.viewportX + slot * cellWidth,
-        this.viewportY,
-        cellWidth,
-        this.viewportHeight,
+        this.viewportX + cell.x * this.viewportWidth,
+        this.viewportY + cell.y * this.viewportHeight,
+        cell.width * this.viewportWidth,
+        cell.height * this.viewportHeight,
         scene.fit,
         crop.x,
         crop.y,

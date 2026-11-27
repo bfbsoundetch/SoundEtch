@@ -289,8 +289,12 @@ export class VideoPreview {
 
   private paint(frame: VideoSample): void {
     const ratio = window.devicePixelRatio || 1
-    const cssWidth = this.canvas.clientWidth
-    const cssHeight = this.canvas.clientHeight
+    // Fractional layout sizes keep the area's exact aspect ratio: rounded client sizes skew it, opening hairlines
+    // between contained pictures that fill neighboring areas. Unlike bounding rects, these ignore transition transforms.
+    const rendered = this.canvas.clientWidth > 0 && this.canvas.clientHeight > 0
+    const style = rendered ? getComputedStyle(this.canvas) : null
+    const cssWidth = style ? parseFloat(style.width) : 0
+    const cssHeight = style ? parseFloat(style.height) : 0
     const width = Math.max(1, Math.round(cssWidth * ratio))
     const height = Math.max(1, Math.round(cssHeight * ratio))
     if (this.canvas.width !== width) this.canvas.width = width

@@ -63,8 +63,7 @@ export class Project extends DatabasePersisted {
     this.outputScenes = this.outputScenes.map((scene) => {
       if (!scene.tracks.includes(track)) return scene
       const copy = cloneOutputScene(scene)
-      if (copy.tracks[0] === track) copy.tracks[0] = null
-      if (copy.tracks[1] === track) copy.tracks[1] = null
+      copy.tracks = copy.tracks.map((source) => (source === track ? null : source))
       return copy
     })
     if (this.outputCaptions.track === track) {

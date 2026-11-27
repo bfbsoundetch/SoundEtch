@@ -213,7 +213,7 @@ test('database reload preserves per-scene and per-slot crops while legacy scenes
   expect(getOutputCropPosition(project.outputScenes[1], 0)).toEqual({ x: 0, y: 0.25, scale: 1.8 })
 })
 
-test('deleting a source track clears both scene slots immutably and leaves a valid persisted graph', async () => {
+test('deleting a source track clears every scene slot immutably and leaves a valid persisted graph', async () => {
   const project = new Project('output sources', 48_000)
   const removed = new Track('removed', 1)
   const remaining = new Track('remaining', 1)
@@ -234,6 +234,7 @@ test('deleting a source track clears both scene slots immutably and leaves a val
     },
     { startSample: 100, layout: 'single', fit: 'contain', tracks: [removed, removed] },
     { startSample: 200, layout: 'single', fit: 'cover', tracks: [null, remaining] },
+    { startSample: 300, layout: 'grid-2x2', fit: 'cover', tracks: [remaining, null, removed, removed] },
   ]
   const before = project.outputScenes
   await DatabasePersister.save(project)
@@ -253,6 +254,7 @@ test('deleting a source track clears both scene slots immutably and leaves a val
     },
     { startSample: 100, layout: 'single', fit: 'contain', tracks: [null, null] },
     { startSample: 200, layout: 'single', fit: 'cover', tracks: [null, remaining] },
+    { startSample: 300, layout: 'grid-2x2', fit: 'cover', tracks: [remaining, null, null, null] },
   ])
   expect(before[0].tracks).toEqual([removed, remaining])
   expect(before[1].tracks).toEqual([removed, removed])
@@ -273,10 +275,12 @@ test('deleting a source track clears both scene slots immutably and leaves a val
     },
     { startSample: 100, layout: 'single', fit: 'contain', tracks: [null, null] },
     { startSample: 200, layout: 'single', fit: 'cover', tracks: [null, { i: remaining.id }] },
+    { startSample: 300, layout: 'grid-2x2', fit: 'cover', tracks: [{ i: remaining.id }, null, null, null] },
   ])
   const restored = (await DatabasePersister.fromPersistedObject(persistedProject)) as Project
   expect(restored.outputScenes[0].tracks[1]).toBe(restored.getTracks()[0])
   expect(restored.outputScenes[1].tracks).toEqual([null, null])
+  expect(restored.outputScenes[3].tracks).toEqual([restored.getTracks()[0], null, null, null])
   project.outputScenes[0].cropPositions![0].x = 1
   project.outputScenes[0].cropPositions![1].y = 0
   expect(getOutputCropPosition(before[0], 0)).toEqual({ x: 0.2, y: 0.3 })

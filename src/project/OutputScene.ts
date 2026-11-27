@@ -20,12 +20,24 @@ export interface OutputTransition {
   direction: OutputTransitionDirection
 }
 
+export type OutputLayout = 'single' | 'side-by-side' | 'three-across' | 'grid-2x2'
+
+/** A layout area in fractions of the 16:9 frame. */
+export interface OutputLayoutCell {
+  x: number
+  y: number
+  width: number
+  height: number
+}
+
 export interface OutputScene {
   startSample: number
-  layout: 'single' | 'side-by-side'
+  layout: OutputLayout
   fit: 'contain' | 'cover'
-  tracks: [Track | null, Track | null]
-  cropPositions?: [CropPosition, CropPosition]
+  /** Sources by layout area, row by row; null or absent entries are Automatic. Older scenes store two. */
+  tracks: (Track | null)[]
+  /** By layout area like `tracks`; absent entries are centered at base scale. */
+  cropPositions?: CropPosition[]
   /** Frame styling in pixels on the 1920×1080 output canvas; absent values are zero. */
   cornerRadius?: number
   margin?: number
@@ -33,9 +45,47 @@ export interface OutputScene {
   transition?: OutputTransition
 }
 
+export const OUTPUT_LAYOUTS: readonly OutputLayout[] = ['single', 'side-by-side', 'three-across', 'grid-2x2']
 export const OUTPUT_TRANSITION_KINDS: readonly OutputTransitionKind[] = ['fade', 'crossfade', 'slide', 'push', 'zoom']
 export const OUTPUT_TRANSITION_DIRECTIONS: readonly OutputTransitionDirection[] = ['left', 'right', 'up', 'down']
 export const DEFAULT_OUTPUT_TRANSITION_DURATION = 0.5
+
+const OUTPUT_LAYOUT_CELLS: Record<OutputLayout, readonly Readonly<OutputLayoutCell>[]> = {
+  single: [{ x: 0, y: 0, width: 1, height: 1 }],
+  'side-by-side': [
+    { x: 0, y: 0, width: 1 / 2, height: 1 },
+    { x: 1 / 2, y: 0, width: 1 / 2, height: 1 },
+  ],
+  'three-across': [
+    { x: 0, y: 0, width: 1 / 3, height: 1 },
+    { x: 1 / 3, y: 0, width: 1 / 3, height: 1 },
+    { x: 2 / 3, y: 0, width: 1 / 3, height: 1 },
+  ],
+  'grid-2x2': [
+    { x: 0, y: 0, width: 1 / 2, height: 1 / 2 },
+    { x: 1 / 2, y: 0, width: 1 / 2, height: 1 / 2 },
+    { x: 0, y: 1 / 2, width: 1 / 2, height: 1 / 2 },
+    { x: 1 / 2, y: 1 / 2, width: 1 / 2, height: 1 / 2 },
+  ],
+}
+
+/** The most areas any layout has. */
+export const MAX_OUTPUT_LAYOUT_CELLS = Math.max(...OUTPUT_LAYOUTS.map((layout) => OUTPUT_LAYOUT_CELLS[layout].length))
+
+/** The layout's areas in source order, row by row. */
+export function getOutputLayoutCells(layout: OutputLayout): readonly Readonly<OutputLayoutCell>[] {
+  return OUTPUT_LAYOUT_CELLS[layout]
+}
+
+/** The chosen source of a layout area, or null for Automatic. */
+export function getOutputSceneTrack(scene: OutputScene, slot: number): Track | null {
+  return scene.tracks[slot] ?? null
+}
+
+export function setOutputSceneTrack(scene: OutputScene, slot: number, track: Track | null): void {
+  while (scene.tracks.length < slot) scene.tracks.push(null)
+  scene.tracks[slot] = track
+}
 
 export const MIN_OUTPUT_CROP_SCALE = 1
 export const MAX_OUTPUT_CROP_SCALE = 4
@@ -52,6 +102,13 @@ export function getOutputCropPosition(scene: OutputScene, slot: number): Readonl
   return scene.cropPositions?.[slot] ?? centeredCropPosition
 }
 
+/** Sets an area's pan position, keeping its scale. */
+export function setOutputCropPosition(scene: OutputScene, slot: number, x: number, y: number): void {
+  const positions = (scene.cropPositions ??= [])
+  while (positions.length < slot) positions.push({ ...centeredCropPosition })
+  positions[slot] = { ...positions[slot], x, y }
+}
+
 export function getOutputCropScale(scene: OutputScene, slot: number): number {
   return clampOutputCropScale(getOutputCropPosition(scene, slot).scale ?? MIN_OUTPUT_CROP_SCALE)
 }
@@ -65,9 +122,7 @@ export function getOutputTransition(scenes: readonly OutputScene[], index: numbe
 /** Copy editable scene data while retaining source track identities. */
 export function cloneOutputScene(scene: OutputScene): OutputScene {
   const copy: OutputScene = { ...scene, tracks: [...scene.tracks] }
-  if (scene.cropPositions) {
-    copy.cropPositions = [{ ...scene.cropPositions[0] }, { ...scene.cropPositions[1] }]
-  }
+  if (scene.cropPositions) copy.cropPositions = scene.cropPositions.map((position) => ({ ...position }))
   if (scene.transition) copy.transition = { ...scene.transition }
   return copy
 }

@@ -4319,19 +4319,12 @@ input::placeholder {
 .output-panel-preview-layer {
   position: absolute;
   inset: 0;
-  display: grid;
-  grid-template-columns: minmax(0, 1fr);
   background: #000;
 }
 
-.output-panel-preview-split {
-  grid-template-columns: repeat(2, minmax(0, 1fr));
-}
-
+/* OutputPanelController places each area from the scene layout's cells. */
 .output-panel-preview-slot {
-  position: relative;
-  min-width: 0;
-  min-height: 0;
+  position: absolute;
   overflow: hidden;
   background: #000;
 }
