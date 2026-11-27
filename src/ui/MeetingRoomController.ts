@@ -63,6 +63,21 @@ class VideoContainer {
     this.divElement.appendChild(this.recordingActivityElement)
   }
 
+  /**
+   * Letterboxes portrait video instead of cropping it; anything else keeps the stylesheet's `cover`.
+   * Driven by the decoded frame size because a remote track's `getSettings()` has no dimensions
+   * until its first frame arrives, and the size can change mid-call (rotation, simulcast layers).
+   */
+  letterboxPortraitVideo() {
+    const update = () => {
+      const { videoWidth, videoHeight } = this.vidElement
+      this.vidElement.style.objectFit = videoWidth > 0 && videoWidth < videoHeight ? 'contain' : ''
+    }
+    for (const type of ['loadedmetadata', 'resize', 'emptied']) {
+      this.vidElement.addEventListener(type, update)
+    }
+  }
+
   setName(name: string | null) {
     if (name) {
       this.divElement.setAttribute('aria-label', `Spotlight ${name}`)
@@ -263,7 +278,10 @@ export class MeetingRoomController {
     this.setUiForDisconnectedState()
     this.applyVideoLayout()
     this.selfVideoContainer.isActive = true
-    this.guestContainers.forEach((c) => (c.isActive = false))
+    this.guestContainers.forEach((c) => {
+      c.isActive = false
+      c.letterboxPortraitVideo()
+    })
     this.updateContainerInertness()
 
     LocalMediaStreams.registerAVDeviceListener((added, track) => {
@@ -665,14 +683,7 @@ export class MeetingRoomController {
         if (this.guestContainers[i].vidElement.srcObject != mediaStream) {
           this.guestContainers[i].vidElement.srcObject = mediaStream
         }
-        const videoTrack = mediaStream.getVideoTracks()[0]
-        if (videoTrack) {
-          if ((videoTrack.getSettings().aspectRatio ?? 0) < 1) {
-            this.guestContainers[i].vidElement.style.objectFit = 'contain'
-          } else {
-            this.guestContainers[i].vidElement.style.objectFit = 'cover'
-          }
-        } else {
+        if (mediaStream.getVideoTracks().length == 0) {
           this.guestContainers[i].vidElement.load()
         }
         this.guestContainers[i].vidElement.poster = this.getSvgPosterForUser(state.members[i].username, false)
