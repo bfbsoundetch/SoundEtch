@@ -33,7 +33,8 @@ summary {
 
 .clip-view-info-button:focus-visible,
 .track-timeline-control:focus-visible,
-.top-panel-size-button:focus-visible {
+.top-panel-size-button:focus-visible,
+#timeline-scrollbar:focus-visible {
   outline-offset: -2px;
 }
 
@@ -359,11 +360,12 @@ dialog.overlay::backdrop {
   min-height: 0;
   display: grid;
   grid-area: body;
-  grid-template-rows: auto minmax(0, 1fr);
+  grid-template-rows: auto minmax(0, 1fr) auto;
   grid-template-columns: 100%;
   grid-template-areas:
     'timeline'
-    'lists';
+    'lists'
+    'scrollbar';
   overscroll-behavior: none;
   overflow-y: scroll;
 }
@@ -1619,6 +1621,37 @@ video {
 
 .timeline-scroll-left-icon {
   transform: rotate(180deg);
+}
+
+/* Under the lanes; its width, set from the track list, matches theirs. */
+#timeline-scrollbar {
+  grid-area: scrollbar;
+  position: relative;
+  /* Above the position marker, which reaches the bottom of the page. */
+  z-index: 7;
+  height: 1rem;
+  margin-left: 14rem;
+  background-color: var(--alt-background);
+  touch-action: none;
+  user-select: none;
+}
+
+#timeline-scrollbar-thumb {
+  position: absolute;
+  top: 0.1875rem;
+  bottom: 0.1875rem;
+  border-radius: 0.3125rem;
+  background-color: color-mix(in srgb, var(--color) 55%, transparent);
+  cursor: grab;
+}
+
+#timeline-scrollbar-thumb:hover,
+#timeline-scrollbar-thumb.is-dragging {
+  background-color: var(--color);
+}
+
+#timeline-scrollbar-thumb.is-dragging {
+  cursor: grabbing;
 }
 
 #input-track-lists {

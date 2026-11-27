@@ -218,6 +218,10 @@ Drag one local media file onto the timeline, or onto the welcome area in an empt
 
 File drops are available while stopped or monitoring, not during playback, recording, or another local-file import. Drop one file at a time; text and link drags are left alone.
 
+## Scrolling the timeline
+
+The scroll bar under the Output row pans the timeline from time 0 to the end of the last track. Drag its thumb, or press beside the thumb to center it there and keep dragging. Over the bar, a vertical wheel pans and Ctrl+wheel zooms. While the view is past the end of the last track, the bar's range extends to the view, and the bar only moves it back toward the end. When the bar has focus, Left/Right pan by a tenth of the view, Page Up/Page Down by a whole view, and Home/End go to time 0 and to the end of the last track.
+
 ## Selecting on the timeline
 
 Click a track's timeline to place the cursor, then **Shift-click** another point to select the time range and every track between the two points, including both endpoint tracks. Shift-click also extends an existing selection; further Shift-clicks move its endpoint while keeping the original anchor. Shift-click the ruler to adjust the time range without changing the selected tracks.

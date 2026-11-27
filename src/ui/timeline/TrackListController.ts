@@ -58,6 +58,7 @@ import { getTrackTranscriptEntries } from '../transcript/TrackTranscript'
 import type { TrackTranscriptEntry } from '../transcript/TrackTranscript'
 import { OutputTimelineController } from './OutputTimelineController'
 import { TranscriptBoundaryController } from './TranscriptBoundaryController'
+import { TimelineScrollbarController } from './TimelineScrollbarController'
 
 interface Selection {
   startSample: number
@@ -141,6 +142,7 @@ export class TrackListController {
   private readonly tracklistElement = document.getElementById('track-list')!
   private readonly tracklistInfoElement = document.getElementById('track-info-list')!
   readonly outputTimelineController = new OutputTimelineController(this)
+  private readonly scrollbar = new TimelineScrollbarController(this)
   private readonly newTrackDropRegion = document.createElement('div')
   private readonly resizeCallback
   private readonly infoWaveformPairs = new Map<
@@ -247,6 +249,16 @@ export class TrackListController {
     if (this.translationUnits < 0) {
       this.translationUnits = 0
     }
+    this.draw()
+  }
+
+  /** Pans so the view's left edge is `units` from time 0. */
+  setTranslation(units: number) {
+    const translation = Math.max(0, Math.round(units))
+    if (translation == this.translationUnits) {
+      return
+    }
+    this.translationUnits = translation
     this.draw()
   }
 
@@ -1094,6 +1106,7 @@ export class TrackListController {
     this.automationMode?.controller.draw()
     this.selectionController.draw()
     this.positionMarkerController.draw()
+    this.scrollbar.draw()
     this.trackPanelController.transcript.syncPlayback()
     this.timelineKeyboard.refresh()
   }
@@ -1275,6 +1288,7 @@ export class TrackListController {
     this.waveforms.forEach((waveform) => waveform.drawAudioData())
     this.selectionController.draw()
     this.positionMarkerController.draw(position)
+    this.scrollbar.draw()
     this.trackPanelController.transcript.syncPlayback(position)
   }
 }
