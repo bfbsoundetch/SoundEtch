@@ -17,6 +17,7 @@ Try it at [soundetch.org](https://soundetch.org).
 - Fast, accurate speech-to-text.
 - Text-based audio editing.
 - Automatic saving; accidentally closing the page won't destroy your progress.
+- Optional cloud backup with your DropBox or S3-compatible storage.
 
 ## Development
 
